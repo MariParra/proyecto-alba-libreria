@@ -1,3 +1,5 @@
+# sync.py
+
 import sqlite3
 import gspread
 import pandas as pd
@@ -12,7 +14,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CREDENTIALS_FILE = os.path.join(BASE_DIR, "config", "credentials.json")
 LOCAL_DB_NAME = os.path.join(BASE_DIR, "2_database", "libreria.db")
 
-
 def clean_field(value):
     # -- NORMALIZAR CAMPOS VACIOS O NULOS --
     val_str = str(value).strip()
@@ -22,7 +23,7 @@ def clean_field(value):
 
 def sync_system():
     print("Iniciando proceso de sincronizacion...")
-
+    
     # -- CONECTAR A GOOGLE SHEETS --
     try:
         gc = gspread.service_account(filename=CREDENTIALS_FILE)
@@ -55,7 +56,7 @@ def sync_system():
         );
         """)
 
-        # --- 2. TABLA SUSCRIPCIONES (LA QUE FALTABA) ---
+        # --- 2. TABLA SUSCRIPCIONES ---
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS suscripciones (
             suscripcion_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,7 +81,7 @@ def sync_system():
         );
         """)
 
-        # --- 4. TABLA ASIGNACIONES (LA VERSIÓN CORRECTA) ---
+        # --- 4. TABLA ASIGNACIONES (ESQUEMA ROBUSTO PROPUESTO) ---
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS asignaciones (
             asignacion_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,8 +93,8 @@ def sync_system():
             ano_mes TEXT GENERATED ALWAYS AS (ano || mes) STORED,
             pagado TEXT DEFAULT 'FALSE',
             envio_pagado TEXT DEFAULT 'FALSE',
-            estado_envio TEXT DEFAULT 'Pendiente', 
-            fecha_asignacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            estado_envio TEXT DEFAULT 'PENDIENTE', 
+            fecha_asignacion TIMESTAMP,
             FOREIGN KEY (cliente_id) REFERENCES clientes(cliente_id),
             FOREIGN KEY (libro_suscripcion_id) REFERENCES libros(libro_id),
             UNIQUE(cliente_id, ano_mes)
@@ -107,13 +108,14 @@ def sync_system():
             UPDATE libros SET titulo = UPPER(NEW.titulo), autor = UPPER(NEW.autor) WHERE libro_id = NEW.libro_id;
         END;
         """)
+        
         cursor.execute("""
         CREATE TRIGGER IF NOT EXISTS force_uppercase_books_update
         AFTER UPDATE OF titulo, autor ON libros BEGIN
             UPDATE libros SET titulo = UPPER(NEW.titulo), autor = UPPER(NEW.autor) WHERE libro_id = NEW.libro_id;
         END;
         """)
-
+        
         conn.commit()
         print("Base de datos local verificada y estructurada.")
     except sqlite3.Error as e:
@@ -126,10 +128,12 @@ def sync_system():
         for index, row in df.iterrows():
             email = clean_field(row.get("Email", row.get("Dirección de correo electrónico", "")))
             name = clean_field(row.get("Nombre ", row.get("Nombre", "")))
-            if name == "SIN INFORMACION": continue
+            if name == "SIN INFORMACION": 
+                continue
             
-            if email == "SIN INFORMACION": email = f"sin_correo_{index}@albalibreria.cl"
-
+            if email == "SIN INFORMACION": 
+                email = f"sin_correo_{index}@albalibreria.cl"
+                
             phone = clean_field(row.get("Teléfono", ""))
             instagram = clean_field(row.get("Instagram", ""))
             status = clean_field(row.get("Estado cliente", "ACTIVA"))
@@ -139,7 +143,8 @@ def sync_system():
             pay_date = clean_field(row.get("Fecha de pago", ""))
             delivery_method = clean_field(row.get("Método de entrega", ""))
             genres = clean_field(row.get("Selecciona los géneros de tu preferencia (puedes elegir los que quieras)", ""))
-
+            
+            # -- INSERTAR O ACTUALIZAR CLIENTE --
             cursor.execute("""
             INSERT INTO clientes (email, nombre, telefono, instagram, direccion, rut, status) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(email) DO UPDATE SET
@@ -147,9 +152,11 @@ def sync_system():
                 direccion=excluded.direccion, rut=excluded.rut, status=excluded.status;
             """, (email, name, phone, instagram, address, rut, status))
             
+            # -- OBTENER ID DEL CLIENTE PROCESADO --
             cursor.execute("SELECT cliente_id FROM clientes WHERE email = ?", (email,))
             client_id = cursor.fetchone()[0]
-
+            
+            # -- INSERTAR O ACTUALIZAR SUSCRIPCION --
             cursor.execute("""
             INSERT INTO suscripciones (cliente_id, fecha_pago, metodo_entrega, generos_preferencia) VALUES (?, ?, ?, ?)
             ON CONFLICT(cliente_id) DO UPDATE SET
@@ -157,7 +164,7 @@ def sync_system():
             """, (client_id, pay_date, delivery_method, genres))
             
             processed_clients += 1
-
+            
         conn.commit()
         print(f"Sincronización exitosa: {processed_clients} clientes y suscripciones procesadas.")
     except Exception as e:
