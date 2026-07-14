@@ -5,17 +5,53 @@ import time
 import json
 
 # -- CONFIGURAR RUTAS --
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "libreria.db")
-JSON_FILE_PATH = os.path.join(BASE_DIR, "libros.json")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
+JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
 
 # -- ASIGNAR CLAVE DE API --
-API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE" 
+API_KEY = "TU_API_KEY_REAL_AQUI"
+
+# -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
+GENRES_MAP = {
+    "ROMANCE": "ROMÁNTICA",
+    "ROMÁNTICA": "ROMÁNTICA",
+    "LOVE": "ROMÁNTICA",
+    "FANTASY": "FANTASÍA",
+    "FANTASÍA": "FANTASÍA",
+    "HORROR": "TERROR",
+    "TERROR": "TERROR",
+    "SCIENCE FICTION": "CIENCIA FICCIÓN",
+    "CIENCIA FICCIÓN": "CIENCIA FICCIÓN",
+    "SCI-FI": "CIENCIA FICCIÓN",
+    "THRILLER": "SUSPENSO",
+    "SUSPENSO": "SUSPENSO",
+    "MYSTERY": "SUSPENSO",
+    "MISTERIO": "SUSPENSO",
+    "POLICIAL": "SUSPENSO",
+    "DETECTIVE": "SUSPENSO",
+    "FICTION": "FICCIÓN GENERAL",
+    "FICCIÓN": "FICCIÓN GENERAL",
+    "LITERARY": "FICCIÓN GENERAL"
+}
+
+def clean_and_map_genre(google_genres_raw):
+    # -- HOMOLOGAR CATEGORIAS DE GOOGLE CON FORMULARIO --
+    if not google_genres_raw or google_genres_raw == "SIN INFORMACION":
+        return "SIN INFORMACION"
+
+    genre_upper = str(google_genres_raw).upper()
+
+    for key, val in GENRES_MAP.items():
+        if key in genre_upper:
+            return val
+
+    return "OTRO"
 
 def fetch_book_data(title):
     # -- CODIFICAR TITULO PARA URL --
     encoded_title = requests.utils.quote(title)
-    
+
     # -- CONSTRUIR URLS DE BUSQUEDA --
     url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
     url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
@@ -29,9 +65,10 @@ def fetch_book_data(title):
                 info = data["items"][0]["volumeInfo"]
                 official_title = info.get("title", title)
                 author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
-                genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
+                raw_genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
+                mapped_genre = clean_and_map_genre(raw_genre)
                 publisher = info.get("publisher", "SIN INFORMACION")
-                return official_title, author, genre, publisher
+                return official_title, author, mapped_genre, publisher
     except Exception:
         pass
 
@@ -44,9 +81,10 @@ def fetch_book_data(title):
                 info = data["items"][0]["volumeInfo"]
                 official_title = info.get("title", title)
                 author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
-                genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
+                raw_genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
+                mapped_genre = clean_and_map_genre(raw_genre)
                 publisher = info.get("publisher", "SIN INFORMACION")
-                return official_title, author, genre, publisher
+                return official_title, author, mapped_genre, publisher
     except Exception:
         pass
 
@@ -81,7 +119,7 @@ def run_import():
         return
 
     print(f"\nIniciando importacion de {len(book_titles)} libros usando API Key...")
-    
+
     # -- CONECTAR A BASE DE DATOS --
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -99,10 +137,10 @@ def run_import():
             continue
 
         print(f"Buscando en Google Books: {title}...")
-        
+
         # -- OBTENER DATOS DE LA API --
         official_title, author, genre, publisher = fetch_book_data(title)
-        
+
         # -- VERIFICAR SI EL TITULO OFICIAL YA EXISTE --
         cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (official_title,))
         if cursor.fetchone():
@@ -119,7 +157,7 @@ def run_import():
             success_count += 1
         except Exception as e:
             print(f"Error guardando '{title}': {e}")
-        
+
         # -- ESPERAR UN SEGUNDO PARA NO SATURAR LA API --
         time.sleep(1) 
 
