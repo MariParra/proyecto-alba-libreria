@@ -7,9 +7,11 @@ import os
 GOOGLE_SHEET_NAME = "INSCRIPCIONES CAJA MENSUAL" 
 WORKSHEET_NAME = "formulario"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CREDENTIALS_FILE = os.path.join(BASE_DIR, "credentials.json")
-LOCAL_DB_NAME = os.path.join(BASE_DIR, "libreria.db")
+# -- CONFIGURAR RUTAS --
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "config", "credentials.json")
+LOCAL_DB_NAME = os.path.join(BASE_DIR, "2_database", "libreria.db")
+
 
 def clean_field(value):
     # -- NORMALIZAR CAMPOS VACIOS O NULOS --

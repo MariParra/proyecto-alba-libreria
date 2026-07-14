@@ -4,16 +4,16 @@ import pandas as pd
 from datetime import datetime
 
 # -- CONFIGURAR RUTAS --
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOCAL_DB_NAME = os.path.join(BASE_DIR, "libreria.db")
-BACKUP_DIR = os.path.join(BASE_DIR, "respaldos") 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
+BACKUP_DIR = os.path.join(BASE_DIR, "5_backups")
 
 def backup_database():
     print("Iniciando proceso de respaldo doble (SQLite y Excel)...")
 
     # -- VERIFICAR QUE LA BASE DE DATOS ORIGINAL EXISTA --
-    if not os.path.exists(LOCAL_DB_NAME):
-        print(f"Error: No se encontro la base de datos en: {LOCAL_DB_NAME}")
+    if not os.path.exists(DB_PATH):
+        print(f"Error: No se encontro la base de datos en: {DB_PATH}")
         return
 
     # -- CREAR CARPETA DE RESPALDOS SI NO EXISTE --
@@ -35,7 +35,7 @@ def backup_database():
         # ==========================================
         # 1. RESPALDO NATIVO SQLITE (.db)
         # ==========================================
-        origen = sqlite3.connect(LOCAL_DB_NAME)
+        origen = sqlite3.connect(DB_PATH)
         destino_db = sqlite3.connect(backup_db_path)
         origen.backup(destino_db)
         print(f"Respaldo SQLite creado: {backup_db_filename}")

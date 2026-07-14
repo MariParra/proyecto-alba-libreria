@@ -5,13 +5,13 @@ import json
 import difflib
 
 # -- CONFIGURAR RUTAS --
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "libreria.db")
-JSON_PATH = os.path.join(BASE_DIR, "libros.json")
-CSV_PATH = os.path.join(BASE_DIR, "INSCRIPCIONES CAJA MENSUAL - CAJITAS.csv") 
-CLEAN_CSV_PATH = os.path.join(BASE_DIR, "CAJITAS_CORREGIDO.csv")
-OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "migracion_asignaciones.sql")
-MISSING_REPORT_PATH = os.path.join(BASE_DIR, "reporte_faltantes.csv")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
+JSON_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
+CSV_PATH = os.path.join(BASE_DIR, "1_input_data", "INSCRIPCIONES CAJA MENSUAL - CAJITAS.csv") 
+CLEAN_CSV_PATH = os.path.join(BASE_DIR, "4_output_reports", "CAJITAS_CORREGIDO.csv")
+OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "4_output_reports", "migracion_asignaciones.sql")
+MISSING_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_faltantes.csv")
 
 def get_best_match(raw_title, official_dict):
     """Algoritmo de corrección automática de títulos (Fuzzy Matching)."""
@@ -37,7 +37,7 @@ def generate_migration_sql():
             official_titles = json.load(f)
         official_dict = {t.upper(): t for t in official_titles}
     except Exception as e:
-        print(f"❌ Error al leer libros.json: {e}")
+        print(f"Error al leer libros.json: {e}")
         return
         
     # --- 2. CARGAR Y CORREGIR EL CSV ---
@@ -50,10 +50,10 @@ def generate_migration_sql():
         col_libro = next((c for c in df.columns if 'libro' in c.lower() or 'titulo' in c.lower()), 'Titulo')
         col_cliente = next((c for c in df.columns if 'client' in c.lower()), 'Clienta')
         
-        # 🟢 DROPNA REFORZADO: Eliminar filas donde falte 'Clienta', 'Año' o 'Mes'
+        # DROPNA REFORZADO: Eliminar filas donde falte 'Clienta', 'Año' o 'Mes'
         print(f"Filas originales en el CSV: {len(df)}")
         df.dropna(subset=[col_cliente, 'Año', 'Mes'], inplace=True)
-        print(f"✅ Filas con datos válidos encontradas después de aplicar el DROPNA: {len(df)}")
+        print(f"Filas con datos válidos encontradas después de aplicar el DROPNA: {len(df)}")
         
         print(f"Corrigiendo nombres de libros en la columna '{col_libro}'...")
         df[col_libro] = df[col_libro].apply(lambda x: get_best_match(x, official_dict) if pd.notna(x) else x)
@@ -62,7 +62,7 @@ def generate_migration_sql():
         df.to_csv(CLEAN_CSV_PATH, index=False, encoding='utf-8-sig', sep=';')
 
     except Exception as e:
-        print(f"❌ Error procesando el CSV: {e}")
+        print(f"Error procesando el CSV: {e}")
         return
 
     # --- 3. CONECTAR A BD Y GENERAR SQL ---
@@ -107,7 +107,7 @@ def generate_migration_sql():
             pagado = 'TRUE' if str(row.get('Pagado', '')).strip().upper() == 'TRUE' else 'FALSE'
             envio_pagado = 'TRUE' if str(row.get('Envio pagado', '')).strip().upper() == 'TRUE' else 'FALSE'
 
-            # 🟢 REGLA DE NEGOCIO: OK para junio 2026 y anteriores, Pendiente para los nuevos.
+            # REGLA DE NEGOCIO: OK para junio 2026 y anteriores, Pendiente para los nuevos.
             if int(ano_val) < 2026 or (int(ano_val) == 2026 and int(mes_val) <= 6):
                 estado_envio = 'OK'
             else:
@@ -132,7 +132,7 @@ def generate_migration_sql():
             print(f"⚠️ ¡Atención! Algunos libros no se encontraron. Revisa '{MISSING_REPORT_PATH}'.")
                 
     except Exception as e:
-        print(f"❌ Ocurrió un error inesperado en la fase de BD: {e}")
+        print(f"Ocurrió un error inesperado en la fase de BD: {e}")
 
 if __name__ == "__main__":
     generate_migration_sql()
