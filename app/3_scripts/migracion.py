@@ -17,7 +17,6 @@ def get_best_match(raw_title, official_dict):
     """Algoritmo de corrección automática de títulos (Fuzzy Matching)."""
     raw_upper = str(raw_title).strip().upper()
     if not raw_upper or raw_upper == 'NAN': return raw_title
-    
     if raw_upper in official_dict: return official_dict[raw_upper]
     
     for off_up, off_orig in official_dict.items():
@@ -40,27 +39,22 @@ def generate_migration_sql():
         print(f"Error al leer libros.json: {e}")
         return
         
-    # --- 2. CARGAR Y CORREGIR EL CSV ---
+    # --- 2. CARGAR Y CORREGIR EL CSV (CON LÓGICA RESTAURADA) ---
     try:
-        # Usar sep=None hace que Pandas adivine si es coma o punto y coma
         df = pd.read_csv(CSV_PATH, sep=None, engine='python', on_bad_lines='skip')
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip() # Limpieza de encabezados
         
-        # Búsqueda dinámica de las columnas principales
         col_libro = next((c for c in df.columns if 'libro' in c.lower() or 'titulo' in c.lower()), 'Titulo')
         col_cliente = next((c for c in df.columns if 'client' in c.lower()), 'Clienta')
         
-        # DROPNA REFORZADO: Eliminar filas donde falte 'Clienta', 'Año' o 'Mes'
         print(f"Filas originales en el CSV: {len(df)}")
-        df.dropna(subset=[col_cliente, 'Año', 'Mes'], inplace=True)
-        print(f"Filas con datos válidos encontradas después de aplicar el DROPNA: {len(df)}")
+        df.dropna(subset=[col_cliente, 'Año', 'Mes'], inplace=True) # DROPNA reforzado
+        print(f"Filas con datos válidos después de la limpieza: {len(df)}")
         
         print(f"Corrigiendo nombres de libros en la columna '{col_libro}'...")
         df[col_libro] = df[col_libro].apply(lambda x: get_best_match(x, official_dict) if pd.notna(x) else x)
         
-        # Guardamos un respaldo limpio del CSV para auditoría
         df.to_csv(CLEAN_CSV_PATH, index=False, encoding='utf-8-sig', sep=';')
-
     except Exception as e:
         print(f"Error procesando el CSV: {e}")
         return
@@ -73,6 +67,8 @@ def generate_migration_sql():
         
         sql_inserts, libros_no_encontrados = [], set()
         
+        meses_map = {'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04', 'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08', 'septiembre': '09', 'octubre': '10', 'noviembre': '11', 'diciembre': '12'}
+
         for _, row in df.iterrows():
             cliente_nombre_raw = str(row.get(col_cliente, '')).strip()
             libro_titulo_raw = str(row.get(col_libro, '')).strip()
@@ -92,35 +88,39 @@ def generate_migration_sql():
             
             mes_texto = str(row.get('Mes', '')).strip().lower()
             
-            # Limpieza exhaustiva del año: convertimos a float y luego a int para eliminar los ".0"
             try:
                 ano_val = str(int(float(row['Año'])))
-            except:
-                continue # Si por alguna extraña razón falla la conversión, omitimos la fila
+            except (ValueError, TypeError):
+                continue
             
-            meses_map = {'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04', 'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08', 'septiembre': '09', 'octubre': '10', 'noviembre': '11', 'diciembre': '12'}
-            mes_val = meses_map.get(mes_texto, "00")
-            
-            if mes_val == "00": continue
+            mes_val = meses_map.get(mes_texto)
+            if not mes_val: continue
             
             fecha_asignacion = f"{ano_val}-{mes_val}-01 00:00:00"
-            pagado = 'TRUE' if str(row.get('Pagado', '')).strip().upper() == 'TRUE' else 'FALSE'
-            envio_pagado = 'TRUE' if str(row.get('Envio pagado', '')).strip().upper() == 'TRUE' else 'FALSE'
-
-            # REGLA DE NEGOCIO: OK para junio 2026 y anteriores, Pendiente para los nuevos.
+            pagado_csv = str(row.get('Pagado', 'FALSE')).strip().upper()
+            
+            # REGLA DE NEGOCIO ESTRICA
             if int(ano_val) < 2026 or (int(ano_val) == 2026 and int(mes_val) <= 6):
                 estado_envio = 'OK'
+                envio_pagado = 'TRUE'
+                pagado = 'TRUE'
             else:
-                estado_envio = 'Pendiente'
-
-            # Construcción de la sentencia de inserción y actualización
+                estado_envio = 'PENDIENTE'
+                envio_pagado = 'FALSE'
+                pagado = 'FALSE'
+                
             sql = (
                 f"INSERT INTO asignaciones (cliente_id, libro_suscripcion_id, ano, mes, pagado, envio_pagado, estado_envio, fecha_asignacion) "
                 f"VALUES ({cliente_id}, {libro_id_sql}, '{ano_val}', '{mes_val}', '{pagado}', '{envio_pagado}', '{estado_envio}', '{fecha_asignacion}') "
-                f"ON CONFLICT(cliente_id, ano_mes) DO UPDATE SET libro_suscripcion_id = excluded.libro_suscripcion_id, estado_envio = excluded.estado_envio;"
+                f"ON CONFLICT(cliente_id, ano, mes) DO UPDATE SET "
+                f"libro_suscripcion_id = excluded.libro_suscripcion_id, "
+                f"estado_envio = excluded.estado_envio, "
+                f"pagado = excluded.pagado, "
+                f"envio_pagado = excluded.envio_pagado, "
+                f"fecha_asignacion = excluded.fecha_asignacion;"
             )
             sql_inserts.append(sql)
-
+            
         conn.close()
 
         with open(OUTPUT_SQL_PATH, 'w', encoding='utf-8') as f:
@@ -130,7 +130,7 @@ def generate_migration_sql():
         if libros_no_encontrados:
             pd.DataFrame([{"Tipo": "Libro", "Nombre": l} for l in libros_no_encontrados]).to_csv(MISSING_REPORT_PATH, index=False, encoding='utf-8-sig')
             print(f"⚠️ ¡Atención! Algunos libros no se encontraron. Revisa '{MISSING_REPORT_PATH}'.")
-                
+            
     except Exception as e:
         print(f"Ocurrió un error inesperado en la fase de BD: {e}")
 

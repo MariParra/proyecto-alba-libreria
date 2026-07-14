@@ -33,7 +33,7 @@ def realizar_respaldo_automatico(etiqueta="OPEN"):
 
     # -- GENERAR NOMBRE DE RESPALDO CON FECHA, HORA Y ETIQUETA DE EVENTO --
     ahora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    nombre_respaldo = os.path.join(carpeta_respaldos, f"respaldo_club_{ahora}_{etiqueta}.db")
+    nombre_respaldo = os.path.join(carpeta_respaldos, f"respaldo_albalibreria_{ahora}_{etiqueta}.db")
 
     # -- COPIAR ARCHIVO DE BASE DE DATOS AL RESPALDO --
     try:
