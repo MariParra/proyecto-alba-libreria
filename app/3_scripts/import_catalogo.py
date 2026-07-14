@@ -3,6 +3,7 @@ import os
 import requests
 import time
 import json
+import re
 
 # -- CONFIGURAR RUTAS --
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,7 +13,6 @@ JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
 # -- ASIGNAR CLAVE DE API --
 API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE"
 
-# -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
 # -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
 # IMPORTANTE: El orden importa. Los géneros compuestos van primero.
 GENRES_MAP = {
@@ -67,47 +67,65 @@ GENRES_MAP = {
     "MISTERIO": "Thriller",
     "DETECTIVE": "Thriller",
     "POLICIAL": "Thriller",
+    
     # 3. Categorías generales (Fallbacks)
     "FICTION": "Ficción General",
     "FICCIÓN": "Ficción General",
     "LITERARY": "Ficción General"
 }
 
+def clean_and_map_genre(categories_list, description):
+    # -- BUSCAR PRIMERO EN LAS CATEGORÍAS OFICIALES --
+    if categories_list:
+        categorias_str = " ".join(categories_list).upper()
+        for key, val in GENRES_MAP.items():
+            if key in categorias_str:
+                return val
 
-def clean_and_map_genre(google_genres_raw):
-    # -- HOMOLOGAR CATEGORIAS DE GOOGLE CON FORMULARIO --
-    if not google_genres_raw or google_genres_raw == "SIN INFORMACION":
+    # -- SI NO HAY CATEGORÍAS (O NO HUBO MATCH), BUSCAR EN LA SINOPSIS (DESCRIPCIÓN) --
+    if description:
+        desc_upper = str(description).upper()
+        for key, val in GENRES_MAP.items():
+            # Buscamos palabras clave en la descripción
+            if key in desc_upper:
+                return val
+
+    # Si no hay categorías ni descripción, o no hace match con nada
+    if not categories_list and not description:
         return "SIN INFORMACION"
-
-    genre_upper = str(google_genres_raw).upper()
-
-    for key, val in GENRES_MAP.items():
-        if key in genre_upper:
-            return val
-
+    
     return "OTRO"
 
 def fetch_book_data(title):
-    # -- CODIFICAR TITULO PARA URL --
-    encoded_title = requests.utils.quote(title)
+    # -- LIMPIAR EL TÍTULO (Expresión regular corregida) --
+    clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
+    encoded_title = requests.utils.quote(clean_title)
 
-    # -- CONSTRUIR URLS DE BUSQUEDA --
-    url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
-    url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
+    # -- URLS SIN RESTRICCIÓN DE IDIOMA --
+    url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&maxResults=1&key={API_KEY}"
+    url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&maxResults=1&key={API_KEY}"
+
+    def extract_data(data):
+        if "items" in data and data["items"]:
+            info = data["items"][0]["volumeInfo"]
+            official_title = info.get("title", title)
+            author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
+            
+            raw_categories = info.get("categories", [])
+            description = info.get("description", "")
+            
+            mapped_genre = clean_and_map_genre(raw_categories, description)
+            publisher = info.get("publisher", "SIN INFORMACION")
+            
+            return official_title, author, mapped_genre, publisher
+        return None
 
     # -- BUSCAR POR TITULO EXACTO --
     try:
         response = requests.get(url_intitle, timeout=10)
         if response.status_code == 200:
-            data = response.json()
-            if "items" in data and data["items"]:
-                info = data["items"][0]["volumeInfo"]
-                official_title = info.get("title", title)
-                author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
-                raw_genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
-                mapped_genre = clean_and_map_genre(raw_genre)
-                publisher = info.get("publisher", "SIN INFORMACION")
-                return official_title, author, mapped_genre, publisher
+            result = extract_data(response.json())
+            if result: return result
     except Exception:
         pass
 
@@ -115,15 +133,8 @@ def fetch_book_data(title):
     try:
         response = requests.get(url_general, timeout=10)
         if response.status_code == 200:
-            data = response.json()
-            if "items" in data and data["items"]:
-                info = data["items"][0]["volumeInfo"]
-                official_title = info.get("title", title)
-                author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
-                raw_genre = ", ".join(info.get("categories", ["SIN INFORMACION"]))
-                mapped_genre = clean_and_map_genre(raw_genre)
-                publisher = info.get("publisher", "SIN INFORMACION")
-                return official_title, author, mapped_genre, publisher
+            result = extract_data(response.json())
+            if result: return result
     except Exception:
         pass
 
@@ -158,35 +169,32 @@ def run_import():
         return
 
     print(f"\nIniciando importacion de {len(book_titles)} libros usando API Key...")
-
+    
     # -- CONECTAR A BASE DE DATOS --
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
-    # -- INICIAR CONTADORES --
+    
     success_count = 0
     skipped_count = 0
 
     # -- PROCESAR CADA LIBRO --
     for title in book_titles:
-        # -- VERIFICAR SI EL TITULO ORIGINAL YA EXISTE --
+        # Verificar si el título original ya existe
         cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (title,))
         if cursor.fetchone():
             skipped_count += 1
             continue
 
         print(f"Buscando en Google Books: {title}...")
-
-        # -- OBTENER DATOS DE LA API --
         official_title, author, genre, publisher = fetch_book_data(title)
 
-        # -- VERIFICAR SI EL TITULO OFICIAL YA EXISTE --
+        # Verificar si el título oficial ya existe
         cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (official_title,))
         if cursor.fetchone():
             skipped_count += 1
             continue
 
-        # -- INSERTAR NUEVO LIBRO --
+        # Insertar nuevo libro
         try:
             cursor.execute(
                 "INSERT INTO libros (titulo, autor, genero, editorial) VALUES (?, ?, ?, ?)",
@@ -196,11 +204,9 @@ def run_import():
             success_count += 1
         except Exception as e:
             print(f"Error guardando '{title}': {e}")
+            
+        time.sleep(1)
 
-        # -- ESPERAR UN SEGUNDO PARA NO SATURAR LA API --
-        time.sleep(1) 
-
-    # -- CERRAR CONEXION --
     conn.close()
     print(f"\nImportacion completada: {success_count} guardados con exito, {skipped_count} saltados por duplicado.")
 
