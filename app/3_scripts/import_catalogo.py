@@ -13,27 +13,66 @@ JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
 API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE"
 
 # -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
+# -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
+# IMPORTANTE: El orden importa. Los géneros compuestos van primero.
 GENRES_MAP = {
-    "ROMANCE": "ROMÁNTICA",
-    "ROMÁNTICA": "ROMÁNTICA",
-    "LOVE": "ROMÁNTICA",
-    "FANTASY": "FANTASÍA",
-    "FANTASÍA": "FANTASÍA",
-    "HORROR": "TERROR",
-    "TERROR": "TERROR",
-    "SCIENCE FICTION": "CIENCIA FICCIÓN",
-    "CIENCIA FICCIÓN": "CIENCIA FICCIÓN",
-    "SCI-FI": "CIENCIA FICCIÓN",
-    "THRILLER": "SUSPENSO",
-    "SUSPENSO": "SUSPENSO",
-    "MYSTERY": "SUSPENSO",
-    "MISTERIO": "SUSPENSO",
-    "POLICIAL": "SUSPENSO",
-    "DETECTIVE": "SUSPENSO",
-    "FICTION": "FICCIÓN GENERAL",
-    "FICCIÓN": "FICCIÓN GENERAL",
-    "LITERARY": "FICCIÓN GENERAL"
+    # 1. Subgéneros y términos compuestos (evita colisiones)
+    "DARK ROMANCE": "Dark Romance",
+    "DARK ACADEMIA": "Dark Academy",
+    "DARK ACADEMY": "Dark Academy",
+    "PSYCHOLOGICAL THRILLER": "Thriller Psicológico",
+    "THRILLER PSICOLÓGICO": "Thriller Psicológico",
+    "THRILLER PSICOLOGICO": "Thriller Psicológico",
+    "ROMANTASY": "Romantasy",
+    "SCIENCE FICTION": "Ciencia Ficción",
+    "CIENCIA FICCIÓN": "Ciencia Ficción",
+    "CIENCIA FICCION": "Ciencia Ficción",
+    "SCI-FI": "Ciencia Ficción",
+    
+    # 2. Géneros principales
+    "ROMANCE": "Romance",
+    "ROMÁNTICA": "Romance",
+    "ROMANTICA": "Romance",
+    "LOVE": "Romance",
+    "FANTASY": "Fantasía",
+    "FANTASÍA": "Fantasía",
+    "FANTASIA": "Fantasía",
+    "DYSTOPIA": "Distopía",
+    "DISTOPÍA": "Distopía",
+    "DISTOPIA": "Distopía",
+    "HISTORICAL": "Histórico",
+    "HISTÓRICO": "Histórico",
+    "HISTORICO": "Histórico",
+    "CLASSIC": "Clásicos",
+    "CLÁSICO": "Clásicos",
+    "CLASICO": "Clásicos",
+    "POETRY": "Poesía",
+    "POESÍA": "Poesía",
+    "POESIA": "Poesía",
+    "LGBT": "LGTBQ+",
+    "QUEER": "LGTBQ+",
+    "GAY": "LGTBQ+",
+    "LESBIAN": "LGTBQ+",
+    "EROTIC": "Spicy",
+    "ERÓTICA": "Spicy",
+    "EROTICA": "Spicy",
+    "SPICY": "Spicy",
+    "HORROR": "Terror y Horror",
+    "TERROR": "Terror y Horror",
+    "MACABRE": "Terror y Horror",
+    "THRILLER": "Thriller",
+    "SUSPENSE": "Thriller",
+    "SUSPENSO": "Thriller",
+    "MYSTERY": "Thriller", 
+    "MISTERIO": "Thriller",
+    "DETECTIVE": "Thriller",
+    "POLICIAL": "Thriller",
+    # 3. Categorías generales (Fallbacks)
+    "FICTION": "Ficción General",
+    "FICCIÓN": "Ficción General",
+    "LITERARY": "Ficción General"
 }
+
 
 def clean_and_map_genre(google_genres_raw):
     # -- HOMOLOGAR CATEGORIAS DE GOOGLE CON FORMULARIO --
