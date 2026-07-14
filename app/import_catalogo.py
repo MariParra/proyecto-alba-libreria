@@ -1,50 +1,28 @@
 import sqlite3
 import os
-import json
+import requests
 import time
-from google.oauth2 import service_account
-from google.auth.transport.requests import AuthorizedSession
+import json
 
-# --- CONFIGURACION DE RUTAS ---
+# -- CONFIGURAR RUTAS --
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "libreria.db")
 JSON_FILE_PATH = os.path.join(BASE_DIR, "libros.json")
-CREDENTIALS_FILE = os.path.join(BASE_DIR, "credentials.json")
 
-def get_authorized_session():
-    # -- AUTENTICARSE CON CREDENTIALS.JSON PARA OBTENER UNA SESION CON CUOTA --
-    if not os.path.exists(CREDENTIALS_FILE):
-        print(f"DEBUG: No se encontro {CREDENTIALS_FILE}. Se realizara consulta publica.")
-        return None
-    try:
-        # Definir el alcance necesario para consultar la API de Google Books
-        scopes = ["https://www.googleapis.com/auth/books"]
-        credentials = service_account.Credentials.from_service_account_file(
-            CREDENTIALS_FILE, scopes=scopes
-        )
-        # Crear una sesion autenticada que inyectara los tokens en cada peticion
-        session = AuthorizedSession(credentials)
-        return session
-    except Exception as e:
-        print(f"DEBUG: Error al iniciar sesion autenticada: {e}")
-        return None
+# -- ASIGNAR CLAVE DE API --
+API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE" 
 
-def fetch_book_data(session, title):
-    # -- PREPARAR URL DE BUSQUEDA --
-    import requests
+def fetch_book_data(title):
+    # -- CODIFICAR TITULO PARA URL --
     encoded_title = requests.utils.quote(title)
     
-    # Intentamos primero con filtro de titulo
-    url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&langRestrict=es&maxResults=1"
-    url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&langRestrict=es&maxResults=1"
+    # -- CONSTRUIR URLS DE BUSQUEDA --
+    url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
+    url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&langRestrict=es&maxResults=1&key={API_KEY}"
 
-    # Intentar buscar usando la sesion autenticada (Plan A con intitle)
+    # -- BUSCAR POR TITULO EXACTO --
     try:
-        if session:
-            response = session.get(url_intitle, timeout=10)
-        else:
-            response = requests.get(url_intitle, timeout=10)
-            
+        response = requests.get(url_intitle, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if "items" in data and data["items"]:
@@ -57,13 +35,9 @@ def fetch_book_data(session, title):
     except Exception:
         pass
 
-    # Plan B (Busqueda general si intitle falla o no arroja resultados)
+    # -- BUSCAR DE FORMA GENERAL --
     try:
-        if session:
-            response = session.get(url_general, timeout=10)
-        else:
-            response = requests.get(url_general, timeout=10)
-            
+        response = requests.get(url_general, timeout=10)
         if response.status_code == 200:
             data = response.json()
             if "items" in data and data["items"]:
@@ -76,70 +50,66 @@ def fetch_book_data(session, title):
     except Exception:
         pass
 
-    # Plan C: Quedarse con el titulo original del JSON como respaldo
+    # -- RETORNAR VALORES POR DEFECTO SI NO EXISTE --
     return title, "SIN INFORMACION", "SIN INFORMACION", "SIN INFORMACION"
 
 def run_import():
-    # --- Limpiar la tabla de libros para una importacion limpia ---
+    # -- LIMPIAR TABLA DE LIBROS --
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        print("\nLimpiando la tabla 'libros' para una importacion limpia...")
+        print("\nLimpiando la tabla 'libros' para una importacion con datos reales...")
         cursor.execute("DELETE FROM libros;")
         cursor.execute("DELETE FROM sqlite_sequence WHERE name='libros';")
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error al vaciar la base de datos: {e}")
+        print(f"Error al limpiar la base de datos: {e}")
         return
 
-    # --- Validar existencia del JSON ---
+    # -- VERIFICAR EXISTENCIA DEL ARCHIVO JSON --
     if not os.path.exists(JSON_FILE_PATH):
-        print(f"Error: No se encontro el archivo '{JSON_FILE_PATH}'")
+        print(f"Error: No se encontro '{JSON_FILE_PATH}'")
         return
 
-    try:
-        with open(JSON_FILE_PATH, 'r', encoding='utf-8') as file:
-            book_titles = json.load(file)
-    except Exception as e:
-        print(f"Error al leer el archivo JSON: {e}")
-        return
+    # -- LEER ARCHIVO JSON --
+    with open(JSON_FILE_PATH, 'r', encoding='utf-8') as file:
+        book_titles = json.load(file)
 
     if not book_titles:
         print("El archivo 'libros.json' esta vacio.")
         return
 
-    print(f"\nIniciando importacion definitiva de {len(book_titles)} libros...")
+    print(f"\nIniciando importacion de {len(book_titles)} libros usando API Key...")
     
-    # Iniciar sesion con credenciales de GCP
-    session = get_authorized_session()
-    if session:
-        print("Autenticacion exitosa: Conectando a Google Books mediante Cuenta de Servicio.")
-    else:
-        print("Advertencia: No se pudo autenticar. Se procedera con consultas publicas.")
-
+    # -- CONECTAR A BASE DE DATOS --
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # -- INICIAR CONTADORES --
     success_count = 0
     skipped_count = 0
 
+    # -- PROCESAR CADA LIBRO --
     for title in book_titles:
-        # Evitar duplicados por seguridad
+        # -- VERIFICAR SI EL TITULO ORIGINAL YA EXISTE --
         cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (title,))
         if cursor.fetchone():
             skipped_count += 1
             continue
 
-        print(f"Importando: {title}...")
-        official_title, author, genre, publisher = fetch_book_data(session, title)
+        print(f"Buscando en Google Books: {title}...")
         
-        # Segunda verificacion con el titulo oficial obtenido
+        # -- OBTENER DATOS DE LA API --
+        official_title, author, genre, publisher = fetch_book_data(title)
+        
+        # -- VERIFICAR SI EL TITULO OFICIAL YA EXISTE --
         cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (official_title,))
         if cursor.fetchone():
             skipped_count += 1
             continue
 
+        # -- INSERTAR NUEVO LIBRO --
         try:
             cursor.execute(
                 "INSERT INTO libros (titulo, autor, genero, editorial) VALUES (?, ?, ?, ?)",
@@ -148,16 +118,14 @@ def run_import():
             conn.commit()
             success_count += 1
         except Exception as e:
-            print(f"Error al guardar '{title}': {e}")
+            print(f"Error guardando '{title}': {e}")
         
-        # Pausa recomendada de 1 segundo
-        time.sleep(1)
+        # -- ESPERAR UN SEGUNDO PARA NO SATURAR LA API --
+        time.sleep(1) 
 
+    # -- CERRAR CONEXION --
     conn.close()
-    
-    print("\n--- RESUMEN DE IMPORTACION ---")
-    print(f"Libros importados con exito: {success_count}")
-    print(f"Libros saltados (ya existian): {skipped_count}")
+    print(f"\nImportacion completada: {success_count} guardados con exito, {skipped_count} saltados por duplicado.")
 
 if __name__ == "__main__":
     run_import()
