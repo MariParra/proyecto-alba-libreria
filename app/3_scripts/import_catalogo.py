@@ -10,7 +10,7 @@ DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
 
 # -- ASIGNAR CLAVE DE API --
-API_KEY = "TU_API_KEY_REAL_AQUI"
+API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE"
 
 # -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
 GENRES_MAP = {
