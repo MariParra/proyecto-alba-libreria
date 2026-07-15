@@ -1,8 +1,51 @@
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
+from tkinter import ttk, messagebox, simpledialog
 import datetime
 import conexion
+
+def abrir_dialogo_comentario(root, tabla, callback_refrescar):
+    """Abre un diálogo para editar el campo de texto 'comentario'."""
+    selected_iid = tabla.focus()
+    if not selected_iid: return
+
+    asignacion_id = tabla.set(selected_iid, "asignacion_id")
+    valor_actual = tabla.set(selected_iid, "comentario")
+
+    # Usamos un Toplevel personalizado para más control que simpledialog
+    win = tk.Toplevel(root)
+    win.title("Editar Comentario")
+    win.geometry("400x300")
+    win.transient(root)
+    win.grab_set()
+    win.configure(bg="#FCE4EC")
+
+    tk.Label(win, text="Comentario:", bg="#FCE4EC", font=("Helvetica", 10, "bold")).pack(pady=(10, 5))
+    
+    text_frame = tk.Frame(win, bd=1, relief="sunken")
+    text_frame.pack(padx=10, pady=5, fill="both", expand=True)
+    
+    text_widget = tk.Text(text_frame, wrap="word", height=10, width=40, font=("Helvetica", 10))
+    text_widget.pack(fill="both", expand=True)
+    text_widget.insert("1.0", valor_actual if valor_actual and valor_actual != 'SIN COMENTARIOS' else "")
+
+    def guardar_comentario():
+        nuevo_valor = text_widget.get("1.0", tk.END).strip()
+        if not nuevo_valor:
+            nuevo_valor = "SIN COMENTARIOS"
+
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE asignaciones SET comentario = ? WHERE asignacion_id = ?", (nuevo_valor, asignacion_id))
+            conn.commit()
+            conn.close()
+            win.destroy()
+            callback_refrescar()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo actualizar el comentario: {e}", parent=win)
+
+    tk.Button(win, text="Guardar", command=guardar_comentario, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold")).pack(pady=10)
+
 
 def manejar_edicion_celda(event, root, widgets, callback_refrescar):
     tabla = widgets['tabla_clientes']
@@ -21,14 +64,16 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
         abrir_dialogo_fecha(root, tabla, callback_refrescar)
         return
     elif selected_col_name == "libro":
-        # Llamar a la ventana emergente para asignar libro
         abrir_dialogo_asignar_libro(root, tabla, callback_refrescar, lambda: refrescar_inventario_global(widgets))
         return
+    # AÑADIDO: Manejo para la columna de comentario
+    elif selected_col_name == "comentario":
+        abrir_dialogo_comentario(root, tabla, callback_refrescar)
+        return
 
-    # Lógica de edición in-line para estados
     opciones_combo = None
     campo_bd = None
-    # ... (código de edición in-line para estados sin cambios) ...
+    
     estados = ["EN PREPARACION", "POR ENVIAR", "ENVIADO", "POR RETIRAR", "RETIRADO"]
     if selected_col_name == "estado":
         opciones_combo = estados
@@ -36,8 +81,11 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
     elif selected_col_name == "pagado":
         opciones_combo = ["Si", "No"]
         campo_bd = "pagado"
+    elif selected_col_name == "envio_pag":
+        opciones_combo = ["Si", "No"]
+        campo_bd = "envio_pagado"
     elif selected_col_name == "tipo_envio":
-        opciones_combo = ["STARKEN", "BLUEXPRESS", "CORREOS CHILE", "RETIRO"] # Ejemplo
+        opciones_combo = ["BLUEXPRESS", "PAKET", "RETIRO"]
         campo_bd = "metodo_entrega"
 
     if opciones_combo:
@@ -54,7 +102,6 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
             try:
                 conn = conexion.conectar_db()
                 cursor = conn.cursor()
-                # Para el tipo de envío, la tabla es 'suscripciones', no 'asignaciones'
                 if campo_bd == "metodo_entrega":
                     cliente_id = tabla.set(selected_iid, "cliente_id")
                     cursor.execute("UPDATE suscripciones SET metodo_entrega = ? WHERE cliente_id = ?", (valor_guardar, cliente_id))
@@ -72,8 +119,11 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
         cb.bind("<Return>", guardar_cambio_combo)
         cb.bind("<<ComboboxSelected>>", guardar_cambio_combo)
 
+
 def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inventario):
     selected_iid = tabla.focus()
+    if not selected_iid: return
+    
     asignacion_id = tabla.set(selected_iid, "asignacion_id")
     cliente_nombre = tabla.set(selected_iid, "nombre")
     
@@ -82,24 +132,31 @@ def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inv
         cursor = conn.cursor()
         cursor.execute("SELECT libro_suscripcion_id FROM asignaciones WHERE asignacion_id = ?", (asignacion_id,))
         current_libro_id = cursor.fetchone()[0]
-        # --- MEJORA FUTURA: APLICAR AQUÍ "WHERE stock > 0" ---
-        cursor.execute("SELECT libro_id, titulo, stock FROM libros ORDER BY titulo")
-        libros_db = cursor.fetchall()
+        cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE stock > 0 ORDER BY titulo")
+        libros_disponibles = cursor.fetchall()
+
+        # Si el libro actual ya no tiene stock, lo buscamos aparte para mostrarlo en la lista
+        if current_libro_id and not any(l[0] == current_libro_id for l in libros_disponibles):
+             cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
+             libro_actual_info = cursor.fetchone()
+             if libro_actual_info:
+                 libros_disponibles.insert(0, libro_actual_info)
+
         conn.close()
     except Exception as e:
         messagebox.showerror("Error", f"Error al acceder a BD: {e}")
         return
         
-    mapa_libros = {f"{t} (Stock: {s})": l_id for l_id, t, s in libros_db}
+    mapa_libros = {f"{t} (Stock: {s})": l_id for l_id, t, s in libros_disponibles}
     opciones = ["(Sin Asignar)"] + list(mapa_libros.keys())
     
-    # (Código de la ventana emergente y lógica de stock sin cambios)
     valor_actual_str = "(Sin Asignar)"
     if current_libro_id:
         for txt, l_id in mapa_libros.items():
             if l_id == current_libro_id:
                 valor_actual_str = txt
                 break
+
     win = tk.Toplevel(root)
     win.title("Asignar Libro")
     win.geometry("420x220")
@@ -114,31 +171,52 @@ def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inv
     def guardar_asignacion():
         nuevo_valor_str = cb_libros.get()
         nuevo_id = mapa_libros.get(nuevo_valor_str, None)
+
         if nuevo_id == current_libro_id:
             win.destroy()
             return
+            
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
+
+            # Lógica robusta para actualizar stock
+            # Restaura el stock del libro anterior si existía
             if current_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
+            
+            # Reduce el stock del nuevo libro si se asignó uno
             if nuevo_id:
+                cursor.execute("SELECT stock FROM libros WHERE libro_id = ?", (nuevo_id,))
+                stock_actual_nuevo_libro = cursor.fetchone()[0]
+                if stock_actual_nuevo_libro <= 0:
+                     messagebox.showwarning("Sin Stock", "El libro seleccionado ya no tiene stock disponible. La operación fue cancelada.", parent=win)
+                     conn.rollback() # Revertir el aumento de stock del libro anterior
+                     conn.close()
+                     win.destroy()
+                     callback_inventario()
+                     return
                 cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (nuevo_id,))
+
+            # Actualiza la asignación
             cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = ? WHERE asignacion_id = ?", (nuevo_id, asignacion_id))
+
             conn.commit()
             conn.close()
             messagebox.showinfo("Asignación Exitosa", "Libro asignado y stock actualizado.", parent=win)
             win.destroy()
             callback_asignaciones()
-            callback_inventario() # Refresca también la tabla de inventario
+            callback_inventario()
         except Exception as e:
             messagebox.showerror("Error", f"Fallo al asignar el libro: {e}", parent=win)
             
     tk.Button(win, text="Confirmar Asignación", command=guardar_asignacion, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), pady=5, padx=10).pack(pady=10)
 
+
 def abrir_dialogo_fecha(root, tabla, callback_refrescar):
-    # (Código del diálogo de fecha sin cambios)
     selected_iid = tabla.focus()
+    if not selected_iid: return
+    
     asignacion_id = tabla.set(selected_iid, "asignacion_id")
     valor_actual = tabla.set(selected_iid, "fecha_asig")
     win = tk.Toplevel(root)
@@ -150,7 +228,8 @@ def abrir_dialogo_fecha(root, tabla, callback_refrescar):
     tk.Label(win, text="Editar fecha (YYYY-MM-DD HH:MM:SS)", bg="#FCE4EC", font=("Helvetica", 10, "bold")).pack(pady=(10, 2))
     entry_fecha = tk.Entry(win, width=30, font=("Helvetica", 10))
     entry_fecha.pack(pady=5, padx=20)
-    entry_fecha.insert(0, valor_actual)
+    entry_fecha.insert(0, valor_actual if valor_actual else "")
+    
     def guardar_fecha():
         try:
             conn = conexion.conectar_db()
@@ -162,15 +241,16 @@ def abrir_dialogo_fecha(root, tabla, callback_refrescar):
             callback_refrescar()
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=win)
+            
     def usar_timestamp_actual():
         entry_fecha.delete(0, tk.END)
         entry_fecha.insert(0, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         guardar_fecha()
+        
     frame_botones = tk.Frame(win, bg="#FCE4EC")
     frame_botones.pack(pady=10)
     tk.Button(frame_botones, text="Guardar", command=guardar_fecha).pack(side="left", padx=10)
     tk.Button(frame_botones, text="Usar Fecha Actual", command=usar_timestamp_actual).pack(side="left", padx=10)
     
-# Esta función global es necesaria para que el pop-up de asignación pueda llamar al refresco del inventario
 def refrescar_inventario_global(widgets):
-    pass # Será reemplazada por la función real del controlador
+    pass

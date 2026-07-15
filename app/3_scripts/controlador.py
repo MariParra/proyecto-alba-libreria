@@ -58,7 +58,8 @@ class AppControlador:
         self.refrescar_todas_las_tablas()
         
     def toggle_columnas_opcionales(self):
-        columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag"]
+        # AÑADIDO: 'comentario' se mantiene visible junto con las columnas base.
+        columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
         opcionales_visibles = []
         if self.widgets['vars_opcionales']['rut'].get(): opcionales_visibles.append("rut")
         if self.widgets['vars_opcionales']['email'].get(): opcionales_visibles.append("email")
@@ -142,9 +143,10 @@ class AppControlador:
             meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
             placeholders_meses = ",".join("?" * len(meses_nums))
             
+            # AÑADIDO: 'a.comentario' en la consulta SELECT
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado {str_extras}
+                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -177,15 +179,16 @@ class AppControlador:
             cursor.execute(query, params)
             for f in cursor.fetchall():
                 fila_formateada = list(f)
-                fila_formateada[5] = fila_formateada[5] if fila_formateada[5] else "SIN ASIGNACIÓN"
-                fila_formateada[9] = "Si" if str(fila_formateada[9]).upper() == "TRUE" else "No"
-                fila_formateada[10] = "Si" if str(fila_formateada[10]).upper() == "TRUE" else "No"
+                fila_formateada[5] = fila_formateada[5] if fila_formateada[5] else "SIN ASIGNACIÓN" # Libro
+                fila_formateada[9] = "Si" if str(fila_formateada[9]).upper() == "TRUE" else "No" # Pagado
+                fila_formateada[10] = "Si" if str(fila_formateada[10]).upper() == "TRUE" else "No" # Envio Pagado
                 tabla.insert("", "end", values=tuple(fila_formateada))
             conn.close()
         except Exception as e:
             messagebox.showerror("Error BD", f"Error al cargar asignaciones: {e}")
 
-    def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, stock, precio FROM libros ORDER BY titulo", params=()):
+    # AÑADIDO: 'encuadernacion' en la consulta
+    def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros ORDER BY titulo", params=()):
         if widgets is None: widgets = self.widgets
         tabla = widgets['tabla_libros']
         for item in tabla.get_children(): tabla.delete(item)
@@ -197,10 +200,10 @@ class AppControlador:
             conn.close()
             for fila in self.datos_inventario_actual:
                 tabla.insert("", "end", values=fila)
-            stock_total = sum(int(fila[5]) for fila in self.datos_inventario_actual if fila[5])
+            # El índice del stock ahora es 6
+            stock_total = sum(int(fila[6]) for fila in self.datos_inventario_actual if fila[6])
             widgets['lbl_stock_total'].config(text=f"Unidades Totales en Inventario: {stock_total}")
             
-            # Recargar las listas del autocompletado
             self.refrescar_listas_autocompletado()
             
         except Exception as e:
@@ -209,7 +212,8 @@ class AppControlador:
     def buscar_libro(self):
         termino = self.widgets['entry_busqueda_libros'].get().strip()
         if not termino: return self.quitar_filtro()
-        query = "SELECT libro_id, titulo, autor, genero, editorial, stock, precio FROM libros WHERE titulo LIKE ? OR autor LIKE ? ORDER BY titulo"
+        # AÑADIDO: 'encuadernacion' en la consulta de búsqueda
+        query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros WHERE titulo LIKE ? OR autor LIKE ? ORDER BY titulo"
         self.refrescar_inventario(query=query, params=(f"%{termino}%", f"%{termino}%"))
 
     def quitar_filtro(self):
@@ -244,6 +248,8 @@ class AppControlador:
                 entry.config(validate="key")
             elif isinstance(entry, ttk.Combobox):
                 entry.set("")
+        # AÑADIDO: Valor por defecto para encuadernación al limpiar
+        self.widgets['form_libro_entries']['encuadernacion'].set('TAPA BLANDA')
         tabla = self.widgets['tabla_libros']
         if tabla.selection():
             tabla.selection_remove(tabla.selection()[0])
@@ -262,12 +268,19 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
+            # AÑADIDO: 'encuadernacion' en la lógica de guardado
             if libro_id:
-                cursor.execute("UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, stock=?, precio=? WHERE libro_id=?", 
-                               (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
+                cursor.execute("""
+                    UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, encuadernacion=?, stock=?, precio=? 
+                    WHERE libro_id=?
+                """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'], 
+                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
             else:
-                cursor.execute("INSERT INTO libros (titulo, autor, genero, editorial, stock, precio) VALUES (?, ?, ?, ?, ?, ?)", 
-                               (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
+                cursor.execute("""
+                    INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'],
+                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
             conn.commit()
             conn.close()
             messagebox.showinfo("Éxito", "Libro guardado correctamente.")
@@ -310,11 +323,17 @@ class AppControlador:
             self.root.config(cursor="")
             win = tk.Toplevel(self.root)
             win.title("Google Sheet Generado")
-            tk.Label(win, text="Reporte exportado.", font=("Helvetica", 10, "bold")).pack(pady=10)
-            entry = tk.Entry(win, width=60)
+            
+            correo_destino = "develop.alba.libreria@gmail.com"
+            mensaje = f"Reporte exportado y compartido con:\n{correo_destino}"
+            
+            tk.Label(win, text=mensaje, font=("Helvetica", 10, "bold")).pack(pady=10, padx=10)
+            
+            entry = tk.Entry(win, width=80)
             entry.pack(padx=20, pady=5)
             entry.insert(0, url)
             entry.config(state="readonly") 
+            
             tk.Button(win, text="Cerrar", command=win.destroy).pack(pady=10)
         except Exception as e:
             self.root.config(cursor="")
@@ -323,17 +342,22 @@ class AppControlador:
     def disparar_script_externo(self, script, mensaje_exito):
         try:
             self.root.config(cursor="watch"); self.root.update()
-            output = conexion.ejecutar_script_externo(os.path.join(os.path.dirname(os.path.abspath(__file__)), script))
+            # La ruta al script debe ser absoluta para evitar problemas
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', script)
+            output = conexion.ejecutar_script_externo(script_path)
             self.root.config(cursor="")
             try:
-                reporte = json.loads(output)
+                # El stdout puede contener más que solo el JSON
+                json_part = output.stdout[output.stdout.find('{'):]
+                reporte = json.loads(json_part)
                 if reporte.get("error"): messagebox.showerror("Error", reporte["error"])
                 else: messagebox.showinfo("Completado", f"{mensaje_exito}\nProcesados: {reporte.get('clientes_procesados', 0)}\nNuevos: {reporte.get('nuevos_clientes', 0)}\nActualizados: {reporte.get('clientes_actualizados', 0)}")
-            except: messagebox.showinfo("Completado", mensaje_exito)
+            except (json.JSONDecodeError, IndexError):
+                messagebox.showinfo("Completado", mensaje_exito)
             self.refrescar_todas_las_tablas()
         except Exception as e:
             self.root.config(cursor="")
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"Error al ejecutar el script '{script}': {e}")
 
     def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización completada.")
     def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Catálogo cargado.")

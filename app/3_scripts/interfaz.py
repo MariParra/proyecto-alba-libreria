@@ -99,17 +99,23 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     scroll_x_cli = ttk.Scrollbar(frame_tabla_cli, orient="horizontal")
     scroll_y_cli = ttk.Scrollbar(frame_tabla_cli, orient="vertical")
     
-    columnas_cli = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "rut", "email", "telefono", "direccion")
+    # AÑADIDO: 'comentario' a la lista de columnas
+    columnas_cli = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario", "rut", "email", "telefono", "direccion")
     tabla_cli = ttk.Treeview(frame_tabla_cli, columns=columnas_cli, show="headings", selectmode="browse", xscrollcommand=scroll_x_cli.set, yscrollcommand=scroll_y_cli.set)
     
-    tabla_cli['displaycolumns'] = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag")
+    # AÑADIDO: 'comentario' a las columnas visibles por defecto
+    tabla_cli['displaycolumns'] = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario")
     
     scroll_x_cli.config(command=tabla_cli.xview)
     scroll_y_cli.config(command=tabla_cli.yview)
     for col in columnas_cli:
-        titulo_col = "Tipo De Envio" if col == "tipo_envio" else ("Año" if col == "ano" else col.replace("_", " ").title())
+        titulo_col = col.replace("_", " ").title()
+        if col == "tipo_envio": titulo_col = "Tipo De Envio"
+        if col == "envio_pag": titulo_col = "Envio Pagado"
+            
         tabla_cli.heading(col, text=titulo_col)
         ancho = 60 if col in ["ano", "mes", "pagado", "envio_pag"] else 120
+        if col == "comentario": ancho = 150 # Ancho para el comentario
         tabla_cli.column(col, width=ancho, minwidth=60)
         
     scroll_y_cli.pack(side="right", fill="y")
@@ -128,7 +134,10 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['lbl_status_libro'].grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
     widgets['form_libro_entries'] = {}
     
-    campos_form = [("titulo", "Título", "entry"), ("autor", "Autor", "combo"), ("genero", "Género", "combo"), ("editorial", "Editorial", "combo"), ("stock", "Stock", "entry"), ("precio", "Precio", "entry")]
+    # AÑADIDO: 'encuadernacion' al formulario
+    campos_form = [("titulo", "Título", "entry"), ("autor", "Autor", "combo"), ("genero", "Género", "combo"), 
+                   ("editorial", "Editorial", "combo"), ("encuadernacion", "Encuadernación", "combo_enc"),
+                   ("stock", "Stock", "entry"), ("precio", "Precio", "entry")]
     
     vcmd_int = (ventana.register(comandos_ui['cmd_validar_int']), '%P')
     vcmd_float = (ventana.register(comandos_ui['cmd_validar_float']), '%P')
@@ -138,6 +147,10 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         
         if tipo == "combo":
             entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10))
+        # AÑADIDO: Lógica para el combobox de encuadernación
+        elif tipo == "combo_enc":
+            entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10), state="readonly",
+                                 values=['TAPA BLANDA', 'TAPA DURA', 'BOLSILLO'])
         else:
             validation_cmd = None
             if col_id == "stock": validation_cmd = vcmd_int
@@ -167,13 +180,21 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_tabla_libros.pack(fill="both", expand=True)
     scroll_x_lib = ttk.Scrollbar(frame_tabla_libros, orient="horizontal")
     scroll_y_lib = ttk.Scrollbar(frame_tabla_libros, orient="vertical")
-    columnas_lib = ("libro_id", "titulo", "autor", "genero", "editorial", "stock", "precio")
+    
+    # AÑADIDO: 'encuadernacion' a las columnas de la tabla de libros
+    columnas_lib = ("libro_id", "titulo", "autor", "genero", "editorial", "encuadernacion", "stock", "precio")
     tabla_lib = ttk.Treeview(frame_tabla_libros, columns=columnas_lib, show="headings", selectmode="browse", xscrollcommand=scroll_x_lib.set, yscrollcommand=scroll_y_lib.set)
     scroll_x_lib.config(command=tabla_lib.xview)
     scroll_y_lib.config(command=tabla_lib.yview)
     for col in columnas_lib:
         tabla_lib.heading(col, text=col.replace("_", " ").title())
-        tabla_lib.column(col, width=120, minwidth=100, stretch=False if col != "titulo" else True)
+        ancho = 120
+        if col == "stock" or col == "precio":
+            ancho = 80
+        elif col == "libro_id":
+            ancho = 60
+        tabla_lib.column(col, width=ancho, minwidth=60, stretch=(col == "titulo"))
+        
     scroll_y_lib.pack(side="right", fill="y")
     scroll_x_lib.pack(side="bottom", fill="x")
     tabla_lib.pack(side="left", fill="both", expand=True)
