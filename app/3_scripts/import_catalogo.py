@@ -5,210 +5,139 @@ import time
 import json
 import re
 
-# -- CONFIGURAR RUTAS --
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# --- CONFIGURACIÓN ---
+# Rutas relativas asumiendo que este script corre en el directorio principal del proyecto
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
+# Esta clave es de ejemplo, asegúrate de tener la tuya si la cambiaste
+API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE" 
 
-# -- ASIGNAR CLAVE DE API --
-API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE"
-
-# -- DEFINIR MAPA DE HOMOLOGACION DE GENEROS --
-# IMPORTANTE: El orden importa. Los géneros compuestos van primero.
+# --- MAPE DE GÉNEROS RESTAURADO ---
 GENRES_MAP = {
-    # 1. Subgéneros y términos compuestos (evita colisiones)
-    "DARK ROMANCE": "Dark Romance",
-    "DARK ACADEMIA": "Dark Academy",
-    "DARK ACADEMY": "Dark Academy",
-    "PSYCHOLOGICAL THRILLER": "Thriller Psicológico",
-    "THRILLER PSICOLÓGICO": "Thriller Psicológico",
-    "THRILLER PSICOLOGICO": "Thriller Psicológico",
-    "ROMANTASY": "Romantasy",
-    "SCIENCE FICTION": "Ciencia Ficción",
-    "CIENCIA FICCIÓN": "Ciencia Ficción",
-    "CIENCIA FICCION": "Ciencia Ficción",
-    "SCI-FI": "Ciencia Ficción",
-    
-    # 2. Géneros principales
-    "ROMANCE": "Romance",
-    "ROMÁNTICA": "Romance",
-    "ROMANTICA": "Romance",
-    "LOVE": "Romance",
-    "FANTASY": "Fantasía",
-    "FANTASÍA": "Fantasía",
-    "FANTASIA": "Fantasía",
-    "DYSTOPIA": "Distopía",
-    "DISTOPÍA": "Distopía",
-    "DISTOPIA": "Distopía",
-    "HISTORICAL": "Histórico",
-    "HISTÓRICO": "Histórico",
-    "HISTORICO": "Histórico",
-    "CLASSIC": "Clásicos",
-    "CLÁSICO": "Clásicos",
-    "CLASICO": "Clásicos",
-    "POETRY": "Poesía",
-    "POESÍA": "Poesía",
-    "POESIA": "Poesía",
-    "LGBT": "LGTBQ+",
-    "QUEER": "LGTBQ+",
-    "GAY": "LGTBQ+",
-    "LESBIAN": "LGTBQ+",
-    "EROTIC": "Spicy",
-    "ERÓTICA": "Spicy",
-    "EROTICA": "Spicy",
-    "SPICY": "Spicy",
-    "HORROR": "Terror y Horror",
-    "TERROR": "Terror y Horror",
-    "MACABRE": "Terror y Horror",
-    "THRILLER": "Thriller",
-    "SUSPENSE": "Thriller",
-    "SUSPENSO": "Thriller",
-    "MYSTERY": "Thriller", 
-    "MISTERIO": "Thriller",
-    "DETECTIVE": "Thriller",
-    "POLICIAL": "Thriller",
-    
-    # 3. Categorías generales (Fallbacks)
-    "FICTION": "Ficción General",
-    "FICCIÓN": "Ficción General",
-    "LITERARY": "Ficción General"
+    # Subgéneros y términos compuestos
+    "DARK ROMANCE": "Dark Romance", "DARK ACADEMIA": "Dark Academy", "DARK ACADEMY": "Dark Academy",
+    "PSYCHOLOGICAL THRILLER": "Thriller Psicológico", "THRILLER PSICOLÓGICO": "Thriller Psicológico", "THRILLER PSICOLOGICO": "Thriller Psicológico",
+    "ROMANTASY": "Romantasy", "SCIENCE FICTION": "Ciencia Ficción", "CIENCIA FICCIÓN": "Ciencia Ficción", "CIENCIA FICCION": "Ciencia Ficción", "SCI-FI": "Ciencia Ficción",
+    # Géneros principales
+    "ROMANCE": "Romance", "ROMÁNTICA": "Romance", "ROMANTICA": "Romance", "LOVE": "Romance",
+    "FANTASY": "Fantasía", "FANTASÍA": "Fantasía", "FANTASIA": "Fantasía",
+    "DYSTOPIA": "Distopía", "DISTOPÍA": "Distopía", "DISTOPIA": "Distopía",
+    "HISTORICAL": "Histórico", "HISTÓRICO": "Histórico", "HISTORICO": "Histórico",
+    "CLASSIC": "Clásicos", "CLÁSICO": "Clásicos", "CLASICO": "Clásicos",
+    "POETRY": "Poesía", "POESÍA": "Poesía", "POESIA": "Poesía",
+    "LGBT": "LGTBQ+", "QUEER": "LGTBQ+", "GAY": "LGTBQ+", "LESBIAN": "LGTBQ+",
+    "EROTIC": "Spicy", "ERÓTICA": "Spicy", "EROTICA": "Spicy", "SPICY": "Spicy",
+    "HORROR": "Terror y Horror", "TERROR": "Terror y Horror", "MACABRE": "Terror y Horror",
+    "THRILLER": "Thriller", "SUSPENSE": "Thriller", "SUSPENSO": "Thriller", "MYSTERY": "Thriller", "MISTERIO": "Thriller", "DETECTIVE": "Thriller", "POLICIAL": "Thriller",
+    # Fallbacks
+    "FICTION": "Ficción General", "FICCIÓN": "Ficción General", "LITERARY": "Ficción General"
 }
 
 def clean_and_map_genre(categories_list, description):
-    # -- BUSCAR PRIMERO EN LAS CATEGORÍAS OFICIALES --
     if categories_list:
         categorias_str = " ".join(categories_list).upper()
         for key, val in GENRES_MAP.items():
             if key in categorias_str:
                 return val
-
-    # -- SI NO HAY CATEGORÍAS (O NO HUBO MATCH), BUSCAR EN LA SINOPSIS (DESCRIPCIÓN) --
     if description:
         desc_upper = str(description).upper()
         for key, val in GENRES_MAP.items():
-            # Buscamos palabras clave en la descripción
             if key in desc_upper:
                 return val
-
-    # Si no hay categorías ni descripción, o no hace match con nada
     if not categories_list and not description:
         return "SIN INFORMACION"
-    
     return "OTRO"
 
 def fetch_book_data(title):
-    # -- LIMPIAR EL TÍTULO (Expresión regular corregida) --
     clean_title = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip()
     encoded_title = requests.utils.quote(clean_title)
-
-    # -- URLS SIN RESTRICCIÓN DE IDIOMA --
     url_intitle = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{encoded_title}&maxResults=1&key={API_KEY}"
     url_general = f"https://www.googleapis.com/books/v1/volumes?q={encoded_title}&maxResults=1&key={API_KEY}"
 
     def extract_data(data):
         if "items" in data and data["items"]:
             info = data["items"][0]["volumeInfo"]
-            official_title = info.get("title", title)
-            author = ", ".join(info.get("authors", ["SIN INFORMACION"]))
-            
-            raw_categories = info.get("categories", [])
-            description = info.get("description", "")
-            
-            mapped_genre = clean_and_map_genre(raw_categories, description)
-            publisher = info.get("publisher", "SIN INFORMACION")
-            
-            return official_title, author, mapped_genre, publisher
+            return {
+                "titulo": info.get("title", title),
+                "autor": ", ".join(info.get("authors", ["SIN INFORMACION"])),
+                "genero": clean_and_map_genre(info.get("categories", []), info.get("description", "")),
+                "editorial": info.get("publisher", "SIN INFORMACION")
+            }
         return None
 
-    # -- BUSCAR POR TITULO EXACTO --
     try:
         response = requests.get(url_intitle, timeout=10)
         if response.status_code == 200:
             result = extract_data(response.json())
             if result: return result
-    except Exception:
-        pass
-
-    # -- BUSCAR DE FORMA GENERAL --
+    except Exception: pass
     try:
         response = requests.get(url_general, timeout=10)
         if response.status_code == 200:
             result = extract_data(response.json())
             if result: return result
-    except Exception:
-        pass
-
-    # -- RETORNAR VALORES POR DEFECTO SI NO EXISTE --
-    return title, "SIN INFORMACION", "SIN INFORMACION", "SIN INFORMACION"
+    except Exception: pass
+    
+    return {"titulo": title, "autor": "SIN INFORMACION", "genero": "SIN INFORMACION", "editorial": "SIN INFORMACION"}
 
 def run_import():
-    # -- LIMPIAR TABLA DE LIBROS --
+    reporte = {"clientes_procesados": 0, "nuevos_clientes": 0, "clientes_actualizados": 0, "error": None}
     try:
+        with open(JSON_FILE_PATH, 'r', encoding='utf-8') as f:
+            book_titles_from_json = json.load(f)
+        
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        print("\nLimpiando la tabla 'libros' para una importacion con datos reales...")
-        cursor.execute("DELETE FROM libros;")
-        cursor.execute("DELETE FROM sqlite_sequence WHERE name='libros';")
+        
+        for title_in_json in book_titles_from_json:
+            if not title_in_json: continue
+            
+            reporte["clientes_procesados"] += 1
+            
+            # 1. Buscar datos enriquecidos en Google Books API
+            libro_api = fetch_book_data(title_in_json)
+            
+            # 2. Verificar si el libro ya existe en la BD (por título)
+            cursor.execute("SELECT * FROM libros WHERE titulo = ?", (libro_api['titulo'],))
+            libro_existente = cursor.fetchone()
+            
+            if not libro_existente:
+                # 3. INSERT si no existe: Se inserta con stock 0 por defecto.
+                cursor.execute("""
+                    INSERT INTO libros (titulo, autor, genero, editorial, stock, precio) VALUES (?, ?, ?, ?, ?, ?)
+                """, (libro_api['titulo'], libro_api['autor'], libro_api['genero'], libro_api['editorial'], 0, 0.0))
+                reporte["nuevos_clientes"] += 1
+            else:
+                # 4. UPDATE si existe, pero solo si los campos están vacíos. NUNCA se toca stock ni precio.
+                libro_id, _, autor_db, genero_db, editorial_db, _, _ = libro_existente
+                update_fields = []
+                params = []
+                
+                if (not autor_db or autor_db == "SIN INFORMACION") and libro_api.get('autor'):
+                    update_fields.append("autor = ?")
+                    params.append(libro_api['autor'])
+                if (not genero_db or genero_db == "SIN INFORMACION") and libro_api.get('genero'):
+                    update_fields.append("genero = ?")
+                    params.append(libro_api['genero'])
+                if (not editorial_db or editorial_db == "SIN INFORMACION") and libro_api.get('editorial'):
+                    update_fields.append("editorial = ?")
+                    params.append(libro_api['editorial'])
+                    
+                if update_fields:
+                    query = f"UPDATE libros SET {', '.join(update_fields)} WHERE libro_id = ?"
+                    params.append(libro_id)
+                    cursor.execute(query, params)
+                    reporte["clientes_actualizados"] += 1
+            
+            time.sleep(1) # Pausa para no saturar la API de Google
+            
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error al limpiar la base de datos: {e}")
-        return
-
-    # -- VERIFICAR EXISTENCIA DEL ARCHIVO JSON --
-    if not os.path.exists(JSON_FILE_PATH):
-        print(f"Error: No se encontro '{JSON_FILE_PATH}'")
-        return
-
-    # -- LEER ARCHIVO JSON --
-    with open(JSON_FILE_PATH, 'r', encoding='utf-8') as file:
-        book_titles = json.load(file)
-
-    if not book_titles:
-        print("El archivo 'libros.json' esta vacio.")
-        return
-
-    print(f"\nIniciando importacion de {len(book_titles)} libros usando API Key...")
-    
-    # -- CONECTAR A BASE DE DATOS --
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    success_count = 0
-    skipped_count = 0
-
-    # -- PROCESAR CADA LIBRO --
-    for title in book_titles:
-        # Verificar si el título original ya existe
-        cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (title,))
-        if cursor.fetchone():
-            skipped_count += 1
-            continue
-
-        print(f"Buscando en Google Books: {title}...")
-        official_title, author, genre, publisher = fetch_book_data(title)
-
-        # Verificar si el título oficial ya existe
-        cursor.execute("SELECT 1 FROM libros WHERE UPPER(titulo) = UPPER(?)", (official_title,))
-        if cursor.fetchone():
-            skipped_count += 1
-            continue
-
-        # Insertar nuevo libro
-        try:
-            cursor.execute(
-                "INSERT INTO libros (titulo, autor, genero, editorial) VALUES (?, ?, ?, ?)",
-                (official_title, author, genre, publisher)
-            )
-            conn.commit()
-            success_count += 1
-        except Exception as e:
-            print(f"Error guardando '{title}': {e}")
-            
-        time.sleep(1)
-
-    conn.close()
-    print(f"\nImportacion completada: {success_count} guardados con exito, {skipped_count} saltados por duplicado.")
+        reporte["error"] = str(e)
+        
+    print(json.dumps(reporte))
 
 if __name__ == "__main__":
     run_import()
