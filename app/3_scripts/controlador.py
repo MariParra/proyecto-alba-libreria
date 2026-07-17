@@ -61,6 +61,8 @@ class AppControlador:
         self.widgets['tabla_clientes'].bind("<Double-1>", lambda event: manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo))
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         
+        self.widgets['entry_busqueda_libros'].bind("<Return>", self.buscar_libro)
+        
         self.refrescar_todas_las_tablas()
         self.configurar_eventos_autocompletado()
 
@@ -216,7 +218,8 @@ class AppControlador:
         except Exception as e:
             print(f"Error al cargar inventario: {e}")
 
-    def buscar_libro(self):
+    def buscar_libro(self, event=None):
+        """Busca un libro. Acepta un argumento de evento opcional."""
         termino = self.widgets['entry_busqueda_libros'].get().strip()
         if not termino: return self.quitar_filtro()
         query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros WHERE titulo LIKE ? OR autor LIKE ? ORDER BY titulo"
