@@ -1,3 +1,2542 @@
 [
-  "Silvercloak"
+    {
+        "titulo":"LA ETERNIDAD NO ES PARA SIEMPRE",
+        "autor":"J. C. CERVANTES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"9 DE NOVIEMBRE",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"A LA SOMBRA DEL ARCOIRIS",
+        "autor":"ELENA CASTILLO CASTRO",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA TRAICION DE LOS CISNES",
+        "autor":"A.B. PORANEK",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ADIOS, PARIS",
+        "autor":"ANSTEY HARRIS",
+        "genero":"FICCION GENERAL",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AGUAS OSCURAS",
+        "autor":"ROBERT BRYNDZA",
+        "genero":"THRILLER",
+        "editorial":"DUOMO EDICIONES",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALAS DE ESTRELLA",
+        "autor":"DISNEY, ALLISON SAFT",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALAS DE ONIX",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALICIA EN EL PAIS DE LAS IDEAS",
+        "autor":"ROGER-POL DROIT",
+        "genero":"FICCION GENERAL",
+        "editorial":"ARIEL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALIENTO DE LAS LLAMAS",
+        "autor":"CLEMENTINE RIVERA",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AMANECER DE ONYX",
+        "autor":"KATE GOLDEN",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AMANECER EN LA COSECHA",
+        "autor":"SUZANNE COLLINS",
+        "genero":"CIENCIA FICCION",
+        "editorial":"MOLINO (RBA)",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AMOR ANIMAL",
+        "autor":"LANA FERGUS9N",
+        "genero":"ROMANTASY",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL AMOR DERRIBA MUROS",
+        "autor":"REBECCA JENSHAK",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AMOR EN PRESTAMO",
+        "autor":"EMILY HENRY",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ANDE, ANDE, ANDE, LA MARI MORENA",
+        "autor":"M. J. SANCHEZ",
+        "genero":"ROMANCE",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ANTES DE VERTE",
+        "autor":"EMILY HOUGHTON",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"APRENDIZ DEL VILLANO",
+        "autor":"HANNAH NICOLE MAEHRER",
+        "genero":"ROMANTASY",
+        "editorial":"FAERIS EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"APUESTO POR NOSOTROS",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ASALTO MEDICI",
+        "autor":"MARINA TENA TENA",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ASESINA DE DIOSES",
+        "autor":"HANNAH KANER",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ASISTENTE DEL VILLANO",
+        "autor":"HANNAH NICOLE MAEHRER",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ATMOSPHERE",
+        "autor":"CHARLES SOULE",
+        "genero":"CIENCIA FICCION",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ATRAPADA EN VACACIONES",
+        "autor":"CHRISTINA LAUREN",
+        "genero":"ROMANCE",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA BELLA Y LA BESTIA",
+        "autor":"JEANNE-MARIE LEPRINCE DE BEAUMONT)",
+        "genero":"CLASICOS",
+        "editorial":"ALMA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BESTIARIO",
+        "autor":"JULIO CORTAZAR",
+        "genero":"FICCION GENERAL",
+        "editorial":"ALFAGUARA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BETTER",
+        "autor":"CARRIE ELKS",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BIENVENIDOS A LA LIBRERIA HYUNAM-DONG",
+        "autor":"SATOSHI YAGISAWA",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BIRTHDAY GIRL",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"Butcher",
+        "autor":"KEVIN PANETTA",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BLUEBELLS",
+        "autor":"S. M. SOTO",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BOSS",
+        "autor":"EVA MUÑOZ",
+        "genero":"DARK ROMANCE",
+        "editorial":"MONTENA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BUTCHER",
+        "autor":"SELENE M.",
+        "genero":"DARK ROMANCE",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BUTCHER AND BLACKBIRD",
+        "autor":"BRYNNE WEAVER",
+        "genero":"DARK ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL BUZON DE LAS IMPURAS",
+        "autor":"FRANCISCA SOLAR",
+        "genero":"HISTORICO",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CADENAS DEL REY",
+        "autor":"JENNIFER L. ARMENTROUT",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CANTO DE TORMENTOS",
+        "autor":"BRAIDEE OTTO",
+        "genero":"FANTASIA",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CAPTIVE",
+        "autor":"SARAH RIVENS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CARTAS DE OTRO MUNDO",
+        "autor":"EMILY J. TAYLOR",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CHARLIE, EL AMOR Y LOS CLICHES",
+        "autor":"ELLA MAISE",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CIUDAD DE POLVO DE ESTRELLAS",
+        "autor":"GEORGIA SUMMERS",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"COLLIDE",
+        "autor":"BAL KHABRA",
+        "genero":"ROMANCE",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CONFESIONES",
+        "autor":"SAN AGUSTIN DE HIPONA",
+        "genero":"CLASICOS",
+        "editorial":"ALIANZA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CORAZON ROTO",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CORAZON AGRIDULCE",
+        "autor":"H. HUNTING",
+        "genero":"ROMANCE",
+        "editorial":"WONDERBOOKS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CORRUPT",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CORTAR EL VIENTO",
+        "autor":"LYLA SAGE",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN CRUCIGRAMA Y UN CAFÉ"
+    },
+    {
+        "titulo":"CRUZAR LA LINEA",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO DESPIERTEN LAS FLORES",
+        "autor":"ANDREA LONGARELA",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO EL CIELO SE VUELVA AMARILLO",
+        "autor":"NEREA PASCUAL",
+        "genero":"ROMANCE",
+        "editorial":"ESENCIA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO HARU ESTUVO AQUI",
+        "autor":"DUSTIN THAO",
+        "genero":"ROMANCE",
+        "editorial":"KIWI",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO NO QUEDEN MAS ESTRELLAS QUE CONTAR",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO SEAS MIA",
+        "autor":"ABBI GLINES",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DE RODILLAS",
+        "autor":"J. KENNER",
+        "genero":"SPICY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DE SANGRE Y CENIZAS",
+        "autor":"JENNIFER L. ARMENTROUT",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DEL ODIO AL AMOR",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN DELIRIO ENCANTADOR",
+        "autor":"SHEA ERNSHAW",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DESEOS PELIGROSOS",
+        "autor":"TAYLOR HUTTON",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DESPUES DEL OCEANO",
+        "autor":"BELEN MARTINEZ",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DESTRUCTORA DE REINOS",
+        "autor":"VICTORIA AVEYARD",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DETONANTE",
+        "autor":"MAR PETRYK",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DIANA IN LOVE",
+        "autor":"SHANA FESTE Y JEN BESSER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DIOSES DE JADE Y SOMBRA",
+        "autor":"SILVIA MORENO-GARCIA",
+        "genero":"FANTASIA",
+        "editorial":"MINOTAURO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DIOSES INDOMABLES",
+        "autor":"HANNAH KANER",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DIRTY DIANA",
+        "autor":"CHARLENE DIANE MITCHELL",
+        "genero":"ROMANCE",
+        "editorial":"XLIBRIS CORPORATION",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DONDE MORA LA OSCURIDAD",
+        "autor":"A.B. PORANEK",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DOS VIDAS PARA CRECER",
+        "autor":"KRISTINA MONINGER",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DULCE PESADILLA",
+        "autor":"TRACY WOLFF",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":"tapa dura"
+    },
+    {
+        "titulo":"LA ECUACION DE LAS ALMAS GEMELAS",
+        "autor":"CHRISTINA LAUREN",
+        "genero":"ROMANCE",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL AMOR NO TIENE REGLAS",
+        "autor":"TESSA BAILEY",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL AMOR Y LOS CLICHES",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL ARTE DE AHOGARSE",
+        "autor":"SARAH A. PARKER",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL ARTE DE SER NOSOTROS",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL AÑO DE LA LANGOSTA",
+        "autor":"TERRY HAYES",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL CANTO DE LOS AHOGADOS",
+        "autor":"KALIE CASSIDY",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG-ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL COLOR DE LAS COSAS INVISIBLES",
+        "autor":"ANDREA LONGARELA",
+        "genero":"ROMANCE",
+        "editorial":"PLANETAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL CONVENTO",
+        "autor":"ALANA S. PORTERO",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL CORAZON DEL REY",
+        "autor":"JENNIFER L. ARMENTROUT",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL DIA QUE DEJO DE NEVAR EN ALASKA",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL FARO DE LOS AMORES DORMIDOS",
+        "autor":"ANDREA LONGARELA",
+        "genero":"ROMANCE",
+        "editorial":"PLANETAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL LOBO Y LA SERPIENTE",
+        "autor":"REBECCA ROBINSON",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL MAGO DE OZ",
+        "autor":"L. FRANK BAUM",
+        "genero":"CLASICOS",
+        "editorial":"ZIG-ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL MISTERIO DE LA LAVANDERIA DE YEONNAM DONG",
+        "autor":"KIM JIYUN",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL PAJARO Y EL CORAZON DE PIEDRA",
+        "autor":"CARISSA BROADBENT",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL PRINCIPE CAUTIVO",
+        "autor":"C. S. PACAT",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL PROBLEMA DEL PARAISO",
+        "autor":"CHRISTINA LAUREN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL RETORNO DE RACHEL PRICE",
+        "autor":"HOLLY JACKSON",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL REY DE LA MASCARA OSCURA",
+        "autor":"JAVIERA VALENZUELA",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SECRETO DE LAS NUBES",
+        "autor":"ALYSON RICHMAN",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SECRETO DEL RIO",
+        "autor":"SANDRA BARNEDA",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SEÑOR NUMERO DESCONOCIDO",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SOL TAMBIEN ES UNA ESTRELLA",
+        "autor":"NICOLA YOON",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SUSURRO DE LAS ESTRELLAS",
+        "autor":"CRISTIN WILLIAMS",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL VALS DE LA BRUJA",
+        "autor":"BELEN MARTINEZ",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL VERDUGO",
+        "autor":"",
+        "genero":"FICCION GENERAL",
+        "editorial":"ANDRES BELLO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EN LAS NUBES",
+        "autor":"LAURA CHICA",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EN LO MAS PROFUNDO",
+        "autor":"JENNIFER E. ARCHER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN ENCANTAMIENTO FRAGIL",
+        "autor":"REBECCA ROSS",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ENTRE TU Y YO",
+        "autor":"NORA ROBERTS",
+        "genero":"ROMANCE",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ERES EL AMOR DE MI OTRA VIDA",
+        "autor":"",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ESCANDALO REAL",
+        "autor":"CAT SCHIELD",
+        "genero":"ROMANCE",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ESCAPARATE NAVIDEÑO",
+        "autor":"JENNY COLGAN",
+        "genero":"ROMANCE",
+        "editorial":"VERGARA (PRH)",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ESNOB",
+        "autor":"ELISABET BENAVENT",
+        "genero":"ROMANCE",
+        "editorial":"SUMA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ETEREO",
+        "autor":"JOANA MARCUS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FEARFUL",
+        "autor":"SARAH RIVENS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FELICES PARA NUNCA",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FINGE QUE ME QUIERES",
+        "autor":"ELENA ARMAS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FIVE BROTHERS",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FLAWLESS",
+        "autor":"ELSIE SILVER",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA FRAGILIDAD DE UN CORAZON BAJO LA LLUVIA",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GAIJIN",
+        "autor":"MAXIMILIANO MATAYOSHI",
+        "genero":"HISTORICO",
+        "editorial":"ODELIA EDITORA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GENTE QUE CONOCEMOS EN VACACIONES",
+        "autor":"EMILY HENRY",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GIULIA, EL AMOR Y UN PUÑADO DE LAVANDA",
+        "autor":"CHERRY CHIC",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GRIMM MORTAL",
+        "autor":"GENA SHOWALTER",
+        "genero":"ROMANTASY",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GUARDIANA DE LIBROS",
+        "autor":"MADELINE MARTIN",
+        "genero":"HISTORICO",
+        "editorial":"HARPERCOLLINS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GUARDIANES. LOS CONDENADOS",
+        "autor":"BELEN CERECEDA",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"GUÍA DE BRUJAS PARA CITAS FALSAS CON UN DEMONIO",
+        "autor":"SARAH HAWLEY",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HAS LLAMADO A SAM",
+        "autor":"DUSTIN THAO",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HASTA QUE CAIGA LA LUNA",
+        "autor":"SARAH RIVENS",
+        "genero":"ROMANTASY",
+        "editorial":"PENGUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HASTA QUE NOS QUEDEMOS SIN ESTRELLAS",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HECHICERA DE HUESOS",
+        "autor":"KATHRYN PURDIE",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HIDEAWAY",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HIJOS DORADOS",
+        "autor":"PATRICIA BARCENA",
+        "genero":"THRILLER",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA HIPOTESIS DEL AMOR",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HOY SE LO DIGO",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HUNDIDA",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"IDILICO",
+        "autor":"MIA VARINIA",
+        "genero":"DARK ROMANCE",
+        "editorial":"INDEPENDIENTE",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"INVOCACION",
+        "autor":"ST GIBSON",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ISLA DE DIOSES",
+        "autor":"HANNAH KANER",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ISLA DE LOS ANHELOS",
+        "autor":"SARAH JIO",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JOSH Y HAZEL: GUIA PARA EL FRACASO AMOROSO",
+        "autor":"CHRISTINA LAUREN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JUEGO DE DOS",
+        "autor":"VI KEELAND",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JUEGO DE REINAS",
+        "autor":"KATHARINE MCGEE",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JULIETTE Y LAS CANCIONES",
+        "autor":"JANE FEATHER",
+        "genero":"HISTORICO",
+        "editorial":"LIBROS DE SEDA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JUNTOS EN LA HOGUERA",
+        "autor":"ISABEL IBAÑEZ",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"KILLSWITCH",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ASESINA DEL REY",
+        "autor":"MELISSA BLAIR",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA CHICA QUE OIA A LOS MUERTOS",
+        "autor":"ANNE GRIFFIN",
+        "genero":"FICCION GENERAL",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ECUACION DE AMOR",
+        "autor":"HELEN HOANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA FAN NUMERO 1",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA HIJA DEL RELOJERO",
+        "autor":"LARRY LOFTIS",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA HORA AZUL",
+        "autor":"ALFONSO GOIZUETA",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA LIBRERIA DE LADY DESTINO",
+        "autor":"GEORGIA SUMMERS",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA LIBRERIA DE LOS VIERNES",
+        "autor":"SAWAKO NATORI",
+        "genero":"FICCION GENERAL",
+        "editorial":"ESPASA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MAGIA DE LAS CASUALIDADES",
+        "autor":"MEGAN MAXWELL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MALDICION DE LA SANGRE",
+        "autor":"HANNAH KANER",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MECANICA DEL AMOR",
+        "autor":"ALEXENE FAROL FOLLMUTH",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA NIÑA SALVAJE",
+        "autor":"KRISTIN HANNAH",
+        "genero":"FICCION GENERAL",
+        "editorial":"SUMA DE LETRAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA NOVIA EQUIVOCADA",
+        "autor":"CATHARINA MAURA",
+        "genero":"ROMANCE",
+        "editorial":"ESPASA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA PRINCESA ENCANTADA",
+        "autor":"DAWN BROWER",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA QUIMICA DEL AMOR",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA SONRISA DEL DEMONIO",
+        "autor":"TRACY WOLFF",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA TEORIA DEL AMOR",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BESAME EN MITAD DE LA TORMENTA",
+        "autor":"SARAI MARTIN",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ULTIMA CARTA",
+        "autor":"PEDRO RUIZ",
+        "genero":"OTRO",
+        "editorial":"PLANETA PUBLISHING CORPORATION",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ULTIMA CUENTISTA",
+        "autor":"DONNA BARBA HIGUERA",
+        "genero":"CIENCIA FICCION",
+        "editorial":"CHRONICLE BOOKS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA ULTIMA VEZ QUE PIENSO EN TI",
+        "autor":"BLUE JEANS",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LADY MACBETH",
+        "autor":"AVA REID",
+        "genero":"HISTORICO",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LARGA VIDA AL REY",
+        "autor":"JENNIFER L. ARMENTROUT",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LAS CENIZAS Y EL REY MALDITO",
+        "autor":"CARISSA BROADBENT",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LAS COSAS MAS PRECIOSAS",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LAS HERMANAS BLUE",
+        "autor":"COCO MELLORS",
+        "genero":"FICCION GENERAL",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LAS SIRENAS",
+        "autor":"EMILIA HART",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LAYLA",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA LECTURA DEL VERANO",
+        "autor":"EMILY HENRY",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LLEVAME A CUALQUIER LUGAR",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LO QUE LA NIEVE SUSURRA AL CAER",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS BRUJOS DEL FIN DEL MUNDO",
+        "autor":"MIGUEL FERRADA",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS DOS AMORES DE MI VIDA",
+        "autor":"TAYLOR JENKINS REID",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS JUEGOS DEL HAMBRE",
+        "autor":"SUZANNE COLLINS",
+        "genero":"DISTOPIA",
+        "editorial":"MOLINO (RBA)",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS SIETE MARIDOS DE EVELYN HUGO",
+        "autor":"TAYLOR JENKINS REID",
+        "genero":"FICCION GENERAL",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS ULTIMOS DIAS DE CLAYTON & CO",
+        "autor":"FRANCISCA HERAS",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MADAME BOVARY",
+        "autor":"GUSTAVE FLAUBERT",
+        "genero":"CLASICOS",
+        "editorial":"ALIANZA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MAGIA EN LA CALLE NAVIDAD",
+        "autor":"IVY PEMBROKE",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN MAPA DE TIERRAS EXTRAÑAS",
+        "autor":"ALWYN HAMILTON",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MAS QUE UNA POSIBILIDAD",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MASCARA DE GATO",
+        "autor":"FRANCESCA ZAPPIA",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MAXTON HALL",
+        "autor":"MONA KASTEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MEDIUM",
+        "autor":"SILVIA ROSSI",
+        "genero":"THRILLER",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MEJOR QUE EN LAS PELICULAS",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MELODIA DE LA MEMORIA",
+        "autor":"ALYSON RICHMAN",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MENTIRAS A DOBLE FILO",
+        "autor":"CARISSA BROADBENT",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MENU PARA DOS",
+        "autor":"CASEY MCQUISTON",
+        "genero":"ROMANCE",
+        "editorial":"MOLINO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MESA DE LOS SOLTEROS",
+        "autor":"VI KEELAND",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MI NOMBRE ES EMILIA DEL VALLE",
+        "autor":"LORENA PRONSKY",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MI QUERIDO RIVAL",
+        "autor":"ALEXANDRA MOODY",
+        "genero":"ROMANCE",
+        "editorial":"ALFAGUARA IJC",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MIL RECUERDOS TUYOS",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NADA COMO EN LAS PELICULAS",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NADA DE ESTO ES VERDAD",
+        "autor":"LISA JEWELL",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NAVIDAD FUN",
+        "autor":"MEGAN MAXWELL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NEGOCIOS O PLACER",
+        "autor":"RACHEL LYNN SOLOMON",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NIGHTFALL",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NIGHTSHADE",
+        "autor":"AUTUMN WOODS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO CONFIES EN ASHER HALL",
+        "autor":"J. S. LARK",
+        "genero":"THRILLER",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO DEBERIAMOS",
+        "autor":"VI KEELAND",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO DEBIA SER ASI",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO ES AMOR",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"CONTRALUZ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO ESTAS EN LA LISTA",
+        "autor":"ALISON ESPACH",
+        "genero":"FICCION GENERAL",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NOCHE DE CABALLEROS",
+        "autor":"ALEXENE FAROL FOLLMUTH",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NOSOTROS EN LA LUNA",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NOVA",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANCE",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NUESTRA DESQUICIADA HISTORIA DE AMOR",
+        "autor":"KANDI STEINER",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NUESTRO LARGO ADIOS",
+        "autor":"MEGAN MAXWELL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NUESTRO LUGAR EN EL MUNDO",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN NUEVO ENGAÑO",
+        "autor":"CARMEN ARANDA",
+        "genero":"ROMANCE",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NUNCA OLVIDES QUE TE QUIERO",
+        "autor":"NICHOLAS SPARKS, M. NIGHT SHYAMALAN",
+        "genero":"ROMANCE",
+        "editorial":"ROCA EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"OJALA ESTA FUERA NUESTRA HISTORIA DE AMOR",
+        "autor":"ANDREA LONGARELA",
+        "genero":"ROMANCE",
+        "editorial":"ESENCIA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"OYE, DIABLA",
+        "autor":"JULIA DE LA FUENTE",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PABELLON 57",
+        "autor":"CARLOS BASSO",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PACTO ELECTRIZANTE",
+        "autor":"MEGHAN QUINN",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PECADOR",
+        "autor":"SIERRA SIMONE",
+        "genero":"SPICY",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PERDIDO",
+        "autor":"DEVNEY PERRY",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PESADILLA EN NAVIDAD",
+        "autor":"TIM BURTON",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PRIMER AMOR",
+        "autor":"IVAN TURGUENEV",
+        "genero":"CLASICOS",
+        "editorial":"ALIANZA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PROMESAS OSCURAS",
+        "autor":"CHRISTINE FEEHAN",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PUCKING AROUND",
+        "autor":"EMILY RATH",
+        "genero":"SPICY",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"QUE ENTIERREN NUESTROS HUESOS EN LA MEDIANOCHE",
+        "autor":"V. E. SCHWAB",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"QUEDARA EL AMOR",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"QUERIDO VECINO",
+        "autor":"PENELOPE WARD",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"QUIZAS EN OTRA VIDA",
+        "autor":"TAYLOR JENKINS REID",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"RECUERDAME, ALICE",
+        "autor":"MARTA SANTES",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REINA DEL ESTIO",
+        "autor":"CARMEN ROMERO LORENZO",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REY DE LA CODICIA",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REY DE LA DESIDIA",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REY DE LA IRA",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REY DE LA SOBERBIA",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ROMPER EL CIRCULO",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA ROSA MALDITA",
+        "autor":"REBECCA ZANETTI",
+        "genero":"DARK ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ROSE IN CHAINS",
+        "autor":"SARAH RIVENS",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SAY YOU SWEAR",
+        "autor":"MEAGAN BRANDY",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SECRETO",
+        "autor":"L. J. SHEN",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SECRETO DE SU MENTE",
+        "autor":"MARIE BENEDICT",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS SECRETOS DEL JARDIN DE ODETTE",
+        "autor":"MICHEL BUSSI",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SEIS GRULLAS",
+        "autor":"ELIZABETH LIM",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SEIS LITROS PROMEDIO",
+        "autor":"J. S. LARK",
+        "genero":"THRILLER",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA SERPIENTE Y LAS ALAS DE LA NOCHE",
+        "autor":"CARISSA BROADBENT",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SI FUERAMOS ETERNOS",
+        "autor":"EMMA GIL",
+        "genero":"ROMANCE",
+        "editorial":"MARTINEZ ROCA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SIEMBRA NEGRA",
+        "autor":"JESUS DIAMANTINO",
+        "genero":"TERROR Y HORROR",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SIEMPRE FUISTE TU",
+        "autor":"MADELINE BAKER",
+        "genero":"ROMANCE",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SIGHT UNSEEN",
+        "autor":"ALEXIS MARIE",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SONATA DE VERANO",
+        "autor":"JULIA QUINN",
+        "genero":"HISTORICO",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SONO UN VIOLIN EN PARIS",
+        "autor":"MARIA REIG",
+        "genero":"HISTORICO",
+        "editorial":"ESPASA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SPIRAL",
+        "autor":"BAL KHABRA",
+        "genero":"ROMANCE",
+        "editorial":"VERA ROMANTICA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TE ODIO CON AMOR",
+        "autor":"JO WATSON",
+        "genero":"ROMANCE",
+        "editorial":"LIBROS DE SEDA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TE RECETO UN GATO",
+        "autor":"SYOU ISHIDA",
+        "genero":"FICCION GENERAL",
+        "editorial":"DUOMO EDICIONES",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TEORIA KIM",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TERAPIA PARA LLEVAR",
+        "autor":"ANA PEREZ",
+        "genero":"OTRO",
+        "editorial":"MONTENA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"THE DEFENDER",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"THE LUCKY ONES",
+        "autor":"LIZ LAWSON",
+        "genero":"THRILLER",
+        "editorial":"DELACORTE PRESS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"THE STRIKER",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"THIS IS OUR TIME",
+        "autor":"TREVIN WAX",
+        "genero":"OTRO",
+        "editorial":"BH PUBLISHING GROUP",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TODOS NUESTROS RECUERDOS",
+        "autor":"MELISSA WIESNER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TRAS LA NOCHE",
+        "autor":"LINDA HOWARD",
+        "genero":"THRILLER",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TRAS LA PUERTA",
+        "autor":"J. D. BARKER",
+        "genero":"THRILLER",
+        "editorial":"DESTINO (PLANETA)",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TREN BALA",
+        "autor":"",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TRONO DE LOS CAIDOS",
+        "autor":"KERRI MANISCALCO",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TRONO DE MONSTRUOS",
+        "autor":"KERRI MANISCALCO",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL TRONO DEL PRISIONERO",
+        "autor":"HOLLY BLACK",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU",
+        "autor":"CAROLINE KEPNES",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU ENEMIGA SECRETA",
+        "autor":"SARAH ADAMS",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU Y OTROS DESASTRES NATURALES",
+        "autor":"MARIA MARTINEZ",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TWISTED GAMES",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TWISTED HATE",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TWISTED LIES",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TWISTED LOVE",
+        "autor":"ANA HUANG",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UGLY LOVE",
+        "autor":"COLLEEN HOOVER",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN MAR SIN ESTRELLAS",
+        "autor":"ERIN MORGENSTERN",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN PASE AL CORAZON",
+        "autor":"MEGHAN QUINN",
+        "genero":"ROMANCE",
+        "editorial":"CHIC EDITORIAL",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN SEGUNDO PARA AMAR",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN VERANO EN EL CAMPAMENTO",
+        "autor":"JENNY COLGAN",
+        "genero":"ROMANCE",
+        "editorial":"VERGARA (PRH)",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN VERANO EN NUEVA YORK",
+        "autor":"SARAH MORGAN",
+        "genero":"ROMANCE",
+        "editorial":"HARLEQUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA CANCION SALVAJE",
+        "autor":"VICTORIA SCHWAB",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA CATASTROFICA VISITA AL ZOO",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA CITA EN EL INFIERNO",
+        "autor":"SARAH RIVENS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA CORTE DE ROSAS Y ESPINAS",
+        "autor":"SARAH J. MAAS",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA DE LAS SUYAS",
+        "autor":"CURTIS SITTENFELD",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA HISTORIA DIVERTIDA",
+        "autor":"EMILY HENRY",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA LUNA SIN MIEL",
+        "autor":"CHRISTINA LAUREN",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA NUEVA OPORTUNIDAD",
+        "autor":"COLLEEN HOOVER",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA PROMESA DE CIEN AÑOS",
+        "autor":"SARAH JIO",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA PUERTA EN LA SOMBRA",
+        "autor":"ALICIA ACOSTA",
+        "genero":"FANTASIA",
+        "editorial":"ZIG-ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"VERITY",
+        "autor":"COLLEEN HOOVER",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"VIAJANDO CON MEGAN",
+        "autor":"MEGAN MAXWELL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"VUELVE EN ENERO",
+        "autor":"JOANA MARCUS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"WILDER",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"YO EN TU CASA, TU EN LA MIA",
+        "autor":"BETH O'LEARY",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU, YO Y EL SUPER BOWL",
+        "autor":"TRACY WOLFF",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA SEGUNDA MUERTE DE LOCKE",
+        "autor":"MARINA TENA TENA",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUENTOS VICTORIANOS DE FANTASMAS PARA NAVIDAD",
+        "autor":"VARIOS AUTORES",
+        "genero":"TERROR Y HORROR",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO ERES MI ALMA GEMELA",
+        "autor":"ELENA ARMAS",
+        "genero":"FICCION GENERAL",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALFA",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"HIJA DE NINGUN MUNDO",
+        "autor":"CARISSA BROADBENT",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SCYTHE AND SPARROW",
+        "autor":"BRYNNE WEAVER",
+        "genero":"DARK ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MARCA DEL DRAGON",
+        "autor":"ARTHYFICE",
+        "genero":"ROMANTASY",
+        "editorial":"TRAYECTO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TODAS LAS HISTORIAS LLEVAN TU NOMBRE",
+        "autor":"ANDREA LONGARELA",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"METAL SLINGER",
+        "autor":"RACHEL SCHNEIDER",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NOVIA",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TODOS LOS DEMONIOS DEL CIELO",
+        "autor":"MIRIAM MOSQUERA",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TODOS LOS ANGELES DEL INFIERNO",
+        "autor":"MIRIAM MOSQUERA",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA VIDA MARAVILLOSA",
+        "autor":"EMILY HENRY",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"MIS LUNES CON AROMA A MATCHA",
+        "autor":"MICHIKO AOYAMA",
+        "genero":"HEALINH FICTION",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FURIA",
+        "autor":"TRACY WOLFF",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL GUARDIAN DE ESPADAS",
+        "autor":"CASSANDRA CLARE",
+        "genero":"FANTASIA",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN AMIGO GRATIS",
+        "autor":"INMA RUBIALES",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LEGACY: DONDE TODO COMIENZA",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CAIDA LIBRE",
+        "autor":"ALI HAZELWOOD",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CIEN DESAFIOS",
+        "autor":"NATALIE MAR",
+        "genero":"ROMANCE",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SHANGAI INMORTAL",
+        "autor":"A.Y CHAO",
+        "genero":"ROMANTASY",
+        "editorial":"MINOTAURO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA CHICA DE MIS SUEÑOS",
+        "autor":"TESSA BAILEY",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA CORTE DE ALAS Y RUINA ",
+        "autor":"SARAH J. MAAS",
+        "genero":"ROMANTASY",
+        "editorial":"BOOKET",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"QUICKSILVER",
+        "autor":"CALLIE HART",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"REY ENTRE SOMBRAS",
+        "autor":"MELISSA LANDERS",
+        "genero":"ROMANTASY",
+        "editorial":"MINOTAURO",
+        "encuadernacion":"tapa dura"
+    },
+    {
+        "titulo":"ELITE PLATEADA",
+        "autor":"DANI FRANCIS",
+        "genero":"FANTASIA DISTOPICA",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ALAS DE SANGRE",
+        "autor":"REBECCA YARROS",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ORGULLO Y PREJUICIO",
+        "autor":"JANE AUSTEN",
+        "genero":"CLASICOS",
+        "editorial":"ALMA PANORAMA",
+        "encuadernacion":"tapa dura"
+    },
+    {
+        "titulo":"¿QUE SE SIENTE?",
+        "autor":"JENEANE O'RILEY",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN TRATO CON EL REY DE LOS ELFOS ",
+        "autor":"ELISE KOVA",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CREEDENCE",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN PODER DESATADO",
+        "autor":"FREYA MARSKE",
+        "genero":"FANTASIA",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA REINA",
+        "autor":"JENNIFER ARMENTROU",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL CLUB DEL OLVIDO",
+        "autor":"ALICE KELLEN",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"DONDE HABITAN LAS SIRENAS",
+        "autor":"MARIA MARTINEZ",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ANTES DE IRME",
+        "autor":"TILLIE COLE",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"FELICES PARA SIEMPRE",
+        "autor":"LYNN PAINTER",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TRIADA: AUNQUE EL INFIERNO ME CONSUMA",
+        "autor":"CAROL S. BROWN",
+        "genero":"DARK ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PELIGRO",
+        "autor":"ST ABBY",
+        "genero":"DARK ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PERDIENDO EL CONTROL",
+        "autor":"LIZ TOMFORDE",
+        "genero":"ROMANCE",
+        "editorial":"MONTENA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SIGUIENDO EL JUEGO",
+        "autor":"LIZ TOMFORDE",
+        "genero":"ROMANCE",
+        "editorial":"MONTENA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"JUGANDO FUERTE",
+        "autor":"LIZ TOMFORDE",
+        "genero":"ROMANCE",
+        "editorial":"MONTENA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ABRAZAME, QUE NO TE QUIERO",
+        "autor":"IRENE FERB",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA CASA DE LOS ALETEOS",
+        "autor":"OLIVIA WILDENSTEIN",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU SANGRE, MIS HUESOS",
+        "autor":"KELLY ANDREW",
+        "genero":"ROMANTASY",
+        "editorial":"URANO ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL PERFUME DEL REY",
+        "autor":"KARINE BERNAL",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SANGRE DE DRAGON",
+        "autor":"BRIAR BOLEYN",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BLACK BIRD ACADEMY: MUERTE A LA OSCURIDAD",
+        "autor":"STELLA TACK",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":"tapa dura"
+    },
+    {
+        "titulo":"UNA CORTE DE ALAS Y RUINA ",
+        "autor":"SARAH J. MAAS",
+        "genero":"ROMANTASY",
+        "editorial":"PLANETA",
+        "encuadernacion":"tapa dura"
+    },
+    {
+        "titulo":"PARAISO PERVERSO",
+        "autor":"MAR PETRYK",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN AMOR DE NOVELA",
+        "autor":"ASHLEY POSTON",
+        "genero":"ROMANCE",
+        "editorial":"URANO ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CUANDO TE ATREVAS A SENTIR",
+        "autor":"TAMARA MOLINA",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ECHAR EL LAZO",
+        "autor":"LYLA SAGE",
+        "genero":"ROMANCE",
+        "editorial":"URANO ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TE ENCUENTRO EN EL TIEMPO",
+        "autor":"ROSE MERINO",
+        "genero":"ROMANCE",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ENTRE CENIZAS ROJAS",
+        "autor":"MAR PETRYK",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"CRIATURAS DESPIADADAS",
+        "autor":"J.T GEISSINGER",
+        "genero":"DARK ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SINNERS ANONYMOUS",
+        "autor":"SOMME SKETCHER",
+        "genero":"DARK ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL SONIDO DEL AMOR",
+        "autor":"ASHLEY POSTON",
+        "genero":"ROMANCE",
+        "editorial":"URANO ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA MANSION DE RAYNE",
+        "autor":"HARLEY LAROUX",
+        "genero":"DARK ROMANCE",
+        "editorial":"URANO ",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LO FRAGIL Y LO ETERNO",
+        "autor":"BRUNO PUELLES",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SKATE INTO ME",
+        "autor":"MORINA ESTRINGANA",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UNA INFINIDAD DE SUEÑOS",
+        "autor":"MARA RUTHERFORD",
+        "genero":"ROMANTASY",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"TU, YO Y NUESTRA COSTUMBRENDE ENREDAR LAS COSAS",
+        "autor":"NEREA CABALEIRO",
+        "genero":"ROMANCE",
+        "editorial":"ZIG ZAG",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"ESCUDO DE GORRIONES",
+        "autor":"DEVNEY PERRY",
+        "genero":"ROMANTASY",
+        "editorial":"V&R EDITORAS",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"RAZIEL",
+        "autor":"MAXIMILIANO AYLWIN",
+        "genero":"FANTASIA",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"KHAOS",
+        "autor":"CHANYS A. WILSON",
+        "genero":"FANTASIA",
+        "editorial":"AUTOPUBLICADO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN LUGAR FELIZ",
+        "autor":"EMILY HENRY",
+        "genero":"ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SUNRISE: EL ULTIMO AMANECER",
+        "autor":"ANNA TODD",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN BESO OSCURO",
+        "autor":"REBECCA ZANETTI",
+        "genero":"DARK ROMANCE",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LOS AMANTES DE PRAGA",
+        "autor":"ALYSON RICHMANN",
+        "genero":"HISTORICO",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"NO ME LLAMES LOCA",
+        "autor":"GILRAEN EARFALAS",
+        "genero":"THRILLER",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"PUNK 57",
+        "autor":"PENELOPE DOUGLAS",
+        "genero":"DARK ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"LA CASA MARIONNE",
+        "autor":"J. ELLE",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN AMANECER CON CABALLERO LOBO",
+        "autor":"ELISE KOVA",
+        "genero":"ROMANTASY",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"UN VERANO EN NY",
+        "autor":"ALEX ASTER",
+        "genero":"ROMANCE",
+        "editorial":"PENGUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"SILVERCLOAK"
+    }
 ]

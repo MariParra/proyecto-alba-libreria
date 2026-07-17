@@ -1,138 +1,179 @@
 import sqlite3
 import pandas as pd
 import os
-import json
-import difflib
+import unicodedata
+from datetime import datetime
 
-# -- CONFIGURAR RUTAS --
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# --- CONFIGURAR RUTAS ---
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(SCRIPT_DIR) 
+
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
-JSON_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
-CSV_PATH = os.path.join(BASE_DIR, "1_input_data", "INSCRIPCIONES CAJA MENSUAL - CAJITAS.csv") 
-CLEAN_CSV_PATH = os.path.join(BASE_DIR, "4_output_reports", "CAJITAS_CORREGIDO.csv")
-OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "4_output_reports", "migracion_asignaciones.sql")
-MISSING_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_faltantes.csv")
 
-def get_best_match(raw_title, official_dict):
-    """Algoritmo de corrección automática de títulos (Fuzzy Matching)."""
-    raw_upper = str(raw_title).strip().upper()
-    if not raw_upper or raw_upper == 'NAN': return raw_title
-    if raw_upper in official_dict: return official_dict[raw_upper]
-    
-    for off_up, off_orig in official_dict.items():
-        if raw_upper in off_up: return off_orig
-        
-    matches = difflib.get_close_matches(raw_upper, official_dict.keys(), n=1, cutoff=0.6)
-    if matches: return official_dict[matches[0]]
-    
-    return raw_title
+posibles_rutas = [
+    os.path.join(BASE_DIR, "migracion_corregido.csv"),
+    os.path.join(BASE_DIR, "1_input_data", "migracion_corregido.csv"),
+    os.path.join(BASE_DIR, "1_input_data", "migracion_20260715.csv") 
+]
+
+CSV_PATH = None
+for ruta in posibles_rutas:
+    if os.path.exists(ruta):
+        CSV_PATH = ruta
+        break
+
+# Rutas de salida
+OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "4_output_reports", "migracion_asignaciones.sql")
+MISSING_CLIENTS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_clientes_faltantes.csv")
+MISSING_BOOKS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_libros_faltantes.csv")
+# --- NUEVO REPORTE ---
+SKIPPED_ROWS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_filas_omitidas.csv")
+
+
+def normalize_name(name):
+    if not isinstance(name, str): return ""
+    s = ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
+    return s.strip().upper()
+
+MANUAL_CLIENT_FIXES = {
+    "LUIS ALFREDO PEREZ DROGUETT": "Luis Pérez (Danae Martínez)",
+    "KELLY ARANDA": "Kelly Araneda",
+    "KELLY": "Kelly Araneda",
+    "MARIANA": "Mariana parra", 
+    "MELANIE": "Melanie Thomas", 
+    "TAMARA AGUILERA CONTRERAS": "Tamara Aguilera",
+    "JOSNELIS": "Josnelis hernandez",
+    "KARLA VICENCIO": "Karla Vicencio Vargas"
+}
 
 def generate_migration_sql():
-    print("Iniciando estandarización y migración...")
-    
-    # --- 1. CARGAR CATÁLOGO OFICIAL (JSON) ---
-    try:
-        with open(JSON_PATH, 'r', encoding='utf-8') as f:
-            official_titles = json.load(f)
-        official_dict = {t.upper(): t for t in official_titles}
-    except Exception as e:
-        print(f"Error al leer libros.json: {e}")
+    if not CSV_PATH:
+        print("Error: No se encontró ningún archivo CSV de migración.")
         return
         
-    # --- 2. CARGAR Y CORREGIR EL CSV (CON LÓGICA RESTAURADA) ---
+    print(f"Iniciando migración de asignaciones desde:\n{CSV_PATH} ...")
+    
     try:
-        df = pd.read_csv(CSV_PATH, sep=None, engine='python', on_bad_lines='skip')
-        df.columns = df.columns.str.strip() # Limpieza de encabezados
+        df = pd.read_csv(CSV_PATH, sep=None, engine='python', encoding='utf-8-sig', on_bad_lines='warn')
+        df.columns = [str(c).strip().strip('\ufeff').strip('"').strip("'") for c in df.columns]
         
-        col_libro = next((c for c in df.columns if 'libro' in c.lower() or 'titulo' in c.lower()), 'Titulo')
-        col_cliente = next((c for c in df.columns if 'client' in c.lower()), 'Clienta')
-        
-        print(f"Filas originales en el CSV: {len(df)}")
-        df.dropna(subset=[col_cliente, 'Año', 'Mes'], inplace=True) # DROPNA reforzado
-        print(f"Filas con datos válidos después de la limpieza: {len(df)}")
-        
-        print(f"Corrigiendo nombres de libros en la columna '{col_libro}'...")
-        df[col_libro] = df[col_libro].apply(lambda x: get_best_match(x, official_dict) if pd.notna(x) else x)
-        
-        df.to_csv(CLEAN_CSV_PATH, index=False, encoding='utf-8-sig', sep=';')
+        # Guardar una copia antes de filtrar
+        df_original = df.copy()
+
     except Exception as e:
-        print(f"Error procesando el CSV: {e}")
+        print(f"Error al procesar el CSV: {e}")
         return
 
-    # --- 3. CONECTAR A BD Y GENERAR SQL ---
     try:
         conn = sqlite3.connect(DB_PATH)
-        cliente_map = {str(nombre).strip().upper(): id for id, nombre in pd.read_sql_query("SELECT cliente_id, nombre FROM clientes", conn).values}
-        libro_map = {str(titulo).strip().upper(): id for id, titulo in pd.read_sql_query("SELECT libro_id, titulo FROM libros", conn).values}
         
-        sql_inserts, libros_no_encontrados = [], set()
+        db_clientes = pd.read_sql_query("SELECT cliente_id, nombre FROM clientes", conn).values
+        cliente_map = {normalize_name(nombre): id for id, nombre in db_clientes}
+        
+        libro_map = {normalize_name(titulo): id for id, titulo in pd.read_sql_query("SELECT libro_id, titulo FROM libros", conn).values}
+        
+        sql_inserts = []
+        clientes_no_encontrados = set()
+        libros_no_encontrados = set()
+        
+        # --- NUEVO: Lista para filas omitidas ---
+        omitted_rows = []
         
         meses_map = {'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04', 'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08', 'septiembre': '09', 'octubre': '10', 'noviembre': '11', 'diciembre': '12'}
 
-        for _, row in df.iterrows():
-            cliente_nombre_raw = str(row.get(col_cliente, '')).strip()
-            libro_titulo_raw = str(row.get(col_libro, '')).strip()
+        for index, row in df_original.iterrows():
+            # --- Añadimos una columna de razón para el reporte ---
+            reason = ""
             
-            if not cliente_nombre_raw or cliente_nombre_raw.lower() == 'nan': continue
+            cliente_nombre_raw = str(row.get('Clienta', '')).strip().upper()
             
-            cliente_id = cliente_map.get(cliente_nombre_raw.upper())
-            if not cliente_id: continue 
+            if not cliente_nombre_raw:
+                reason = "Nombre de cliente vacío"
+                omitted_rows.append(list(row) + [reason])
+                continue
+
+            if cliente_nombre_raw in MANUAL_CLIENT_FIXES:
+                cliente_nombre_raw_norm = normalize_name(MANUAL_CLIENT_FIXES[cliente_nombre_raw])
+            else:
+                cliente_nombre_raw_norm = normalize_name(cliente_nombre_raw)
+            
+            cliente_id = cliente_map.get(cliente_nombre_raw_norm)
+            if not cliente_id:
+                clientes_no_encontrados.add(row.get('Clienta'))
+                reason = "Cliente no encontrado en la BD"
+                omitted_rows.append(list(row) + [reason])
+                continue
 
             libro_id_sql = "NULL"
-            if libro_titulo_raw and libro_titulo_raw.lower() != 'nan':
-                libro_id = libro_map.get(libro_titulo_raw.upper())
-                if libro_id: 
+            libro_titulo = row.get('Titulo') 
+            if pd.notna(libro_titulo):
+                libro_titulo_norm = normalize_name(libro_titulo)
+                libro_id = libro_map.get(libro_titulo_norm)
+                if libro_id:
                     libro_id_sql = str(libro_id)
-                else: 
-                    libros_no_encontrados.add(libro_titulo_raw)
+                else:
+                    if libro_titulo.strip():
+                        libros_no_encontrados.add(libro_titulo)
             
             mes_texto = str(row.get('Mes', '')).strip().lower()
+            mes_val = meses_map.get(mes_texto)
             
             try:
                 ano_val = str(int(float(row['Año'])))
             except (ValueError, TypeError):
+                reason = "Año inválido o vacío"
+                omitted_rows.append(list(row) + [reason])
                 continue
             
-            mes_val = meses_map.get(mes_texto)
-            if not mes_val: continue
+            if not mes_val:
+                reason = "Mes inválido o vacío"
+                omitted_rows.append(list(row) + [reason])
+                continue
             
-            fecha_asignacion = f"{ano_val}-{mes_val}-01 00:00:00"
-            pagado_csv = str(row.get('Pagado', 'FALSE')).strip().upper()
-            
-            # REGLA DE NEGOCIO ESTRICA
-            if int(ano_val) < 2026 or (int(ano_val) == 2026 and int(mes_val) <= 6):
-                estado_envio = 'OK'
-                envio_pagado = 'TRUE'
-                pagado = 'TRUE'
+            fecha_limite = datetime(2026, 7, 31).date()
+            fecha_asignacion_dt = datetime(int(ano_val), int(mes_val), 1).date()
+
+            if fecha_asignacion_dt <= fecha_limite:
+                estado_envio, envio_pagado, pagado = 'OK', 'TRUE', 'TRUE'
             else:
-                estado_envio = 'PENDIENTE'
-                envio_pagado = 'FALSE'
-                pagado = 'FALSE'
-                
+                estado_envio, envio_pagado, pagado = 'PENDIENTE', 'FALSE', 'FALSE'
+            
+            fecha_asignacion_sql = f"{ano_val}-{mes_val}-01 00:00:00"
+            
             sql = (
                 f"INSERT INTO asignaciones (cliente_id, libro_suscripcion_id, ano, mes, pagado, envio_pagado, estado_envio, fecha_asignacion) "
-                f"VALUES ({cliente_id}, {libro_id_sql}, '{ano_val}', '{mes_val}', '{pagado}', '{envio_pagado}', '{estado_envio}', '{fecha_asignacion}') "
-                f"ON CONFLICT(cliente_id, ano, mes) DO UPDATE SET "
+                f"VALUES ({cliente_id}, {libro_id_sql}, '{ano_val}', '{mes_val}', '{pagado}', '{envio_pagado}', '{estado_envio}', '{fecha_asignacion_sql}') "
+                f"ON CONFLICT(cliente_id, ano_mes) DO UPDATE SET "
                 f"libro_suscripcion_id = excluded.libro_suscripcion_id, "
                 f"estado_envio = excluded.estado_envio, "
                 f"pagado = excluded.pagado, "
-                f"envio_pagado = excluded.envio_pagado, "
-                f"fecha_asignacion = excluded.fecha_asignacion;"
+                f"envio_pagado = excluded.envio_pagado;"
             )
             sql_inserts.append(sql)
             
         conn.close()
 
         with open(OUTPUT_SQL_PATH, 'w', encoding='utf-8') as f:
-            for insert in sql_inserts: f.write(insert + "\n")
+            for insert in sql_inserts:
+                f.write(insert + "\n")
         print(f"\n✅ Éxito: {len(sql_inserts)} comandos SQL generados en '{OUTPUT_SQL_PATH}'.")
         
+        # --- Lógica de reportes ---
+        if omitted_rows:
+            omitted_df = pd.DataFrame(omitted_rows, columns=list(df_original.columns) + ['Motivo_Omision'])
+            omitted_df.to_csv(SKIPPED_ROWS_REPORT_PATH, index=False, encoding='utf-8-sig', sep=';')
+            print(f"¡Atención! {len(omitted_rows)} filas fueron omitidas. Revisa el nuevo reporte: '{SKIPPED_ROWS_REPORT_PATH}'")
+
+        if clientes_no_encontrados:
+            pd.DataFrame([{"Nombre Cliente No Encontrado": c} for c in clientes_no_encontrados]).to_csv(MISSING_CLIENTS_REPORT_PATH, index=False, encoding='utf-8-sig', sep=';')
+            print(f"{len(clientes_no_encontrados)} clientes no se encontraron. Revisa '{MISSING_CLIENTS_REPORT_PATH}'.")
+        
         if libros_no_encontrados:
-            pd.DataFrame([{"Tipo": "Libro", "Nombre": l} for l in libros_no_encontrados]).to_csv(MISSING_REPORT_PATH, index=False, encoding='utf-8-sig')
-            print(f"⚠️ ¡Atención! Algunos libros no se encontraron. Revisa '{MISSING_REPORT_PATH}'.")
+            pd.DataFrame([{"Título Libro No Encontrado": l} for l in libros_no_encontrados]).to_csv(MISSING_BOOKS_REPORT_PATH, index=False, encoding='utf-8-sig', sep=';')
+            print(f"{len(libros_no_encontrados)} libros no se encontraron y se asignaron como nulos. Revisa '{MISSING_BOOKS_REPORT_PATH}'.")
             
     except Exception as e:
-        print(f"Ocurrió un error inesperado en la fase de BD: {e}")
+        print(f"Ocurrió un error inesperado: {e}")
 
 if __name__ == "__main__":
     generate_migration_sql()

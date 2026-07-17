@@ -244,6 +244,9 @@ def sync_system():
             delivery_method = clean_field(row.get("Método de entrega", ""))
             genres = clean_field(row.get("Selecciona los géneros de tu preferencia (puedes elegir los que quieras)", ""))
             
+            if genres != "SIN INFORMACION":
+                genres = genres.replace("DARK ACADEMY", "DARK ACADEMIA")
+
             # -- INSERTAR O ACTUALIZAR CLIENTE --
             cursor.execute("""
             INSERT INTO clientes (email, nombre, telefono, instagram, direccion, rut, status) VALUES (?, ?, ?, ?, ?, ?, ?)
