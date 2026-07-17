@@ -85,7 +85,7 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
         opciones_combo = ["Si", "No"]
         campo_bd = "envio_pagado"
     elif selected_col_name == "tipo_envio":
-        opciones_combo = ["BLUEXPRESS", "PAKET", "RETIRO"]
+        opciones_combo = ["BLUEXPRESS", "PAKET", "RETIRO", "STARKEN"]
         campo_bd = "metodo_entrega"
 
     if opciones_combo:
@@ -137,10 +137,10 @@ def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inv
 
         # Si el libro actual ya no tiene stock, lo buscamos aparte para mostrarlo en la lista
         if current_libro_id and not any(l[0] == current_libro_id for l in libros_disponibles):
-             cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
-             libro_actual_info = cursor.fetchone()
-             if libro_actual_info:
-                 libros_disponibles.insert(0, libro_actual_info)
+                cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
+                libro_actual_info = cursor.fetchone()
+                if libro_actual_info:
+                    libros_disponibles.insert(0, libro_actual_info)
 
         conn.close()
     except Exception as e:
