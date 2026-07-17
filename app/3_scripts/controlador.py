@@ -3,7 +3,7 @@ from tkinter import messagebox, ttk
 import json
 import os
 import datetime
-import subprocess  # <--- ESTA ES LA LÍNEA QUE FALTABA
+import subprocess
 import conexion
 import interfaz
 import export
@@ -22,6 +22,9 @@ class AppControlador:
             'genero': [],
             'editorial': []
         }
+        
+        # Variable para controlar el slider de stock
+        self.stock_filter_var = tk.IntVar()
 
         def validar_int(P): return P.isdigit() or P == ""
         def validar_float(P):
@@ -37,8 +40,9 @@ class AppControlador:
             'cmd_guardar_libro': self.guardar_libro,
             'cmd_limpiar_form_libro': self.limpiar_formulario_libro,
             'cmd_eliminar_libro': self.eliminar_libro,
-            'cmd_buscar_libro': self.buscar_libro,
-            'cmd_quitar_filtro': self.quitar_filtro,
+            'cmd_aplicar_filtros': self.aplicar_filtros_inventario,
+            'cmd_limpiar_filtros': self.limpiar_filtros_inventario,
+            'cmd_ordenar_libros': self.ordenar_columna_inventario,
             'cmd_validar_int': validar_int,
             'cmd_validar_float': validar_float,
             'cmd_toggle_columnas': self.toggle_columnas_opcionales
@@ -57,58 +61,112 @@ class AppControlador:
         self.widgets['cmb_filtro_pagado'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_envio'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_libro'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
-
         self.widgets['tabla_clientes'].bind("<Double-1>", lambda event: manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo))
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         
-        self.widgets['entry_busqueda_libros'].bind("<Return>", self.buscar_libro)
+        # Vincular Enter a la nueva función de filtros
+        self.widgets['entry_busqueda_libros'].bind("<Return>", self.aplicar_filtros_inventario)
+        
+        # Configurar eventos del slider
+        if 'slider_stock' in self.widgets:
+            self.widgets['slider_stock'].config(variable=self.stock_filter_var)
+            self.widgets['slider_stock'].bind("<ButtonRelease-1>", self.aplicar_filtros_inventario)
+            self.stock_filter_var.trace_add("write", self.actualizar_label_stock)
         
         self.refrescar_todas_las_tablas()
         self.configurar_eventos_autocompletado()
+        self.configurar_slider_stock()
 
+    # --- LÓGICA DE AUTOCOMPLETADO ---
     def refrescar_listas_autocompletado(self):
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            
             for campo in self.autocompletado_data.keys():
                 cursor.execute(f"SELECT DISTINCT {campo} FROM libros WHERE {campo} IS NOT NULL AND {campo} != '' AND {campo} != 'SIN INFORMACION' ORDER BY {campo}")
                 valores = [str(row[0]) for row in cursor.fetchall()]
                 self.autocompletado_data[campo] = valores
-                self.widgets['form_libro_entries'][campo]['values'] = valores
                 
+                # Mantener valor actual si existe
+                if campo in self.widgets['form_libro_entries']:
+                    current_value = self.widgets['form_libro_entries'][campo].get()
+                    self.widgets['form_libro_entries'][campo]['values'] = valores
+                    if current_value in valores:
+                        self.widgets['form_libro_entries'][campo].set(current_value)
             conn.close()
         except Exception as e:
             print(f"Error cargando listas de autocompletado: {e}")
 
     def configurar_eventos_autocompletado(self):
-        """Asigna los eventos de teclado a los combobox para filtrar dinámicamente."""
         for campo in self.autocompletado_data.keys():
-            combobox = self.widgets['form_libro_entries'][campo]
-            
-            # Usamos un lambda con un argumento por defecto para "capturar" el valor actual de 'campo'.
-            combobox.bind('<KeyRelease>', lambda event, c=campo: self.on_keyrelease_autocompletar(event, c))
-
+            if campo in self.widgets['form_libro_entries']:
+                combobox = self.widgets['form_libro_entries'][campo]
+                combobox.bind('<KeyRelease>', lambda event, c=campo: self.on_keyrelease_autocompletar(event, c))
 
     def on_keyrelease_autocompletar(self, event, campo_actual):
-        """Filtra la lista de sugerencias y la restaura si el campo está vacío."""
         widget = event.widget
-        
-        # Ignorar teclas que no modifican el texto para evitar comportamiento errático
         if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'Escape', 'Control_L', 'Alt_L'):
             return
-        
         valor_escrito = widget.get()
         lista_completa = self.autocompletado_data[campo_actual]
-
         if valor_escrito == '':
-            # Si el campo se vacía, se restaura la lista completa.
             widget['values'] = lista_completa
         else:
-            # Si se escribe, se filtra la lista.
             data = [item for item in lista_completa if valor_escrito.lower() in item.lower()]
             widget['values'] = data
 
+    # --- LÓGICA DEL SLIDER Y FILTROS DE INVENTARIO ---
+    def configurar_slider_stock(self):
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(stock) FROM libros")
+            max_stock = cursor.fetchone()[0]
+            conn.close()
+            
+            if max_stock and 'slider_stock' in self.widgets:
+                self.widgets['slider_stock'].config(to=max_stock)
+                self.stock_filter_var.set(max_stock)
+        except Exception as e:
+            print(f"Error al configurar el slider de stock: {e}")
+            if 'slider_stock' in self.widgets:
+                self.widgets['slider_stock'].config(to=100)
+                self.stock_filter_var.set(100)
+
+    def actualizar_label_stock(self, *args):
+        if 'lbl_filtro_stock' in self.widgets:
+            valor_actual = self.stock_filter_var.get()
+            self.widgets['lbl_filtro_stock'].config(text=f"Stock máx: {valor_actual}")
+    
+    def aplicar_filtros_inventario(self, event=None):
+        termino_busqueda = self.widgets['entry_busqueda_libros'].get().strip()
+        stock_maximo = self.stock_filter_var.get()
+
+        query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros"
+        condiciones = []
+        params = []
+
+        if termino_busqueda:
+            condiciones.append("(titulo LIKE ? OR autor LIKE ?)")
+            params.extend([f"%{termino_busqueda}%", f"%{termino_busqueda}%"])
+
+        condiciones.append("stock <= ?")
+        params.append(stock_maximo)
+        
+        if condiciones:
+            query += " WHERE " + " AND ".join(condiciones)
+        
+        query += " ORDER BY titulo"
+        self.refrescar_inventario(query=query, params=tuple(params))
+
+    def limpiar_filtros_inventario(self, event=None):
+        self.widgets['entry_busqueda_libros'].delete(0, tk.END)
+        if 'slider_stock' in self.widgets:
+            max_val = self.widgets['slider_stock'].cget("to")
+            self.stock_filter_var.set(int(float(max_val)))
+        self.aplicar_filtros_inventario()
+
+    # --- RESTO DE LA LÓGICA ---
     def toggle_columnas_opcionales(self):
         columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
         opcionales_visibles = []
@@ -156,7 +214,7 @@ class AppControlador:
             
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                    s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
+                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -199,6 +257,7 @@ class AppControlador:
 
     def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros ORDER BY titulo", params=()):
         if widgets is None: widgets = self.widgets
+        if 'tabla_libros' not in widgets: return
         tabla = widgets['tabla_libros']
         for item in tabla.get_children(): tabla.delete(item)
         try:
@@ -212,22 +271,9 @@ class AppControlador:
 
             stock_total = sum(int(fila[6]) for fila in self.datos_inventario_actual if fila[6])
             widgets['lbl_stock_total'].config(text=f"Unidades Totales en Inventario: {stock_total}")
-            
             self.refrescar_listas_autocompletado()
-            
         except Exception as e:
             print(f"Error al cargar inventario: {e}")
-
-    def buscar_libro(self, event=None):
-        """Busca un libro. Acepta un argumento de evento opcional."""
-        termino = self.widgets['entry_busqueda_libros'].get().strip()
-        if not termino: return self.quitar_filtro()
-        query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros WHERE titulo LIKE ? OR autor LIKE ? ORDER BY titulo"
-        self.refrescar_inventario(query=query, params=(f"%{termino}%", f"%{termino}%"))
-
-    def quitar_filtro(self):
-        self.widgets['entry_busqueda_libros'].delete(0, tk.END)
-        self.refrescar_inventario()
 
     def al_seleccionar_libro(self, event=None):
         tabla = self.widgets['tabla_libros']
@@ -281,18 +327,22 @@ class AppControlador:
                     UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, encuadernacion=?, stock=?, precio=? 
                     WHERE libro_id=?
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'], 
-                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
+                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
             else:
                 cursor.execute("""
                     INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'],
-                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
+                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
             conn.commit()
             conn.close()
             messagebox.showinfo("Éxito", "Libro guardado correctamente.")
             self.limpiar_formulario_libro()
-            self.refrescar_inventario()
+            
+            # Recargar configuración del slider por si el max stock cambió
+            self.configurar_slider_stock() 
+            self.aplicar_filtros_inventario()
+            
         except Exception as e:
             messagebox.showerror("Error BD", str(e))
 
@@ -309,7 +359,9 @@ class AppControlador:
             conn.commit()
             conn.close()
             self.limpiar_formulario_libro()
-            self.refrescar_inventario()
+            
+            self.configurar_slider_stock()
+            self.aplicar_filtros_inventario()
         except Exception as e:
             messagebox.showerror("Error BD", str(e))
 
@@ -329,7 +381,6 @@ class AppControlador:
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', script)
             resultado = subprocess.run(["python", script_path], capture_output=True, text=True, check=True, encoding='utf-8')
             self.root.config(cursor="")
-
             output_str = resultado.stdout
             try:
                 json_part = output_str[output_str.find('{'):]
@@ -347,7 +398,6 @@ class AppControlador:
                     messagebox.showinfo("Completado", mensaje)
             except (json.JSONDecodeError, IndexError):
                 messagebox.showinfo("Completado", f"{mensaje_exito}\n(No se encontró un reporte JSON detallado)")
-
             self.refrescar_todas_las_tablas()
         except subprocess.CalledProcessError as e:
             self.root.config(cursor="")
@@ -358,3 +408,32 @@ class AppControlador:
 
     def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización de clientes completada.")
     def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Importación de catálogo completada.")
+    
+    def ordenar_columna_inventario(self, col, reverse):
+        """Ordena la tabla de libros al hacer clic en el encabezado."""
+        if 'tabla_libros' not in self.widgets: return
+        tabla = self.widgets['tabla_libros']
+        
+        # Obtener todos los valores de la columna clickeada
+        lista_valores = [(tabla.set(k, col), k) for k in tabla.get_children('')]
+        
+        # 1. Limpiar las flechas de TODOS los encabezados para resetearlos
+        for c in tabla['columns']:
+            texto_original = c.replace("_", " ").title()
+            # Restauramos el comando base
+            tabla.heading(c, text=texto_original, command=lambda _col=c: self.ordenar_columna_inventario(_col, False))
+            
+        # 2. Intentar ordenar numéricamente (para stock, precio, id). Si falla, ordenar alfabéticamente.
+        try:
+            lista_valores.sort(key=lambda t: float(t[0]) if t[0] else 0.0, reverse=reverse)
+        except ValueError:
+            lista_valores.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
+
+        # 3. Reorganizar los elementos visualmente en la tabla
+        for index, (val, k) in enumerate(lista_valores):
+            tabla.move(k, '', index)
+
+        # 4. Añadir la flecha visual al encabezado clickeado e invertir la acción para el próximo clic
+        texto_heading = col.replace("_", " ").title()
+        flecha = "  ▼" if reverse else "  ▲"
+        tabla.heading(col, text=texto_heading + flecha, command=lambda _col=col: self.ordenar_columna_inventario(_col, not reverse))
