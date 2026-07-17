@@ -27,7 +27,6 @@ class AppControlador:
             'cmd_sync_clientes': self.sync_clientes,
             'cmd_import_catalogo': self.importar_catalogo,
             'cmd_exportar_excel': self.exportar_excel,
-            'cmd_exportar_gsheets': self.exportar_gsheets,
             'cmd_guardar_libro': self.guardar_libro,
             'cmd_limpiar_form_libro': self.limpiar_formulario_libro,
             'cmd_eliminar_libro': self.eliminar_libro,
@@ -312,29 +311,6 @@ class AppControlador:
             ruta = export.exportar_a_excel()
             self.root.config(cursor="")
             messagebox.showinfo("Éxito", f"Excel generado en:\n{ruta}")
-        except Exception as e:
-            self.root.config(cursor="")
-            messagebox.showerror("Error", str(e))
-
-    def exportar_gsheets(self):
-        try:
-            self.root.config(cursor="watch"); self.root.update()
-            url = export.exportar_a_google_sheets()
-            self.root.config(cursor="")
-            win = tk.Toplevel(self.root)
-            win.title("Google Sheet Generado")
-            
-            correo_destino = "develop.alba.libreria@gmail.com"
-            mensaje = f"Reporte exportado y compartido con:\n{correo_destino}"
-            
-            tk.Label(win, text=mensaje, font=("Helvetica", 10, "bold")).pack(pady=10, padx=10)
-            
-            entry = tk.Entry(win, width=80)
-            entry.pack(padx=20, pady=5)
-            entry.insert(0, url)
-            entry.config(state="readonly") 
-            
-            tk.Button(win, text="Cerrar", command=win.destroy).pack(pady=10)
         except Exception as e:
             self.root.config(cursor="")
             messagebox.showerror("Error", str(e))

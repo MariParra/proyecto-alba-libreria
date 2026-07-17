@@ -22,11 +22,11 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_top = tk.Frame(ventana, bg=config.COLOR_FONDO_PRINCIPAL, padx=10, pady=10)
     frame_top.pack(fill="x")
     
-    frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
-    frame_exportaciones.pack(side="right", padx=10)
-    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#1D6F42", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
-    tk.Button(frame_exportaciones, text="A GSheets", command=comandos_ui['cmd_exportar_gsheets'], bg="#0F9D58", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
+    # --- CONTENEDOR DE EXPORTACIONES ---
+    frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold, width=150, height=70)
+    frame_exportaciones.pack(side="right", padx=10, fill="y")
     
+    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#1D6F42", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)    
     frame_acciones = tk.LabelFrame(frame_top, text="Operaciones de Base", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
     frame_acciones.pack(side="right", padx=10)
     tk.Button(frame_acciones, text="Sync Clientes", command=comandos_ui['cmd_sync_clientes'], bg=config.COLOR_BOTON_CRUD, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)

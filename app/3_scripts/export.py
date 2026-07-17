@@ -2,13 +2,10 @@ import pandas as pd
 import os
 from datetime import datetime
 import sqlite3
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "2_database", "libreria.db"))
 OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "4_output_reports"))
-CREDENTIALS_FILE = os.path.abspath(os.path.join(BASE_DIR, "..", "config", "credentials.json"))
 
 def obtener_dataframes():
     conn = sqlite3.connect(DB_PATH)
@@ -24,7 +21,6 @@ def obtener_dataframes():
     campos_extra = []
     for campo in posibles_opcionales:
         if campo in columnas_clientes: 
-            # Evitar duplicados si hay varios alias para email
             if 'email' in campo and any('email' in c for c in campos_extra):
                 continue
             campos_extra.append(f"c.{campo}")
@@ -71,39 +67,3 @@ def exportar_a_excel():
         return output_filename
     except Exception as e:
         raise Exception(f"Error en exportación a Excel: {e}")
-
-def exportar_a_google_sheets():
-    try:
-        df_inventario, df_asignaciones = obtener_dataframes()
-        df_inventario.fillna('', inplace=True)
-        df_asignaciones.fillna('', inplace=True)
-
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(creds)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        titulo_sheet = f"Reporte_Libreria_{timestamp}"
-        
-        sh = client.create(titulo_sheet)
-        
-        # --- MODIFICACIÓN ---
-        # 1. Definir el correo para compartirlo y retornarlo.
-        email_a_compartir = 'develop.alba.libreria@gmail.com'
-        sh.share(email_a_compartir, perm_type='user', role='writer')
-        
-        # 2. Hacer público para que cualquiera con el enlace lo vea.
-        sh.share('', perm_type='anyone', role='reader')
-
-        # Actualizar hojas de cálculo
-        hoja_inventario = sh.sheet1
-        hoja_inventario.update_title("Inventario")
-        hoja_inventario.update([df_inventario.columns.values.tolist()] + df_inventario.values.tolist())
-
-        hoja_asignaciones = sh.add_worksheet(title="Asignaciones", rows=str(len(df_asignaciones)+10), cols=str(len(df_asignaciones.columns)))
-        hoja_asignaciones.update([df_asignaciones.columns.values.tolist()] + df_asignaciones.values.tolist())
-        
-        # 3. Retornar tanto la URL como el correo.
-        return sh.url, email_a_compartir
-    except Exception as e:
-        raise Exception(f"Error en Google Sheets (Posible cuota excedida): {e}")
