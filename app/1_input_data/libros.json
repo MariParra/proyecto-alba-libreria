@@ -1627,10 +1627,10 @@
         "encuadernacion":null
     },
     {
-        "titulo":"LOS SECRETOS DEL JARDIN DE ODETTE",
-        "autor":"MICHEL BUSSI",
-        "genero":"THRILLER",
-        "editorial":"PLANETA",
+        "titulo":"LOS SECRETOS DEL HOTEL JARDIN DE ODETTE",
+        "autor":"BRUNO PUELLES",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
         "encuadernacion":null
     },
     {
@@ -1928,10 +1928,10 @@
         "encuadernacion":null
     },
     {
-        "titulo":"UNA DE LAS SUYAS",
-        "autor":"CURTIS SITTENFELD",
-        "genero":"FICCION GENERAL",
-        "editorial":"PLANETA",
+        "titulo":"UNA DE LOS SUYOS",
+        "autor":"ROSE L. MCCARNEY",
+        "genero":"DARK ROMANCE",
+        "editorial":"URANO",
         "encuadernacion":null
     },
     {
@@ -2539,6 +2539,13 @@
     {
         "titulo":"AMOR FUERA DE SERIE",
         "autor":"NEREA PASCUAL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"BLOOM",
+        "autor":"KEVIN PANETTA",
         "genero":"ROMANCE",
         "editorial":"PLANETA",
         "encuadernacion":null
