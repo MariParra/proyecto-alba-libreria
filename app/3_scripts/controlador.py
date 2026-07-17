@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 import json
 import os
 import datetime
+import subprocess  # <--- ESTA ES LA LÍNEA QUE FALTABA
 import conexion
 import interfaz
 import export
@@ -13,9 +14,15 @@ MAPEO_MESES = {"Enero": "01", "Febrero": "02", "Marzo": "03", "Abril": "04", "Ma
 class AppControlador:
     def __init__(self, root):
         self.root = root
-        self.widgets = {} 
-        self.datos_inventario_actual = [] 
+        self.widgets = {}
+        self.datos_inventario_actual = []
         
+        self.autocompletado_data = {
+            'autor': [],
+            'genero': [],
+            'editorial': []
+        }
+
         def validar_int(P): return P.isdigit() or P == ""
         def validar_float(P):
             if P == "" or P == ".": return True
@@ -55,9 +62,65 @@ class AppControlador:
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         
         self.refrescar_todas_las_tablas()
+        self.configurar_eventos_autocompletado()
+
+    def refrescar_listas_autocompletado(self):
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            for campo in self.autocompletado_data.keys():
+                cursor.execute(f"SELECT DISTINCT {campo} FROM libros WHERE {campo} IS NOT NULL AND {campo} != '' AND {campo} != 'SIN INFORMACION' ORDER BY {campo}")
+                valores = [str(row[0]) for row in cursor.fetchall()]
+                self.autocompletado_data[campo] = valores
+                self.widgets['form_libro_entries'][campo]['values'] = valores
+                
+            conn.close()
+        except Exception as e:
+            print(f"Error cargando listas de autocompletado: {e}")
+
+    def configurar_eventos_autocompletado(self):
+        for campo in self.autocompletado_data.keys():
+            combobox = self.widgets['form_libro_entries'][campo]
+            combobox.bind('<KeyRelease>', self.on_keyrelease_autocompletar)
+            combobox.bind('<FocusOut>', self.on_focusout_cerrar_lista)
+
+    def on_keyrelease_autocompletar(self, event):
+        widget = event.widget
+        campo_actual = None
+        for key, cb in self.widgets['form_libro_entries'].items():
+            if cb == widget:
+                campo_actual = key
+                break
+        if not campo_actual: return
+
+        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'BackSpace'):
+            return
         
+        valor_escrito = widget.get()
+        lista_completa = self.autocompletado_data[campo_actual]
+
+        if valor_escrito == '':
+            widget['values'] = lista_completa
+        else:
+            data = [item for item in lista_completa if valor_escrito.lower() in item.lower()]
+            widget['values'] = data
+            
+            if data:
+                widget.event_generate('<Down>')
+
+    def on_focusout_cerrar_lista(self, event):
+        widget = event.widget
+        campo_actual = None
+        for key, cb in self.widgets['form_libro_entries'].items():
+            if cb == widget:
+                campo_actual = key
+                break
+        if not campo_actual: return
+        
+        widget['values'] = self.autocompletado_data[campo_actual]
+
     def toggle_columnas_opcionales(self):
-        # AÑADIDO: 'comentario' se mantiene visible junto con las columnas base.
         columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
         opcionales_visibles = []
         if self.widgets['vars_opcionales']['rut'].get(): opcionales_visibles.append("rut")
@@ -69,46 +132,6 @@ class AppControlador:
     def refrescar_todas_las_tablas(self):
         self.iniciar_sincronizacion_periodo()
         self.refrescar_inventario()
-
-    # --- NUEVA LÓGICA DE AUTOCOMPLETADO INTELIGENTE ---
-    def refrescar_listas_autocompletado(self):
-        try:
-            conn = conexion.conectar_db()
-            cursor = conn.cursor()
-            
-            for campo in ['autor', 'genero', 'editorial']:
-                cursor.execute(f"SELECT DISTINCT {campo} FROM libros WHERE {campo} IS NOT NULL AND {campo} != ''")
-                valores = [str(row[0]) for row in cursor.fetchall()]
-                
-                cb = self.widgets['form_libro_entries'][campo]
-                cb['values'] = valores
-                
-                def on_keyrelease(event, combobox=cb, lista=valores):
-                    # No interrumpir el uso normal de las flechas, Tab o Enter
-                    if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R'):
-                        return
-                    
-                    value = combobox.get()
-                    if value == '':
-                        combobox['values'] = lista
-                    else:
-                        # Filtrar coincidencias
-                        data = [item for item in lista if value.lower() in item.lower()]
-                        combobox['values'] = data
-                        
-                        # Si hay coincidencias, abrir la lista
-                        if data:
-                            combobox.event_generate('<Down>')
-                            
-                    # Mantener el foco en la caja de texto
-                    combobox.focus()
-                    combobox.icursor(tk.END)
-                
-                cb.bind('<KeyRelease>', on_keyrelease)
-                
-            conn.close()
-        except Exception as e:
-            print("Error cargando listas de autocompletado:", e)
 
     def iniciar_sincronizacion_periodo(self):
         meses_seleccionados = [m for m, var in self.widgets['meses_vars'].items() if var.get()]
@@ -142,10 +165,9 @@ class AppControlador:
             meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
             placeholders_meses = ",".join("?" * len(meses_nums))
             
-            # AÑADIDO: 'a.comentario' en la consulta SELECT
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
+                    s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -178,15 +200,14 @@ class AppControlador:
             cursor.execute(query, params)
             for f in cursor.fetchall():
                 fila_formateada = list(f)
-                fila_formateada[5] = fila_formateada[5] if fila_formateada[5] else "SIN ASIGNACIÓN" # Libro
-                fila_formateada[9] = "Si" if str(fila_formateada[9]).upper() == "TRUE" else "No" # Pagado
-                fila_formateada[10] = "Si" if str(fila_formateada[10]).upper() == "TRUE" else "No" # Envio Pagado
+                fila_formateada[5] = fila_formateada[5] if fila_formateada[5] else "SIN ASIGNACIÓN"
+                fila_formateada[9] = "Si" if str(fila_formateada[9]).upper() == "TRUE" else "No"
+                fila_formateada[10] = "Si" if str(fila_formateada[10]).upper() == "TRUE" else "No"
                 tabla.insert("", "end", values=tuple(fila_formateada))
             conn.close()
         except Exception as e:
             messagebox.showerror("Error BD", f"Error al cargar asignaciones: {e}")
 
-    # AÑADIDO: 'encuadernacion' en la consulta
     def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros ORDER BY titulo", params=()):
         if widgets is None: widgets = self.widgets
         tabla = widgets['tabla_libros']
@@ -199,7 +220,7 @@ class AppControlador:
             conn.close()
             for fila in self.datos_inventario_actual:
                 tabla.insert("", "end", values=fila)
-            # El índice del stock ahora es 6
+
             stock_total = sum(int(fila[6]) for fila in self.datos_inventario_actual if fila[6])
             widgets['lbl_stock_total'].config(text=f"Unidades Totales en Inventario: {stock_total}")
             
@@ -211,7 +232,6 @@ class AppControlador:
     def buscar_libro(self):
         termino = self.widgets['entry_busqueda_libros'].get().strip()
         if not termino: return self.quitar_filtro()
-        # AÑADIDO: 'encuadernacion' en la consulta de búsqueda
         query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros WHERE titulo LIKE ? OR autor LIKE ? ORDER BY titulo"
         self.refrescar_inventario(query=query, params=(f"%{termino}%", f"%{termino}%"))
 
@@ -247,7 +267,6 @@ class AppControlador:
                 entry.config(validate="key")
             elif isinstance(entry, ttk.Combobox):
                 entry.set("")
-        # AÑADIDO: Valor por defecto para encuadernación al limpiar
         self.widgets['form_libro_entries']['encuadernacion'].set('TAPA BLANDA')
         tabla = self.widgets['tabla_libros']
         if tabla.selection():
@@ -255,7 +274,7 @@ class AppControlador:
 
     def guardar_libro(self):
         entries = self.widgets['form_libro_entries']
-        datos = {col_id: entry.get().strip() for col_id, entry in entries.items()}
+        datos = {col_id: entry.get().strip().upper() for col_id, entry in entries.items()}
         if not datos['titulo'] or not datos['stock']:
             messagebox.showwarning("Campos Vacíos", "El Título y el Stock son obligatorios.")
             return
@@ -267,19 +286,18 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            # AÑADIDO: 'encuadernacion' en la lógica de guardado
             if libro_id:
                 cursor.execute("""
                     UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, encuadernacion=?, stock=?, precio=? 
                     WHERE libro_id=?
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'], 
-                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
+                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
             else:
                 cursor.execute("""
                     INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'],
-                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
+                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
             conn.commit()
             conn.close()
             messagebox.showinfo("Éxito", "Libro guardado correctamente.")
@@ -318,22 +336,35 @@ class AppControlador:
     def disparar_script_externo(self, script, mensaje_exito):
         try:
             self.root.config(cursor="watch"); self.root.update()
-            # La ruta al script debe ser absoluta para evitar problemas
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', script)
-            output = conexion.ejecutar_script_externo(script_path)
+            resultado = subprocess.run(["python", script_path], capture_output=True, text=True, check=True, encoding='utf-8')
             self.root.config(cursor="")
+
+            output_str = resultado.stdout
             try:
-                # El stdout puede contener más que solo el JSON
-                json_part = output.stdout[output.stdout.find('{'):]
+                json_part = output_str[output_str.find('{'):]
                 reporte = json.loads(json_part)
-                if reporte.get("error"): messagebox.showerror("Error", reporte["error"])
-                else: messagebox.showinfo("Completado", f"{mensaje_exito}\nProcesados: {reporte.get('clientes_procesados', 0)}\nNuevos: {reporte.get('nuevos_clientes', 0)}\nActualizados: {reporte.get('clientes_actualizados', 0)}")
+                
+                mensaje = f"{mensaje_exito}\n"
+                if "libros_procesados" in reporte:
+                    mensaje += (f"\nLibros Procesados: {reporte.get('libros_procesados', 0)}"
+                                f"\nNuevos: {reporte.get('nuevos_libros', 0)}"
+                                f"\nActualizados: {reporte.get('libros_actualizados', 0)}")
+                
+                if reporte.get("error"):
+                    messagebox.showerror("Error en Script", reporte["error"])
+                else:
+                    messagebox.showinfo("Completado", mensaje)
             except (json.JSONDecodeError, IndexError):
-                messagebox.showinfo("Completado", mensaje_exito)
+                messagebox.showinfo("Completado", f"{mensaje_exito}\n(No se encontró un reporte JSON detallado)")
+
             self.refrescar_todas_las_tablas()
+        except subprocess.CalledProcessError as e:
+            self.root.config(cursor="")
+            messagebox.showerror("Error de Ejecución", f"Fallo al ejecutar '{script}':\n{e.stderr}")
         except Exception as e:
             self.root.config(cursor="")
-            messagebox.showerror("Error", f"Error al ejecutar el script '{script}': {e}")
+            messagebox.showerror("Error", f"Error inesperado al ejecutar '{script}':\n{e}")
 
-    def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización completada.")
-    def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Catálogo cargado.")
+    def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización de clientes completada.")
+    def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Importación de catálogo completada.")
