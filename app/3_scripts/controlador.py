@@ -80,45 +80,32 @@ class AppControlador:
             print(f"Error cargando listas de autocompletado: {e}")
 
     def configurar_eventos_autocompletado(self):
+        """Asigna los eventos de teclado a los combobox para filtrar dinámicamente."""
         for campo in self.autocompletado_data.keys():
             combobox = self.widgets['form_libro_entries'][campo]
-            combobox.bind('<KeyRelease>', self.on_keyrelease_autocompletar)
-            combobox.bind('<FocusOut>', self.on_focusout_cerrar_lista)
+            
+            # Usamos un lambda con un argumento por defecto para "capturar" el valor actual de 'campo'.
+            combobox.bind('<KeyRelease>', lambda event, c=campo: self.on_keyrelease_autocompletar(event, c))
 
-    def on_keyrelease_autocompletar(self, event):
+
+    def on_keyrelease_autocompletar(self, event, campo_actual):
+        """Filtra la lista de sugerencias y la restaura si el campo está vacío."""
         widget = event.widget
-        campo_actual = None
-        for key, cb in self.widgets['form_libro_entries'].items():
-            if cb == widget:
-                campo_actual = key
-                break
-        if not campo_actual: return
-
-        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'BackSpace'):
+        
+        # Ignorar teclas que no modifican el texto para evitar comportamiento errático
+        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'Escape', 'Control_L', 'Alt_L'):
             return
         
         valor_escrito = widget.get()
         lista_completa = self.autocompletado_data[campo_actual]
 
         if valor_escrito == '':
+            # Si el campo se vacía, se restaura la lista completa.
             widget['values'] = lista_completa
         else:
+            # Si se escribe, se filtra la lista.
             data = [item for item in lista_completa if valor_escrito.lower() in item.lower()]
             widget['values'] = data
-            
-            if data:
-                widget.event_generate('<Down>')
-
-    def on_focusout_cerrar_lista(self, event):
-        widget = event.widget
-        campo_actual = None
-        for key, cb in self.widgets['form_libro_entries'].items():
-            if cb == widget:
-                campo_actual = key
-                break
-        if not campo_actual: return
-        
-        widget['values'] = self.autocompletado_data[campo_actual]
 
     def toggle_columnas_opcionales(self):
         columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
