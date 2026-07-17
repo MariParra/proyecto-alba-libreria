@@ -9,7 +9,7 @@ DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 
 # --- RUTAS DE RESPALDO ORGANIZADAS EN SUBCARPETAS ---
 BACKUP_DIR_RAIZ = os.path.join(BASE_DIR, "5_backups")
-BACKUP_DIR_SQLITE = os.path.join(BACKUP_DIR_RAIZ, "backup_sqlite")
+BACKUP_DIR_SQLITE = os.path.join(BACKUP_DIR_RAIZ, "backup_sqlite", "manual")
 BACKUP_DIR_EXCEL = os.path.join(BACKUP_DIR_RAIZ, "backup_excel")
 
 def backup_database():
@@ -34,10 +34,10 @@ def backup_database():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Nombres de archivo apuntando a las nuevas subcarpetas
-    backup_db_filename = f"libreria_respaldo_{timestamp}.db"
+    backup_db_filename = f"libreria_respaldo_manual_{timestamp}.db"
     backup_db_path = os.path.join(BACKUP_DIR_SQLITE, backup_db_filename)
     
-    backup_excel_filename = f"libreria_respaldo_{timestamp}.xlsx"
+    backup_excel_filename = f"libreria_respaldo_manual_{timestamp}.xlsx"
     backup_excel_path = os.path.join(BACKUP_DIR_EXCEL, backup_excel_filename)
 
     origen = None

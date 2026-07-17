@@ -1,5 +1,3 @@
-# aplicativo/conexion.py
-
 import sqlite3
 import os
 import shutil
@@ -12,35 +10,40 @@ def conectar_db():
     return sqlite3.connect(DB_NAME)
 
 def realizar_respaldo_automatico(etiqueta="OPEN"):
+    """
+    Crea un respaldo de la base de datos en la subcarpeta 'backup_sqlite',
+    usando la etiqueta proporcionada (ej: OPEN, CLOSE).
+    """
+    print(f"Iniciando respaldo automático con etiqueta: {etiqueta}...")
+    
     # -- VERIFICAR EXISTENCIA DE LA BASE DE DATOS --
     if not os.path.exists(DB_NAME):
         print(f"Advertencia: No se encontro la base de datos para respaldar: {DB_NAME}")
         return
 
-    # -- CONSTRUIR RUTA DINAMICA HACIA 5_backups --
-    # Sube un nivel desde 'aplicativo' hasta 'app', y luego entra a '5_backups'
-    archivo_actual = str(__file__)
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(archivo_actual)))
-    carpeta_respaldos = os.path.join(BASE_DIR, "5_backups")
-    
-    # -- CREAR CARPETA DE RESPALDOS SI NO EXISTE --
-    if not os.path.exists(carpeta_respaldos):
-        try:
-            os.makedirs(carpeta_respaldos)
-        except Exception as e:
-            print(f"Error al crear carpeta de respaldos en {carpeta_respaldos}: {e}")
-            return
+    # -- CONSTRUIR RUTA DINÁMICA HACIA LA SUBCARPETA DE RESPALDOS SQLITE --
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # La ruta ahora apunta a la subcarpeta específica para respaldos .db
+        carpeta_respaldos_sqlite = os.path.join(base_dir, "5_backups", "backup_sqlite", "self-acting")
+        
+        # -- CREAR CARPETA DE RESPALDOS SI NO EXISTE --
+        os.makedirs(carpeta_respaldos_sqlite, exist_ok=True)
 
-    # -- GENERAR NOMBRE DE RESPALDO CON FECHA, HORA Y ETIQUETA DE EVENTO --
+    except Exception as e:
+        print(f"Error al crear o encontrar la carpeta de respaldos: {e}")
+        return
+
+    # -- GENERAR NOMBRE DE RESPALDO CON FECHA, HORA Y ETIQUETA --
     ahora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    nombre_respaldo = os.path.join(carpeta_respaldos, f"respaldo_albalibreria_{ahora}_{etiqueta}.db")
+    nombre_respaldo = os.path.join(carpeta_respaldos_sqlite, f"respaldo_evento_{ahora}_{etiqueta}.db")
 
     # -- COPIAR ARCHIVO DE BASE DE DATOS AL RESPALDO --
     try:
         shutil.copy2(DB_NAME, nombre_respaldo)
-        print(f"Respaldo creado ({etiqueta}): {nombre_respaldo}")
+        print(f"  -> Respaldo '{etiqueta}' creado con éxito en: {nombre_respaldo}")
     except Exception as e:
-        print(f"Error en respaldo: {e}")
+        print(f"Error al realizar la copia de respaldo: {e}")
 
 def ejecutar_script_externo(nombre_script):
     # -- VERIFICAR EXISTENCIA DEL SCRIPT EXTERNO --
@@ -48,4 +51,5 @@ def ejecutar_script_externo(nombre_script):
         raise FileNotFoundError(f"No se encontró el archivo '{nombre_script}'")
         
     # -- EJECUTAR SCRIPT COMO SUBPROCESO --
-    subprocess.run(["python", nombre_script], capture_output=True, text=True, check=True)
+    # Se usa subprocess.run para mayor control
+    return subprocess.run(["python", nombre_script], capture_output=True, text=True, check=True, encoding='utf-8')
