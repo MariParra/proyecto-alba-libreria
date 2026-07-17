@@ -5,12 +5,14 @@ import sqlite3
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "2_database", "libreria.db"))
-OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "4_output_reports"))
+
+# --- NUEVA RUTA DE EXPORTACIÓN ---
+# Ahora los reportes se guardarán en 4_output_reports/reportes_excel/
+OUTPUT_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "4_output_reports", "reportes_excel"))
 
 def obtener_dataframes():
     conn = sqlite3.connect(DB_PATH)
     
-    # AÑADIDO: 'encuadernacion' en la consulta de inventario
     df_inventario = pd.read_sql_query("SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros ORDER BY titulo", conn)
     
     cursor = conn.cursor()
@@ -27,7 +29,6 @@ def obtener_dataframes():
             
     str_campos_extra = ", " + ", ".join(campos_extra) if campos_extra else ""
 
-    # AÑADIDO: 'a.comentario' en la consulta de asignaciones
     query_asignaciones = f"""
         SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes {str_campos_extra}, l.titulo AS libro, 
             s.metodo_entrega AS tipo_envio, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario
@@ -47,12 +48,15 @@ def obtener_dataframes():
 def exportar_a_excel():
     try:
         df_inventario, df_asignaciones = obtener_dataframes()
-        if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+        
+        # Crea la carpeta y subcarpeta si no existen
+        if not os.path.exists(OUTPUT_DIR): 
+            os.makedirs(OUTPUT_DIR)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = os.path.join(OUTPUT_DIR, f"Reporte_Libreria_{timestamp}.xlsx")
 
-        with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
             df_inventario.to_excel(writer, sheet_name='Inventario', index=False)
             df_asignaciones.to_excel(writer, sheet_name='Asignaciones', index=False)
             
@@ -62,7 +66,10 @@ def exportar_a_excel():
                 for idx, col in enumerate(df.columns):
                     series = df[col]
                     max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
-                    worksheet.set_column(idx, idx, max_len)
+                    
+                    # Ajuste de sintaxis de openpyxl
+                    column_letter = chr(65 + idx) if idx < 26 else chr(64 + idx // 26) + chr(65 + idx % 26)
+                    worksheet.column_dimensions[column_letter].width = max_len
                     
         return output_filename
     except Exception as e:
