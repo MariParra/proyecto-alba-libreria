@@ -150,7 +150,7 @@
         "titulo":"ASISTENTE DEL VILLANO",
         "autor":"HANNAH NICOLE MAEHRER",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -255,7 +255,7 @@
         "titulo":"CANTO DE TORMENTOS",
         "autor":"BRAIDEE OTTO",
         "genero":"FANTASIA",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -468,7 +468,7 @@
         "titulo":"DOS VIDAS PARA CRECER",
         "autor":"KRISTINA MONINGER",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -1077,7 +1077,7 @@
         "titulo":"BESAME EN MITAD DE LA TORMENTA",
         "autor":"SARAI MARTIN",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -1642,9 +1642,9 @@
     },
     {
         "titulo":"SEIS LITROS PROMEDIO",
-        "autor":"J. S. LARK",
-        "genero":"THRILLER",
-        "editorial":"CHIC EDITORIAL",
+        "autor":"MIRELLA GRANUCCI",
+        "genero":"TERROR Y HORROR",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -1683,9 +1683,9 @@
         "encuadernacion":null
     },
     {
-        "titulo":"SONATA DE VERANO",
-        "autor":"JULIA QUINN",
-        "genero":"HISTORICO",
+        "titulo":"UNA SONATA DE VERANO",
+        "autor":"BELEN MARTINEZ",
+        "genero":"FANTASIA",
         "editorial":"URANO",
         "encuadernacion":null
     },
@@ -1777,7 +1777,7 @@
         "titulo":"TRAS LA PUERTA",
         "autor":"J. D. BARKER",
         "genero":"THRILLER",
-        "editorial":"DESTINO (PLANETA)",
+        "editorial":"PLANETA",
         "encuadernacion":null
     },
     {
@@ -2036,7 +2036,7 @@
         "titulo":"ALFA",
         "autor":"ALI HAZELWOOD",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2050,7 +2050,7 @@
         "titulo":"SCYTHE AND SPARROW",
         "autor":"BRYNNE WEAVER",
         "genero":"DARK ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2078,21 +2078,21 @@
         "titulo":"NOVIA",
         "autor":"ALI HAZELWOOD",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"TODOS LOS DEMONIOS DEL CIELO",
         "autor":"MIRIAM MOSQUERA",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"TODOS LOS ANGELES DEL INFIERNO",
         "autor":"MIRIAM MOSQUERA",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2141,7 +2141,7 @@
         "titulo":"CAIDA LIBRE",
         "autor":"ALI HAZELWOOD",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2176,7 +2176,7 @@
         "titulo":"QUICKSILVER",
         "autor":"CALLIE HART",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2189,8 +2189,8 @@
     {
         "titulo":"ELITE PLATEADA",
         "autor":"DANI FRANCIS",
-        "genero":"FANTASIA DISTOPICA",
-        "editorial":"ZIG ZAG",
+        "genero":"FANTASIA",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2211,7 +2211,7 @@
         "titulo":"¿QUE SE SIENTE?",
         "autor":"JENEANE O'RILEY",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2274,14 +2274,14 @@
         "titulo":"TRIADA: AUNQUE EL INFIERNO ME CONSUMA",
         "autor":"CAROL S. BROWN",
         "genero":"DARK ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"PELIGRO",
         "autor":"ST ABBY",
         "genero":"DARK ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2309,14 +2309,14 @@
         "titulo":"ABRAZAME, QUE NO TE QUIERO",
         "autor":"IRENE FERB",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"LA CASA DE LOS ALETEOS",
         "autor":"OLIVIA WILDENSTEIN",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2344,7 +2344,7 @@
         "titulo":"BLACK BIRD ACADEMY: MUERTE A LA OSCURIDAD",
         "autor":"STELLA TACK",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":"tapa dura"
     },
     {
@@ -2372,7 +2372,7 @@
         "titulo":"CUANDO TE ATREVAS A SENTIR",
         "autor":"TAMARA MOLINA",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2407,7 +2407,7 @@
         "titulo":"SINNERS ANONYMOUS",
         "autor":"SOMME SKETCHER",
         "genero":"DARK ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2435,21 +2435,21 @@
         "titulo":"SKATE INTO ME",
         "autor":"MORINA ESTRINGANA",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"UNA INFINIDAD DE SUEÑOS",
         "autor":"MARA RUTHERFORD",
         "genero":"ROMANTASY",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
         "titulo":"TU, YO Y NUESTRA COSTUMBRENDE ENREDAR LAS COSAS",
         "autor":"NEREA CABALEIRO",
         "genero":"ROMANCE",
-        "editorial":"ZIG ZAG",
+        "editorial":"ZIG-ZAG",
         "encuadernacion":null
     },
     {
@@ -2534,6 +2534,13 @@
         "autor":"ALEX ASTER",
         "genero":"ROMANCE",
         "editorial":"PENGUIN",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"AMOR FUERA DE SERIE",
+        "autor":"NEREA PASCUAL",
+        "genero":"ROMANCE",
+        "editorial":"PLANETA",
         "encuadernacion":null
     },
     {
