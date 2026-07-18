@@ -45,7 +45,10 @@ class AppControlador:
             'cmd_ordenar_libros': self.ordenar_columna_inventario,
             'cmd_validar_int': validar_int,
             'cmd_validar_float': validar_float,
-            'cmd_toggle_columnas': self.toggle_columnas_opcionales
+            'cmd_toggle_columnas': self.toggle_columnas_opcionales,
+            'cmd_guardar_cliente': self.guardar_cliente,
+            'cmd_limpiar_form_cliente': self.limpiar_formulario_cliente,
+            'cmd_eliminar_cliente': self.eliminar_cliente
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -72,6 +75,9 @@ class AppControlador:
             self.widgets['slider_stock'].config(variable=self.stock_filter_var)
             self.widgets['slider_stock'].bind("<ButtonRelease-1>", self.aplicar_filtros_inventario)
             self.stock_filter_var.trace_add("write", self.actualizar_label_stock)
+        
+        self.widgets['tabla_gestion_clientes'].bind("<<TreeviewSelect>>", self.al_seleccionar_cliente)
+        self.widgets['entry_busqueda_clientes'].bind("<KeyRelease>", self.buscar_cliente_gestion)
         
         self.refrescar_todas_las_tablas()
         self.configurar_eventos_autocompletado()
@@ -179,6 +185,7 @@ class AppControlador:
     def refrescar_todas_las_tablas(self):
         self.iniciar_sincronizacion_periodo()
         self.refrescar_inventario()
+        self.refrescar_tabla_clientes_gestion()
 
     def iniciar_sincronizacion_periodo(self):
         meses_seleccionados = [m for m, var in self.widgets['meses_vars'].items() if var.get()]
@@ -214,7 +221,7 @@ class AppControlador:
             
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
+                    s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -375,10 +382,15 @@ class AppControlador:
             self.root.config(cursor="")
             messagebox.showerror("Error", str(e))
 
-    def disparar_script_externo(self, script, mensaje_exito):
+    def disparar_script_externo(self, script_name, mensaje_exito):
         try:
             self.root.config(cursor="watch"); self.root.update()
-            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', script)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            script_path = os.path.join(current_dir, script_name)
+            
+            if not os.path.exists(script_path):
+                raise FileNotFoundError(f"No se encontró el script en la ruta esperada: {script_path}")
+            
             resultado = subprocess.run(["python", script_path], capture_output=True, text=True, check=True, encoding='utf-8')
             self.root.config(cursor="")
             output_str = resultado.stdout
@@ -405,7 +417,154 @@ class AppControlador:
         except Exception as e:
             self.root.config(cursor="")
             messagebox.showerror("Error", f"Error inesperado al ejecutar '{script}':\n{e}")
+            
+    def refrescar_tabla_clientes_gestion(self, termino_busqueda=None):
+        """Carga o filtra la lista de clientes en la pestaña de gestión."""
+        if 'tabla_gestion_clientes' not in self.widgets: return
+        tabla = self.widgets['tabla_gestion_clientes']
+        for item in tabla.get_children():
+            tabla.delete(item)
+        
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            query = "SELECT cliente_id, nombre, email, telefono, status FROM clientes"
+            params = []
+            if termino_busqueda:
+                query += " WHERE nombre LIKE ? OR email LIKE ? OR telefono LIKE ?"
+                params.extend([f"%{termino_busqueda}%", f"%{termino_busqueda}%", f"%{termino_busqueda}%"])
+            query += " ORDER BY nombre"
+            
+            cursor.execute(query, tuple(params))
+            for cliente in cursor.fetchall():
+                tabla.insert("", "end", values=cliente)
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudo cargar la lista de clientes: {e}")
 
+    def buscar_cliente_gestion(self, event=None):
+        """Se activa al escribir en la caja de búsqueda de clientes."""
+        termino = self.widgets['entry_busqueda_clientes'].get().strip()
+        self.refrescar_tabla_clientes_gestion(termino)
+
+    def al_seleccionar_cliente(self, event=None):
+        """Rellena el formulario cuando se selecciona un cliente de la tabla."""
+        if 'tabla_gestion_clientes' not in self.widgets: return
+        tabla = self.widgets['tabla_gestion_clientes']
+        seleccion = tabla.selection()
+        if not seleccion: return
+        
+        cliente_id = tabla.set(seleccion[0], "cliente_id")
+        self.widgets['lbl_status_cliente'].config(text=f"Modo: Editando Cliente ID {cliente_id}", fg="#0277BD")
+        
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT nombre, email, telefono, direccion, rut, instagram, status FROM clientes WHERE cliente_id = ?", (cliente_id,))
+            datos_cliente = cursor.fetchone()
+            conn.close()
+
+            if datos_cliente:
+                campos = ['nombre', 'email', 'telefono', 'direccion', 'rut', 'instagram', 'status']
+                for i, campo_id in enumerate(campos):
+                    widget = self.widgets['form_cliente_entries'][campo_id]
+                    valor = datos_cliente[i] if datos_cliente[i] else ""
+                    if isinstance(widget, ttk.Combobox):
+                        widget.set(valor)
+                    else:
+                        widget.delete(0, tk.END)
+                        widget.insert(0, valor)
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudieron cargar los datos del cliente: {e}")
+
+    def limpiar_formulario_cliente(self):
+        """Limpia los campos del formulario de edición de cliente."""
+        self.widgets['lbl_status_cliente'].config(text="Seleccione un cliente para editar", fg="#0277BD")
+        for widget in self.widgets['form_cliente_entries'].values():
+            if isinstance(widget, ttk.Combobox):
+                widget.set('')
+            else:
+                widget.delete(0, tk.END)
+        
+        tabla = self.widgets['tabla_gestion_clientes']
+        if tabla.selection():
+            tabla.selection_remove(tabla.selection()[0])
+
+    def guardar_cliente(self):
+        """Guarda los cambios realizados en el formulario de cliente."""
+        if 'tabla_gestion_clientes' not in self.widgets: return
+        tabla = self.widgets['tabla_gestion_clientes']
+        seleccion = tabla.selection()
+        if not seleccion:
+            messagebox.showwarning("Sin Selección", "Por favor, seleccione un cliente de la lista para guardar.")
+            return
+
+        cliente_id = tabla.set(seleccion[0], "cliente_id")
+        
+        datos_nuevos = {
+            campo: widget.get().strip()
+            for campo, widget in self.widgets['form_cliente_entries'].items()
+        }
+
+        if not datos_nuevos['nombre']:
+            messagebox.showwarning("Campo Obligatorio", "El nombre del cliente no puede estar vacío.")
+            return
+            
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE clientes SET
+                    nombre = ?, email = ?, telefono = ?, direccion = ?,
+                    rut = ?, instagram = ?, status = ?
+                WHERE cliente_id = ?
+            """, (
+                datos_nuevos['nombre'], datos_nuevos['email'], datos_nuevos['telefono'],
+                datos_nuevos['direccion'], datos_nuevos['rut'], datos_nuevos['instagram'],
+                datos_nuevos['status'], cliente_id
+            ))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Éxito", "Los datos del cliente se han actualizado correctamente.")
+            self.refrescar_tabla_clientes_gestion()
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudo guardar al cliente: {e}")
+
+    def eliminar_cliente(self):
+        """Elimina un cliente y todos sus datos asociados."""
+        if 'tabla_gestion_clientes' not in self.widgets: return
+        tabla = self.widgets['tabla_gestion_clientes']
+        seleccion = tabla.selection()
+        
+        if not seleccion:
+            messagebox.showwarning("Atención", "Seleccione un cliente de la lista para eliminar.")
+            return
+
+        cliente_id = tabla.set(seleccion[0], "cliente_id")
+        nombre = tabla.set(seleccion[0], "nombre")
+
+        if not messagebox.askyesno("Confirmar Eliminación", f"¿Está seguro de eliminar al cliente '{nombre}'?\n\nADVERTENCIA: Esto eliminará de forma permanente sus suscripciones y todas sus asignaciones de libros históricas."):
+            return
+
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            
+            # Borrar en orden para no violar llaves foráneas
+            cursor.execute("DELETE FROM asignaciones WHERE cliente_id = ?", (cliente_id,))
+            cursor.execute("DELETE FROM suscripciones WHERE cliente_id = ?", (cliente_id,))
+            cursor.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            messagebox.showinfo("Éxito", f"El cliente '{nombre}' ha sido eliminado.")
+            self.limpiar_formulario_cliente()
+            self.refrescar_todas_las_tablas() # Refresca todas las tablas para consistencia
+        except Exception as e:
+            messagebox.showerror("Error BD", f"No se pudo eliminar al cliente: {e}")
+        
     def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización de clientes completada.")
     def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Importación de catálogo completada.")
     

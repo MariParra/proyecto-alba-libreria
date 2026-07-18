@@ -92,8 +92,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         var = tk.BooleanVar(value=False)
         widgets['vars_opcionales'][col_id] = var
         tk.Checkbutton(frame_columnas_opc, text=texto, variable=var, bg=config.COLOR_FONDO_PRINCIPAL, 
-                       command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=10)
-                       
+                    command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=10)
     frame_tabla_cli = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_tabla_cli.pack(fill="both", expand=True, padx=5, pady=5)
     scroll_x_cli = ttk.Scrollbar(frame_tabla_cli, orient="horizontal")
@@ -122,7 +121,69 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tabla_cli.pack(side="left", fill="both", expand=True)
     widgets['tabla_clientes'] = tabla_cli
 
-    # --- PESTAÑA 2: INVENTARIO DE LIBROS ---
+        # --- PESTAÑA 2: GESTIÓN DE CLIENTES (NUEVA) ---
+    frame_gestion_clientes = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
+    notebook.add(frame_gestion_clientes, text="Gestión de Clientes")
+
+    # Frame izquierdo para la tabla de clientes
+    frame_tabla_gestion = tk.LabelFrame(frame_gestion_clientes, text="Listado de Clientes", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, padx=10, pady=10)
+    frame_tabla_gestion.pack(side="left", fill="both", expand=True, padx=15, pady=15)
+    
+    # Buscador para la tabla de clientes
+    frame_busqueda_clientes = tk.Frame(frame_tabla_gestion, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_busqueda_clientes.pack(fill="x", pady=(0, 10))
+    tk.Label(frame_busqueda_clientes, text="Buscar Cliente:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
+    widgets['entry_busqueda_clientes'] = ttk.Entry(frame_busqueda_clientes, width=30)
+    widgets['entry_busqueda_clientes'].pack(side="left", padx=10)
+
+    scroll_y_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="vertical")
+    columnas_gestion = ("cliente_id", "nombre", "email", "telefono", "status")
+    tabla_gestion_clientes = ttk.Treeview(frame_tabla_gestion, columns=columnas_gestion, show="headings", selectmode="browse", yscrollcommand=scroll_y_clientes_gestion.set)
+    scroll_y_clientes_gestion.config(command=tabla_gestion_clientes.yview)
+    
+    for col in columnas_gestion:
+        tabla_gestion_clientes.heading(col, text=col.replace("_", " ").title())
+        ancho = 150
+        if col == "cliente_id": ancho = 60
+        if col == "status": ancho = 80
+        if col == "email": ancho = 200
+        tabla_gestion_clientes.column(col, width=ancho, minwidth=60)
+
+    scroll_y_clientes_gestion.pack(side="right", fill="y")
+    tabla_gestion_clientes.pack(side="left", fill="both", expand=True)
+    widgets['tabla_gestion_clientes'] = tabla_gestion_clientes
+
+    # Frame derecho para el formulario de edición
+    frame_form_cliente = tk.LabelFrame(frame_gestion_clientes, text=" Editar Información del Cliente ", bg="#FFFFFF", font=font_bold, padx=20, pady=20)
+    frame_form_cliente.pack(side="right", fill="y", padx=(0, 15), pady=15)
+    
+    widgets['lbl_status_cliente'] = tk.Label(frame_form_cliente, text="Seleccione un cliente para editar", font=font_italic_status, fg="#0277BD", bg="#FFFFFF")
+    widgets['lbl_status_cliente'].grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
+    
+    widgets['form_cliente_entries'] = {}
+    campos_cliente_form = [
+        ("nombre", "Nombre:", "entry"), ("email", "Email:", "entry"), 
+        ("telefono", "Teléfono:", "entry"), ("direccion", "Dirección:", "entry"), 
+        ("rut", "RUT:", "entry"), ("instagram", "Instagram:", "entry"), 
+        ("status", "Status:", "combo")
+    ]
+
+    for i, (col_id, label_text, tipo) in enumerate(campos_cliente_form, start=1):
+        tk.Label(frame_form_cliente, text=label_text, bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=8, padx=(0, 10))
+        if tipo == "combo":
+            entry = ttk.Combobox(frame_form_cliente, width=30, font=("Helvetica", 10), state="readonly", values=['ACTIVA', 'INACTIVA'])
+        else:
+            entry = tk.Entry(frame_form_cliente, width=32, relief="solid", bd=1, font=("Helvetica", 10))
+        entry.grid(row=i, column=1, sticky="w", pady=8, ipady=4)
+        widgets['form_cliente_entries'][col_id] = entry
+
+    frame_botones_cliente = tk.Frame(frame_form_cliente, bg="#FFFFFF")
+    frame_botones_cliente.grid(row=len(campos_cliente_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
+    tk.Button(frame_botones_cliente, text="Guardar Cambios", command=comandos_ui['cmd_guardar_cliente'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
+    tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
+    
+    # --- PESTAÑA 3: INVENTARIO DE LIBROS ---
     frame_libros = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
     notebook.add(frame_libros, text="Inventario de Libros")
     
