@@ -132,38 +132,94 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         res = cursor.fetchone()
         current_libro_id = res[0] if res else None
         
-        cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE stock > 0 ORDER BY titulo")
-        libros_disponibles = cursor.fetchall()
+        cursor.execute("SELECT s.generos_preferencia FROM asignaciones a JOIN suscripciones s ON a.cliente_id = s.cliente_id WHERE a.asignacion_id = ?", (asignacion_id,))
+        res_gen = cursor.fetchone()
+        generos_str = res_gen[0] if res_gen and res_gen[0] else ""
+        generos_preferidos = [g.strip().upper() for g in generos_str.split(',') if g.strip()]
         
-        if current_libro_id and not any(l[0] == current_libro_id for l in libros_disponibles):
-            cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
-            libro_actual_info = cursor.fetchone()
-            if libro_actual_info:
-                libros_disponibles.insert(0, libro_actual_info)
-                
+        cursor.execute("SELECT libro_id, titulo, stock, genero FROM libros ORDER BY titulo")
+        todos_los_libros = cursor.fetchall()
+        
         conn.close()
     except Exception as e:
         messagebox.showerror("Error", f"Error al acceder a BD: {e}")
         return
         
-    mapa_libros = {f"{t} (Stock: {s})": l_id for l_id, t, s in libros_disponibles}
-    opciones = ["(Sin Asignar)"] + list(mapa_libros.keys())
+    libros_recomendados_stock = []
+    libros_recomendados_catalogo = []
+    libros_todos_stock = []
+    libros_todos_catalogo = []
+    
+    for l_id, t, s, gen in todos_los_libros:
+        texto_opcion = f"{t} (Stock: {s})"
+        es_recomendado = any(pref in str(gen).strip().upper() or str(gen).strip().upper() in pref for pref in generos_preferidos)
+
+        if es_recomendado:
+            if s > 0: libros_recomendados_stock.append((texto_opcion, l_id))
+            else: libros_recomendados_catalogo.append((texto_opcion, l_id))
+        
+        if s > 0: libros_todos_stock.append((texto_opcion, l_id))
+        else: libros_todos_catalogo.append((texto_opcion, l_id))
+
+    mapa_libros = {txt: l_id for txt, l_id in (libros_todos_stock + libros_todos_catalogo)}
     valor_actual_str = next((txt for txt, l_id in mapa_libros.items() if l_id == current_libro_id), "(Sin Asignar)")
 
     win = tk.Toplevel(root)
     win.title("Asignar / Quitar Libro")
-    win.geometry("450x250")
+    win.geometry("550x350")
     win.transient(root); win.grab_set(); win.configure(bg="#FFF8E1")
     
-    tk.Label(win, text=f"Modificando asignación de:\n{cliente_nombre}", bg="#FFF8E1", font=("Helvetica", 11, "bold")).pack(pady=(15, 10))
+    tk.Label(win, text=f"Modificando asignación de:\n{cliente_nombre}", bg="#FFF8E1", font=("Helvetica", 11, "bold")).pack(pady=(10, 0))
+    gustos_display = generos_str if generos_str and generos_str != "SIN INFORMACION" else "No especificados"
+    tk.Label(win, text=f"Gustos de la clienta: {gustos_display}", bg="#FFF8E1", font=("Helvetica", 9, "italic"), fg="#555").pack(pady=(2, 5))
     
-    cb_libros = ttk.Combobox(win, values=opciones, state="readonly", width=50, font=("Helvetica", 10))
+    lbl_alerta = tk.Label(win, text="¡Ojo! No hay libros en stock para sus gustos.", bg="#FFF8E1", font=("Helvetica", 9, "bold"), fg="red")
+    if not libros_recomendados_stock and generos_preferidos:
+        lbl_alerta.pack()
+
+    # --- FRAME PARA LOS CHECKBOXES DE CONTROL ---
+    frame_checks = tk.Frame(win, bg="#FFF8E1")
+    frame_checks.pack(pady=5)
+    
+    usar_filtro_var = tk.BooleanVar(value=True if (libros_recomendados_stock or libros_recomendados_catalogo) else False)
+    incluir_sin_stock_var = tk.BooleanVar(value=False) # Por defecto, no mostramos los de catálogo
+    cb_libros = ttk.Combobox(win, state="readonly", width=70, font=("Helvetica", 10))
+    
+    def actualizar_opciones_combobox(*args):
+        opciones_mostrar = ["(Sin Asignar)"]
+        
+        if usar_filtro_var.get(): # --- MODO FILTRADO POR GÉNERO ---
+            if libros_recomendados_stock:
+                opciones_mostrar.append("--- RECOMENDADOS EN STOCK ---")
+                opciones_mostrar.extend([txt for txt, l_id in libros_recomendados_stock])
+            if incluir_sin_stock_var.get() and libros_recomendados_catalogo:
+                opciones_mostrar.append("--- RECOMENDADOS (CATÁLOGO / SIN STOCK) ---")
+                opciones_mostrar.extend([txt for txt, l_id in libros_recomendados_catalogo])
+        else: # --- MODO VER TODO EL INVENTARIO ---
+            if libros_todos_stock:
+                opciones_mostrar.append("--- TODO EL CATÁLOGO EN STOCK ---")
+                opciones_mostrar.extend([txt for txt, l_id in libros_todos_stock])
+            if incluir_sin_stock_var.get() and libros_todos_catalogo:
+                opciones_mostrar.append("--- TODO EL CATÁLOGO (SIN STOCK) ---")
+                opciones_mostrar.extend([txt for txt, l_id in libros_todos_catalogo])
+
+        cb_libros.config(values=opciones_mostrar)
+        if valor_actual_str in opciones_mostrar: cb_libros.set(valor_actual_str)
+        else: cb_libros.set(opciones_mostrar[0])
+
+    chk_filtro_genero = tk.Checkbutton(frame_checks, text="Filtrar por Géneros", variable=usar_filtro_var, bg="#FFF8E1", command=actualizar_opciones_combobox, cursor="hand2")
+    if not (libros_recomendados_stock or libros_recomendados_catalogo):
+        chk_filtro_genero.config(state="disabled")
+    chk_filtro_genero.pack(side="left", padx=10)
+
+    chk_sin_stock = tk.Checkbutton(frame_checks, text="Incluir sin stock (Catálogo)", variable=incluir_sin_stock_var, bg="#FFF8E1", command=actualizar_opciones_combobox, cursor="hand2")
+    chk_sin_stock.pack(side="left", padx=10)
+    
     cb_libros.pack(pady=5, padx=15)
-    cb_libros.set(valor_actual_str)
+    actualizar_opciones_combobox()
     
     frame_botones = tk.Frame(win, bg="#FFF8E1")
-    frame_botones.pack(pady=20, fill="x", expand=True)
-
+    frame_botones.pack(pady=15, fill="x", expand=True)
     def guardar_y_cerrar():
         seleccion_str = cb_libros.get()
         nuevo_libro_id = mapa_libros.get(seleccion_str, None)
@@ -175,10 +231,8 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            
             if current_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
-            
             if nuevo_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (nuevo_libro_id,))
                 
@@ -188,13 +242,13 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
             conn.close()
             win.destroy()
             callback_asignaciones()
-            callback_inventario() # Llama al refresco del inventario
+            callback_inventario()
         except Exception as e:
             messagebox.showerror("Error BD", f"No se pudo guardar la asignación: {e}", parent=win)
 
     def quitar_y_cerrar():
         if not current_libro_id:
-            messagebox.showinfo("Información", "Este cliente ya se encuentra 'Sin Asignar'.", parent=win)
+            messagebox.showinfo("Información", "Esta clienta ya se encuentra 'Sin Asignar'.", parent=win)
             return
             
         if messagebox.askyesno("Confirmar", f"¿Quitar el libro a {cliente_nombre}?\n\nEl libro volverá al stock.", parent=win):
@@ -212,7 +266,6 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
             except Exception as e:
                 messagebox.showerror("Error BD", f"No se pudo quitar la asignación: {e}", parent=win)
 
-    # Botones
     tk.Button(frame_botones, text="Guardar Cambios", command=guardar_y_cerrar, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="left", padx=(30, 10))
     tk.Button(frame_botones, text="Quitar Asignación", command=quitar_y_cerrar, bg="#D32F2F", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="right", padx=(10, 30))
 

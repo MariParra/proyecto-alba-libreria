@@ -80,7 +80,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['cmb_filtro_envio'] = ttk.Combobox(frame_controles_cli, values=["Todos", "Si", "No", "N/A"], width=6, state="readonly")
     widgets['cmb_filtro_envio'].pack(side="left", padx=5)
     widgets['cmb_filtro_envio'].set("Todos")
-    
+    tk.Button(frame_controles_cli, text="Eliminar Asignación Seleccionada", command=comandos_ui['cmd_eliminar_asignacion'], 
+            bg="#B71C1C", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2"
+            ).pack(side="right", padx=(20, 10))
     # --- Frame para Opciones de la Pestaña de Asignaciones ---
     frame_opciones_asignaciones = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_opciones_asignaciones.pack(fill="x", padx=5, pady=(5, 5))

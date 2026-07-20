@@ -48,7 +48,8 @@ class AppControlador:
             'cmd_eliminar_cliente': self.eliminar_cliente,
             'cmd_aplicar_descuento': self.aplicar_descuento_masivo,
             'cmd_quitar_descuentos': self.quitar_descuentos,
-            'cmd_actualizar_stock': self.actualizar_stock_masivo
+            'cmd_actualizar_stock': self.actualizar_stock_masivo,
+            'cmd_eliminar_asignacion': self.eliminar_asignacion_manual
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -539,12 +540,15 @@ class AppControlador:
         item_id = self.widgets['tabla_clientes'].focus()
         if not item_id: return
         
-        columna = self.widgets['tabla_clientes'].identify_column(event.x)
-        col_name = self.widgets['tabla_clientes'].column(columna, "id")
-        
+        columna_num_str = self.widgets['tabla_clientes'].identify_column(event.x)
+        col_index = int(columna_num_str.replace('#', ''))
+        col_name = self.widgets['tabla_clientes']['columns'][col_index - 1]
+
         if col_name == 'libro':
             from ui_dialogos import abrir_dialogo_asignar_libro 
-            abrir_dialogo_asignar_libro(self.root, self.widgets['tabla_clientes'], item_id, self.iniciar_sincronizacion_periodo, lambda: self.refrescar_inventario())
+            # Asegúrate de que llame a las dos funciones callback al final
+            abrir_dialogo_asignar_libro(self.root, self.widgets['tabla_clientes'], item_id, 
+                                        self.iniciar_sincronizacion_periodo, self.refrescar_inventario)
         else:
             from ui_dialogos import manejar_edicion_celda
             manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo)
@@ -585,6 +589,7 @@ class AppControlador:
 
     def ordenar_columna_gestion(self, col, reverse):
         self.ordenar_columna(self.widgets['tabla_gestion_clientes'], col, reverse)
+        
     def iniciar_sincronizacion_periodo(self, event=None):
         meses_seleccionados = [m for m, var in self.widgets['meses_vars'].items() if var.get()]
         if not meses_seleccionados: self.widgets['mb_meses'].config(text="Ninguno")
@@ -601,7 +606,18 @@ class AppControlador:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
             
-            # --- MAGIA: GENERACIÓN AUTOMÁTICA DE ASIGNACIONES FALTANTES ---
+            meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
+            
+            # --- MAGIA 1: LIMPIEZA INTELIGENTE DE CLIENTAS INACTIVAS ---
+            for mes_num in meses_nums:
+                cursor.execute("""
+                DELETE FROM asignaciones 
+                WHERE ano = ? AND mes = ? 
+                    AND estado_envio = 'EN PREPARACION' 
+                    AND libro_suscripcion_id IS NULL 
+                    AND cliente_id IN (SELECT cliente_id FROM clientes WHERE status = 'INACTIVA')
+            """, (ano_str, mes_num))
+            # --- MAGIA 2: GENERACIÓN AUTOMÁTICA DE ASIGNACIONES FALTANTES ---
             meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
             for mes_num in meses_nums:
                 cursor.execute("""
@@ -732,3 +748,51 @@ class AppControlador:
         """Llama al script para actualizar stock y precios desde un CSV."""
         if messagebox.askokcancel("Actualizar Stock", "Asegúrate de haber guardado tu archivo Excel como 'stock_precios.csv' dentro de la carpeta '1_input_data'.\n\nEl archivo debe tener las columnas: titulo, stock, precio.\n\n¿Deseas continuar?"):
             self.disparar_script_externo("actualizar_stock.py", "Proceso completado.\nSi hubo libros no encontrados, revisa el archivo 'libros_no_encontrados_stock.txt' en la carpeta 1_input_data.\n\n(La métrica 'Nuevos' de abajo indica los libros omitidos)")
+    
+    def eliminar_asignacion_manual(self):
+        """
+        Elimina una fila de asignación completa de la base de datos.
+        Si había un libro asignado, lo devuelve al stock.
+        """
+        tabla = self.widgets['tabla_clientes']
+        seleccion = tabla.selection()
+        if not seleccion:
+            messagebox.showwarning("Sin Selección", "Por favor, selecciona una fila de asignación de la tabla para eliminar.")
+            return
+
+        item_id = seleccion[0]
+        asignacion_id = tabla.set(item_id, "asignacion_id")
+        nombre_cliente = tabla.set(item_id, "nombre")
+        mes = tabla.set(item_id, "mes")
+        ano = tabla.set(item_id, "ano")
+
+        if not messagebox.askyesno("Confirmar Eliminación", 
+                                f"¿Estás seguro de que quieres eliminar la asignación de {nombre_cliente} para el período {mes}/{ano}?\n\n"
+                                "Esta acción no se puede deshacer. Si había un libro asignado, será devuelto al inventario."):
+            return
+
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+
+            # 1. Verificar si hay un libro asignado para devolverlo al stock
+            cursor.execute("SELECT libro_suscripcion_id FROM asignaciones WHERE asignacion_id = ?", (asignacion_id,))
+            resultado = cursor.fetchone()
+            if resultado and resultado[0]:
+                libro_id_a_devolver = resultado[0]
+                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (libro_id_a_devolver,))
+                print(f"Devolviendo libro ID {libro_id_a_devolver} al stock.")
+
+            # 2. Eliminar la fila de asignación
+            cursor.execute("DELETE FROM asignaciones WHERE asignacion_id = ?", (asignacion_id,))
+            
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Éxito", f"La asignación para {nombre_cliente} ({mes}/{ano}) ha sido eliminada.")
+            
+            # Refrescar la vista para que la fila desaparezca
+            self.iniciar_sincronizacion_periodo()
+
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudo eliminar la asignación: {e}")
