@@ -222,6 +222,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones.grid(row=len(campos_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
     tk.Button(frame_botones, text="Guardar / Modificar", command=comandos_ui['cmd_guardar_libro'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
     tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones, text="Aplicar Descuento Masivo", command=comandos_ui['cmd_aplicar_descuento'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
+    tk.Button(frame_botones, text="Quitar Descuentos", command=comandos_ui['cmd_quitar_descuentos'], bg="#757575", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
 
     frame_izquierdo = tk.Frame(frame_libros, bg=config.COLOR_FONDO_PRINCIPAL)
@@ -252,7 +254,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     scroll_x_lib = ttk.Scrollbar(frame_tabla_libros, orient="horizontal")
     scroll_y_lib = ttk.Scrollbar(frame_tabla_libros, orient="vertical")
     
-    columnas_lib = ("libro_id", "titulo", "autor", "genero", "editorial", "encuadernacion", "stock", "precio")
+    columnas_lib = ("libro_id", "titulo", "autor", "genero", "editorial", "encuadernacion", "stock", "precio", "precio_original")
     tabla_lib = ttk.Treeview(frame_tabla_libros, columns=columnas_lib, show="headings", selectmode="browse", xscrollcommand=scroll_x_lib.set, yscrollcommand=scroll_y_lib.set)
     scroll_x_lib.config(command=tabla_lib.xview)
     scroll_y_lib.config(command=tabla_lib.yview)

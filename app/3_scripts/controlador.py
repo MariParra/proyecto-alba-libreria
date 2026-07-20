@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, simpledialog
 import json
 import os
 import datetime
@@ -48,7 +48,9 @@ class AppControlador:
             'cmd_toggle_columnas': self.toggle_columnas_opcionales,
             'cmd_guardar_cliente': self.guardar_cliente,
             'cmd_limpiar_form_cliente': self.limpiar_formulario_cliente,
-            'cmd_eliminar_cliente': self.eliminar_cliente
+            'cmd_eliminar_cliente': self.eliminar_cliente,
+            'cmd_aplicar_descuento': self.aplicar_descuento_masivo,
+            'cmd_quitar_descuentos': self.quitar_descuentos,
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -148,7 +150,7 @@ class AppControlador:
         termino_busqueda = self.widgets['entry_busqueda_libros'].get().strip()
         stock_maximo = self.stock_filter_var.get()
 
-        query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros"
+        query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original FROM libros"
         condiciones = []
         params = []
 
@@ -262,7 +264,7 @@ class AppControlador:
         except Exception as e:
             messagebox.showerror("Error BD", f"Error al cargar asignaciones: {e}")
 
-    def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio FROM libros ORDER BY titulo", params=()):
+    def refrescar_inventario(self, widgets=None, query="SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original FROM libros ORDER BY titulo", params=()):
         if widgets is None: widgets = self.widgets
         if 'tabla_libros' not in widgets: return
         tabla = widgets['tabla_libros']
@@ -331,16 +333,16 @@ class AppControlador:
             cursor = conn.cursor()
             if libro_id:
                 cursor.execute("""
-                    UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, encuadernacion=?, stock=?, precio=? 
+                    UPDATE libros SET titulo=?, autor=?, genero=?, editorial=?, encuadernacion=?, stock=?, precio=?, precio_original=?  
                     WHERE libro_id=?
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'], 
-                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
+                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0), libro_id))
             else:
                 cursor.execute("""
                     INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'],
-                      int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
+                    int(datos['stock']), float(datos['precio'] if datos['precio'] else 0)))
             conn.commit()
             conn.close()
             messagebox.showinfo("Éxito", "Libro guardado correctamente.")
@@ -596,3 +598,106 @@ class AppControlador:
         texto_heading = col.replace("_", " ").title()
         flecha = "  ▼" if reverse else "  ▲"
         tabla.heading(col, text=texto_heading + flecha, command=lambda _col=col: self.ordenar_columna_inventario(_col, not reverse))
+        
+    def aplicar_descuento_masivo(self):
+        """Aplica un descuento porcentual a los precios de los libros."""
+        # 1. Preguntar por el porcentaje
+        porcentaje_str = simpledialog.askstring("Descuento Masivo", "Introduce el porcentaje de descuento a aplicar (ej: 15 para 15%):", parent=self.root)
+        
+        if not porcentaje_str:
+            return # El usuario canceló
+        
+        try:
+            porcentaje = float(porcentaje_str)
+            if not (0 < porcentaje < 100):
+                raise ValueError("El porcentaje debe estar entre 0 y 100.")
+            multiplicador = 1 - (porcentaje / 100)
+        except (ValueError, TypeError):
+            messagebox.showerror("Valor Inválido", "Por favor, introduce un número válido para el porcentaje (ej: 15 o 15.5).")
+            return
+
+        # 2. Preguntar a qué libros aplicar el descuento
+        respuesta = messagebox.askquestion("Aplicar Descuento",
+                                                "¿Quieres aplicar el descuento a los libros actualmente filtrados en la tabla?\n\n"
+                                                " - 'Sí' para aplicar solo a los filtrados.\n"
+                                                " - 'No' para aplicar a TODOS los libros del inventario.",
+                                                icon='question')
+
+        ids_a_actualizar = []
+        if respuesta == 'yes':
+            # Obtener IDs solo de los libros visibles en la tabla
+            tabla = self.widgets['tabla_libros']
+            for item_id in tabla.get_children():
+                ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
+            
+            if not ids_a_actualizar:
+                messagebox.showinfo("Sin Libros", "No hay libros en la tabla para aplicar el descuento.")
+                return
+        
+        # 3. Construir y ejecutar la consulta SQL
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            query = "UPDATE libros SET precio = ROUND(precio_original * ?, 2)"
+            params = [multiplicador]
+            
+            if respuesta == 'yes':
+                # Si se aplica a filtrados, añadir un WHERE con los IDs
+                placeholders = ', '.join('?' for _ in ids_a_actualizar)
+                query += f" WHERE libro_id IN ({placeholders})"
+                params.extend(ids_a_actualizar)
+            
+            cursor.execute(query, tuple(params))
+            libros_afectados = cursor.rowcount
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Éxito", f"Se aplicó un {porcentaje}% de descuento a {libros_afectados} libros.")
+            
+            # Actualizar la vista para reflejar los nuevos precios
+            self.aplicar_filtros_inventario()
+
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudo aplicar el descuento: {e}")
+
+    def quitar_descuentos(self):
+        """Restaura el precio original de los libros (quita los descuentos)."""
+        respuesta = messagebox.askquestion("Quitar Descuentos",
+                                         "¿Quieres quitar el descuento a los libros actualmente filtrados en la tabla?\n\n"
+                                         " - 'Sí' para restaurar precio solo a los filtrados.\n"
+                                         " - 'No' para quitar el descuento a TODOS los libros del inventario.",
+                                         icon='warning')
+
+        ids_a_actualizar = []
+        if respuesta == 'yes':
+            tabla = self.widgets['tabla_libros']
+            for item_id in tabla.get_children():
+                ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
+            
+            if not ids_a_actualizar:
+                messagebox.showinfo("Sin Libros", "No hay libros en la tabla para restaurar el precio.")
+                return
+        
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            query = "UPDATE libros SET precio = precio_original"
+            params = []
+            
+            if respuesta == 'yes':
+                placeholders = ', '.join('?' for _ in ids_a_actualizar)
+                query += f" WHERE libro_id IN ({placeholders})"
+                params.extend(ids_a_actualizar)
+            
+            cursor.execute(query, tuple(params))
+            libros_afectados = cursor.rowcount
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Éxito", f"Se ha restaurado el precio original a {libros_afectados} libros.")
+            self.aplicar_filtros_inventario()
+
+        except Exception as e:
+            messagebox.showerror("Error de BD", f"No se pudieron quitar los descuentos: {e}")

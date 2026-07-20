@@ -16,6 +16,38 @@ def clean_field(value):
         return "SIN INFORMACION"
     return val_str
 
+def resetear_emails_duplicados(conn):
+    """
+    Función de limpieza única. Detecta clientes con emails 'SIN_CORREO...'
+    y les asigna un nuevo email único basado en su ID para resolver conflictos.
+    """
+    cursor = conn.cursor()
+    try:
+        # Busca clientes con emails que podrían estar duplicados
+        cursor.execute("SELECT cliente_id, email FROM clientes WHERE email LIKE 'SIN_CORREO_%' OR email = 'SIN INFORMACION'")
+        clientes_a_revisar = cursor.fetchall()
+        
+        if not clientes_a_revisar:
+            return # No hay nada que limpiar
+
+        print("Detectados clientes con emails autogenerados. Verificando y limpiando duplicados...")
+        
+        # Iniciar una transacción para asegurar que todo se haga o nada
+        cursor.execute("BEGIN TRANSACTION;")
+        
+        for cliente_id, email_actual in clientes_a_revisar:
+            # Generar un nuevo email único y seguro basado en el ID del cliente
+            nuevo_email = f"SIN_CORREO_ID_{cliente_id}@ALBALIBRERIA.CL"
+            if email_actual != nuevo_email:
+                cursor.execute("UPDATE clientes SET email = ? WHERE cliente_id = ?", (nuevo_email, cliente_id))
+
+        conn.commit()
+        print(f"Limpieza completada. {len(clientes_a_revisar)} emails de clientes han sido estandarizados.")
+
+    except Exception as e:
+        print(f"Error durante la limpieza de emails: {e}")
+        conn.rollback()
+
 def sync_system():
     print("Iniciando proceso de sincronizacion...")
 
@@ -36,6 +68,18 @@ def sync_system():
         # La BD ya está verificada y creada por pasos anteriores.
         cursor = conn.cursor()
         print("Base de datos local conectada.")
+        
+        resetear_emails_duplicados(conn)
+        
+        cursor.execute("PRAGMA table_info(libros)")
+        columnas_libros = [col[1] for col in cursor.fetchall()]
+        if 'precio_original' not in columnas_libros:
+            print("Añadiendo columna 'precio_original' a la tabla 'libros'...")
+            cursor.execute("ALTER TABLE libros ADD COLUMN precio_original REAL DEFAULT 0;")
+            cursor.execute("UPDATE libros SET precio_original = precio;") # Copiar precios existentes
+            conn.commit()
+            print("¡Columna 'precio_original' añadida y sincronizada!")
+            
     except Exception as e:
         print(f"Error al conectar BD: {e}")
         if conn: conn.close()
@@ -104,7 +148,7 @@ def sync_system():
                 """, (status_sync, phone_sync, address_sync, rut_sync, instagram_sync, email_sync, client_id))
             else:
                 # 2. BUSCAR POR EMAIL (por si acaso le cambiaron el nombre en el form)
-                if email_sync and not email_sync.startswith("SIN_CORREO_"):
+                if email_sync:
                     cursor.execute("SELECT cliente_id FROM clientes WHERE email = ?", (email_sync,))
                     res_em = cursor.fetchone()
                     if res_em:
