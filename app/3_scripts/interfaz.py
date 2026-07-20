@@ -186,32 +186,48 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['form_libro_entries'] = {}
     
     campos_form = [("titulo", "Título", "entry"), ("autor", "Autor", "combo"), ("genero", "Género", "combo"), 
-                    ("editorial", "Editorial", "combo"), ("encuadernacion", "Encuadernación", "combo_enc"),
+                    ("editorial", "Editorial", "combo"), ("encuadernacion", "Encuadernación", "combo"),
                     ("stock", "Stock", "entry"), ("precio_original", "Precio Base", "entry")]
+
     
     vcmd_int = (ventana.register(comandos_ui['cmd_validar_int']), '%P')
     vcmd_float = (ventana.register(comandos_ui['cmd_validar_float']), '%P')
     
     for i, (col_id, label_text, tipo) in enumerate(campos_form, start=1):
-        tk.Label(frame_form_libros, text=f"{label_text}:", bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=8, padx=(0, 10))
-        if tipo == "combo": entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10))
-        elif tipo == "combo_enc": entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10), state="readonly", values=['TAPA BLANDA', 'TAPA DURA', 'BOLSILLO'])
-        else:
+        tk.Label(frame_form_libros, text=f"{label_text}:", bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=4, padx=(0, 10))
+        
+        if tipo == "combo":
+            entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10))
+            # --- LÓGICA AÑADIDA ---
+            if col_id == "encuadernacion":
+                entry['values'] = ['TAPA BLANDA', 'TAPA DURA', 'BOLSILLO']
+                entry['state'] = 'readonly'
+        else: # tipo == "entry"
             validation_cmd = None
             if col_id == "stock": validation_cmd = vcmd_int
             elif col_id == "precio_original": validation_cmd = vcmd_float
             entry = tk.Entry(frame_form_libros, width=28, relief="solid", bd=1, font=("Helvetica", 10), validate="key", validatecommand=validation_cmd)
-        entry.grid(row=i, column=1, sticky="w", pady=8, ipady=4 if tipo == "entry" else 0)
-        widgets['form_libro_entries'][col_id] = entry
         
-    frame_botones = tk.Frame(frame_form_libros, bg="#FFFFFF")
-    frame_botones.grid(row=len(campos_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
-    tk.Button(frame_botones, text="Guardar / Modificar", command=comandos_ui['cmd_guardar_libro'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
-    tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+        entry.grid(row=i, column=1, sticky="w", pady=4, ipady=2 if tipo == "entry" else 0)
+        widgets['form_libro_entries'][col_id] = entry
+
+        
+        frame_botones = tk.Frame(frame_form_libros, bg="#FFFFFF")
+        
+    frame_botones.grid(row=len(campos_form)+1, column=0, columnspan=2, sticky="ew", pady=(15, 0))
     
-    tk.Button(frame_botones, text="Aplicar Descuento Masivo", command=comandos_ui['cmd_aplicar_descuento'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
-    tk.Button(frame_botones, text="Quitar Descuentos", command=comandos_ui['cmd_quitar_descuentos'], bg="#757575", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
-    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones, text="Guardar / Modificar", command=comandos_ui['cmd_guardar_libro'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=3)
+    tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=3)
+    
+    # --- SUB-FRAME PARA PONER LOS BOTONES DE DESCUENTO EN UNA SOLA FILA ---
+    frame_descuentos = tk.Frame(frame_botones, bg="#FFFFFF")
+    frame_descuentos.pack(fill="x", pady=(15, 3))
+    
+    tk.Button(frame_descuentos, text="Aplicar Descuento", command=comandos_ui['cmd_aplicar_descuento'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(side="left", fill="x", expand=True, padx=(0, 2))
+    tk.Button(frame_descuentos, text="Quitar Descuento", command=comandos_ui['cmd_quitar_descuentos'], bg="#757575", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(side="right", fill="x", expand=True, padx=(2, 0))
+
+    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=(10, 2))
+
 
     # --- Frame Izquierdo (Filtros y Tabla Inventario) ---
     frame_izquierdo = tk.Frame(frame_libros, bg=config.COLOR_FONDO_PRINCIPAL)
@@ -225,20 +241,34 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['entry_busqueda_libros'] = ttk.Entry(frame_busqueda_filtros, width=25)
     widgets['entry_busqueda_libros'].grid(row=0, column=1, padx=5, sticky="ew")
     tk.Button(frame_busqueda_filtros, text="Buscar", command=comandos_ui['cmd_aplicar_filtros'], bg="#1A73E8", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=2, padx=5)
-    tk.Button(frame_busqueda_filtros, text="Limpiar", command=comandos_ui['cmd_limpiar_filtros'], bg="gray", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=3, padx=5)
+    tk.Button(frame_busqueda_filtros, text="Quitar Filtros", command=comandos_ui['cmd_limpiar_filtros'], bg="gray", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=3, padx=5)
 
     # Fila 1: Filtros Combo
-    frame_combos = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)
-    frame_combos.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10,0))
-    tk.Label(frame_combos, text="Autor:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
-    widgets['cmb_filtro_autor'] = ttk.Combobox(frame_combos, state="readonly", width=15)
-    widgets['cmb_filtro_autor'].pack(side="left", padx=(0, 10))
-    tk.Label(frame_combos, text="Género:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
-    widgets['cmb_filtro_genero'] = ttk.Combobox(frame_combos, state="readonly", width=15)
-    widgets['cmb_filtro_genero'].pack(side="left", padx=(0, 10))
-    tk.Label(frame_combos, text="Editorial:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
-    widgets['cmb_filtro_editorial'] = ttk.Combobox(frame_combos, state="readonly", width=15)
-    widgets['cmb_filtro_editorial'].pack(side="left")
+        # Fila 1: Filtros Múltiples (Listbox)
+    frame_listas = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_listas.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10,0))
+    
+    # Función auxiliar para crear las listas limpiamente
+    def crear_lista_filtro(parent, texto):
+        frame = tk.Frame(parent, bg=config.COLOR_FONDO_PRINCIPAL)
+        tk.Label(frame, text=texto, bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(anchor="w")
+        scroll = ttk.Scrollbar(frame, orient="vertical")
+        # selectmode="multiple" permite clics independientes. exportselection=False evita que se deseleccione al clicar otra lista.
+        lista = tk.Listbox(frame, selectmode="multiple", exportselection=False, height=4, yscrollcommand=scroll.set, font=("Helvetica", 9))
+        scroll.config(command=lista.yview)
+        lista.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        return frame, lista
+
+    frame_autor, widgets['list_filtro_autor'] = crear_lista_filtro(frame_listas, "Autor(es):")
+    frame_autor.pack(side="left", padx=(0, 5), fill="both", expand=True)
+    
+    frame_genero, widgets['list_filtro_genero'] = crear_lista_filtro(frame_listas, "Género(s):")
+    frame_genero.pack(side="left", padx=5, fill="both", expand=True)
+    
+    frame_editorial, widgets['list_filtro_editorial'] = crear_lista_filtro(frame_listas, "Editorial(es):")
+    frame_editorial.pack(side="left", padx=(5, 0), fill="both", expand=True)
+
 
     # Fila 2: Sliders de Stock (Min y Max)
     frame_sliders = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)

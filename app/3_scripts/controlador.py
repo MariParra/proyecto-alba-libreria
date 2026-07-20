@@ -18,7 +18,6 @@ class AppControlador:
         self.datos_inventario_actual = []
         self.autocompletado_data = { 'autor': [], 'genero': [], 'editorial': [] }
         
-        # Variables para los sliders de stock Min y Max
         self.stock_min_var = tk.IntVar()
         self.stock_max_var = tk.IntVar()
 
@@ -66,13 +65,12 @@ class AppControlador:
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         self.widgets['entry_busqueda_libros'].bind("<Return>", self.aplicar_filtros_inventario)
         
-        # Binds para los combos de filtros
-        if 'cmb_filtro_autor' in self.widgets:
-            self.widgets['cmb_filtro_autor'].bind("<<ComboboxSelected>>", self.aplicar_filtros_inventario)
-            self.widgets['cmb_filtro_genero'].bind("<<ComboboxSelected>>", self.aplicar_filtros_inventario)
-            self.widgets['cmb_filtro_editorial'].bind("<<ComboboxSelected>>", self.aplicar_filtros_inventario)
+        # Binds para las Listas Múltiples
+        for campo in ['autor', 'genero', 'editorial']:
+            key = f'list_filtro_{campo}'
+            if key in self.widgets:
+                self.widgets[key].bind("<<ListboxSelect>>", self.aplicar_filtros_inventario)
 
-        # Binds para los Sliders
         if 'slider_stock_min' in self.widgets:
             self.widgets['slider_stock_min'].config(variable=self.stock_min_var)
             self.widgets['slider_stock_max'].config(variable=self.stock_max_var)
@@ -100,21 +98,23 @@ class AppControlador:
                 valores = [str(row[0]) for row in cursor.fetchall()]
                 self.autocompletado_data[campo] = valores
                 
+                # Actualizar el Combobox del formulario
                 if campo in self.widgets['form_libro_entries']:
                     current_value = self.widgets['form_libro_entries'][campo].get()
                     self.widgets['form_libro_entries'][campo]['values'] = valores
                     if current_value in valores:
                         self.widgets['form_libro_entries'][campo].set(current_value)
 
-                cmb_filtro = self.widgets.get(f'cmb_filtro_{campo}')
-                if cmb_filtro:
-                    current_filtro = cmb_filtro.get()
-                    valores_filtro = ["Todos"] + valores
-                    cmb_filtro['values'] = valores_filtro
-                    if current_filtro in valores_filtro:
-                        cmb_filtro.set(current_filtro)
-                    else:
-                        cmb_filtro.set("Todos")
+                # Actualizar el Listbox múltiple de los filtros
+                lst_filtro = self.widgets.get(f'list_filtro_{campo}')
+                if lst_filtro:
+                    # Guardar las selecciones actuales
+                    seleccionados = [lst_filtro.get(i) for i in lst_filtro.curselection()]
+                    lst_filtro.delete(0, tk.END)
+                    for val in valores:
+                        lst_filtro.insert(tk.END, val)
+                        if val in seleccionados:
+                            lst_filtro.selection_set(lst_filtro.size()-1)
 
             conn.close()
         except Exception as e:
@@ -180,19 +180,17 @@ class AppControlador:
             condiciones.append("(titulo LIKE ? OR autor LIKE ?)")
             params.extend([f"%{termino_busqueda}%", f"%{termino_busqueda}%"])
 
-        autor = self.widgets.get('cmb_filtro_autor', tk.Entry()).get()
-        genero = self.widgets.get('cmb_filtro_genero', tk.Entry()).get()
-        editorial = self.widgets.get('cmb_filtro_editorial', tk.Entry()).get()
-
-        if autor and autor != "Todos":
-            condiciones.append("autor = ?")
-            params.append(autor)
-        if genero and genero != "Todos":
-            condiciones.append("genero = ?")
-            params.append(genero)
-        if editorial and editorial != "Todos":
-            condiciones.append("editorial = ?")
-            params.append(editorial)
+        # Filtros de Listbox (selección múltiple)
+        for campo in ['autor', 'genero', 'editorial']:
+            lst_filtro = self.widgets.get(f'list_filtro_{campo}')
+            if lst_filtro:
+                # Obtener los nombres seleccionados
+                seleccionados = [lst_filtro.get(i) for i in lst_filtro.curselection()]
+                if seleccionados:
+                    # Generar ?,?,? de forma dinámica
+                    placeholders = ', '.join(['?'] * len(seleccionados))
+                    condiciones.append(f"{campo} IN ({placeholders})")
+                    params.extend(seleccionados)
 
         condiciones.append("stock >= ? AND stock <= ?")
         params.extend([stock_min, stock_max])
@@ -203,9 +201,11 @@ class AppControlador:
 
     def limpiar_filtros_inventario(self, event=None):
         self.widgets['entry_busqueda_libros'].delete(0, tk.END)
-        self.widgets['cmb_filtro_autor'].set("Todos")
-        self.widgets['cmb_filtro_genero'].set("Todos")
-        self.widgets['cmb_filtro_editorial'].set("Todos")
+        
+        # Limpiar listas múltiples
+        for campo in ['autor', 'genero', 'editorial']:
+            lst = self.widgets.get(f'list_filtro_{campo}')
+            if lst: lst.selection_clear(0, tk.END)
         
         if 'slider_stock_max' in self.widgets:
             max_val = self.widgets['slider_stock_max'].cget("to")
@@ -245,23 +245,26 @@ class AppControlador:
         
         for col_id, entry in entries.items():
             valor = tabla.set(item_id, col_id)
-            if isinstance(entry, tk.Entry):
+            # --- ORDEN CORREGIDO AQUÍ ---
+            if isinstance(entry, ttk.Combobox):
+                entry.set(valor if valor else "")
+            elif isinstance(entry, tk.Entry):
                 entry.config(validate="none") 
                 entry.delete(0, tk.END)
                 entry.insert(0, valor if valor else "")
                 entry.config(validate="key") 
-            elif isinstance(entry, ttk.Combobox):
-                entry.set(valor if valor else "")
 
     def limpiar_formulario_libro(self):
         self.widgets['lbl_status_libro'].config(text="Modo: Creando nuevo libro", fg="#C2185B")
         for entry in self.widgets['form_libro_entries'].values():
-            if isinstance(entry, tk.Entry):
+            # --- ORDEN CORREGIDO AQUÍ ---
+            if isinstance(entry, ttk.Combobox):
+                entry.set("")
+            elif isinstance(entry, tk.Entry):
                 entry.config(validate="none")
                 entry.delete(0, tk.END)
                 entry.config(validate="key")
-            elif isinstance(entry, ttk.Combobox):
-                entry.set("")
+                
         self.widgets['form_libro_entries']['encuadernacion'].set('TAPA BLANDA')
         tabla = self.widgets['tabla_libros']
         if tabla.selection():
@@ -281,8 +284,6 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            # El precio introducido en el form es el precio_original. 
-            # Al guardar, reseteamos tanto el precio base como el de venta (quitando descuento previo de ese libro).
             precio_base = float(datos['precio_original'] if datos['precio_original'] else 0)
             
             if libro_id:
@@ -345,7 +346,6 @@ class AppControlador:
         flecha = "  ▼" if reverse else "  ▲"
         tabla.heading(col, text=texto_heading + flecha, command=lambda _col=col: self.ordenar_columna_inventario(_col, not reverse))
 
-    # --- LÓGICA DE DESCUENTOS ---
     def aplicar_descuento_masivo(self):
         porcentaje_str = simpledialog.askstring("Descuento Masivo", "Introduce el porcentaje de descuento a aplicar (ej: 15 para 15%):", parent=self.root)
         if not porcentaje_str: return
@@ -376,7 +376,6 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            # SE CALCULA SOBRE EL PRECIO ORIGINAL SIEMPRE
             query = "UPDATE libros SET precio = ROUND(precio_original * ?, 2)"
             params = [multiplicador]
             
