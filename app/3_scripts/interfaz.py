@@ -30,7 +30,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_acciones.pack(side="right", padx=10)
     tk.Button(frame_acciones, text="Sync Clientes", command=comandos_ui['cmd_sync_clientes'], bg=config.COLOR_BOTON_CRUD, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
     tk.Button(frame_acciones, text="Cargar Libros", command=comandos_ui['cmd_import_catalogo'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
-
+    tk.Button(frame_acciones, text="Actualizar Stock/Precios", command=comandos_ui['cmd_actualizar_stock'], bg="#0277BD", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
+    
     notebook = ttk.Notebook(ventana) 
     notebook.pack(fill="both", expand=True, padx=10, pady=10)
 

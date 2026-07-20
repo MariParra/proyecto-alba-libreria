@@ -47,7 +47,8 @@ class AppControlador:
             'cmd_limpiar_form_cliente': self.limpiar_formulario_cliente,
             'cmd_eliminar_cliente': self.eliminar_cliente,
             'cmd_aplicar_descuento': self.aplicar_descuento_masivo,
-            'cmd_quitar_descuentos': self.quitar_descuentos
+            'cmd_quitar_descuentos': self.quitar_descuentos,
+            'cmd_actualizar_stock': self.actualizar_stock_masivo
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -726,3 +727,8 @@ class AppControlador:
 
     def sync_clientes(self): self.disparar_script_externo("sync.py", "Sincronización de clientes completada.")
     def importar_catalogo(self): self.disparar_script_externo("import_catalogo.py", "Importación de catálogo completada.")
+    
+    def actualizar_stock_masivo(self):
+        """Llama al script para actualizar stock y precios desde un CSV."""
+        if messagebox.askokcancel("Actualizar Stock", "Asegúrate de haber guardado tu archivo Excel como 'stock_precios.csv' dentro de la carpeta '1_input_data'.\n\nEl archivo debe tener las columnas: titulo, stock, precio.\n\n¿Deseas continuar?"):
+            self.disparar_script_externo("actualizar_stock.py", "Proceso completado.\nSi hubo libros no encontrados, revisa el archivo 'libros_no_encontrados_stock.txt' en la carpeta 1_input_data.\n\n(La métrica 'Nuevos' de abajo indica los libros omitidos)")
