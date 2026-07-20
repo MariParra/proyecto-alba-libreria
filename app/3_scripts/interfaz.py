@@ -22,10 +22,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_top = tk.Frame(ventana, bg=config.COLOR_FONDO_PRINCIPAL, padx=10, pady=10)
     frame_top.pack(fill="x")
     
-    # --- CONTENEDOR DE EXPORTACIONES ---
     frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold, width=150, height=70)
     frame_exportaciones.pack(side="right", padx=10, fill="y")
-    
     tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#1D6F42", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)    
     
     frame_acciones = tk.LabelFrame(frame_top, text="Operaciones de Base", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
@@ -92,7 +90,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         var = tk.BooleanVar(value=False)
         widgets['vars_opcionales'][col_id] = var
         tk.Checkbutton(frame_columnas_opc, text=texto, variable=var, bg=config.COLOR_FONDO_PRINCIPAL, 
-                    command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=10)
+                       command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=10)
+                       
     frame_tabla_cli = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_tabla_cli.pack(fill="both", expand=True, padx=5, pady=5)
     scroll_x_cli = ttk.Scrollbar(frame_tabla_cli, orient="horizontal")
@@ -100,9 +99,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     columnas_cli = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario", "rut", "email", "telefono", "direccion")
     tabla_cli = ttk.Treeview(frame_tabla_cli, columns=columnas_cli, show="headings", selectmode="browse", xscrollcommand=scroll_x_cli.set, yscrollcommand=scroll_y_cli.set)
-    
     tabla_cli['displaycolumns'] = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario")
-    
     scroll_x_cli.config(command=tabla_cli.xview)
     scroll_y_cli.config(command=tabla_cli.yview)
     
@@ -110,7 +107,6 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         titulo_col = col.replace("_", " ").title()
         if col == "tipo_envio": titulo_col = "Tipo De Envio"
         if col == "envio_pag": titulo_col = "Envio Pagado"
-            
         tabla_cli.heading(col, text=titulo_col)
         ancho = 60 if col in ["ano", "mes", "pagado", "envio_pag"] else 120
         if col == "comentario": ancho = 150
@@ -121,15 +117,13 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tabla_cli.pack(side="left", fill="both", expand=True)
     widgets['tabla_clientes'] = tabla_cli
 
-        # --- PESTAÑA 2: GESTIÓN DE CLIENTES (NUEVA) ---
+    # --- PESTAÑA 2: GESTIÓN DE CLIENTES ---
     frame_gestion_clientes = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
     notebook.add(frame_gestion_clientes, text="Gestión de Clientes")
 
-    # Frame izquierdo para la tabla de clientes
     frame_tabla_gestion = tk.LabelFrame(frame_gestion_clientes, text="Listado de Clientes", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, padx=10, pady=10)
     frame_tabla_gestion.pack(side="left", fill="both", expand=True, padx=15, pady=15)
     
-    # Buscador para la tabla de clientes
     frame_busqueda_clientes = tk.Frame(frame_tabla_gestion, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_busqueda_clientes.pack(fill="x", pady=(0, 10))
     tk.Label(frame_busqueda_clientes, text="Buscar Cliente:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
@@ -153,7 +147,6 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tabla_gestion_clientes.pack(side="left", fill="both", expand=True)
     widgets['tabla_gestion_clientes'] = tabla_gestion_clientes
 
-    # Frame derecho para el formulario de edición
     frame_form_cliente = tk.LabelFrame(frame_gestion_clientes, text=" Editar Información del Cliente ", bg="#FFFFFF", font=font_bold, padx=20, pady=20)
     frame_form_cliente.pack(side="right", fill="y", padx=(0, 15), pady=15)
     
@@ -161,12 +154,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['lbl_status_cliente'].grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 20))
     
     widgets['form_cliente_entries'] = {}
-    campos_cliente_form = [
-        ("nombre", "Nombre:", "entry"), ("email", "Email:", "entry"), 
-        ("telefono", "Teléfono:", "entry"), ("direccion", "Dirección:", "entry"), 
-        ("rut", "RUT:", "entry"), ("instagram", "Instagram:", "entry"), 
-        ("status", "Status:", "combo")
-    ]
+    campos_cliente_form = [("nombre", "Nombre:", "entry"), ("email", "Email:", "entry"), ("telefono", "Teléfono:", "entry"), 
+                           ("direccion", "Dirección:", "entry"), ("rut", "RUT:", "entry"), ("instagram", "Instagram:", "entry"), ("status", "Status:", "combo")]
 
     for i, (col_id, label_text, tipo) in enumerate(campos_cliente_form, start=1):
         tk.Label(frame_form_cliente, text=label_text, bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=8, padx=(0, 10))
@@ -182,11 +171,13 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_botones_cliente, text="Guardar Cambios", command=comandos_ui['cmd_guardar_cliente'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
-    
+
+
     # --- PESTAÑA 3: INVENTARIO DE LIBROS ---
     frame_libros = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
     notebook.add(frame_libros, text="Inventario de Libros")
     
+    # Formulario derecho (Administrar Libro)
     frame_form_libros = tk.LabelFrame(frame_libros, text=" Administrar Libro ", bg="#FFFFFF", font=font_bold, padx=20, pady=20)
     frame_form_libros.pack(side="right", fill="y", padx=(0, 15), pady=15)
     
@@ -196,25 +187,20 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     campos_form = [("titulo", "Título", "entry"), ("autor", "Autor", "combo"), ("genero", "Género", "combo"), 
                     ("editorial", "Editorial", "combo"), ("encuadernacion", "Encuadernación", "combo_enc"),
-                    ("stock", "Stock", "entry"), ("precio", "Precio", "entry")]
+                    ("stock", "Stock", "entry"), ("precio_original", "Precio Base", "entry")]
     
     vcmd_int = (ventana.register(comandos_ui['cmd_validar_int']), '%P')
     vcmd_float = (ventana.register(comandos_ui['cmd_validar_float']), '%P')
     
     for i, (col_id, label_text, tipo) in enumerate(campos_form, start=1):
         tk.Label(frame_form_libros, text=f"{label_text}:", bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=8, padx=(0, 10))
-        
-        if tipo == "combo":
-            entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10))
-        elif tipo == "combo_enc":
-            entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10), state="readonly",
-                                values=['TAPA BLANDA', 'TAPA DURA', 'BOLSILLO'])
+        if tipo == "combo": entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10))
+        elif tipo == "combo_enc": entry = ttk.Combobox(frame_form_libros, width=27, font=("Helvetica", 10), state="readonly", values=['TAPA BLANDA', 'TAPA DURA', 'BOLSILLO'])
         else:
             validation_cmd = None
             if col_id == "stock": validation_cmd = vcmd_int
-            elif col_id == "precio": validation_cmd = vcmd_float
+            elif col_id == "precio_original": validation_cmd = vcmd_float
             entry = tk.Entry(frame_form_libros, width=28, relief="solid", bd=1, font=("Helvetica", 10), validate="key", validatecommand=validation_cmd)
-            
         entry.grid(row=i, column=1, sticky="w", pady=8, ipady=4 if tipo == "entry" else 0)
         widgets['form_libro_entries'][col_id] = entry
         
@@ -222,30 +208,49 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones.grid(row=len(campos_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
     tk.Button(frame_botones, text="Guardar / Modificar", command=comandos_ui['cmd_guardar_libro'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
     tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    
     tk.Button(frame_botones, text="Aplicar Descuento Masivo", command=comandos_ui['cmd_aplicar_descuento'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
     tk.Button(frame_botones, text="Quitar Descuentos", command=comandos_ui['cmd_quitar_descuentos'], bg="#757575", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
-    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
+    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
 
+    # --- Frame Izquierdo (Filtros y Tabla Inventario) ---
     frame_izquierdo = tk.Frame(frame_libros, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_izquierdo.pack(side="left", fill="both", expand=True, padx=15, pady=15)
     
-    # --- Frame de Búsqueda y Filtros ---
     frame_busqueda_filtros = tk.LabelFrame(frame_izquierdo, text="Filtros de Inventario", bg=config.COLOR_FONDO_PRINCIPAL, font=("Helvetica", 9, "bold"), padx=10, pady=10)
     frame_busqueda_filtros.pack(fill="x", pady=(0, 10))
 
-    # Fila 0: Búsqueda por texto y botones
-    tk.Label(frame_busqueda_filtros, text="Buscar:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).grid(row=0, column=0, padx=(0,5), sticky="w")
-    widgets['entry_busqueda_libros'] = ttk.Entry(frame_busqueda_filtros, width=30)
+    # Fila 0: Búsqueda de texto y botones
+    tk.Label(frame_busqueda_filtros, text="Buscar Título:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).grid(row=0, column=0, padx=(0,5), sticky="w")
+    widgets['entry_busqueda_libros'] = ttk.Entry(frame_busqueda_filtros, width=25)
     widgets['entry_busqueda_libros'].grid(row=0, column=1, padx=5, sticky="ew")
     tk.Button(frame_busqueda_filtros, text="Buscar", command=comandos_ui['cmd_aplicar_filtros'], bg="#1A73E8", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=2, padx=5)
     tk.Button(frame_busqueda_filtros, text="Limpiar", command=comandos_ui['cmd_limpiar_filtros'], bg="gray", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=3, padx=5)
 
-    # Fila 1: Filtro de Stock (Slider)
-    widgets['lbl_filtro_stock'] = tk.Label(frame_busqueda_filtros, text="Stock máx: 0", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold)
-    widgets['lbl_filtro_stock'].grid(row=1, column=0, padx=(0,5), pady=(10,0), sticky="w")
-    
-    widgets['slider_stock'] = ttk.Scale(frame_busqueda_filtros, from_=0, to=100, orient="horizontal")
-    widgets['slider_stock'].grid(row=1, column=1, columnspan=3, padx=5, pady=(10,0), sticky="ew")
+    # Fila 1: Filtros Combo
+    frame_combos = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_combos.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10,0))
+    tk.Label(frame_combos, text="Autor:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
+    widgets['cmb_filtro_autor'] = ttk.Combobox(frame_combos, state="readonly", width=15)
+    widgets['cmb_filtro_autor'].pack(side="left", padx=(0, 10))
+    tk.Label(frame_combos, text="Género:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
+    widgets['cmb_filtro_genero'] = ttk.Combobox(frame_combos, state="readonly", width=15)
+    widgets['cmb_filtro_genero'].pack(side="left", padx=(0, 10))
+    tk.Label(frame_combos, text="Editorial:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left")
+    widgets['cmb_filtro_editorial'] = ttk.Combobox(frame_combos, state="readonly", width=15)
+    widgets['cmb_filtro_editorial'].pack(side="left")
+
+    # Fila 2: Sliders de Stock (Min y Max)
+    frame_sliders = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_sliders.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(10,0))
+    widgets['lbl_filtro_stock_min'] = tk.Label(frame_sliders, text="Stock Min: 0", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, width=12, anchor="w")
+    widgets['lbl_filtro_stock_min'].pack(side="left")
+    widgets['slider_stock_min'] = ttk.Scale(frame_sliders, from_=0, to=100, orient="horizontal")
+    widgets['slider_stock_min'].pack(side="left", expand=True, fill="x", padx=(0,15))
+    widgets['lbl_filtro_stock_max'] = tk.Label(frame_sliders, text="Stock Max: 0", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, width=12, anchor="w")
+    widgets['lbl_filtro_stock_max'].pack(side="left")
+    widgets['slider_stock_max'] = ttk.Scale(frame_sliders, from_=0, to=100, orient="horizontal")
+    widgets['slider_stock_max'].pack(side="left", expand=True, fill="x")
 
     frame_busqueda_filtros.grid_columnconfigure(1, weight=1)
 
@@ -258,14 +263,13 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tabla_lib = ttk.Treeview(frame_tabla_libros, columns=columnas_lib, show="headings", selectmode="browse", xscrollcommand=scroll_x_lib.set, yscrollcommand=scroll_y_lib.set)
     scroll_x_lib.config(command=tabla_lib.xview)
     scroll_y_lib.config(command=tabla_lib.yview)
+    
     for col in columnas_lib:
-        tabla_lib.heading(col, text=col.replace("_", " ").title())
+        titulo_col = col.replace("_", " ").title()
         tabla_lib.heading(col, text=titulo_col, command=lambda c=col: comandos_ui['cmd_ordenar_libros'](c, False))
         ancho = 120
-        if col == "stock" or col == "precio":
-            ancho = 80
-        elif col == "libro_id":
-            ancho = 60
+        if col in ["stock", "precio", "precio_original"]: ancho = 80
+        elif col == "libro_id": ancho = 60
         tabla_lib.column(col, width=ancho, minwidth=60, stretch=(col == "titulo"))
         
     scroll_y_lib.pack(side="right", fill="y")
