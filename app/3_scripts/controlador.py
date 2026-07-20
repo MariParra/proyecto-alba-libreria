@@ -38,6 +38,8 @@ class AppControlador:
             'cmd_aplicar_filtros': self.aplicar_filtros_inventario,
             'cmd_limpiar_filtros': self.limpiar_filtros_inventario,
             'cmd_ordenar_libros': self.ordenar_columna_inventario,
+            'cmd_ordenar_asignaciones': self.ordenar_columna_asignaciones,
+            'cmd_ordenar_gestion': self.ordenar_columna_gestion,
             'cmd_validar_int': validar_int,
             'cmd_validar_float': validar_float,
             'cmd_toggle_columnas': self.toggle_columnas_opcionales,
@@ -55,21 +57,21 @@ class AppControlador:
         self.widgets['meses_vars'][mes_actual].set(True)
         self.widgets['cmb_ano'].set(str(datetime.datetime.now().year))
         
+        # BINDS ASIGNACIONES
         self.widgets['cmb_ano'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_estado'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_pagado'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_envio'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['cmb_filtro_libro'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
-        self.widgets['tabla_clientes'].bind("<Double-1>", lambda event: manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo))
+        self.widgets['tabla_clientes'].bind("<Double-1>", self.manejar_edicion_celda_asignacion)
+        self.widgets['entry_busqueda_asignaciones'].bind("<KeyRelease>", lambda e: self.iniciar_sincronizacion_periodo())
         
+        # BINDS INVENTARIO
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         self.widgets['entry_busqueda_libros'].bind("<Return>", self.aplicar_filtros_inventario)
-        
-        # Binds para las Listas Múltiples
         for campo in ['autor', 'genero', 'editorial']:
             key = f'list_filtro_{campo}'
-            if key in self.widgets:
-                self.widgets[key].bind("<<ListboxSelect>>", self.aplicar_filtros_inventario)
+            if key in self.widgets: self.widgets[key].bind("<<ListboxSelect>>", self.aplicar_filtros_inventario)
 
         if 'slider_stock_min' in self.widgets:
             self.widgets['slider_stock_min'].config(variable=self.stock_min_var)
@@ -79,6 +81,7 @@ class AppControlador:
             self.stock_min_var.trace_add("write", self.actualizar_label_stock)
             self.stock_max_var.trace_add("write", self.actualizar_label_stock)
         
+        # BINDS GESTION CLIENTES
         self.widgets['tabla_gestion_clientes'].bind("<<TreeviewSelect>>", self.al_seleccionar_cliente)
         self.widgets['entry_busqueda_clientes'].bind("<KeyRelease>", self.buscar_cliente_gestion)
 
@@ -98,23 +101,19 @@ class AppControlador:
                 valores = [str(row[0]) for row in cursor.fetchall()]
                 self.autocompletado_data[campo] = valores
                 
-                # Actualizar el Combobox del formulario
                 if campo in self.widgets['form_libro_entries']:
                     current_value = self.widgets['form_libro_entries'][campo].get()
                     self.widgets['form_libro_entries'][campo]['values'] = valores
                     if current_value in valores:
                         self.widgets['form_libro_entries'][campo].set(current_value)
 
-                # Actualizar el Listbox múltiple de los filtros
                 lst_filtro = self.widgets.get(f'list_filtro_{campo}')
                 if lst_filtro:
-                    # Guardar las selecciones actuales
                     seleccionados = [lst_filtro.get(i) for i in lst_filtro.curselection()]
                     lst_filtro.delete(0, tk.END)
                     for val in valores:
                         lst_filtro.insert(tk.END, val)
-                        if val in seleccionados:
-                            lst_filtro.selection_set(lst_filtro.size()-1)
+                        if val in seleccionados: lst_filtro.selection_set(lst_filtro.size()-1)
 
             conn.close()
         except Exception as e:
@@ -128,12 +127,10 @@ class AppControlador:
 
     def on_keyrelease_autocompletar(self, event, campo_actual):
         widget = event.widget
-        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'Escape', 'Control_L', 'Alt_L'):
-            return
+        if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab', 'Shift_L', 'Shift_R', 'Escape', 'Control_L', 'Alt_L'): return
         valor_escrito = widget.get()
         lista_completa = self.autocompletado_data[campo_actual]
-        if valor_escrito == '':
-            widget['values'] = lista_completa
+        if valor_escrito == '': widget['values'] = lista_completa
         else:
             data = [item for item in lista_completa if valor_escrito.lower() in item.lower()]
             widget['values'] = data
@@ -156,8 +153,7 @@ class AppControlador:
                 self.widgets['slider_stock_max'].config(to=max_stock)
                 self.stock_min_var.set(0)
                 self.stock_max_var.set(max_stock)
-        except Exception as e:
-            print(f"Error al configurar los sliders de stock: {e}")
+        except Exception as e: print(f"Error al configurar los sliders de stock: {e}")
 
     def actualizar_label_stock(self, *args):
         if 'lbl_filtro_stock_min' in self.widgets:
@@ -168,9 +164,7 @@ class AppControlador:
         termino_busqueda = self.widgets['entry_busqueda_libros'].get().strip()
         stock_min = self.stock_min_var.get()
         stock_max = self.stock_max_var.get()
-
-        if stock_min > stock_max:
-            stock_min, stock_max = stock_max, stock_min
+        if stock_min > stock_max: stock_min, stock_max = stock_max, stock_min
 
         query = "SELECT libro_id, titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original FROM libros"
         condiciones = []
@@ -180,14 +174,11 @@ class AppControlador:
             condiciones.append("(titulo LIKE ? OR autor LIKE ?)")
             params.extend([f"%{termino_busqueda}%", f"%{termino_busqueda}%"])
 
-        # Filtros de Listbox (selección múltiple)
         for campo in ['autor', 'genero', 'editorial']:
             lst_filtro = self.widgets.get(f'list_filtro_{campo}')
             if lst_filtro:
-                # Obtener los nombres seleccionados
                 seleccionados = [lst_filtro.get(i) for i in lst_filtro.curselection()]
                 if seleccionados:
-                    # Generar ?,?,? de forma dinámica
                     placeholders = ', '.join(['?'] * len(seleccionados))
                     condiciones.append(f"{campo} IN ({placeholders})")
                     params.extend(seleccionados)
@@ -201,8 +192,6 @@ class AppControlador:
 
     def limpiar_filtros_inventario(self, event=None):
         self.widgets['entry_busqueda_libros'].delete(0, tk.END)
-        
-        # Limpiar listas múltiples
         for campo in ['autor', 'genero', 'editorial']:
             lst = self.widgets.get(f'list_filtro_{campo}')
             if lst: lst.selection_clear(0, tk.END)
@@ -225,14 +214,12 @@ class AppControlador:
             cursor.execute(query, params)
             self.datos_inventario_actual = cursor.fetchall()
             conn.close()
-            for fila in self.datos_inventario_actual:
-                tabla.insert("", "end", values=fila)
+            for fila in self.datos_inventario_actual: tabla.insert("", "end", values=fila)
 
             stock_total = sum(int(fila[6]) for fila in self.datos_inventario_actual if fila[6])
             widgets['lbl_stock_total'].config(text=f"Unidades Totales en Inventario: {stock_total}")
             self.refrescar_listas_autocompletado()
-        except Exception as e:
-            print(f"Error al cargar inventario: {e}")
+        except Exception as e: print(f"Error al cargar inventario: {e}")
 
     def al_seleccionar_libro(self, event=None):
         tabla = self.widgets['tabla_libros']
@@ -245,9 +232,7 @@ class AppControlador:
         
         for col_id, entry in entries.items():
             valor = tabla.set(item_id, col_id)
-            # --- ORDEN CORREGIDO AQUÍ ---
-            if isinstance(entry, ttk.Combobox):
-                entry.set(valor if valor else "")
+            if isinstance(entry, ttk.Combobox): entry.set(valor if valor else "")
             elif isinstance(entry, tk.Entry):
                 entry.config(validate="none") 
                 entry.delete(0, tk.END)
@@ -257,18 +242,14 @@ class AppControlador:
     def limpiar_formulario_libro(self):
         self.widgets['lbl_status_libro'].config(text="Modo: Creando nuevo libro", fg="#C2185B")
         for entry in self.widgets['form_libro_entries'].values():
-            # --- ORDEN CORREGIDO AQUÍ ---
-            if isinstance(entry, ttk.Combobox):
-                entry.set("")
+            if isinstance(entry, ttk.Combobox): entry.set("")
             elif isinstance(entry, tk.Entry):
                 entry.config(validate="none")
                 entry.delete(0, tk.END)
                 entry.config(validate="key")
-                
         self.widgets['form_libro_entries']['encuadernacion'].set('TAPA BLANDA')
         tabla = self.widgets['tabla_libros']
-        if tabla.selection():
-            tabla.selection_remove(tabla.selection()[0])
+        if tabla.selection(): tabla.selection_remove(tabla.selection()[0])
 
     def guardar_libro(self):
         entries = self.widgets['form_libro_entries']
@@ -304,8 +285,7 @@ class AppControlador:
             self.limpiar_formulario_libro()
             self.configurar_slider_stock() 
             self.aplicar_filtros_inventario()
-        except Exception as e:
-            messagebox.showerror("Error BD", str(e))
+        except Exception as e: messagebox.showerror("Error BD", str(e))
 
     def eliminar_libro(self):
         seleccion = self.widgets['tabla_libros'].selection()
@@ -322,8 +302,7 @@ class AppControlador:
             self.limpiar_formulario_libro()
             self.configurar_slider_stock()
             self.aplicar_filtros_inventario()
-        except Exception as e:
-            messagebox.showerror("Error BD", str(e))
+        except Exception as e: messagebox.showerror("Error BD", str(e))
 
     def ordenar_columna_inventario(self, col, reverse):
         if 'tabla_libros' not in self.widgets: return
@@ -334,13 +313,10 @@ class AppControlador:
             texto_original = c.replace("_", " ").title()
             tabla.heading(c, text=texto_original, command=lambda _col=c: self.ordenar_columna_inventario(_col, False))
             
-        try:
-            lista_valores.sort(key=lambda t: float(t[0]) if t[0] else 0.0, reverse=reverse)
-        except ValueError:
-            lista_valores.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
+        try: lista_valores.sort(key=lambda t: float(t[0]) if t[0] else 0.0, reverse=reverse)
+        except ValueError: lista_valores.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
 
-        for index, (val, k) in enumerate(lista_valores):
-            tabla.move(k, '', index)
+        for index, (val, k) in enumerate(lista_valores): tabla.move(k, '', index)
 
         texto_heading = col.replace("_", " ").title()
         flecha = "  ▼" if reverse else "  ▲"
@@ -367,11 +343,8 @@ class AppControlador:
         ids_a_actualizar = []
         if respuesta == 'yes':
             tabla = self.widgets['tabla_libros']
-            for item_id in tabla.get_children():
-                ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
-            if not ids_a_actualizar:
-                messagebox.showinfo("Sin Libros", "No hay libros en la tabla para aplicar el descuento.")
-                return
+            for item_id in tabla.get_children(): ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
+            if not ids_a_actualizar: return messagebox.showinfo("Sin Libros", "No hay libros en la tabla para aplicar el descuento.")
         
         try:
             conn = conexion.conectar_db()
@@ -390,8 +363,7 @@ class AppControlador:
             conn.close()
             messagebox.showinfo("Éxito", f"Se aplicó un {porcentaje}% de descuento a {libros_afectados} libros.")
             self.aplicar_filtros_inventario()
-        except Exception as e:
-            messagebox.showerror("Error de BD", f"No se pudo aplicar el descuento: {e}")
+        except Exception as e: messagebox.showerror("Error de BD", f"No se pudo aplicar el descuento: {e}")
 
     def quitar_descuentos(self):
         respuesta = messagebox.askquestion("Quitar Descuentos",
@@ -403,11 +375,8 @@ class AppControlador:
         ids_a_actualizar = []
         if respuesta == 'yes':
             tabla = self.widgets['tabla_libros']
-            for item_id in tabla.get_children():
-                ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
-            if not ids_a_actualizar:
-                messagebox.showinfo("Sin Libros", "No hay libros en la tabla para restaurar el precio.")
-                return
+            for item_id in tabla.get_children(): ids_a_actualizar.append(tabla.set(item_id, "libro_id"))
+            if not ids_a_actualizar: return messagebox.showinfo("Sin Libros", "No hay libros en la tabla para restaurar el precio.")
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
@@ -425,8 +394,7 @@ class AppControlador:
             conn.close()
             messagebox.showinfo("Éxito", f"Se ha restaurado el precio original a {libros_afectados} libros.")
             self.aplicar_filtros_inventario()
-        except Exception as e:
-            messagebox.showerror("Error de BD", f"No se pudieron quitar los descuentos: {e}")
+        except Exception as e: messagebox.showerror("Error de BD", f"No se pudieron quitar los descuentos: {e}")
 
 
     # ==========================================
@@ -439,21 +407,39 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            query = "SELECT cliente_id, nombre, email, telefono, status FROM clientes"
+            # SE AÑADIÓ RUT Y DIRECCION
+            query = "SELECT cliente_id, nombre, email, telefono, rut, direccion, status FROM clientes"
             params = []
             if termino_busqueda:
-                query += " WHERE nombre LIKE ? OR email LIKE ? OR telefono LIKE ?"
-                params.extend([f"%{termino_busqueda}%", f"%{termino_busqueda}%", f"%{termino_busqueda}%"])
+                query += " WHERE nombre LIKE ? OR email LIKE ? OR telefono LIKE ? OR rut LIKE ?"
+                params.extend([f"%{termino_busqueda}%"] * 4)
             query += " ORDER BY nombre"
             cursor.execute(query, tuple(params))
             for cliente in cursor.fetchall(): tabla.insert("", "end", values=cliente)
             conn.close()
-        except Exception as e:
-            messagebox.showerror("Error de BD", f"No se pudo cargar la lista de clientes: {e}")
+        except Exception as e: messagebox.showerror("Error de BD", f"No se pudo cargar la lista de clientes: {e}")
 
     def buscar_cliente_gestion(self, event=None):
         termino = self.widgets['entry_busqueda_clientes'].get().strip()
         self.refrescar_tabla_clientes_gestion(termino)
+
+    def ordenar_columna_gestion(self, col, reverse):
+        if 'tabla_gestion_clientes' not in self.widgets: return
+        tabla = self.widgets['tabla_gestion_clientes']
+        lista_valores = [(tabla.set(k, col), k) for k in tabla.get_children('')]
+        
+        for c in tabla['columns']:
+            texto_original = c.replace("_", " ").title()
+            tabla.heading(c, text=texto_original, command=lambda _col=c: self.ordenar_columna_gestion(_col, False))
+            
+        try: lista_valores.sort(key=lambda t: float(t[0]) if t[0] else 0.0, reverse=reverse)
+        except ValueError: lista_valores.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
+
+        for index, (val, k) in enumerate(lista_valores): tabla.move(k, '', index)
+
+        texto_heading = col.replace("_", " ").title()
+        flecha = "  ▼" if reverse else "  ▲"
+        tabla.heading(col, text=texto_heading + flecha, command=lambda _col=col: self.ordenar_columna_gestion(_col, not reverse))
 
     def al_seleccionar_cliente(self, event=None):
         if 'tabla_gestion_clientes' not in self.widgets: return
@@ -480,8 +466,7 @@ class AppControlador:
                     else:
                         widget.delete(0, tk.END)
                         widget.insert(0, valor)
-        except Exception as e:
-            messagebox.showerror("Error de BD", f"No se pudieron cargar los datos del cliente: {e}")
+        except Exception as e: messagebox.showerror("Error de BD", f"No se pudieron cargar los datos del cliente: {e}")
 
     def limpiar_formulario_cliente(self):
         self.widgets['lbl_status_cliente'].config(text="Seleccione un cliente para editar", fg="#0277BD")
@@ -511,8 +496,7 @@ class AppControlador:
             conn.close()
             messagebox.showinfo("Éxito", "Los datos del cliente se han actualizado correctamente.")
             self.refrescar_tabla_clientes_gestion()
-        except Exception as e:
-            messagebox.showerror("Error de BD", f"No se pudo guardar al cliente: {e}")
+        except Exception as e: messagebox.showerror("Error de BD", f"No se pudo guardar al cliente: {e}")
 
     def eliminar_cliente(self):
         if 'tabla_gestion_clientes' not in self.widgets: return
@@ -536,11 +520,10 @@ class AppControlador:
             messagebox.showinfo("Éxito", f"El cliente '{nombre}' ha sido eliminado.")
             self.limpiar_formulario_cliente()
             self.refrescar_todas_las_tablas() 
-        except Exception as e:
-            messagebox.showerror("Error BD", f"No se pudo eliminar al cliente: {e}")
+        except Exception as e: messagebox.showerror("Error BD", f"No se pudo eliminar al cliente: {e}")
 
     # ==========================================
-    # UTILIDADES GENERALES Y EXPORTACIÓN
+    # ASIGNACIONES, SINCRONIZACIÓN Y EXPORTACIÓN
     # ==========================================
     def toggle_columnas_opcionales(self):
         columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
@@ -551,12 +534,57 @@ class AppControlador:
         if self.widgets['vars_opcionales']['direccion'].get(): opcionales_visibles.append("direccion")
         self.widgets['tabla_clientes']['displaycolumns'] = columnas_base + opcionales_visibles
 
+    def manejar_edicion_celda_asignacion(self, event):
+        item_id = self.widgets['tabla_clientes'].focus()
+        if not item_id: return
+        
+        columna = self.widgets['tabla_clientes'].identify_column(event.x)
+        col_name = self.widgets['tabla_clientes'].column(columna, "id")
+        
+        if col_name == 'libro':
+            from ui_dialogos import abrir_dialogo_asignar_libro 
+            abrir_dialogo_asignar_libro(self.root, self.widgets['tabla_clientes'], item_id, self.iniciar_sincronizacion_periodo, lambda: self.refrescar_inventario())
+        else:
+            from ui_dialogos import manejar_edicion_celda
+            manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo)
+
+    def ordenar_columna(self, tabla, col, reverse):
+        lista_valores = [(tabla.set(k, col), k) for k in tabla.get_children('')]
+        
+        for c in tabla['columns']:
+            titulo_col = c.replace("_", " ").title()
+            if c == "tipo_envio": titulo_col = "Tipo De Envio"
+            if c == "envio_pag": titulo_col = "Envio Pagado"
+            # Restauramos el comando base sin flecha
+            tabla.heading(c, text=titulo_col, command=lambda _col=c: self.ordenar_columna(tabla, _col, False))
+            
+        try: 
+            # Intentar ordenar como números
+            lista_valores.sort(key=lambda t: float(t[0]) if t[0] and t[0] != 'None' else 0.0, reverse=reverse)
+        except ValueError: 
+            # Si falla, ordenar como texto
+            lista_valores.sort(key=lambda t: str(t[0]).lower(), reverse=reverse)
+
+        for index, (val, k) in enumerate(lista_valores): 
+            tabla.move(k, '', index)
+
+        titulo_col = col.replace("_", " ").title()
+        if col == "tipo_envio": titulo_col = "Tipo De Envio"
+        if col == "envio_pag": titulo_col = "Envio Pagado"
+        flecha = "  ▼" if reverse else "  ▲"
+        tabla.heading(col, text=titulo_col + flecha, command=lambda _col=col: self.ordenar_columna(tabla, _col, not reverse))
+        
     def refrescar_todas_las_tablas(self):
         self.iniciar_sincronizacion_periodo()
         self.refrescar_inventario()
         self.refrescar_tabla_clientes_gestion()
+        
+    def ordenar_columna_asignaciones(self, col, reverse):
+        self.ordenar_columna(self.widgets['tabla_clientes'], col, reverse)
 
-    def iniciar_sincronizacion_periodo(self):
+    def ordenar_columna_gestion(self, col, reverse):
+        self.ordenar_columna(self.widgets['tabla_gestion_clientes'], col, reverse)
+    def iniciar_sincronizacion_periodo(self, event=None):
         meses_seleccionados = [m for m, var in self.widgets['meses_vars'].items() if var.get()]
         if not meses_seleccionados: self.widgets['mb_meses'].config(text="Ninguno")
         elif len(meses_seleccionados) == 1: self.widgets['mb_meses'].config(text=meses_seleccionados[0])
@@ -571,6 +599,23 @@ class AppControlador:
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
+            
+            # --- MAGIA: GENERACIÓN AUTOMÁTICA DE ASIGNACIONES FALTANTES ---
+            meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
+            for mes_num in meses_nums:
+                cursor.execute("""
+                    INSERT INTO asignaciones (cliente_id, ano, mes, estado_envio, pagado, envio_pagado, comentario)
+                    SELECT c.cliente_id, ?, ?, 'EN PREPARACION', 'FALSE', 'FALSE', 'Sin comentario'
+                    FROM clientes c
+                    WHERE c.status = 'ACTIVA'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM asignaciones a 
+                        WHERE a.cliente_id = c.cliente_id 
+                        AND a.ano = ? AND a.mes = ?
+                    )
+                """, (ano_str, mes_num, ano_str, mes_num))
+            conn.commit()
+            
             cursor.execute("PRAGMA table_info(clientes)")
             columnas_clientes = [col[1].lower() for col in cursor.fetchall()]
             
@@ -585,12 +630,11 @@ class AppControlador:
             
             str_extras = ", " + ", ".join(select_extras)
             
-            meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
             placeholders_meses = ",".join("?" * len(meses_nums))
             
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                       s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
+                    s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -617,6 +661,13 @@ class AppControlador:
                 query += " AND l.titulo IS NOT NULL"
             elif filtro_libro == "Sin Asignar":
                 query += " AND l.titulo IS NULL"
+                
+            # --- NUEVO: BÚSQUEDA RÁPIDA DE ASIGNACIONES ---
+            termino_busqueda = self.widgets.get('entry_busqueda_asignaciones')
+            termino_val = termino_busqueda.get().strip() if termino_busqueda else ""
+            if termino_val:
+                query += " AND (c.nombre LIKE ? OR c.email LIKE ? OR c.rut LIKE ?)"
+                params.extend([f"%{termino_val}%"] * 3)
                 
             query += " ORDER BY c.nombre"
 

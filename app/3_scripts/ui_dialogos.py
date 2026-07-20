@@ -120,28 +120,27 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
         cb.bind("<<ComboboxSelected>>", guardar_cambio_combo)
 
 
-def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inventario):
-    selected_iid = tabla.focus()
-    if not selected_iid: return
-    
-    asignacion_id = tabla.set(selected_iid, "asignacion_id")
-    cliente_nombre = tabla.set(selected_iid, "nombre")
+def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, callback_inventario):
+    asignacion_id = tabla.set(item_id, "asignacion_id")
+    cliente_nombre = tabla.set(item_id, "nombre")
     
     try:
         conn = conexion.conectar_db()
         cursor = conn.cursor()
+        
         cursor.execute("SELECT libro_suscripcion_id FROM asignaciones WHERE asignacion_id = ?", (asignacion_id,))
-        current_libro_id = cursor.fetchone()[0]
+        res = cursor.fetchone()
+        current_libro_id = res[0] if res else None
+        
         cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE stock > 0 ORDER BY titulo")
         libros_disponibles = cursor.fetchall()
-
-        # Si el libro actual ya no tiene stock, lo buscamos aparte para mostrarlo en la lista
+        
         if current_libro_id and not any(l[0] == current_libro_id for l in libros_disponibles):
-                cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
-                libro_actual_info = cursor.fetchone()
-                if libro_actual_info:
-                    libros_disponibles.insert(0, libro_actual_info)
-
+            cursor.execute("SELECT libro_id, titulo, stock FROM libros WHERE libro_id = ?", (current_libro_id,))
+            libro_actual_info = cursor.fetchone()
+            if libro_actual_info:
+                libros_disponibles.insert(0, libro_actual_info)
+                
         conn.close()
     except Exception as e:
         messagebox.showerror("Error", f"Error al acceder a BD: {e}")
@@ -149,68 +148,73 @@ def abrir_dialogo_asignar_libro(root, tabla, callback_asignaciones, callback_inv
         
     mapa_libros = {f"{t} (Stock: {s})": l_id for l_id, t, s in libros_disponibles}
     opciones = ["(Sin Asignar)"] + list(mapa_libros.keys())
-    
-    valor_actual_str = "(Sin Asignar)"
-    if current_libro_id:
-        for txt, l_id in mapa_libros.items():
-            if l_id == current_libro_id:
-                valor_actual_str = txt
-                break
+    valor_actual_str = next((txt for txt, l_id in mapa_libros.items() if l_id == current_libro_id), "(Sin Asignar)")
 
     win = tk.Toplevel(root)
-    win.title("Asignar Libro")
-    win.geometry("420x220")
-    win.transient(root)
-    win.grab_set()
-    win.configure(bg="#FFF8E1")
-    tk.Label(win, text=f"Asignando libro a:\n{cliente_nombre}", bg="#FFF8E1", font=("Helvetica", 11, "bold")).pack(pady=(15, 10))
-    cb_libros = ttk.Combobox(win, values=opciones, state="readonly", width=45, font=("Helvetica", 10))
-    cb_libros.pack(pady=10)
+    win.title("Asignar / Quitar Libro")
+    win.geometry("450x250")
+    win.transient(root); win.grab_set(); win.configure(bg="#FFF8E1")
+    
+    tk.Label(win, text=f"Modificando asignación de:\n{cliente_nombre}", bg="#FFF8E1", font=("Helvetica", 11, "bold")).pack(pady=(15, 10))
+    
+    cb_libros = ttk.Combobox(win, values=opciones, state="readonly", width=50, font=("Helvetica", 10))
+    cb_libros.pack(pady=5, padx=15)
     cb_libros.set(valor_actual_str)
     
-    def guardar_asignacion():
-        nuevo_valor_str = cb_libros.get()
-        nuevo_id = mapa_libros.get(nuevo_valor_str, None)
+    frame_botones = tk.Frame(win, bg="#FFF8E1")
+    frame_botones.pack(pady=20, fill="x", expand=True)
 
-        if nuevo_id == current_libro_id:
+    def guardar_y_cerrar():
+        seleccion_str = cb_libros.get()
+        nuevo_libro_id = mapa_libros.get(seleccion_str, None)
+        
+        if nuevo_libro_id == current_libro_id:
             win.destroy()
             return
             
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-
-            # Lógica robusta para actualizar stock
-            # Restaura el stock del libro anterior si existía
+            
             if current_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
             
-            # Reduce el stock del nuevo libro si se asignó uno
-            if nuevo_id:
-                cursor.execute("SELECT stock FROM libros WHERE libro_id = ?", (nuevo_id,))
-                stock_actual_nuevo_libro = cursor.fetchone()[0]
-                if stock_actual_nuevo_libro <= 0:
-                     messagebox.showwarning("Sin Stock", "El libro seleccionado ya no tiene stock disponible. La operación fue cancelada.", parent=win)
-                     conn.rollback() # Revertir el aumento de stock del libro anterior
-                     conn.close()
-                     win.destroy()
-                     callback_inventario()
-                     return
-                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (nuevo_id,))
-
-            # Actualiza la asignación
-            cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = ? WHERE asignacion_id = ?", (nuevo_id, asignacion_id))
-
+            if nuevo_libro_id:
+                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (nuevo_libro_id,))
+                
+            cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = ? WHERE asignacion_id = ?", (nuevo_libro_id, asignacion_id))
+            
             conn.commit()
             conn.close()
-            messagebox.showinfo("Asignación Exitosa", "Libro asignado y stock actualizado.", parent=win)
             win.destroy()
             callback_asignaciones()
-            callback_inventario()
+            callback_inventario() # Llama al refresco del inventario
         except Exception as e:
-            messagebox.showerror("Error", f"Fallo al asignar el libro: {e}", parent=win)
+            messagebox.showerror("Error BD", f"No se pudo guardar la asignación: {e}", parent=win)
+
+    def quitar_y_cerrar():
+        if not current_libro_id:
+            messagebox.showinfo("Información", "Este cliente ya se encuentra 'Sin Asignar'.", parent=win)
+            return
             
-    tk.Button(win, text="Confirmar Asignación", command=guardar_asignacion, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), pady=5, padx=10).pack(pady=10)
+        if messagebox.askyesno("Confirmar", f"¿Quitar el libro a {cliente_nombre}?\n\nEl libro volverá al stock.", parent=win):
+            try:
+                conn = conexion.conectar_db()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
+                cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = NULL WHERE asignacion_id = ?", (asignacion_id,))
+                conn.commit()
+                conn.close()
+                win.destroy()
+                callback_asignaciones()
+                callback_inventario()
+                messagebox.showinfo("Éxito", "Libro desasignado y devuelto al inventario.", parent=root)
+            except Exception as e:
+                messagebox.showerror("Error BD", f"No se pudo quitar la asignación: {e}", parent=win)
+
+    # Botones
+    tk.Button(frame_botones, text="Guardar Cambios", command=guardar_y_cerrar, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="left", padx=(30, 10))
+    tk.Button(frame_botones, text="Quitar Asignación", command=quitar_y_cerrar, bg="#D32F2F", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="right", padx=(10, 30))
 
 
 def abrir_dialogo_fecha(root, tabla, callback_refrescar):
