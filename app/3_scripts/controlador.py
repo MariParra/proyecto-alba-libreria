@@ -698,7 +698,7 @@ class AppControlador:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             script_path = os.path.join(current_dir, script_name)
             if not os.path.exists(script_path): raise FileNotFoundError(f"No se encontró el script en: {script_path}")
-            resultado = subprocess.run(["python", script_path], capture_output=True, text=True, check=True, encoding='utf-8')
+            resultado = subprocess.run(["python", script_path], capture_output=True, text=True, check=True, errors='ignore')
             self.root.config(cursor="")
             output_str = resultado.stdout
             try:

@@ -2,6 +2,7 @@ import sqlite3
 import gspread
 import pandas as pd
 import os
+import random
 
 # --- CONFIGURACIÓN ---
 GOOGLE_SHEET_NAME = "INSCRIPCIONES CAJA MENSUAL"
@@ -17,46 +18,27 @@ def clean_field(value):
     return val_str
 
 def resetear_emails_duplicados(conn):
-    """
-    Función de limpieza única. Detecta clientes con emails 'SIN_CORREO...'
-    y les asigna un nuevo email único basado en su ID para resolver conflictos.
-    """
     cursor = conn.cursor()
     try:
-        # Busca clientes con emails que podrían estar duplicados
         cursor.execute("SELECT cliente_id, email FROM clientes WHERE email LIKE 'SIN_CORREO_%' OR email = 'SIN INFORMACION'")
         clientes_a_revisar = cursor.fetchall()
-        
-        if not clientes_a_revisar:
-            return # No hay nada que limpiar
-
-        print("Detectados clientes con emails autogenerados. Verificando y limpiando duplicados...")
-        
-        # Iniciar una transacción para asegurar que todo se haga o nada
+        if not clientes_a_revisar: return
         cursor.execute("BEGIN TRANSACTION;")
-        
         for cliente_id, email_actual in clientes_a_revisar:
-            # Generar un nuevo email único y seguro basado en el ID del cliente
             nuevo_email = f"SIN_CORREO_ID_{cliente_id}@ALBALIBRERIA.CL"
             if email_actual != nuevo_email:
                 cursor.execute("UPDATE clientes SET email = ? WHERE cliente_id = ?", (nuevo_email, cliente_id))
-
         conn.commit()
-        print(f"Limpieza completada. {len(clientes_a_revisar)} emails de clientes han sido estandarizados.")
-
     except Exception as e:
-        print(f"Error durante la limpieza de emails: {e}")
         conn.rollback()
 
 def sync_system():
     print("Iniciando proceso de sincronizacion...")
-
     try:
         gc = gspread.service_account(filename=CREDENTIALS_FILE)
         spreadsheet = gc.open(GOOGLE_SHEET_NAME)
         worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
-        data = worksheet.get_all_records()
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(worksheet.get_all_records())
         print("Conexion exitosa: datos obtenidos de Google Sheets.")
     except Exception as e:
         print(f"Error al conectar con Google Sheets: {e}")
@@ -65,27 +47,12 @@ def sync_system():
     conn = None
     try:
         conn = sqlite3.connect(LOCAL_DB_NAME)
-        # La BD ya está verificada y creada por pasos anteriores.
         cursor = conn.cursor()
-        print("Base de datos local conectada.")
-        
         resetear_emails_duplicados(conn)
-        
-        cursor.execute("PRAGMA table_info(libros)")
-        columnas_libros = [col[1] for col in cursor.fetchall()]
-        if 'precio_original' not in columnas_libros:
-            print("Añadiendo columna 'precio_original' a la tabla 'libros'...")
-            cursor.execute("ALTER TABLE libros ADD COLUMN precio_original REAL DEFAULT 0;")
-            cursor.execute("UPDATE libros SET precio_original = precio;") # Copiar precios existentes
-            conn.commit()
-            print("¡Columna 'precio_original' añadida y sincronizada!")
-            
     except Exception as e:
-        print(f"Error al conectar BD: {e}")
         if conn: conn.close()
         return
 
-    # --- PROCESAMIENTO SIN DUPLICADOS Y CON PROTECCIÓN ---
     try:
         processed_clients = 0
         
@@ -135,24 +102,37 @@ def sync_system():
             client_id = None
             if res:
                 client_id = res[0]
-                # ACTUALIZAR PROTEGIENDO DATOS MANUALES
-                cursor.execute("""
-                    UPDATE clientes SET
-                        status = ?,
-                        telefono = CASE WHEN telefono = 'SIN INFORMACION' THEN ? ELSE telefono END,
-                        direccion = CASE WHEN direccion = 'SIN INFORMACION' THEN ? ELSE direccion END,
-                        rut = CASE WHEN rut = 'SIN INFORMACION' THEN ? ELSE rut END,
-                        instagram = CASE WHEN instagram = 'SIN INFORMACION' THEN ? ELSE instagram END,
-                        email = CASE WHEN email LIKE 'SIN_CORREO_%' OR email = 'SIN INFORMACION' THEN ? ELSE email END
-                    WHERE cliente_id = ?
-                """, (status_sync, phone_sync, address_sync, rut_sync, instagram_sync, email_sync, client_id))
+                try:
+                    # Intento normal de actualizar incluyendo el correo
+                    cursor.execute("""
+                        UPDATE clientes SET
+                            status = ?,
+                            telefono = CASE WHEN telefono = 'SIN INFORMACION' THEN ? ELSE telefono END,
+                            direccion = CASE WHEN direccion = 'SIN INFORMACION' THEN ? ELSE direccion END,
+                            rut = CASE WHEN rut = 'SIN INFORMACION' THEN ? ELSE rut END,
+                            instagram = CASE WHEN instagram = 'SIN INFORMACION' THEN ? ELSE instagram END,
+                            email = CASE WHEN email LIKE 'SIN_CORREO_%' OR email = 'SIN INFORMACION' THEN ? ELSE email END
+                        WHERE cliente_id = ?
+                    """, (status_sync, phone_sync, address_sync, rut_sync, instagram_sync, email_sync, client_id))
+                except sqlite3.IntegrityError:
+                    # ¡CHOCA CON OTRO CORREO! -> Actualizamos todo MENOS el correo
+                    cursor.execute("""
+                        UPDATE clientes SET
+                            status = ?,
+                            telefono = CASE WHEN telefono = 'SIN INFORMACION' THEN ? ELSE telefono END,
+                            direccion = CASE WHEN direccion = 'SIN INFORMACION' THEN ? ELSE direccion END,
+                            rut = CASE WHEN rut = 'SIN INFORMACION' THEN ? ELSE rut END,
+                            instagram = CASE WHEN instagram = 'SIN INFORMACION' THEN ? ELSE instagram END
+                        WHERE cliente_id = ?
+                    """, (status_sync, phone_sync, address_sync, rut_sync, instagram_sync, client_id))
             else:
-                # 2. BUSCAR POR EMAIL (por si acaso le cambiaron el nombre en el form)
+                # 2. BUSCAR POR EMAIL
                 if email_sync:
                     cursor.execute("SELECT cliente_id FROM clientes WHERE email = ?", (email_sync,))
                     res_em = cursor.fetchone()
                     if res_em:
                         client_id = res_em[0]
+                        # Aquí no actualizamos el correo porque fue la llave de búsqueda
                         cursor.execute("""
                             UPDATE clientes SET
                                 status = ?, nombre = ?, 
@@ -163,13 +143,22 @@ def sync_system():
                             WHERE cliente_id = ?
                         """, (status_sync, name, phone_sync, address_sync, rut_sync, instagram_sync, client_id))
                 
-                # 3. SI NO EXISTE DE NINGUNA MANERA, CREAR NUEVO
+                # 3. CREAR NUEVO
                 if not client_id:
-                    cursor.execute("""
-                        INSERT INTO clientes (email, nombre, telefono, instagram, direccion, rut, status) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (email_sync, name, phone_sync, instagram_sync, address_sync, rut_sync, status_sync))
-                    client_id = cursor.lastrowid
+                    try:
+                        cursor.execute("""
+                            INSERT INTO clientes (email, nombre, telefono, instagram, direccion, rut, status) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (email_sync, name, phone_sync, instagram_sync, address_sync, rut_sync, status_sync))
+                        client_id = cursor.lastrowid
+                    except sqlite3.IntegrityError:
+                        # ¡CORREO TOMADO! -> Forzamos un correo ultra-seguro y aleatorio para poder guardarlo
+                        email_seguro = f"CONFLICTO_{index}_{random.randint(1000,9999)}@ALBALIBRERIA.CL"
+                        cursor.execute("""
+                            INSERT INTO clientes (email, nombre, telefono, instagram, direccion, rut, status) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (email_seguro, name, phone_sync, instagram_sync, address_sync, rut_sync, status_sync))
+                        client_id = cursor.lastrowid
 
             # --- ACTUALIZAR SUSCRIPCIONES ---
             cursor.execute("SELECT suscripcion_id FROM suscripciones WHERE cliente_id = ?", (client_id,))
@@ -185,9 +174,10 @@ def sync_system():
             processed_clients += 1
             
         conn.commit()
-        print(f"Sincronización exitosa: {processed_clients} clientes y suscripciones procesadas.")
+        # Formato JSON para que controlador lo lea bien
+        print(f'{{"exito": true, "mensaje": "Sincronización exitosa: {processed_clients} clientes procesados."}}')
     except Exception as e:
-        print(f"Error durante el procesamiento de datos: {e}")
+        print(f'{{"error": "Error crítico en BD: {e}"}}')
         if conn: conn.rollback()
     finally:
         if conn: conn.close()
