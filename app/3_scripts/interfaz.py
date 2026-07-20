@@ -36,7 +36,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
 
     # --- PESTAÑA 1: ASIGNACIONES Y CLIENTES ---
     frame_asignaciones = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
-    notebook.add(frame_asignaciones, text="Asignaciones y Clientes")
+    notebook.add(frame_asignaciones, text="Asignación de Libros")
     
     frame_controles_cli = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_controles_cli.pack(fill="x", padx=5, pady=5)
@@ -80,18 +80,31 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['cmb_filtro_envio'].pack(side="left", padx=5)
     widgets['cmb_filtro_envio'].set("Todos")
     
-    frame_columnas_opc = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
-    frame_columnas_opc.pack(fill="x", padx=5, pady=(0, 5))
-    tk.Label(frame_columnas_opc, text="Mostrar info de contacto:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, fg="#424242").pack(side="left")
+    # --- Frame para Opciones de la Pestaña de Asignaciones ---
+    frame_opciones_asignaciones = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_opciones_asignaciones.pack(fill="x", padx=5, pady=(5, 5))
+
+    # Sub-frame para los checkboxes de la izquierda
+    frame_opc_izq = tk.Frame(frame_opciones_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_opc_izq.pack(side="left", anchor="w")
     
+    tk.Label(frame_opc_izq, text="Mostrar info de contacto:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, fg="#424242").pack(side="left")
     opcionales = [("RUT", "rut"), ("Email", "email"), ("Teléfono", "telefono"), ("Dirección", "direccion")]
     widgets['vars_opcionales'] = {}
     for texto, col_id in opcionales:
         var = tk.BooleanVar(value=False)
         widgets['vars_opcionales'][col_id] = var
-        tk.Checkbutton(frame_columnas_opc, text=texto, variable=var, bg=config.COLOR_FONDO_PRINCIPAL, 
-                       command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=10)
-                       
+        tk.Checkbutton(frame_opc_izq, text=texto, variable=var, bg=config.COLOR_FONDO_PRINCIPAL, 
+                    command=comandos_ui['cmd_toggle_columnas'], cursor="hand2").pack(side="left", padx=5)
+
+    # Sub-frame para la búsqueda a la derecha
+    frame_opc_der = tk.Frame(frame_opciones_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_opc_der.pack(side="right", anchor="e")
+
+    tk.Label(frame_opc_der, text="Buscar:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold).pack(side="left", padx=(10, 5))
+    widgets['entry_busqueda_asignaciones'] = ttk.Entry(frame_opc_der, width=30)
+    widgets['entry_busqueda_asignaciones'].pack(side="left", padx=(0, 5))
+                    
     frame_tabla_cli = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_tabla_cli.pack(fill="both", expand=True, padx=5, pady=5)
     scroll_x_cli = ttk.Scrollbar(frame_tabla_cli, orient="horizontal")
@@ -104,6 +117,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     scroll_y_cli.config(command=tabla_cli.yview)
     
     for col in columnas_cli:
+        tabla_cli.heading(col, text=..., command=lambda c=col: comandos_ui['cmd_ordenar_asignaciones'](c, False))
         titulo_col = col.replace("_", " ").title()
         if col == "tipo_envio": titulo_col = "Tipo De Envio"
         if col == "envio_pag": titulo_col = "Envio Pagado"
@@ -131,19 +145,26 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['entry_busqueda_clientes'].pack(side="left", padx=10)
 
     scroll_y_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="vertical")
-    columnas_gestion = ("cliente_id", "nombre", "email", "telefono", "status")
-    tabla_gestion_clientes = ttk.Treeview(frame_tabla_gestion, columns=columnas_gestion, show="headings", selectmode="browse", yscrollcommand=scroll_y_clientes_gestion.set)
+    scroll_x_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="horizontal")
+    
+    # NUEVAS COLUMNAS RUT Y DIRECCION
+    columnas_gestion = ("cliente_id", "nombre", "email", "telefono", "rut", "direccion", "status")
+    tabla_gestion_clientes = ttk.Treeview(frame_tabla_gestion, columns=columnas_gestion, show="headings", selectmode="browse", yscrollcommand=scroll_y_clientes_gestion.set, xscrollcommand=scroll_x_clientes_gestion.set)
     scroll_y_clientes_gestion.config(command=tabla_gestion_clientes.yview)
+    scroll_x_clientes_gestion.config(command=tabla_gestion_clientes.xview)
     
     for col in columnas_gestion:
-        tabla_gestion_clientes.heading(col, text=col.replace("_", " ").title())
-        ancho = 150
+        # ORDENAR COLUMNAS GESTION CLIENTES
+        tabla_gestion_clientes.heading(col, text=col.replace("_", " ").title(), command=lambda c=col: comandos_ui['cmd_ordenar_gestion'](c, False))
+        ancho = 120
         if col == "cliente_id": ancho = 60
-        if col == "status": ancho = 80
-        if col == "email": ancho = 200
+        elif col == "status": ancho = 80
+        elif col == "email": ancho = 180
+        elif col == "direccion": ancho = 180
         tabla_gestion_clientes.column(col, width=ancho, minwidth=60)
 
     scroll_y_clientes_gestion.pack(side="right", fill="y")
+    scroll_x_clientes_gestion.pack(side="bottom", fill="x")
     tabla_gestion_clientes.pack(side="left", fill="both", expand=True)
     widgets['tabla_gestion_clientes'] = tabla_gestion_clientes
 
@@ -155,7 +176,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     widgets['form_cliente_entries'] = {}
     campos_cliente_form = [("nombre", "Nombre:", "entry"), ("email", "Email:", "entry"), ("telefono", "Teléfono:", "entry"), 
-                           ("direccion", "Dirección:", "entry"), ("rut", "RUT:", "entry"), ("instagram", "Instagram:", "entry"), ("status", "Status:", "combo")]
+                        ("direccion", "Dirección:", "entry"), ("rut", "RUT:", "entry"), ("instagram", "Instagram:", "entry"), ("status", "Status:", "combo")]
 
     for i, (col_id, label_text, tipo) in enumerate(campos_cliente_form, start=1):
         tk.Label(frame_form_cliente, text=label_text, bg="#FFFFFF", font=font_pequena_bold).grid(row=i, column=0, sticky="e", pady=8, padx=(0, 10))
