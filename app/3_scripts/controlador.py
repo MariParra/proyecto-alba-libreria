@@ -68,10 +68,12 @@ class AppControlador:
         self.widgets['cmb_filtro_libro'].bind("<<ComboboxSelected>>", lambda e: self.iniciar_sincronizacion_periodo())
         self.widgets['tabla_clientes'].bind("<Double-1>", self.manejar_edicion_celda_asignacion)
         self.widgets['entry_busqueda_asignaciones'].bind("<KeyRelease>", lambda e: self.iniciar_sincronizacion_periodo())
+        self.widgets['tabla_clientes'].bind("<Button-3>", lambda e: self.habilitar_copiar_celda(e, self.widgets['tabla_clientes']))
         
         # BINDS INVENTARIO
         self.widgets['tabla_libros'].bind("<<TreeviewSelect>>", self.al_seleccionar_libro)
         self.widgets['entry_busqueda_libros'].bind("<Return>", self.aplicar_filtros_inventario)
+        self.widgets['tabla_libros'].bind("<Button-3>", lambda e: self.habilitar_copiar_celda(e, self.widgets['tabla_libros']))
         for campo in ['autor', 'genero', 'editorial']:
             key = f'list_filtro_{campo}'
             if key in self.widgets: self.widgets[key].bind("<<ListboxSelect>>", self.aplicar_filtros_inventario)
@@ -87,6 +89,7 @@ class AppControlador:
         # BINDS GESTION CLIENTES
         self.widgets['tabla_gestion_clientes'].bind("<<TreeviewSelect>>", self.al_seleccionar_cliente)
         self.widgets['entry_busqueda_clientes'].bind("<KeyRelease>", self.buscar_cliente_gestion)
+        self.widgets['tabla_gestion_clientes'].bind("<Button-3>", lambda e: self.habilitar_copiar_celda(e, self.widgets['tabla_gestion_clientes']))
 
         self.refrescar_todas_las_tablas()
         self.configurar_eventos_autocompletado()
@@ -893,3 +896,35 @@ class AppControlador:
         finally:
             if conn: conn.close()
             self.refrescar_todas_las_tablas()
+            
+    def habilitar_copiar_celda(self, event, tabla):
+        """Muestra un menú con clic derecho para copiar el valor de la celda específica."""
+        # 1. Identificar en qué fila y columna exacta se hizo el clic derecho
+        row_id = tabla.identify_row(event.y)
+        col_id = tabla.identify_column(event.x)
+        
+        if not row_id or not col_id:
+            return # Si hizo clic fuera de los datos, no hacer nada
+            
+        # 2. Extraer el valor exacto de esa celda
+        valor_celda = tabla.set(row_id, col_id)
+        
+        if not valor_celda:
+            return
+            
+        # 3. Seleccionar la fila visualmente para dar feedback
+        tabla.selection_set(row_id)
+        
+        # 4. Crear el menú emergente
+        menu = tk.Menu(self.root, tearoff=0)
+        
+        # Función interna para mandar el texto al portapapeles de Windows
+        def copiar_al_portapapeles():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(valor_celda)
+            self.root.update() # Asegura que se copie al sistema operativo
+            
+        # 5. Añadir la opción al menú y mostrarlo donde está el ratón
+        texto_mostrar = valor_celda if len(valor_celda) < 20 else valor_celda[:17] + "..."
+        menu.add_command(label=f"Copiar '{texto_mostrar}'", command=copiar_al_portapapeles)
+        menu.tk_popup(event.x_root, event.y_root)
