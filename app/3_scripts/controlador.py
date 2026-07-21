@@ -49,7 +49,8 @@ class AppControlador:
             'cmd_aplicar_descuento': self.aplicar_descuento_masivo,
             'cmd_quitar_descuentos': self.quitar_descuentos,
             'cmd_actualizar_stock': self.actualizar_stock_masivo,
-            'cmd_eliminar_asignacion': self.eliminar_asignacion_manual
+            'cmd_eliminar_asignacion': self.eliminar_asignacion_manual,
+            'cmd_asignar_aleatorio': self.asignar_pendientes_aleatorio
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -560,6 +561,7 @@ class AppControlador:
             titulo_col = c.replace("_", " ").title()
             if c == "tipo_envio": titulo_col = "Tipo De Envio"
             if c == "envio_pag": titulo_col = "Envio Pagado"
+            if c == "ano": titulo_col = "Año" 
             # Restauramos el comando base sin flecha
             tabla.heading(c, text=titulo_col, command=lambda _col=c: self.ordenar_columna(tabla, _col, False))
             
@@ -574,6 +576,7 @@ class AppControlador:
             tabla.move(k, '', index)
 
         titulo_col = col.replace("_", " ").title()
+        if col == "ano": titulo_col = "Año" 
         if col == "tipo_envio": titulo_col = "Tipo De Envio"
         if col == "envio_pag": titulo_col = "Envio Pagado"
         flecha = "  ▼" if reverse else "  ▲"
@@ -796,3 +799,97 @@ class AppControlador:
 
         except Exception as e:
             messagebox.showerror("Error de BD", f"No se pudo eliminar la asignación: {e}")
+
+    def asignar_pendientes_aleatorio(self):
+        """
+        Asigna libros de forma aleatoria a todas las clientas del período
+        seleccionado que estén sin asignación, respetando gustos y stock.
+        """
+        meses_seleccionados = [m for m, var in self.widgets['meses_vars'].items() if var.get()]
+        ano_str = self.widgets['cmb_ano'].get()
+
+        if not meses_seleccionados or not ano_str:
+            messagebox.showwarning("Sin Período", "Por favor, selecciona al menos un mes y un año para la asignación.")
+            return
+
+        if not messagebox.askyesno("Confirmar Asignación Automática", 
+                                f"Se intentará asignar un libro a todas las clientas sin asignación para los meses seleccionados del {ano_str}.\n\n"
+                                "El proceso respetará los géneros preferidos y el stock disponible.\n\n¿Deseas continuar?"):
+            return
+
+        libros_asignados_count = 0
+        clientes_pendientes_count = 0
+        
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            # Iniciar una transacción para asegurar que todo se guarde o nada
+            cursor.execute("BEGIN TRANSACTION")
+
+            meses_nums = [MAPEO_MESES[m] for m in meses_seleccionados]
+            placeholders_meses = ",".join("?" * len(meses_nums))
+
+            # 1. Obtener todas las asignaciones pendientes del período
+            query_pendientes = f"""
+                SELECT a.asignacion_id, s.cliente_id, s.generos_preferencia
+                FROM asignaciones a
+                JOIN suscripciones s ON a.cliente_id = s.cliente_id
+                WHERE a.ano = ? AND a.mes IN ({placeholders_meses}) AND a.libro_suscripcion_id IS NULL
+            """
+            params_pendientes = [ano_str] + meses_nums
+            cursor.execute(query_pendientes, params_pendientes)
+            asignaciones_pendientes = cursor.fetchall()
+
+            if not asignaciones_pendientes:
+                messagebox.showinfo("Nada que Asignar", "No se encontraron clientas pendientes de asignación en el período seleccionado.")
+                conn.close()
+                return
+
+            # 2. Obtener todos los libros con stock
+            cursor.execute("SELECT libro_id, genero FROM libros WHERE stock > 0")
+            libros_con_stock = cursor.fetchall()
+            
+            import random
+
+            # 3. Iterar sobre cada clienta pendiente
+            for asignacion_id, cliente_id, generos_str in asignaciones_pendientes:
+                generos_preferidos = [g.strip().upper() for g in (generos_str or "").split(',') if g.strip()]
+                
+                # Filtrar libros que coincidan con los gustos de la clienta
+                libros_candidatos = []
+                if generos_preferidos:
+                    for libro_id, genero_libro in libros_con_stock:
+                        gen_upper = str(genero_libro).strip().upper()
+                        if any(pref in gen_upper or gen_upper in pref for pref in generos_preferidos):
+                            libros_candidatos.append(libro_id)
+                
+                # Si no tiene gustos definidos o no hay coincidencias, usar cualquier libro con stock
+                if not libros_candidatos:
+                    libros_candidatos = [libro_id for libro_id, _ in libros_con_stock]
+
+                if libros_candidatos:
+                    # Elegir un libro al azar y asignarlo
+                    libro_elegido_id = random.choice(libros_candidatos)
+                    
+                    cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = ? WHERE asignacion_id = ?", (libro_elegido_id, asignacion_id))
+                    cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (libro_elegido_id,))
+                    
+                    # Quitar el libro elegido de la lista de disponibles para no reasignarlo
+                    libros_con_stock = [libro for libro in libros_con_stock if libro[0] != libro_elegido_id]
+                    libros_asignados_count += 1
+                else:
+                    clientes_pendientes_count += 1
+            
+            conn.commit()
+            messagebox.showinfo("Proceso Completado", 
+                                f"Asignación automática finalizada.\n\n"
+                                f"Libros asignados con éxito: {libros_asignados_count}\n"
+                                f"Clientas que quedaron pendientes (sin stock compatible): {clientes_pendientes_count}")
+            
+        except Exception as e:
+            if conn: conn.rollback()
+            messagebox.showerror("Error Crítico", f"Ocurrió un error durante la asignación masiva y todos los cambios fueron revertidos.\n\nError: {e}")
+        finally:
+            if conn: conn.close()
+            self.refrescar_todas_las_tablas()
