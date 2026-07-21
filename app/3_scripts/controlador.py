@@ -50,7 +50,8 @@ class AppControlador:
             'cmd_quitar_descuentos': self.quitar_descuentos,
             'cmd_actualizar_stock': self.actualizar_stock_masivo,
             'cmd_eliminar_asignacion': self.eliminar_asignacion_manual,
-            'cmd_asignar_aleatorio': self.asignar_pendientes_aleatorio
+            'cmd_asignar_aleatorio': self.asignar_pendientes_aleatorio,
+            'cmd_ver_historial': self.mostrar_librero_historico
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -928,3 +929,14 @@ class AppControlador:
         texto_mostrar = valor_celda if len(valor_celda) < 20 else valor_celda[:17] + "..."
         menu.add_command(label=f"Copiar '{texto_mostrar}'", command=copiar_al_portapapeles)
         menu.tk_popup(event.x_root, event.y_root)
+
+    def mostrar_librero_historico(self):
+        """Abre la ventana con los libros leídos por la clienta."""
+        # Como está en otro archivo, lo importamos aquí
+        try:
+            from ui_dialogos import abrir_dialogo_ver_historial
+            abrir_dialogo_ver_historial(self.root, self.widgets['tabla_gestion_clientes'])
+        except ImportError:
+            # Por si tu archivo aún se llama ui_dialogos
+            from ui_dialogos import abrir_dialogo_ver_historial
+            abrir_dialogo_ver_historial(self.root, self.widgets['tabla_gestion_clientes'])

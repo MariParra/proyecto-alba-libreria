@@ -196,6 +196,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones_cliente.grid(row=len(campos_cliente_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
     tk.Button(frame_botones_cliente, text="Guardar Cambios", command=comandos_ui['cmd_guardar_cliente'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones_cliente, text="📖 Ver Historial de Lectura", command=comandos_ui['cmd_ver_historial'], 
+            bg="#9A8DFF", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
 
 

@@ -311,3 +311,75 @@ def abrir_dialogo_fecha(root, tabla, callback_refrescar):
     
 def refrescar_inventario_global(widgets):
     pass
+
+def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
+    seleccion = tabla_gestion_clientes.selection()
+    if not seleccion:
+        messagebox.showwarning("Sin Selección", "Por favor, seleccione una clienta de la lista primero.")
+        return
+        
+    cliente_id = tabla_gestion_clientes.set(seleccion[0], "cliente_id")
+    nombre_cliente = tabla_gestion_clientes.set(seleccion[0], "nombre")
+    
+    win = tk.Toplevel(root)
+    win.title(f"Librero Histórico - {nombre_cliente}")
+    win.geometry("550x400")
+    win.transient(root)
+    win.grab_set()
+    win.configure(bg="#F3E5F5") # Fondo morado muy claro
+    
+    tk.Label(win, text=f"Biblioteca Personal de:\n{nombre_cliente}", bg="#F3E5F5", font=("Helvetica", 12, "bold")).pack(pady=(15, 10))
+    
+    frame_tabla = tk.Frame(win)
+    frame_tabla.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+    
+    scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical")
+    # Tabla para mostrar el historial
+    tabla_hist = ttk.Treeview(frame_tabla, columns=("titulo", "origen", "fecha"), show="headings", yscrollcommand=scroll_y.set)
+    scroll_y.config(command=tabla_hist.yview)
+    
+    tabla_hist.heading("titulo", text="Título del Libro")
+    tabla_hist.heading("origen", text="Origen / Método")
+    tabla_hist.heading("fecha", text="Fecha (Mes/Año)")
+    
+    tabla_hist.column("titulo", width=250)
+    tabla_hist.column("origen", width=120, anchor="center")
+    tabla_hist.column("fecha", width=100, anchor="center")
+    
+    scroll_y.pack(side="right", fill="y")
+    tabla_hist.pack(side="left", fill="both", expand=True)
+    
+    # Extraer y cruzar datos desde la Base de Datos
+    try:
+        conn = conexion.conectar_db()
+        cursor = conn.cursor()
+        
+        # Unimos el Histórico Importado con las Asignaciones hechas en la App
+        query = """
+            SELECT l.titulo, 'Importación (Librero Antiguo)' AS origen, 'N/A' AS fecha
+            FROM librero_historico lh
+            JOIN libros l ON lh.libro_id = l.libro_id
+            WHERE lh.cliente_id = ?
+            
+            UNION
+            
+            SELECT l.titulo, 'Asignación App' AS origen, a.mes || '/' || a.ano AS fecha
+            FROM asignaciones a
+            JOIN libros l ON a.libro_suscripcion_id = l.libro_id
+            WHERE a.cliente_id = ? AND a.libro_suscripcion_id IS NOT NULL
+            
+            ORDER BY titulo
+        """
+        cursor.execute(query, (cliente_id, cliente_id))
+        registros = cursor.fetchall()
+        conn.close()
+        
+        if not registros:
+            tabla_hist.insert("", "end", values=("No hay libros registrados para esta clienta.", "", ""))
+        else:
+            for fila in registros:
+                tabla_hist.insert("", "end", values=fila)
+                
+    except Exception as e:
+        messagebox.showerror("Error BD", f"No se pudo cargar el historial: {e}", parent=win)
+        win.destroy()
