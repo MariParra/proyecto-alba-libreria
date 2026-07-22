@@ -794,7 +794,7 @@
         "encuadernacion":null
     },
     {
-        "titulo":"GRIMM MORTAL",
+        "titulo":"EL GRIMM MORTAL",
         "autor":"GENA SHOWALTER",
         "genero":"ROMANTASY",
         "editorial":"HARLEQUIN",
@@ -1977,7 +1977,7 @@
         "encuadernacion":null
     },
     {
-        "titulo":"VIAJANDO CON MEGAN",
+        "titulo":"VIAJANDO CON MEGAN MAXWELL",
         "autor":"MEGAN MAXWELL",
         "genero":"ROMANCE",
         "editorial":"PLANETA",
@@ -2552,5 +2552,82 @@
     },
     {
         "titulo":"SILVERCLOAK"
+    },
+    {
+        "titulo": "TE RECETO OTRO GATO",
+        "autor": "SYOU ISHIDA",
+        "genero": "HEALING FICTION",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "EL SECRETO DE LA NIÑERA",
+        "autor": "SIDONIE BONNEC",
+        "genero": "THRILLER",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "CASA DE CORAZONES",
+        "autor": "SKYLA ARDNT",
+        "genero": "ROMANTASY",
+        "editorial": "V&R EDITORAS",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "NIGHTSHADE",
+        "autor": "AUTUMN WOODS",
+        "genero": "ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "PUNK 57",
+        "autor": "PENELOPE DOUGLAS",
+        "genero": "DARK ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "EL COLECCIONISTA DE HISTORIAS",
+        "autor": "ALYSON RICHMAN",
+        "genero": "HISTORICO",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "SI FUERAMOS ETERNOS",
+        "autor": "EMMA GIL",
+        "genero": "ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "HUNDIDA",
+        "autor": "COLLEN HOOVER",
+        "genero": "ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "LA TEORIA DEL ODIO",
+        "autor": "IÑIGO AGUAS",
+        "genero": "ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "EL FARO DE LOS AMORES DORMIDOS",
+        "autor": "ANDREA LONGARELA",
+        "genero": "ROMANCE",
+        "editorial": "PLANETA",
+        "encuadernacion": null
+    },
+    {
+        "titulo": "REVOLVE",
+        "autor": "BAL KHABRA",
+        "genero": "ROMANCE",
+        "editorial": "V&R EDITORAS",
+        "encuadernacion": null
     }
 ]
