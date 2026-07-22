@@ -214,7 +214,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones_cliente = tk.Frame(frame_form_cliente, bg="#FFFFFF")
     frame_botones_cliente.grid(row=len(campos_cliente_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
     tk.Button(frame_botones_cliente, text="Guardar Cambios", command=comandos_ui['cmd_guardar_cliente'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
-    tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#FDEEF1", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="📖 Ver Historial de Lectura", command=comandos_ui['cmd_ver_historial'], 
             bg="#9A8DFF", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D45B63", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
@@ -264,7 +264,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones.grid(row=len(campos_form)+1, column=0, columnspan=2, sticky="ew", pady=(15, 0))
     
     tk.Button(frame_botones, text="Guardar / Modificar", command=comandos_ui['cmd_guardar_libro'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=3)
-    tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=3)
+    tk.Button(frame_botones, text="Limpiar Formulario", command=comandos_ui['cmd_limpiar_form_libro'], bg="#FDEEF1", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=3)
     
     # --- SUB-FRAME PARA PONER LOS BOTONES DE DESCUENTO EN UNA SOLA FILA ---
     frame_descuentos = tk.Frame(frame_botones, bg="#FFFFFF")
@@ -361,91 +361,100 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tab_ventas = tk.Frame(notebook, bg=config.COLOR_FONDO_PRINCIPAL)
     notebook.add(tab_ventas, text="Caja / Ventas")
 
-    # --- Columna Izquierda: Formulario de Nueva Venta ---
-    frame_form_ventas = tk.Frame(tab_ventas, bg="white", width=380, relief="groove", borderwidth=1)
+    # --- Columna Izquierda: Formulario de Nueva Venta (DISEÑO COMPACTO) ---
+    frame_form_ventas = tk.Frame(tab_ventas, bg="white", width=400, relief="groove", borderwidth=1)
     frame_form_ventas.pack(side="left", fill="y", padx=10, pady=10)
     frame_form_ventas.pack_propagate(False)
     
     tk.Label(frame_form_ventas, text="Registrar Nueva Venta", font=("Helvetica", 14, "bold"), bg="white", fg="#4A148C").pack(pady=(10, 5))
 
     # =========================================================================
-    # NUEVO: PANEL INFERIOR FIJO (Siempre visible en pantalla)
+    # PANEL INFERIOR FIJO (Totales y Botón Guardar)
     # =========================================================================
     frame_bottom_v = tk.Frame(frame_form_ventas, bg="white")
     frame_bottom_v.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
 
-    # Panel de Totales
-    frame_totales = tk.Frame(frame_bottom_v, bg="#FDEEF1", relief="sunken", borderwidth=1)
+    frame_totales = tk.Frame(frame_bottom_v, bg="#F1F8E9", relief="sunken", borderwidth=1)
     frame_totales.pack(fill="x", pady=(5, 10), ipady=5)
-    tk.Label(frame_totales, text="Subtotal Libros:", font=font_pequena_bold, bg="#FDEEF1").grid(row=0, column=0, sticky="e", padx=5)
-    widgets['lbl_v_subtotal'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#FDEEF1")
+    tk.Label(frame_totales, text="Subtotal Libros:", font=font_pequena_bold, bg="#F1F8E9").grid(row=0, column=0, sticky="e", padx=5)
+    widgets['lbl_v_subtotal'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
     widgets['lbl_v_subtotal'].grid(row=0, column=1, sticky="w")
-    tk.Label(frame_totales, text="Costo Envío:", font=font_pequena_bold, bg="#FDEEF1").grid(row=1, column=0, sticky="e", padx=5)
-    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#FDEEF1")
+    tk.Label(frame_totales, text="Costo Envío:", font=font_pequena_bold, bg="#F1F8E9").grid(row=1, column=0, sticky="e", padx=5)
+    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
     widgets['lbl_v_costo_envio'].grid(row=1, column=1, sticky="w")
-    tk.Label(frame_totales, text="TOTAL VENTA:", font=("Helvetica", 11, "bold"), bg="#FDEEF1").grid(row=2, column=0, sticky="e", padx=5, pady=(5,0))
-    widgets['lbl_v_total_final'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#FDEEF1")
+    tk.Label(frame_totales, text="TOTAL VENTA:", font=("Helvetica", 11, "bold"), bg="#F1F8E9").grid(row=2, column=0, sticky="e", padx=5, pady=(5,0))
+    widgets['lbl_v_total_final'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#F1F8E9")
     widgets['lbl_v_total_final'].grid(row=2, column=1, sticky="w", pady=(5,0))
     frame_totales.grid_columnconfigure(1, weight=1)
 
     tk.Button(frame_bottom_v, text="💾 GUARDAR VENTA Y ACTUALIZAR STOCK", command=comandos_ui.get('cmd_v_guardar'), bg="#81BFB7", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=(0, 5))
-    tk.Button(frame_bottom_v, text="Limpiar Formulario", command=comandos_ui.get('cmd_v_limpiar'), bg="#E0E0E0", fg="#212121", font=font_pequena, relief="flat", cursor="hand2").pack(fill="x", ipady=4)
+    tk.Button(frame_bottom_v, text="Limpiar Formulario", command=comandos_ui.get('cmd_v_limpiar'), bg="#FDEEF1", fg="#212121", font=font_pequena, relief="flat", cursor="hand2").pack(fill="x", ipady=4)
 
     # =========================================================================
-    # PANEL SUPERIOR SCROLLEABLE (Para los campos de ingreso de datos)
+    # PANEL SUPERIOR (Campos Compactos, sin Canvas para evitar ocultamientos)
     # =========================================================================
-    canvas_form_v = tk.Canvas(frame_form_ventas, bg="white", highlightthickness=0)
-    scroll_form_v = ttk.Scrollbar(frame_form_ventas, orient="vertical", command=canvas_form_v.yview)
-    frame_inner_v = tk.Frame(canvas_form_v, bg="white")
-    
-    frame_inner_v.bind("<Configure>", lambda e: canvas_form_v.configure(scrollregion=canvas_form_v.bbox("all")))
-    canvas_form_v.create_window((0, 0), window=frame_inner_v, anchor="nw", width=340) # Ancho ajustado a la barra
-    canvas_form_v.configure(yscrollcommand=scroll_form_v.set)
-    
-    # Se empaqueta DESPUÉS del frame_bottom, para que ocupe el espacio restante
-    canvas_form_v.pack(side="left", fill="both", expand=True, padx=(10, 0))
-    scroll_form_v.pack(side="right", fill="y", padx=(0, 10))
+    frame_inner_v = tk.Frame(frame_form_ventas, bg="white")
+    frame_inner_v.pack(side="top", fill="both", expand=True, padx=15)
 
-    # --- Campos del Formulario (Van dentro de la zona scrolleable) ---
     from tkcalendar import DateEntry
-    
-    tk.Label(frame_inner_v, text="Fecha de Venta:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
+    vcmd_float = (ventana.register(comandos_ui.get('cmd_validar_float', lambda: True)), '%P')
+
+    # Fila 1: Fecha
+    tk.Label(frame_inner_v, text="Fecha de Venta:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(2, 0))
     widgets['de_v_fecha'] = DateEntry(frame_inner_v, width=12, background='darkblue', foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
     widgets['de_v_fecha'].pack(anchor="w")
 
-    tk.Label(frame_inner_v, text="Cliente (Autocompletar o crear nuevo):", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(10, 2))
+    # Fila 2: Cliente
+    tk.Label(frame_inner_v, text="Cliente (Autocompletar o crear nuevo):", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 0))
     widgets['cmb_v_cliente'] = ttk.Combobox(frame_inner_v, font=font_pequena)
-    widgets['cmb_v_cliente'].pack(fill="x", ipady=3)
+    widgets['cmb_v_cliente'].pack(fill="x", ipady=2)
 
-    tk.Label(frame_inner_v, text="Libros Vendidos (Añadir al carrito):", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(10, 2))
-    widgets['cmb_v_libros'] = ttk.Combobox(frame_inner_v, font=font_pequena)
-    widgets['cmb_v_libros'].pack(fill="x", ipady=3)
+    # Fila 3: Libro y Precio Especial (LADO A LADO para ahorrar espacio)
+    frame_lp = tk.Frame(frame_inner_v, bg="white")
+    frame_lp.pack(fill="x", pady=(8, 0))
     
-    tk.Label(frame_inner_v, text="Precio Especial (Opcional $):", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
-    vcmd_float = (ventana.register(comandos_ui.get('cmd_validar_float', lambda: True)), '%P')
-    widgets['entry_v_precio_custom'] = tk.Entry(frame_inner_v, font=font_pequena, relief="flat", highlightbackground="#E0E0E0", highlightthickness=1, validate="key", validatecommand=vcmd_float)
-    widgets['entry_v_precio_custom'].pack(fill="x", ipady=3)
+    frame_l = tk.Frame(frame_lp, bg="white")
+    frame_l.pack(side="left", fill="x", expand=True, padx=(0, 3))
+    tk.Label(frame_l, text="Libro Vendido:", bg="white", font=font_pequena_bold).pack(anchor="w")
+    widgets['cmb_v_libros'] = ttk.Combobox(frame_l, font=font_pequena)
+    widgets['cmb_v_libros'].pack(fill="x", ipady=2)
 
+    frame_p = tk.Frame(frame_lp, bg="white")
+    frame_p.pack(side="right", fill="x", expand=True, padx=(3, 0))
+    tk.Label(frame_p, text="Precio Espec. ($):", bg="white", font=font_pequena_bold).pack(anchor="w")
+    widgets['entry_v_precio_custom'] = tk.Entry(frame_p, font=font_pequena, relief="flat", highlightbackground="#FDEEF1", highlightthickness=1, validate="key", validatecommand=vcmd_float)
+    widgets['entry_v_precio_custom'].pack(fill="x", ipady=2)
+
+    # Fila 4: Botones de Carrito
     frame_btn_libros = tk.Frame(frame_inner_v, bg="white")
     frame_btn_libros.pack(fill="x", pady=5)
-    tk.Button(frame_btn_libros, text="Añadir Libro", command=comandos_ui.get('cmd_v_add_libro'), bg="#93A8C0", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
-    tk.Button(frame_btn_libros, text="Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D45B63", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
+    tk.Button(frame_btn_libros, text="➕ Añadir", command=comandos_ui.get('cmd_v_add_libro'), bg="#0288D1", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
+    tk.Button(frame_btn_libros, text="❌ Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D32F2F", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
 
-    # Redujimos la altura de la lista para ahorrar espacio
+    # Carrito
     widgets['list_v_libros'] = tk.Listbox(frame_inner_v, height=3, font=font_pequena, selectbackground="#81BFB7")
-    widgets['list_v_libros'].pack(fill="x", pady=5)
+    widgets['list_v_libros'].pack(fill="x")
 
-    tk.Label(frame_inner_v, text="Método de Envío:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
-    widgets['cmb_v_envio'] = ttk.Combobox(frame_inner_v, values=["RETIRO", "PAKET", "BLUEXPRESS", "STARKEN", "SIN INFORMACION"], state="readonly", font=font_pequena)
-    widgets['cmb_v_envio'].pack(fill="x", ipady=3)
+    # Fila 5: Envío y Costo (LADO A LADO para ahorrar espacio)
+    frame_ec = tk.Frame(frame_inner_v, bg="white")
+    frame_ec.pack(fill="x", pady=(5, 0))
+
+    frame_e = tk.Frame(frame_ec, bg="white")
+    frame_e.pack(side="left", fill="x", expand=True, padx=(0, 3))
+    tk.Label(frame_e, text="Método Envío:", bg="white", font=font_pequena_bold).pack(anchor="w")
+    widgets['cmb_v_envio'] = ttk.Combobox(frame_e, values=["RETIRO", "PAKET", "BLUEXPRESS", "STARKEN", "SIN INFORMACION"], state="readonly", font=font_pequena)
+    widgets['cmb_v_envio'].pack(fill="x", ipady=2)
     widgets['cmb_v_envio'].set("SIN INFORMACION")
 
-    tk.Label(frame_inner_v, text="Costo de Envío ($):", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
-    widgets['entry_v_costo_envio'] = tk.Entry(frame_inner_v, font=font_pequena, relief="flat", highlightbackground="#E0E0E0", highlightthickness=1, validate="key", validatecommand=vcmd_float)
-    widgets['entry_v_costo_envio'].pack(fill="x", ipady=3)
+    frame_c = tk.Frame(frame_ec, bg="white")
+    frame_c.pack(side="right", fill="x", expand=True, padx=(3, 0))
+    tk.Label(frame_c, text="Costo Envío ($):", bg="white", font=font_pequena_bold).pack(anchor="w")
+    widgets['entry_v_costo_envio'] = tk.Entry(frame_c, font=font_pequena, relief="flat", highlightbackground="#FDEEF1", highlightthickness=1, validate="key", validatecommand=vcmd_float)
+    widgets['entry_v_costo_envio'].pack(fill="x", ipady=2)
 
-    tk.Label(frame_inner_v, text="Comentario:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
-    widgets['entry_v_comentario'] = tk.Entry(frame_inner_v, font=font_pequena, relief="flat", highlightbackground="#E0E0E0", highlightthickness=1)
+    # Fila 6: Comentario (¡Libre para escribir texto!)
+    tk.Label(frame_inner_v, text="Comentario:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 0))
+    widgets['entry_v_comentario'] = tk.Entry(frame_inner_v, font=font_pequena, relief="flat", highlightbackground="#FDEEF1", highlightthickness=1)
     widgets['entry_v_comentario'].pack(fill="x", ipady=3)
         
     # --- Columna Derecha: Historial de Ventas con Filtros ---

@@ -1198,8 +1198,8 @@ class AppControlador:
                     # ¡IMPORTANTE! Se crea una suscripción genérica para evitar errores
                     # en otras partes de la app que unen las tablas.
                     cursor.execute("""
-                        INSERT INTO suscripciones (cliente_id, plan, metodo_entrega, generos_preferencia) 
-                        VALUES (?, 'NINGUNO', 'SIN INFORMACION', '')
+                        INSERT INTO suscripciones (cliente_id, metodo_entrega, generos_preferencia) 
+                        VALUES (?, 'SIN INFORMACION', '')
                     """, (cliente_id,))
                 else:
                     # Si el usuario cancela, no continuamos con la venta
