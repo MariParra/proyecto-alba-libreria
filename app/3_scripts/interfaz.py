@@ -216,7 +216,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="📖 Ver Historial de Lectura", command=comandos_ui['cmd_ver_historial'], 
             bg="#9A8DFF", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
-    tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
+    tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D45B63", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
 
 
     # --- PESTAÑA 3: INVENTARIO DE LIBROS ---
@@ -272,7 +272,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_descuentos, text="Aplicar Descuento", command=comandos_ui['cmd_aplicar_descuento'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(side="left", fill="x", expand=True, padx=(0, 2))
     tk.Button(frame_descuentos, text="Quitar Descuento", command=comandos_ui['cmd_quitar_descuentos'], bg="#757575", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(side="right", fill="x", expand=True, padx=(2, 0))
 
-    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=(10, 2))
+    tk.Button(frame_botones, text="Eliminar Seleccionado", command=comandos_ui['cmd_eliminar_libro'], bg="#D45B63", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=4).pack(fill="x", pady=(10, 2))
 
 
     # --- Frame Izquierdo (Filtros y Tabla Inventario) ---
@@ -374,20 +374,20 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_bottom_v.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
 
     # Panel de Totales
-    frame_totales = tk.Frame(frame_bottom_v, bg="#F1F8E9", relief="sunken", borderwidth=1)
+    frame_totales = tk.Frame(frame_bottom_v, bg="#FDEEF1", relief="sunken", borderwidth=1)
     frame_totales.pack(fill="x", pady=(5, 10), ipady=5)
-    tk.Label(frame_totales, text="Subtotal Libros:", font=font_pequena_bold, bg="#F1F8E9").grid(row=0, column=0, sticky="e", padx=5)
-    widgets['lbl_v_subtotal'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
+    tk.Label(frame_totales, text="Subtotal Libros:", font=font_pequena_bold, bg="#FDEEF1").grid(row=0, column=0, sticky="e", padx=5)
+    widgets['lbl_v_subtotal'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#FDEEF1")
     widgets['lbl_v_subtotal'].grid(row=0, column=1, sticky="w")
-    tk.Label(frame_totales, text="Costo Envío:", font=font_pequena_bold, bg="#F1F8E9").grid(row=1, column=0, sticky="e", padx=5)
-    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
+    tk.Label(frame_totales, text="Costo Envío:", font=font_pequena_bold, bg="#FDEEF1").grid(row=1, column=0, sticky="e", padx=5)
+    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#FDEEF1")
     widgets['lbl_v_costo_envio'].grid(row=1, column=1, sticky="w")
-    tk.Label(frame_totales, text="TOTAL VENTA:", font=("Helvetica", 11, "bold"), bg="#F1F8E9").grid(row=2, column=0, sticky="e", padx=5, pady=(5,0))
-    widgets['lbl_v_total_final'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#F1F8E9")
+    tk.Label(frame_totales, text="TOTAL VENTA:", font=("Helvetica", 11, "bold"), bg="#FDEEF1").grid(row=2, column=0, sticky="e", padx=5, pady=(5,0))
+    widgets['lbl_v_total_final'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#FDEEF1")
     widgets['lbl_v_total_final'].grid(row=2, column=1, sticky="w", pady=(5,0))
     frame_totales.grid_columnconfigure(1, weight=1)
 
-    tk.Button(frame_bottom_v, text="💾 GUARDAR VENTA Y ACTUALIZAR STOCK", command=comandos_ui.get('cmd_v_guardar'), bg="#4CAF50", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=(0, 5))
+    tk.Button(frame_bottom_v, text="💾 GUARDAR VENTA Y ACTUALIZAR STOCK", command=comandos_ui.get('cmd_v_guardar'), bg="#81BFB7", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=(0, 5))
     tk.Button(frame_bottom_v, text="Limpiar Formulario", command=comandos_ui.get('cmd_v_limpiar'), bg="#E0E0E0", fg="#212121", font=font_pequena, relief="flat", cursor="hand2").pack(fill="x", ipady=4)
 
     # =========================================================================
@@ -427,11 +427,11 @@ def construir_interfaz(ventana, widgets, comandos_ui):
 
     frame_btn_libros = tk.Frame(frame_inner_v, bg="white")
     frame_btn_libros.pack(fill="x", pady=5)
-    tk.Button(frame_btn_libros, text="Añadir Libro", command=comandos_ui.get('cmd_v_add_libro'), bg="#0288D1", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
-    tk.Button(frame_btn_libros, text="Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D32F2F", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
+    tk.Button(frame_btn_libros, text="Añadir Libro", command=comandos_ui.get('cmd_v_add_libro'), bg="#7ADDF2", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
+    tk.Button(frame_btn_libros, text="Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D45B63", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
 
     # Redujimos la altura de la lista para ahorrar espacio
-    widgets['list_v_libros'] = tk.Listbox(frame_inner_v, height=3, font=font_pequena, selectbackground="#4CAF50")
+    widgets['list_v_libros'] = tk.Listbox(frame_inner_v, height=3, font=font_pequena, selectbackground="#81BFB7")
     widgets['list_v_libros'].pack(fill="x", pady=5)
 
     tk.Label(frame_inner_v, text="Método de Envío:", bg="white", font=font_pequena_bold).pack(anchor="w", pady=(5, 2))
@@ -447,9 +447,29 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['entry_v_comentario'] = tk.Entry(frame_inner_v, font=font_pequena, relief="flat", highlightbackground="#E0E0E0", highlightthickness=1)
     widgets['entry_v_comentario'].pack(fill="x", ipady=3)
         
-        # --- Columna Derecha: Historial de Ventas ---
+    # --- Columna Derecha: Historial de Ventas con Filtros ---
     frame_derecha_v = tk.Frame(tab_ventas, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_derecha_v.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+    # -- Panel de Filtros ---
+    frame_filtros_v = tk.LabelFrame(frame_derecha_v, text="Filtrar Historial", bg=config.COLOR_FONDO_PRINCIPAL, font=font_pequena_bold, padx=10, pady=10)
+    frame_filtros_v.pack(side="top", fill="x", pady=(0, 10))
+
+    tk.Label(frame_filtros_v, text="Cliente:", bg=config.COLOR_FONDO_PRINCIPAL).grid(row=0, column=0)
+    widgets['cmb_filtro_v_cliente'] = ttk.Combobox(frame_filtros_v, width=20)
+    widgets['cmb_filtro_v_cliente'].grid(row=0, column=1, padx=5)
+
+    tk.Label(frame_filtros_v, text="Desde:", bg=config.COLOR_FONDO_PRINCIPAL).grid(row=0, column=2, padx=(10, 0))
+    widgets['de_filtro_v_desde'] = DateEntry(frame_filtros_v, width=10, date_pattern='yyyy-mm-dd')
+    widgets['de_filtro_v_desde'].grid(row=0, column=3, padx=5)
+    
+    tk.Label(frame_filtros_v, text="Hasta:", bg=config.COLOR_FONDO_PRINCIPAL).grid(row=0, column=4)
+    widgets['de_filtro_v_hasta'] = DateEntry(frame_filtros_v, width=10, date_pattern='yyyy-mm-dd')
+    widgets['de_filtro_v_hasta'].grid(row=0, column=5, padx=5)
+
+    frame_btn_filtros_v = tk.Frame(frame_filtros_v, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_btn_filtros_v.grid(row=0, column=6, padx=(10,0))
+    tk.Button(frame_btn_filtros_v, text="Filtrar", command=comandos_ui.get('cmd_v_filtrar'), bg="#1A73E8", fg="white", relief="flat").pack(side="left", padx=2)
+    tk.Button(frame_btn_filtros_v, text="Limpiar", command=comandos_ui.get('cmd_v_limpiar_filtros'), bg="#757575", fg="white", relief="flat").pack(side="left", padx=2)
 
     frame_tabla_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_tabla_ventas.pack(side="top", fill="both", expand=True)
