@@ -53,7 +53,11 @@ class AppControlador:
             'cmd_asignar_aleatorio': self.asignar_pendientes_aleatorio,
             'cmd_ver_historial': self.mostrar_librero_historico,
             'cmd_cerrar_mes': self.cerrar_mes_actual,
-            'cmd_importar_historicos': self.importar_historicos_clientes
+            'cmd_importar_historicos': self.importar_historicos_clientes,
+            'cmd_v_add_libro': self.v_add_libro_al_carrito,
+            'cmd_v_remove_libro': self.v_remove_libro_del_carrito,
+            'cmd_v_guardar': self.v_guardar_venta,
+            'cmd_v_limpiar': self.v_limpiar_formulario
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -94,9 +98,16 @@ class AppControlador:
         self.widgets['entry_busqueda_clientes'].bind("<KeyRelease>", self.buscar_cliente_gestion)
         self.widgets['tabla_gestion_clientes'].bind("<Button-3>", lambda e: self.habilitar_copiar_celda(e, self.widgets['tabla_gestion_clientes']))
 
+        # --- BINDS PARA LA PESTAÑA DE VENTAS ---
+        self.widgets['cmb_v_cliente'].bind('<KeyRelease>', self.v_autocompletar_cliente)
+        self.widgets['cmb_v_libros'].bind('<KeyRelease>', self.v_autocompletar_libro)
+        self.widgets['entry_v_costo_envio'].bind('<KeyRelease>', self.v_actualizar_totales)
+        self.widgets['cmb_v_envio'].bind('<<ComboboxSelected>>', self.v_on_select_envio)
+        
         self.refrescar_todas_las_tablas()
         self.configurar_eventos_autocompletado()
         self.configurar_slider_stock()
+        self.v_iniciar_tab() 
 
     # ==========================================
     # LÓGICA DE AUTOCOMPLETADO
@@ -603,6 +614,7 @@ class AppControlador:
         self.iniciar_sincronizacion_periodo()
         self.refrescar_inventario()
         self.refrescar_tabla_clientes_gestion()
+        self.v_iniciar_tab()
         
     def ordenar_columna_asignaciones(self, col, reverse):
         self.ordenar_columna(self.widgets['tabla_clientes'], col, reverse)
@@ -993,3 +1005,210 @@ class AppControlador:
         """Llama al script para cargar los Excel del historial de clientas."""
         if messagebox.askokcancel("Importar Historiales", "Asegúrate de colocar los archivos Excel/CSV con el nombre de cada clienta dentro de la carpeta '6_libreros'.\n\nEl sistema intentará encontrar los libros aunque los nombres no sean exactos.\n\n¿Deseas comenzar?"):
             self.disparar_script_externo("libreros.py", "Importación de historiales completada.\n\nRevisa la carpeta '4_output_reports' si hubo libros que no se encontraron en tu base de datos.")
+
+    # =========================================================================
+    # LÓGICA DE LA PESTAÑA DE CAJA / VENTAS (FASE 6)
+    # =========================================================================
+
+    def v_iniciar_tab(self):
+        """Se ejecuta al iniciar el programa para cargar los datos en memoria"""
+        self.v_carrito_libros = [] # Ahora guardará diccionarios: {'titulo': 'DUNE', 'precio': 15000}
+        self.v_refrescar_autocompletado()
+        self.v_refrescar_tabla_historial()
+        self.v_limpiar_formulario()
+
+    def v_refrescar_autocompletado(self):
+        try:
+            conn = conexion.conectar_db()
+            # Cargar Clientes
+            clientes_db = conn.execute("SELECT nombre FROM clientes ORDER BY nombre").fetchall()
+            self.v_lista_clientes = [row[0] for row in clientes_db] if clientes_db else []
+            # Cargar Libros (Título y Precio)
+            libros_db = conn.execute("SELECT titulo, precio FROM libros").fetchall()
+            self.v_mapa_libros = {row[0].upper(): row[1] for row in libros_db} if libros_db else {}
+            conn.close()
+
+            self.widgets['cmb_v_cliente']['values'] = self.v_lista_clientes
+            self.widgets['cmb_v_libros']['values'] = list(self.v_mapa_libros.keys())
+        except Exception as e:
+            print("Error cargando autocompletado:", e)
+
+    def v_autocompletar_cliente(self, event):
+        valor = self.widgets['cmb_v_cliente'].get()
+        if valor == '': self.widgets['cmb_v_cliente']['values'] = self.v_lista_clientes
+        else:
+            data = [item for item in self.v_lista_clientes if valor.lower() in item.lower()]
+            self.widgets['cmb_v_cliente']['values'] = data
+
+    def v_autocompletar_libro(self, event):
+        valor = self.widgets['cmb_v_libros'].get()
+        if valor == '': self.widgets['cmb_v_libros']['values'] = list(self.v_mapa_libros.keys())
+        else:
+            data = [item for item in self.v_mapa_libros.keys() if valor.lower() in item.lower()]
+            self.widgets['cmb_v_libros']['values'] = data
+
+    def v_add_libro_al_carrito(self):
+        titulo = self.widgets['cmb_v_libros'].get().strip().upper()
+        if not titulo: return
+        
+        # 1. ¿El libro existe? Si no, lo creamos
+        if titulo not in self.v_mapa_libros:
+            if messagebox.askyesno("Nuevo Libro", f"'{titulo}' NO existe en inventario.\n\n¿Crearlo ahora con stock 0?"):
+                conn = conexion.conectar_db()
+                conn.execute("INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original) VALUES (?, 'SIN INFORMACION', 'SIN INFORMACION', 'SIN INFORMACION', 'TAPA BLANDA', 0, 0.0, 0.0)", (titulo,))
+                conn.commit()
+                conn.close()
+                self.v_refrescar_autocompletado()
+            else:
+                return
+
+        # 2. Determinar el Precio (Normal vs Especial)
+        precio_especial_str = self.widgets['entry_v_precio_custom'].get().strip()
+        if precio_especial_str:
+            precio_final = float(precio_especial_str) # Precio personalizado
+        else:
+            precio_final = self.v_mapa_libros[titulo] # Precio de la base de datos
+
+        # 3. Añadir al Carrito
+        self.v_carrito_libros.append({'titulo': titulo, 'precio': precio_final})
+        self.v_actualizar_carrito_visual()
+        
+        # Limpiar campos de ingreso
+        self.widgets['cmb_v_libros'].set('')
+        self.widgets['entry_v_precio_custom'].delete(0, tk.END)
+
+    def v_remove_libro_del_carrito(self):
+        seleccion = self.widgets['list_v_libros'].curselection()
+        if not seleccion: return
+        
+        # Quitar de la lista en memoria usando el índice visual
+        indice = seleccion[0]
+        self.v_carrito_libros.pop(indice)
+        self.v_actualizar_carrito_visual()
+
+    def v_actualizar_carrito_visual(self):
+        self.widgets['list_v_libros'].delete(0, tk.END)
+        subtotal = 0
+        for item in self.v_carrito_libros:
+            texto = f"{item['titulo']} (${item['precio']:,.0f})"
+            self.widgets['list_v_libros'].insert(tk.END, texto)
+            subtotal += item['precio']
+            
+        self.v_actualizar_totales()
+
+    def v_on_select_envio(self, event=None):
+        if self.widgets['cmb_v_envio'].get() == 'RETIRO':
+            self.widgets['entry_v_costo_envio'].delete(0, tk.END)
+            self.widgets['entry_v_costo_envio'].insert(0, '0')
+        self.v_actualizar_totales()
+
+    def v_actualizar_totales(self, *args):
+        subtotal = sum(item['precio'] for item in self.v_carrito_libros)
+        
+        costo_envio_str = self.widgets['entry_v_costo_envio'].get()
+        costo_envio = float(costo_envio_str) if costo_envio_str else 0
+
+        self.widgets['lbl_v_subtotal'].config(text=f"$ {subtotal:,.0f}")
+        self.widgets['lbl_v_costo_envio'].config(text=f"$ {costo_envio:,.0f}")
+        self.widgets['lbl_v_total_final'].config(text=f"$ {subtotal + costo_envio:,.0f}")
+
+    def v_limpiar_formulario(self):
+        self.v_carrito_libros.clear()
+        self.widgets['list_v_libros'].delete(0, tk.END)
+        self.widgets['cmb_v_cliente'].set('')
+        self.widgets['cmb_v_libros'].set('')
+        self.widgets['entry_v_precio_custom'].delete(0, tk.END)
+        self.widgets['cmb_v_envio'].set('SIN INFORMACION')
+        self.widgets['entry_v_costo_envio'].delete(0, tk.END)
+        self.widgets['entry_v_comentario'].delete(0, tk.END)
+        try:
+            from datetime import date
+            self.widgets['de_v_fecha'].set_date(date.today())
+        except: pass
+        self.v_actualizar_totales()
+        
+    def v_guardar_venta(self):
+        if not self.v_carrito_libros:
+            messagebox.showwarning("Carrito Vacío", "No hay libros para vender.")
+            return
+            
+        cliente_nombre = self.widgets['cmb_v_cliente'].get().strip().upper()
+        if not cliente_nombre:
+            messagebox.showwarning("Sin Cliente", "Por favor, ingresa el nombre del cliente.")
+            return
+
+        fecha = self.widgets['de_v_fecha'].get()
+        envio = self.widgets['cmb_v_envio'].get()
+        comentario = self.widgets['entry_v_comentario'].get()
+        
+        subtotal = sum(item['precio'] for item in self.v_carrito_libros)
+        costo_envio_str = self.widgets['entry_v_costo_envio'].get()
+        costo_envio = float(costo_envio_str) if costo_envio_str else 0
+        total_final = subtotal + costo_envio
+        
+        nombres_libros_str = ", ".join([item['titulo'] for item in self.v_carrito_libros])
+
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            # --- LÓGICA DE CREACIÓN DE CLIENTE MEJORADA ---
+            # 1. ¿El cliente existe?
+            cursor.execute("SELECT cliente_id FROM clientes WHERE UPPER(nombre) = ?", (cliente_nombre,))
+            res = cursor.fetchone()
+            
+            if res:
+                cliente_id = res[0]
+            else:
+                # 2. Si no existe, lo creamos con el estado correcto
+                if messagebox.askyesno("Cliente Nuevo", f"El cliente '{cliente_nombre}' no existe.\n\n¿Deseas crearlo como un 'CLIENTE REGULAR' (no suscriptor)?"):
+                    # Se crea en la tabla clientes con el nuevo estado
+                    cursor.execute("INSERT INTO clientes (nombre, status) VALUES (?, 'CLIENTE REGULAR')", (cliente_nombre,))
+                    cliente_id = cursor.lastrowid
+                    
+                    # ¡IMPORTANTE! Se crea una suscripción genérica para evitar errores
+                    # en otras partes de la app que unen las tablas.
+                    cursor.execute("""
+                        INSERT INTO suscripciones (cliente_id, plan, metodo_entrega, generos_preferencia) 
+                        VALUES (?, 'NINGUNO', 'SIN INFORMACION', '')
+                    """, (cliente_id,))
+                else:
+                    # Si el usuario cancela, no continuamos con la venta
+                    conn.close()
+                    return
+                
+            # 2. GUARDAR LA VENTA
+            cursor.execute("""
+                INSERT INTO registro_ventas (cliente_nombre, fecha_venta, libros_vendidos, monto_total, metodo_envio, comentario)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (cliente_nombre, fecha, nombres_libros_str, total_final, envio, comentario))
+            
+            # 3. DESCONTAR STOCK (MÁGICO)
+            for item in self.v_carrito_libros:
+                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE UPPER(titulo) = ?", (item['titulo'],))
+
+            conn.commit()
+            conn.close()
+            
+            messagebox.showinfo("Éxito", f"Venta registrada por ${total_final:,.0f} y stock actualizado.")
+            self.v_limpiar_formulario()
+            self.v_refrescar_tabla_historial()
+            self.refrescar_inventario() # Actualiza la pestaña de inventario
+            self.v_refrescar_autocompletado() # Por si se creó un cliente nuevo
+            
+        except Exception as e:
+            messagebox.showerror("Error de Venta", f"Ocurrió un error al guardar: {e}")
+
+    def v_refrescar_tabla_historial(self):
+        tabla = self.widgets['tabla_ventas']
+        for item in tabla.get_children(): tabla.delete(item)
+        try:
+            conn = conexion.conectar_db()
+            ventas = conn.execute("SELECT venta_id, fecha_venta, cliente_nombre, libros_vendidos, monto_total, metodo_envio, comentario FROM registro_ventas ORDER BY venta_id DESC").fetchall()
+            for v in ventas:
+                fila = list(v)
+                fila[4] = f"${fila[4]:,.0f}" # Formatear dinero
+                tabla.insert("", "end", values=tuple(fila))
+            conn.close()
+        except:
+            pass
