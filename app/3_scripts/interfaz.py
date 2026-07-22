@@ -427,7 +427,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
 
     frame_btn_libros = tk.Frame(frame_inner_v, bg="white")
     frame_btn_libros.pack(fill="x", pady=5)
-    tk.Button(frame_btn_libros, text="Añadir Libro", command=comandos_ui.get('cmd_v_add_libro'), bg="#7ADDF2", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
+    tk.Button(frame_btn_libros, text="Añadir Libro", command=comandos_ui.get('cmd_v_add_libro'), bg="#93A8C0", fg="white", relief="flat", cursor="hand2").pack(side="left", expand=True, fill="x", padx=(0, 2))
     tk.Button(frame_btn_libros, text="Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D45B63", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
 
     # Redujimos la altura de la lista para ahorrar espacio
@@ -468,7 +468,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
 
     frame_btn_filtros_v = tk.Frame(frame_filtros_v, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_btn_filtros_v.grid(row=0, column=6, padx=(10,0))
-    tk.Button(frame_btn_filtros_v, text="Filtrar", command=comandos_ui.get('cmd_v_filtrar'), bg="#1A73E8", fg="white", relief="flat").pack(side="left", padx=2)
+    tk.Button(frame_btn_filtros_v, text="Filtrar", command=comandos_ui.get('cmd_v_filtrar'), bg="#426567", fg="white", relief="flat").pack(side="left", padx=2)
     tk.Button(frame_btn_filtros_v, text="Limpiar", command=comandos_ui.get('cmd_v_limpiar_filtros'), bg="#757575", fg="white", relief="flat").pack(side="left", padx=2)
 
     frame_tabla_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
@@ -501,5 +501,5 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     # --- NUEVO: Botón para Eliminar Venta ---
     frame_acciones_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_acciones_ventas.pack(side="bottom", fill="x", pady=(10, 0))
-    tk.Button(frame_acciones_ventas, text="🗑️ Eliminar Venta Seleccionada", command=comandos_ui.get('cmd_v_eliminar_venta'), bg="#C62828", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", padx=10, pady=4).pack(side="right")
+    tk.Button(frame_acciones_ventas, text="🗑️ Eliminar Venta Seleccionada", command=comandos_ui.get('cmd_v_eliminar_venta'), bg="#D45B63", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", padx=10, pady=4).pack(side="right")
 
