@@ -91,6 +91,16 @@ def inicializar_base_de_datos(conn):
         UNIQUE(cliente_id, libro_id)
     );
     """)
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS meses_cerrados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ano TEXT NOT NULL,
+        mes TEXT NOT NULL,
+        UNIQUE(ano, mes)
+    );
+    """)
+    
     conn.commit()
     print("Base de datos verificada y tablas aseguradas.")
 

@@ -323,24 +323,45 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     
     win = tk.Toplevel(root)
     win.title(f"Librero Histórico - {nombre_cliente}")
-    win.geometry("550x400")
+    win.geometry("550x450") # Un poco más alto para que quepa el filtro
     win.transient(root)
     win.grab_set()
-    win.configure(bg="#F3E5F5") # Fondo morado muy claro
+    win.configure(bg="#F3E5F5") 
     
     tk.Label(win, text=f"Biblioteca Personal de:\n{nombre_cliente}", bg="#F3E5F5", font=("Helvetica", 12, "bold")).pack(pady=(15, 10))
     
+    # --- NUEVO: MARCO Y COMBOBOX PARA FILTROS ---
+    frame_filtros = tk.Frame(win, bg="#F3E5F5")
+    frame_filtros.pack(fill="x", padx=20, pady=(0, 10))
+    
+    tk.Label(frame_filtros, text="Filtrar por origen:", bg="#F3E5F5", font=("Helvetica", 9, "bold")).pack(side="left")
+    cmb_filtro_origen = ttk.Combobox(frame_filtros, state="readonly", values=["Todos", "Importados (Librero Antiguo)", "Asignados (App)"], width=25)
+    cmb_filtro_origen.set("Todos")
+    cmb_filtro_origen.pack(side="left", padx=10)
+    
+    # --- MARCO DE LA TABLA ---
     frame_tabla = tk.Frame(win)
     frame_tabla.pack(fill="both", expand=True, padx=20, pady=(0, 20))
     
     scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical")
-    # Tabla para mostrar el historial
     tabla_hist = ttk.Treeview(frame_tabla, columns=("titulo", "origen", "fecha"), show="headings", yscrollcommand=scroll_y.set)
     scroll_y.config(command=tabla_hist.yview)
     
-    tabla_hist.heading("titulo", text="Título del Libro")
-    tabla_hist.heading("origen", text="Origen / Método")
-    tabla_hist.heading("fecha", text="Fecha (Mes/Año)")
+    # --- NUEVO: FUNCIÓN PARA ORDENAR AL HACER CLIC ---
+    def ordenar_columna_historial(tv, col, reverse):
+        l = [(tv.set(k, col), k) for k in tv.get_children('')]
+        # Intenta ordenar numéricamente si es posible, sino alfabéticamente
+        try: l.sort(key=lambda t: float(t[0]), reverse=reverse)
+        except ValueError: l.sort(reverse=reverse)
+        for index, (val, k) in enumerate(l):
+            tv.move(k, '', index)
+        # Actualiza el comando para la próxima vez que se haga clic (invierte el orden)
+        tv.heading(col, command=lambda _col=col: ordenar_columna_historial(tv, _col, not reverse))
+
+    # Vinculamos la función de ordenar a los encabezados
+    tabla_hist.heading("titulo", text="Título del Libro", command=lambda: ordenar_columna_historial(tabla_hist, "titulo", False))
+    tabla_hist.heading("origen", text="Origen / Método", command=lambda: ordenar_columna_historial(tabla_hist, "origen", False))
+    tabla_hist.heading("fecha", text="Fecha (Mes/Año)", command=lambda: ordenar_columna_historial(tabla_hist, "fecha", False))
     
     tabla_hist.column("titulo", width=250)
     tabla_hist.column("origen", width=120, anchor="center")
@@ -349,12 +370,40 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     scroll_y.pack(side="right", fill="y")
     tabla_hist.pack(side="left", fill="both", expand=True)
     
-    # Extraer y cruzar datos desde la Base de Datos
+    # --- NUEVO: LÓGICA DE DATOS EN MEMORIA PARA FILTRADO RÁPIDO ---
+    registros_completos = [] # Aquí guardaremos todo lo que traiga la BD
+    
+    def actualizar_vista(*args):
+        # 1. Limpiar tabla actual
+        for item in tabla_hist.get_children():
+            tabla_hist.delete(item)
+            
+        # 2. Leer qué filtro está seleccionado
+        filtro = cmb_filtro_origen.get()
+        
+        # 3. Llenar tabla filtrada
+        for fila in registros_completos:
+            origen_db = fila[1] # La columna "origen" es el índice 1
+            mostrar = False
+            
+            if filtro == "Todos":
+                mostrar = True
+            elif filtro == "Importados (Librero Antiguo)" and "Importación" in origen_db:
+                mostrar = True
+            elif filtro == "Asignados (App)" and "Asignación App" in origen_db:
+                mostrar = True
+                
+            if mostrar:
+                tabla_hist.insert("", "end", values=fila)
+
+    # Conectar el combobox con la función de actualizar
+    cmb_filtro_origen.bind("<<ComboboxSelected>>", actualizar_vista)
+    
+    # Extraer y cruzar datos desde la Base de Datos UNA SOLA VEZ
     try:
         conn = conexion.conectar_db()
         cursor = conn.cursor()
         
-        # Unimos el Histórico Importado con las Asignaciones hechas en la App
         query = """
             SELECT l.titulo, 'Importación (Librero Antiguo)' AS origen, 'N/A' AS fecha
             FROM librero_historico lh
@@ -371,15 +420,15 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
             ORDER BY titulo
         """
         cursor.execute(query, (cliente_id, cliente_id))
-        registros = cursor.fetchall()
+        registros_completos = cursor.fetchall() # Guardamos los datos en la memoria de la ventana
         conn.close()
         
-        if not registros:
+        if not registros_completos:
             tabla_hist.insert("", "end", values=("No hay libros registrados para esta clienta.", "", ""))
+            cmb_filtro_origen.config(state="disabled") # Apagamos el filtro si está vacío
         else:
-            for fila in registros:
-                tabla_hist.insert("", "end", values=fila)
-                
+            actualizar_vista() # Llamamos a la vista inicial (que carga "Todos")
+            
     except Exception as e:
         messagebox.showerror("Error BD", f"No se pudo cargar el historial: {e}", parent=win)
         win.destroy()

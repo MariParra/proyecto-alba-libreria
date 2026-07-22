@@ -84,6 +84,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_controles_cli, text="Eliminar Asignación Seleccionada", command=comandos_ui['cmd_eliminar_asignacion'], 
             bg="#C0392B", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2"
             ).pack(side="right", padx=(20, 10))
+    tk.Button(frame_controles_cli, text="Cerrar Mes", command=comandos_ui['cmd_cerrar_mes'], 
+                bg="#933B5B", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2"
+                ).pack(side="right", padx=(5, 10))
     # --- Frame para Opciones de la Pestaña de Asignaciones ---
     frame_opciones_asignaciones = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_opciones_asignaciones.pack(fill="x", padx=5, pady=(5, 5))
@@ -149,6 +152,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['entry_busqueda_clientes'] = ttk.Entry(frame_busqueda_clientes, width=30)
     widgets['entry_busqueda_clientes'].pack(side="left", padx=10)
 
+    tk.Button(frame_busqueda_clientes, text="Importar Historiales", command=comandos_ui['cmd_importar_historicos'], 
+            bg="#C63E4E", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="right", padx=10)
+    
     scroll_y_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="vertical")
     scroll_x_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="horizontal")
     
