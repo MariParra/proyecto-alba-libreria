@@ -376,10 +376,10 @@ class AppControlador:
 
     def quitar_descuentos(self):
         respuesta = messagebox.askquestion("Quitar Descuentos",
-                                         "¿Quieres quitar el descuento a los libros actualmente filtrados en la tabla?\n\n"
-                                         " - 'Sí' para restaurar precio base solo a los filtrados.\n"
-                                         " - 'No' para quitar el descuento a TODOS los libros.",
-                                         icon='warning')
+                                            "¿Quieres quitar el descuento a los libros actualmente filtrados en la tabla?\n\n"
+                                            " - 'Sí' para restaurar precio original solo a los filtrados.\n"
+                                            " - 'No' para quitar el descuento a TODOS los libros.",
+                                            icon='warning')
 
         ids_a_actualizar = []
         if respuesta == 'yes':

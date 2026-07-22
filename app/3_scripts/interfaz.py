@@ -233,7 +233,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     campos_form = [("titulo", "Título", "entry"), ("autor", "Autor", "combo"), ("genero", "Género", "combo"), 
                     ("editorial", "Editorial", "combo"), ("encuadernacion", "Encuadernación", "combo"),
-                    ("stock", "Stock", "entry"), ("precio_original", "Precio Base", "entry")]
+                    ("stock", "Stock", "entry"), ("precio_original", "Precio Original", "entry")]
 
     
     vcmd_int = (ventana.register(comandos_ui['cmd_validar_int']), '%P')
