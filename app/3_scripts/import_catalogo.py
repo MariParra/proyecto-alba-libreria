@@ -13,8 +13,6 @@ JSON_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "libros.json")
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 API_KEY = "AIzaSyCBBVxSu1idcCwsFovSKxF6LpZdUP3EaDE" 
 
-# (El resto de las funciones de mapeo de género y API no necesitan cambios)
-# ... (GENRES_MAP, clean_and_map_genre, fetch_book_data_from_api) ...
 GENRES_MAP = {
     "DARK ROMANCE": "Dark Romance", "DARK ACADEMIA": "Dark Academy", "DARK ACADEMY": "Dark Academy",
     "PSYCHOLOGICAL THRILLER": "Thriller Psicológico", "THRILLER PSICOLÓGICO": "Thriller Psicológico", "THRILLER PSICOLOGICO": "Thriller Psicológico",
@@ -29,7 +27,8 @@ GENRES_MAP = {
     "EROTIC": "Spicy", "ERÓTICA": "Spicy", "EROTICA": "Spicy", "SPICY": "Spicy",
     "HORROR": "Terror y Horror", "TERROR": "Terror y Horror", "MACABRE": "Terror y Horror",
     "THRILLER": "Thriller", "SUSPENSE": "Thriller", "SUSPENSO": "Thriller", "MYSTERY": "Thriller", "MISTERIO": "Thriller", "DETECTIVE": "Thriller", "POLICIAL": "Thriller",
-    "FICTION": "Ficción General", "FICCIÓN": "Ficción General", "LITERARY": "Ficción General"
+    "FICTION": "Ficción General", "FICCIÓN": "Ficción General", "LITERARY": "Ficción General",
+    "HEALING FICTION": "healing fiction"
 }
 
 def clean_value(value, default="SIN INFORMACION"):
@@ -137,10 +136,10 @@ def run_import():
                     INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (libro_final['titulo'], libro_final['autor'], libro_final['genero'], 
-                      libro_final['editorial'], libro_final['encuadernacion'], 0, 0.0))
+                    libro_final['editorial'], libro_final['encuadernacion'], 0, 0.0))
                 reporte["nuevos_libros"] += 1
             else:
-                libro_id, _, autor_db, genero_db, editorial_db, enc_db, _, _ = libro_existente
+                libro_id, _, autor_db, genero_db, editorial_db, enc_db, _, _, _ = libro_existente
                 update_fields = {}
                 if (autor_db == "SIN INFORMACION") and libro_final['autor'] != "SIN INFORMACION":
                     update_fields['autor'] = libro_final['autor']
@@ -149,7 +148,7 @@ def run_import():
                 if (editorial_db == "SIN INFORMACION") and libro_final['editorial'] != "SIN INFORMACION":
                     update_fields['editorial'] = libro_final['editorial']
                 if (enc_db != libro_final['encuadernacion']):
-                     update_fields['encuadernacion'] = libro_final['encuadernacion']
+                    update_fields['encuadernacion'] = libro_final['encuadernacion']
                 
                 if update_fields:
                     set_clause = ", ".join([f"{field} = ?" for field in update_fields])

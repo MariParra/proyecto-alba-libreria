@@ -4,16 +4,18 @@ import os
 import unicodedata
 from datetime import datetime
 
-# --- (CONFIGURACIÓN DE RUTAS - SIN CAMBIOS) ---
+# --- CONFIGURACIÓN DE RUTAS ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SCRIPT_DIR) 
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
+
 posibles_rutas = [
     os.path.join(BASE_DIR, "migracion_corregido.csv"),
     os.path.join(BASE_DIR, "1_input_data", "migracion_corregido.csv"),
     os.path.join(BASE_DIR, "1_input_data", "migracion_20260715.csv") 
 ]
 CSV_PATH = next((ruta for ruta in posibles_rutas if os.path.exists(ruta)), None)
+
 OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "4_output_reports", "migracion_asignaciones.sql")
 MISSING_CLIENTS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_clientes_faltantes.csv")
 MISSING_BOOKS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_libros_faltantes.csv")
@@ -135,10 +137,11 @@ def generate_migration_sql():
             
             fecha_asignacion_sql = f"{ano_val}-{mes_val}-01 00:00:00"
             
+            # --- AQUÍ ESTÁ LA CORRECCIÓN DEL ERROR ---
             sql = (
                 f"INSERT INTO asignaciones (cliente_id, libro_suscripcion_id, ano, mes, pagado, envio_pagado, estado_envio, fecha_asignacion) "
                 f"VALUES ({cliente_id}, {libro_id_sql}, '{ano_val}', '{mes_val}', '{pagado}', '{envio_pagado}', '{estado_envio}', '{fecha_asignacion_sql}') "
-                f"ON CONFLICT(cliente_id, ano_mes) DO UPDATE SET "
+                f"ON CONFLICT(cliente_id, ano, mes) DO UPDATE SET "
                 f"libro_suscripcion_id = excluded.libro_suscripcion_id, "
                 f"estado_envio = excluded.estado_envio, "
                 f"pagado = excluded.pagado, "
@@ -151,6 +154,7 @@ def generate_migration_sql():
         with open(OUTPUT_SQL_PATH, 'w', encoding='utf-8') as f:
             for insert in sql_inserts:
                 f.write(insert + "\n")
+
         print(f"\n✅ Éxito: {len(sql_inserts)} comandos SQL generados en '{OUTPUT_SQL_PATH}'.")
         
         # --- (Lógica de reportes - SIN CAMBIOS) ---

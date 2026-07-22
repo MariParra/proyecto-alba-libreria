@@ -24,13 +24,15 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold, width=150, height=70)
     frame_exportaciones.pack(side="right", padx=10, fill="y")
-    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#1D6F42", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)    
+    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#4A8C72", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)    
     
     frame_acciones = tk.LabelFrame(frame_top, text="Operaciones de Base", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
     frame_acciones.pack(side="right", padx=10)
     tk.Button(frame_acciones, text="Sync Clientes", command=comandos_ui['cmd_sync_clientes'], bg=config.COLOR_BOTON_CRUD, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
     tk.Button(frame_acciones, text="Cargar Libros", command=comandos_ui['cmd_import_catalogo'], bg=config.COLOR_BOTON_CATALOGO, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
-
+    tk.Button(frame_acciones, text="Actualizar Stock/Precios", command=comandos_ui['cmd_actualizar_stock'], bg="#8E4F8B", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
+    tk.Button(frame_acciones, text="Asignar Pendientes (Auto)", command=comandos_ui['cmd_asignar_aleatorio'], 
+                bg="#FF007F", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
     notebook = ttk.Notebook(ventana) 
     notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -79,7 +81,12 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['cmb_filtro_envio'] = ttk.Combobox(frame_controles_cli, values=["Todos", "Si", "No", "N/A"], width=6, state="readonly")
     widgets['cmb_filtro_envio'].pack(side="left", padx=5)
     widgets['cmb_filtro_envio'].set("Todos")
-    
+    tk.Button(frame_controles_cli, text="Eliminar Asignación Seleccionada", command=comandos_ui['cmd_eliminar_asignacion'], 
+            bg="#C0392B", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2"
+            ).pack(side="right", padx=(20, 10))
+    tk.Button(frame_controles_cli, text="Cerrar Mes", command=comandos_ui['cmd_cerrar_mes'], 
+                bg="#933B5B", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2"
+                ).pack(side="right", padx=(5, 10))
     # --- Frame para Opciones de la Pestaña de Asignaciones ---
     frame_opciones_asignaciones = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_opciones_asignaciones.pack(fill="x", padx=5, pady=(5, 5))
@@ -121,6 +128,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         titulo_col = col.replace("_", " ").title()
         if col == "tipo_envio": titulo_col = "Tipo De Envio"
         if col == "envio_pag": titulo_col = "Envio Pagado"
+        if col == "ano": titulo_col = "Año"   
         tabla_cli.heading(col, text=titulo_col)
         ancho = 60 if col in ["ano", "mes", "pagado", "envio_pag"] else 120
         if col == "comentario": ancho = 150
@@ -144,6 +152,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['entry_busqueda_clientes'] = ttk.Entry(frame_busqueda_clientes, width=30)
     widgets['entry_busqueda_clientes'].pack(side="left", padx=10)
 
+    tk.Button(frame_busqueda_clientes, text="Importar Historiales", command=comandos_ui['cmd_importar_historicos'], 
+            bg="#C63E4E", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="right", padx=10)
+    
     scroll_y_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="vertical")
     scroll_x_clientes_gestion = ttk.Scrollbar(frame_tabla_gestion, orient="horizontal")
     
@@ -191,6 +202,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_botones_cliente.grid(row=len(campos_cliente_form)+1, column=0, columnspan=2, sticky="ew", pady=(30, 0))
     tk.Button(frame_botones_cliente, text="Guardar Cambios", command=comandos_ui['cmd_guardar_cliente'], bg=config.COLOR_ROSA_FUERTE, fg="white", font=font_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Limpiar", command=comandos_ui['cmd_limpiar_form_cliente'], bg="#E0E0E0", fg=config.COLOR_TEXTO, font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
+    tk.Button(frame_botones_cliente, text="📖 Ver Historial de Lectura", command=comandos_ui['cmd_ver_historial'], 
+            bg="#9A8DFF", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=5)
     tk.Button(frame_botones_cliente, text="Eliminar Cliente", command=comandos_ui['cmd_eliminar_cliente'], bg="#D32F2F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=6).pack(fill="x", pady=(25, 5))
 
 
