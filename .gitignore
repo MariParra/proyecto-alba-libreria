@@ -1,1 +1,3 @@
-credentials.json
+info/
+.env
+app/config/creedntials.json
