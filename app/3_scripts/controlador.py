@@ -57,7 +57,8 @@ class AppControlador:
             'cmd_v_add_libro': self.v_add_libro_al_carrito,
             'cmd_v_remove_libro': self.v_remove_libro_del_carrito,
             'cmd_v_guardar': self.v_guardar_venta,
-            'cmd_v_limpiar': self.v_limpiar_formulario
+            'cmd_v_limpiar': self.v_limpiar_formulario,
+            'cmd_v_eliminar_venta': self.v_eliminar_venta
         }
 
         refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
@@ -730,16 +731,44 @@ class AppControlador:
                 conn.close()
 
 
-
     def exportar_excel(self):
         try:
             self.root.config(cursor="watch"); self.root.update()
-            ruta = export.exportar_a_excel()
+
+            # 1. Recolectar datos de la tabla de Asignaciones
+            datos_asignaciones = [self.widgets['tabla_clientes'].item(i)['values'] for i in self.widgets['tabla_clientes'].get_children()]
+            columnas_asignaciones = [self.widgets['tabla_clientes'].heading(c, "text") for c in self.widgets['tabla_clientes']['columns']]
+            
+            # 2. Recolectar datos de la tabla de Gestión de Clientes
+            datos_clientes = [self.widgets['tabla_gestion_clientes'].item(i)['values'] for i in self.widgets['tabla_gestion_clientes'].get_children()]
+            columnas_clientes = [self.widgets['tabla_gestion_clientes'].heading(c, "text") for c in self.widgets['tabla_gestion_clientes']['columns']]
+
+            # 3. Recolectar datos de la tabla de Inventario
+            datos_inventario = [self.widgets['tabla_libros'].item(i)['values'] for i in self.widgets['tabla_libros'].get_children()]
+            columnas_inventario = [self.widgets['tabla_libros'].heading(c, "text") for c in self.widgets['tabla_libros']['columns']]
+
+            # 4. Recolectar datos de la tabla de Historial de Ventas
+            datos_ventas = [self.widgets['tabla_ventas'].item(i)['values'] for i in self.widgets['tabla_ventas'].get_children()]
+            columnas_ventas = [self.widgets['tabla_ventas'].heading(c, "text") for c in self.widgets['tabla_ventas']['columns']]
+
+            # Llamar a la función de exportación en export.py con todos los datos
+            # Asegúrate de importar 'export' al principio de tu controlador.py
+            import export 
+            ruta = export.exportar_a_excel(
+                datos_asignaciones, columnas_asignaciones,
+                datos_clientes, columnas_clientes,
+                datos_inventario, columnas_inventario,
+                datos_ventas, columnas_ventas
+            )
+            
             self.root.config(cursor="")
-            messagebox.showinfo("Éxito", f"Excel generado en:\n{ruta}")
+            if isinstance(ruta, str):
+                messagebox.showinfo("Éxito", f"Excel generado en:\n{ruta}")
         except Exception as e:
             self.root.config(cursor="")
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error de Exportación", str(e))
+
+
 
     def disparar_script_externo(self, script_name, mensaje_exito):
         try:
@@ -1177,11 +1206,11 @@ class AppControlador:
                     conn.close()
                     return
                 
-            # 2. GUARDAR LA VENTA
+            # 3. GUARDAR LA VENTA
             cursor.execute("""
-                INSERT INTO registro_ventas (cliente_nombre, fecha_venta, libros_vendidos, monto_total, metodo_envio, comentario)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (cliente_nombre, fecha, nombres_libros_str, total_final, envio, comentario))
+                INSERT INTO registro_ventas (cliente_id, fecha_venta, libros_vendidos, subtotal_libros, valor_envio, monto_final, metodo_envio, comentario)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (cliente_id, fecha, nombres_libros_str, subtotal, costo_envio, total_final, envio, comentario))
             
             # 3. DESCONTAR STOCK (MÁGICO)
             for item in self.v_carrito_libros:
@@ -1199,16 +1228,100 @@ class AppControlador:
         except Exception as e:
             messagebox.showerror("Error de Venta", f"Ocurrió un error al guardar: {e}")
 
-    def v_refrescar_tabla_historial(self):
+    def v_refrescar_tabla_historial(self, cliente=None, fecha_desde=None, fecha_hasta=None):
         tabla = self.widgets['tabla_ventas']
         for item in tabla.get_children(): tabla.delete(item)
+        
         try:
             conn = conexion.conectar_db()
-            ventas = conn.execute("SELECT venta_id, fecha_venta, cliente_nombre, libros_vendidos, monto_total, metodo_envio, comentario FROM registro_ventas ORDER BY venta_id DESC").fetchall()
+            query = """
+                SELECT 
+                    venta_id, 
+                    fecha_venta, 
+                    (SELECT nombre FROM clientes c WHERE c.cliente_id=rv.cliente_id), 
+                    libros_vendidos, 
+                    monto_final, 
+                    metodo_envio, 
+                    comentario 
+                FROM registro_ventas rv
+            """
+            condiciones = []
+            params = []
+
+            if cliente:
+                condiciones.append("(SELECT nombre FROM clientes c WHERE c.cliente_id=rv.cliente_id) LIKE ?")
+                params.append(f"%{cliente}%")
+            if fecha_desde:
+                condiciones.append("fecha_venta >= ?")
+                params.append(fecha_desde)
+            if fecha_hasta:
+                condiciones.append("fecha_venta <= ?")
+                params.append(fecha_hasta)
+
+            if condiciones:
+                query += " WHERE " + " AND ".join(condiciones)
+            
+            query += " ORDER BY venta_id DESC"
+            
+            ventas = conn.execute(query, params).fetchall()
             for v in ventas:
                 fila = list(v)
-                fila[4] = f"${fila[4]:,.0f}" # Formatear dinero
+                
+                # 1. Seguridad: Convertir todos los posibles valores 'None' a texto vacío ""
+                fila = ["" if x is None else x for x in fila]
+                
+                # 2. Seguridad: Formatear el precio de forma segura aunque el dato venga raro
+                try:
+                    monto = float(fila[4]) if fila[4] != "" else 0
+                    fila[4] = f"${monto:,.0f}"
+                except ValueError:
+                    fila[4] = "$0"
+
+                # Insertar la fila limpia en la tabla visual
                 tabla.insert("", "end", values=tuple(fila))
+                
             conn.close()
-        except:
-            pass
+            
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Error Cargando Historial", f"No se pudo cargar la tabla de ventas.\n\nDetalle: {e}")
+
+    def v_eliminar_venta(self):
+        seleccion = self.widgets['tabla_ventas'].selection()
+        if not seleccion:
+            messagebox.showwarning("Sin Selección", "Por favor, selecciona una venta de la tabla para eliminar.")
+            return
+            
+        item_id = seleccion[0]
+        # --- CORRECCIÓN: Leemos los datos directamente de la base de datos para más seguridad ---
+        venta_id = self.widgets['tabla_ventas'].set(item_id, "id")
+
+        if not messagebox.askyesno("Eliminar Venta", f"¿Estás segura de que deseas anular la venta #{venta_id}?\n\nEl stock de los libros de esta venta se restaurará automáticamente a tu inventario."):
+            return
+
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            
+            # 1. Obtenemos la lista de libros ANTES de borrar la venta
+            cursor.execute("SELECT libros_vendidos FROM registro_ventas WHERE venta_id = ?", (venta_id,))
+            resultado = cursor.fetchone()
+            libros_str = resultado[0] if resultado else ""
+            
+            # 2. Devolver el stock al inventario
+            if libros_str:
+                libros_vendidos = [l.strip().upper() for l in libros_str.split(",") if l.strip()]
+                for libro_titulo in libros_vendidos:
+                    cursor.execute("UPDATE libros SET stock = stock + 1 WHERE UPPER(titulo) = ?", (libro_titulo,))
+            
+            # 3. Borrar el registro de la venta
+            cursor.execute("DELETE FROM registro_ventas WHERE venta_id = ?", (venta_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            messagebox.showinfo("Éxito", "Venta eliminada y stock restaurado correctamente.")
+            self.v_refrescar_tabla_historial() # Actualiza la tabla de ventas
+            self.refrescar_inventario()       # Actualiza la pestaña de inventario para que veas el cambio de stock
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo eliminar la venta: {e}")

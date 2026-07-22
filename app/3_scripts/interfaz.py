@@ -24,8 +24,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold, width=150, height=70)
     frame_exportaciones.pack(side="right", padx=10, fill="y")
-    tk.Button(frame_exportaciones, text="Exportar Excel", command=comandos_ui['cmd_exportar_excel'], 
-            bg="#75956F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", width=15, pady=2).pack(side="right", padx=5)    
+    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui.get('cmd_exportar_excel'), 
+            bg="#03BB85", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", width=15, pady=2).pack(side="right", padx=5)    
+
     frame_acciones = tk.LabelFrame(frame_top, text="Operaciones de Base", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
     frame_acciones.pack(side="right", padx=10)
     tk.Button(frame_acciones, text="Sync Clientes", command=comandos_ui['cmd_sync_clientes'], bg=config.COLOR_BOTON_CRUD, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
@@ -477,6 +478,13 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     columnas_ventas = ("id", "fecha", "cliente", "libros", "total", "envio", "comentario")
     widgets['tabla_ventas'] = ttk.Treeview(frame_tabla_ventas, columns=columnas_ventas, show="headings")
     
+    frame_acciones_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
+    frame_acciones_ventas.pack(side="bottom", fill="x", pady=(10, 0))
+    tk.Button(frame_acciones_ventas, text="🗑️ Eliminar Venta Seleccionada", 
+            command=comandos_ui.get('cmd_v_eliminar_venta'), 
+            bg="#D45B63", fg="white", font=font_pequena_bold, 
+            relief="flat", cursor="hand2", padx=10, pady=4).pack(side="right")
+    
     widgets['tabla_ventas'].heading("id", text="ID")
     widgets['tabla_ventas'].heading("fecha", text="Fecha")
     widgets['tabla_ventas'].heading("cliente", text="Cliente")
@@ -497,9 +505,4 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['tabla_ventas'].configure(yscrollcommand=scroll_v.set)
     scroll_v.pack(side="right", fill="y")
     widgets['tabla_ventas'].pack(side="left", fill="both", expand=True)
-
-    # --- NUEVO: Botón para Eliminar Venta ---
-    frame_acciones_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
-    frame_acciones_ventas.pack(side="bottom", fill="x", pady=(10, 0))
-    tk.Button(frame_acciones_ventas, text="🗑️ Eliminar Venta Seleccionada", command=comandos_ui.get('cmd_v_eliminar_venta'), bg="#D45B63", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", padx=10, pady=4).pack(side="right")
 
