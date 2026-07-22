@@ -101,6 +101,31 @@ def inicializar_base_de_datos(conn):
     );
     """)
     
+        # --- TABLA DE VENTAS ---
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ventas (
+        venta_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cliente_id INTEGER, -- Puede ser NULL si es venta a público general
+        fecha_venta TEXT DEFAULT CURRENT_TIMESTAMP,
+        metodo_pago TEXT,
+        total REAL DEFAULT 0.0,
+        FOREIGN KEY (cliente_id) REFERENCES clientes (cliente_id) ON DELETE SET NULL
+    );
+    """)
+
+    # --- TABLA DE DETALLE DE VENTAS (HISTORIAL CONGELADO) ---
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ventas_detalle (
+        detalle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER,
+        libro_id INTEGER,
+        cantidad INTEGER DEFAULT 1,
+        precio_cobrado REAL NOT NULL, -- Regla de Oro: Congela el precio del momento
+        FOREIGN KEY (venta_id) REFERENCES ventas (venta_id) ON DELETE CASCADE,
+        FOREIGN KEY (libro_id) REFERENCES libros (libro_id) ON DELETE SET NULL
+    );
+    """)
+    
     conn.commit()
     print("Base de datos verificada y tablas aseguradas.")
 

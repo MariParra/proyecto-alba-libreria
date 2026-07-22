@@ -44,7 +44,7 @@ def abrir_dialogo_comentario(root, tabla, callback_refrescar):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo actualizar el comentario: {e}", parent=win)
 
-    tk.Button(win, text="Guardar", command=guardar_comentario, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold")).pack(pady=10)
+    tk.Button(win, text="Guardar", command=guardar_comentario, bg="#81BFB7", fg="white", font=("Helvetica", 10, "bold")).pack(pady=10)
 
 
 def manejar_edicion_celda(event, root, widgets, callback_refrescar):
@@ -167,18 +167,18 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     win = tk.Toplevel(root)
     win.title("Asignar / Quitar Libro")
     win.geometry("550x350")
-    win.transient(root); win.grab_set(); win.configure(bg="#FFF8E1")
+    win.transient(root); win.grab_set(); win.configure(bg="#F7DAE7")
     
-    tk.Label(win, text=f"Modificando asignación de:\n{cliente_nombre}", bg="#FFF8E1", font=("Helvetica", 11, "bold")).pack(pady=(10, 0))
+    tk.Label(win, text=f"Modificando asignación de:\n{cliente_nombre}", bg="#F7DAE7", font=("Helvetica", 11, "bold")).pack(pady=(10, 0))
     gustos_display = generos_str if generos_str and generos_str != "SIN INFORMACION" else "No especificados"
-    tk.Label(win, text=f"Gustos de la clienta: {gustos_display}", bg="#FFF8E1", font=("Helvetica", 9, "italic"), fg="#555").pack(pady=(2, 5))
+    tk.Label(win, text=f"Gustos de la clienta: {gustos_display}", bg="#F7DAE7", font=("Helvetica", 9, "italic"), fg="#555").pack(pady=(2, 5))
     
-    lbl_alerta = tk.Label(win, text="¡Ojo! No hay libros en stock para sus gustos.", bg="#FFF8E1", font=("Helvetica", 9, "bold"), fg="red")
+    lbl_alerta = tk.Label(win, text="¡Ojo! No hay libros en stock para sus gustos.", bg="#F7DAE7", font=("Helvetica", 9, "bold"), fg="red")
     if not libros_recomendados_stock and generos_preferidos:
         lbl_alerta.pack()
 
     # --- FRAME PARA LOS CHECKBOXES DE CONTROL ---
-    frame_checks = tk.Frame(win, bg="#FFF8E1")
+    frame_checks = tk.Frame(win, bg="#F7DAE7")
     frame_checks.pack(pady=5)
     
     usar_filtro_var = tk.BooleanVar(value=True if (libros_recomendados_stock or libros_recomendados_catalogo) else False)
@@ -207,18 +207,18 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         if valor_actual_str in opciones_mostrar: cb_libros.set(valor_actual_str)
         else: cb_libros.set(opciones_mostrar[0])
 
-    chk_filtro_genero = tk.Checkbutton(frame_checks, text="Filtrar por Géneros", variable=usar_filtro_var, bg="#FFF8E1", command=actualizar_opciones_combobox, cursor="hand2")
+    chk_filtro_genero = tk.Checkbutton(frame_checks, text="Filtrar por Géneros", variable=usar_filtro_var, bg="#F7DAE7", command=actualizar_opciones_combobox, cursor="hand2")
     if not (libros_recomendados_stock or libros_recomendados_catalogo):
         chk_filtro_genero.config(state="disabled")
     chk_filtro_genero.pack(side="left", padx=10)
 
-    chk_sin_stock = tk.Checkbutton(frame_checks, text="Incluir sin stock (Catálogo)", variable=incluir_sin_stock_var, bg="#FFF8E1", command=actualizar_opciones_combobox, cursor="hand2")
+    chk_sin_stock = tk.Checkbutton(frame_checks, text="Incluir sin stock (Catálogo)", variable=incluir_sin_stock_var, bg="#F7DAE7", command=actualizar_opciones_combobox, cursor="hand2")
     chk_sin_stock.pack(side="left", padx=10)
     
     cb_libros.pack(pady=5, padx=15)
     actualizar_opciones_combobox()
     
-    frame_botones = tk.Frame(win, bg="#FFF8E1")
+    frame_botones = tk.Frame(win, bg="#F7DAE7")
     frame_botones.pack(pady=15, fill="x", expand=True)
     def guardar_y_cerrar():
         seleccion_str = cb_libros.get()
@@ -266,7 +266,7 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
             except Exception as e:
                 messagebox.showerror("Error BD", f"No se pudo quitar la asignación: {e}", parent=win)
 
-    tk.Button(frame_botones, text="Guardar Cambios", command=guardar_y_cerrar, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="left", padx=(30, 10))
+    tk.Button(frame_botones, text="Guardar Cambios", command=guardar_y_cerrar, bg="#81BFB7", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="left", padx=(30, 10))
     tk.Button(frame_botones, text="Quitar Asignación", command=quitar_y_cerrar, bg="#D32F2F", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="right", padx=(10, 30))
 
 
@@ -432,3 +432,113 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     except Exception as e:
         messagebox.showerror("Error BD", f"No se pudo cargar el historial: {e}", parent=win)
         win.destroy()
+        
+def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
+    asignacion_id = tabla.set(item_id, "asignacion_id")
+    cliente_nombre = tabla.set(item_id, "nombre")
+    extras_actuales_str = tabla.set(item_id, "extras")
+    
+    if not extras_actuales_str or extras_actuales_str == "None":
+        extras_actuales_str = ""
+    lista_extras = [e.strip() for e in extras_actuales_str.split(",") if e.strip()]
+    
+    # --- 1. CARGAR INVENTARIO ACTUAL ---
+    titulos_inventario = []
+    try:
+        conn = conexion.conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT UPPER(titulo) FROM libros ORDER BY titulo")
+        titulos_inventario = [row[0] for row in cursor.fetchall()]
+        conn.close()
+    except Exception as e:
+        messagebox.showerror("Error BD", f"No se pudo cargar el catálogo: {e}")
+
+    win = tk.Toplevel(root)
+    win.title(f"Gestionar Extras - {cliente_nombre}")
+    win.geometry("450x380")
+    win.transient(root)
+    win.grab_set()
+    win.configure(bg="#F7DAE7")
+    
+    tk.Label(win, text=f"Libros Extras para:\n{cliente_nombre}", bg="#F7DAE7", font=("Helvetica", 11, "bold")).pack(pady=(10, 5))
+    
+    frame_lista = tk.Frame(win, bg="#F7DAE7")
+    frame_lista.pack(fill="both", expand=True, padx=20, pady=5)
+    
+    listbox = tk.Listbox(frame_lista, font=("Helvetica", 10), selectbackground="#81BFB7")
+    listbox.pack(side="left", fill="both", expand=True)
+    
+    for ex in lista_extras:
+        listbox.insert("end", ex)
+        
+    frame_controles = tk.Frame(win, bg="#F7DAE7")
+    frame_controles.pack(fill="x", padx=20, pady=5)
+    
+    cb_nuevo = ttk.Combobox(frame_controles, values=titulos_inventario, width=32, font=("Helvetica", 10))
+    cb_nuevo.pack(side="left", padx=(0, 5))
+    
+    def autocompletar(event):
+        tecla = event.keysym
+        if tecla in ('Up', 'Down', 'Left', 'Right', 'Return'): return
+        texto_tecleado = cb_nuevo.get().upper()
+        if texto_tecleado == "": cb_nuevo.config(values=titulos_inventario)
+        else:
+            datos_filtrados = [item for item in titulos_inventario if texto_tecleado in item]
+            cb_nuevo.config(values=datos_filtrados)
+            
+    cb_nuevo.bind('<KeyRelease>', autocompletar)
+    
+    # --- NUEVO: FUNCIÓN DE AUTOGUARDADO EN SEGUNDO PLANO ---
+    def auto_guardar_bd():
+        nuevos_extras = [listbox.get(i) for i in range(listbox.size())]
+        extras_str = ", ".join(nuevos_extras)
+        try:
+            conn = conexion.conectar_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE asignaciones SET extras = ? WHERE asignacion_id = ?", (extras_str, asignacion_id))
+            conn.commit()
+            conn.close()
+            callback_asignaciones() # Refresca la tabla de atrás sin que te des cuenta
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {e}", parent=win)
+
+    def agregar_extra():
+        nuevo = cb_nuevo.get().strip().upper()
+        if not nuevo: return
+        
+        if nuevo not in titulos_inventario:
+            if messagebox.askyesno("Nuevo Libro", f"El libro '{nuevo}' NO existe en tu inventario.\n\n¿Deseas crearlo ahora en tu catálogo (con stock 0)?"):
+                try:
+                    conn = conexion.conectar_db()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original)
+                        VALUES (?, 'SIN INFORMACION', 'SIN INFORMACION', 'SIN INFORMACION', 'TAPA BLANDA', 0, 0.0, 0.0)
+                    """, (nuevo,))
+                    conn.commit()
+                    conn.close()
+                    titulos_inventario.append(nuevo)
+                    titulos_inventario.sort()
+                    messagebox.showinfo("Éxito", "Libro creado y añadido al catálogo.", parent=win)
+                except Exception as e:
+                    messagebox.showerror("Error BD", f"No se pudo crear el libro: {e}", parent=win)
+                    return
+            else:
+                pass
+                
+        listbox.insert("end", nuevo)
+        cb_nuevo.set("")
+        cb_nuevo.config(values=titulos_inventario)
+        auto_guardar_bd() # <--- SE GUARDA SOLITO AL AÑADIR
+            
+    def quitar_extra():
+        seleccion = listbox.curselection()
+        if seleccion:
+            listbox.delete(seleccion[0])
+            auto_guardar_bd() # <--- SE GUARDA SOLITO AL QUITAR
+            
+    tk.Button(frame_controles, text="Añadir", command=agregar_extra, bg="#0288D1", fg="white", cursor="hand2").pack(side="left", padx=5)
+    tk.Button(frame_controles, text="Quitar", command=quitar_extra, bg="#D32F2F", fg="white", cursor="hand2").pack(side="right")
+    
+    # --- EL BOTÓN DE ABAJO AHORA SOLO CIERRA LA VENTANA ---
+    tk.Button(win, text="Cerrar Ventana", command=win.destroy, bg="#757575", fg="white", font=("Helvetica", 10, "bold"), pady=5).pack(fill="x", padx=20, pady=(10, 20))

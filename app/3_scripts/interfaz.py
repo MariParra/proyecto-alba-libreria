@@ -24,8 +24,8 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     frame_exportaciones = tk.LabelFrame(frame_top, text="Exportar Reportes", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold, width=150, height=70)
     frame_exportaciones.pack(side="right", padx=10, fill="y")
-    tk.Button(frame_exportaciones, text="A Excel", command=comandos_ui['cmd_exportar_excel'], bg="#4A8C72", fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)    
-    
+    tk.Button(frame_exportaciones, text="Exportar Excel", command=comandos_ui['cmd_exportar_excel'], 
+            bg="#75956F", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", width=15, pady=2).pack(side="right", padx=5)    
     frame_acciones = tk.LabelFrame(frame_top, text="Operaciones de Base", bg=config.COLOR_FONDO_PRINCIPAL, fg=config.COLOR_TEXTO, font=font_pequena_bold)
     frame_acciones.pack(side="right", padx=10)
     tk.Button(frame_acciones, text="Sync Clientes", command=comandos_ui['cmd_sync_clientes'], bg=config.COLOR_BOTON_CRUD, fg="white", font=font_pequena, relief="flat", cursor="hand2").pack(side="left", padx=5, pady=2)
@@ -43,10 +43,22 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_controles_cli = tk.Frame(frame_asignaciones, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_controles_cli.pack(fill="x", padx=5, pady=5)
     tk.Label(frame_controles_cli, text="Meses:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_bold).pack(side="left")
+    
     mb_meses = tk.Menubutton(frame_controles_cli, text="Seleccionar...", relief="raised", bg="white", width=15)
     mb_meses.pack(side="left", padx=5)
+    
     menu_meses = tk.Menu(mb_meses, tearoff=0)
     mb_meses.config(menu=menu_meses)
+    
+    # Evitar que se cierre al hacer clic
+    def mantener_menu_abierto(event):
+        try:
+            # Forzamos al Menubutton a volver a desplegar su menú inmediatamente
+            mb_meses.focus_set()
+            mb_meses.event_generate('<Button-1>')
+        except:
+            pass
+        
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
     widgets['meses_vars'] = {}
@@ -117,9 +129,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     scroll_x_cli = ttk.Scrollbar(frame_tabla_cli, orient="horizontal")
     scroll_y_cli = ttk.Scrollbar(frame_tabla_cli, orient="vertical")
     
-    columnas_cli = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario", "rut", "email", "telefono", "direccion")
+    columnas_cli = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "extras", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario", "rut", "email", "telefono", "direccion")
     tabla_cli = ttk.Treeview(frame_tabla_cli, columns=columnas_cli, show="headings", selectmode="browse", xscrollcommand=scroll_x_cli.set, yscrollcommand=scroll_y_cli.set)
-    tabla_cli['displaycolumns'] = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario")
+    tabla_cli['displaycolumns'] = ("asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "extras", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario")
     scroll_x_cli.config(command=tabla_cli.xview)
     scroll_y_cli.config(command=tabla_cli.yview)
     

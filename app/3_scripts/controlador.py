@@ -548,17 +548,28 @@ class AppControlador:
         if not item_id: return
         
         columna_num_str = self.widgets['tabla_clientes'].identify_column(event.x)
+        if not columna_num_str: return
+        
         col_index = int(columna_num_str.replace('#', ''))
         col_name = self.widgets['tabla_clientes']['columns'][col_index - 1]
 
+        # 1. Si es la columna LIBRO, abre el diálogo inteligente de asignación
         if col_name == 'libro':
             from ui_dialogos import abrir_dialogo_asignar_libro 
-            # Asegúrate de que llame a las dos funciones callback al final
             abrir_dialogo_asignar_libro(self.root, self.widgets['tabla_clientes'], item_id, 
                                         self.iniciar_sincronizacion_periodo, self.refrescar_inventario)
+                                        
+        # 2. Si es la columna EXTRAS, abre la ventana de gestión de extras
+        elif col_name == 'extras':
+            from ui_dialogos import abrir_dialogo_extras
+            abrir_dialogo_extras(self.root, self.widgets['tabla_clientes'], item_id, self.iniciar_sincronizacion_periodo)
+            
+        # 3. Si es CUALQUIER OTRA COLUMNA (estado, pagado, envio_pag, comentario)
         else:
             from ui_dialogos import manejar_edicion_celda
             manejar_edicion_celda(event, self.root, self.widgets, self.iniciar_sincronizacion_periodo)
+
+
 
     def ordenar_columna(self, tabla, col, reverse):
         lista_valores = [(tabla.set(k, col), k) for k in tabla.get_children('')]
@@ -666,7 +677,7 @@ class AppControlador:
             
             query = f"""
                 SELECT a.asignacion_id, c.cliente_id, c.nombre, a.ano, a.mes, l.titulo, 
-                    s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
+                    a.extras, s.metodo_entrega, a.fecha_asignacion, a.estado_envio, a.pagado, a.envio_pagado, a.comentario {str_extras}
                 FROM asignaciones a
                 JOIN clientes c ON a.cliente_id = c.cliente_id
                 JOIN suscripciones s ON c.cliente_id = s.cliente_id
@@ -694,8 +705,10 @@ class AppControlador:
             for f in cursor.fetchall():
                 fila_formateada = list(f)
                 fila_formateada[5] = fila_formateada[5] if fila_formateada[5] else "SIN ASIGNACIÓN"
-                fila_formateada[9] = "Si" if str(fila_formateada[9]).upper() == "TRUE" else "No"
+                fila_formateada[6] = fila_formateada[6] if fila_formateada[6] else ""
                 fila_formateada[10] = "Si" if str(fila_formateada[10]).upper() == "TRUE" else "No"
+                fila_formateada[11] = "Si" if str(fila_formateada[11]).upper() == "TRUE" else "No"
+                
                 tabla.insert("", "end", values=tuple(fila_formateada))
 
         except Exception as e:
