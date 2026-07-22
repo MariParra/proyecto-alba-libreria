@@ -2,82 +2,87 @@ import sqlite3
 import pandas as pd
 import os
 import json
+import re
 from datetime import datetime
-from thefuzz import process
 
-# --- CONFIGURACIÓN DE RUTAS Y UMBRAL ---
+# --- CONFIGURACIÓN ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIBREROS_DIR = os.path.join(BASE_DIR, "6_libreros")
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 DIR_REPORTES = os.path.join(BASE_DIR, "4_output_reports")
-UMBRAL_DE_CONFIANZA = 90 # Porcentaje de similitud mínimo
-
 os.makedirs(LIBREROS_DIR, exist_ok=True)
 os.makedirs(DIR_REPORTES, exist_ok=True)
 TXT_NO_ENCONTRADOS = os.path.join(DIR_REPORTES, "libros_no_encontrados_historico.txt")
 
-def run_importar_libreros():
-    reporte = { "clientas_procesadas": 0, "libros_historicos_agregados": 0, "libros_ya_existentes": 0, "libros_no_encontrados": 0, "error": None }
-    archivos = [f for f in os.listdir(LIBREROS_DIR) if f.endswith(('.xlsx', '.csv'))]
-    
-    if not archivos:
-        reporte["error"] = "No se encontraron archivos .xlsx o .csv en la carpeta 6_libreros."
-        print(json.dumps(reporte)); return
+def normalize_text(text):
+    if not isinstance(text, str): return ""
+    # Limpia espacios extra y convierte a mayúsculas
+    return ' '.join(text.strip().upper().split())
 
+def run_importar_libreros():
+    reporte = { "coincidencias_perfectas": 0, "coincidencias_por_titulo": 0, "ya_existentes": 0, "no_encontrados": 0, "error": None }
     libros_faltantes_global = []
 
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT libro_id, UPPER(titulo) FROM libros")
-        inventario_completo = {titulo_db: libro_id for libro_id, titulo_db in cursor.fetchall()}
-        lista_titulos_db = list(inventario_completo.keys())
-
-        if not lista_titulos_db:
+        # --- PREPARAMOS LOS DATOS DEL INVENTARIO ---
+        cursor.execute("SELECT libro_id, UPPER(titulo), UPPER(autor) FROM libros")
+        inventario_raw = cursor.fetchall()
+        
+        # Mapa para búsqueda exacta (Título, Autor) -> ID
+        inventario_exacto_dupla = { (normalize_text(titulo), normalize_text(autor)): id for id, titulo, autor in inventario_raw if titulo and autor }
+        
+        # Mapa para búsqueda exacta por Título -> ID
+        inventario_exacto_titulo = { normalize_text(titulo): id for id, titulo, autor in inventario_raw if titulo }
+        
+        if not inventario_raw:
             reporte["error"] = "No hay libros en la base de datos para comparar."
             print(json.dumps(reporte)); return
 
-        for archivo in archivos:
+        for archivo in [f for f in os.listdir(LIBREROS_DIR) if f.endswith(('.xlsx', '.csv'))]:
             nombre_base = os.path.splitext(archivo)[0].upper().strip()
             nombre_limpio = nombre_base.replace("LIBRERO DE", "").replace("HISTORICO", "").replace("LIBRERO", "").strip()
-            
             cursor.execute("SELECT cliente_id FROM clientes WHERE UPPER(nombre) LIKE ?", (f"%{nombre_limpio}%",))
             cliente_res = cursor.fetchone()
-            
             if not cliente_res: continue
             cliente_id = cliente_res[0]
-            reporte["clientas_procesadas"] += 1
-            
-            try:
-                ruta_archivo = os.path.join(LIBREROS_DIR, archivo)
-                if archivo.endswith('.csv'): df = pd.read_csv(ruta_archivo, sep=None, engine='python')
-                else: df = pd.read_excel(ruta_archivo)
-            except Exception as e:
-                print(f"  - Error leyendo {archivo}: {e}")
-                continue
 
+            df = pd.read_excel(os.path.join(LIBREROS_DIR, archivo)) if archivo.endswith('.xlsx') else pd.read_csv(os.path.join(LIBREROS_DIR, archivo), sep=None, engine='python')
             col_titulo = next((c for c in df.columns if any(k in str(c).lower() for k in ['titulo', 'título', 'libro', 'nombre'])), df.columns[0])
+            col_autor = next((c for c in df.columns if 'autor' in str(c).lower()), None)
 
             for index, row in df.iterrows():
-                titulo_historial = str(row.get(col_titulo, '')).strip().upper()
-                if not titulo_historial or titulo_historial == 'NAN': continue
-
-                mejor_coincidencia, puntaje = process.extractOne(titulo_historial, lista_titulos_db)
+                titulo_csv = normalize_text(row.get(col_titulo, ''))
+                autor_csv_raw = str(row.get(col_autor, '')) # Guardamos el autor original para la BD
+                autor_csv_norm = normalize_text(autor_csv_raw) if col_autor else ''
                 
-                libro_id_encontrado = None
-                if puntaje >= UMBRAL_DE_CONFIANZA:
-                    libro_id_encontrado = inventario_completo[mejor_coincidencia]
+                if not titulo_csv or titulo_csv == 'NAN': continue
 
+                libro_id_encontrado = None
+                metodo_encontrado = None
+
+                # --- PRIORIDAD 1: Búsqueda por Dupla (Título, Autor) ---
+                if autor_csv_norm and (titulo_csv, autor_csv_norm) in inventario_exacto_dupla:
+                    libro_id_encontrado = inventario_exacto_dupla[(titulo_csv, autor_csv_norm)]
+                    metodo_encontrado = "coincidencias_perfectas"
+                
+                # --- PRIORIDAD 2: Búsqueda por Título Exacto ---
+                if not libro_id_encontrado and titulo_csv in inventario_exacto_titulo:
+                    libro_id_encontrado = inventario_exacto_titulo[titulo_csv]
+                    metodo_encontrado = "coincidencias_por_titulo"
+
+                # --- GUARDADO ---
                 if libro_id_encontrado:
                     try:
-                        cursor.execute("INSERT INTO librero_historico (cliente_id, libro_id) VALUES (?, ?)", (cliente_id, libro_id_encontrado))
-                        reporte["libros_historicos_agregados"] += 1
+                        cursor.execute("INSERT INTO librero_historico (cliente_id, libro_id, autor_historico) VALUES (?, ?, ?)", (cliente_id, libro_id_encontrado, autor_csv_raw.strip()))
+                        reporte[metodo_encontrado] += 1
                     except sqlite3.IntegrityError:
-                        reporte["libros_ya_existentes"] += 1
+                        reporte["ya_existentes"] += 1
                 else:
-                    reporte["libros_no_encontrados"] += 1
-                    libros_faltantes_global.append(f"{titulo_historial} (Archivo: {archivo}, Mejor coincidencia: '{mejor_coincidencia}' con {puntaje}%)")
+                    reporte["no_encontrados"] += 1
+                    libros_faltantes_global.append(f"{row.get(col_titulo, '')} | {autor_csv_raw} (Archivo: {archivo})")
 
         conn.commit()
 

@@ -79,18 +79,25 @@ def inicializar_base_de_datos(conn):
     );
     """)
 
-    # Tabla de Historial de Libros (Librero)
+    # --- Tabla de Historial de Libros (Librero) ---
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS librero_historico (
         registro_id INTEGER PRIMARY KEY AUTOINCREMENT,
         cliente_id INTEGER,
         libro_id INTEGER,
+        autor_historico TEXT, -- <-- NUEVA COLUMNA PARA EL AUTOR DEL CSV
         origen TEXT DEFAULT 'IMPORTACION',
         FOREIGN KEY(cliente_id) REFERENCES clientes(cliente_id) ON DELETE CASCADE,
         FOREIGN KEY(libro_id) REFERENCES libros(libro_id) ON DELETE CASCADE,
         UNIQUE(cliente_id, libro_id)
     );
     """)
+
+    # --- Comando de seguridad para actualizar la tabla si ya existe ---
+    try:
+        cursor.execute("ALTER TABLE librero_historico ADD COLUMN autor_historico TEXT;")
+    except sqlite3.OperationalError:
+        pass # La columna ya existe, no hacer nada
     
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS meses_cerrados (

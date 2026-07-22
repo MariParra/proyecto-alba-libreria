@@ -323,14 +323,14 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     
     win = tk.Toplevel(root)
     win.title(f"Librero Histórico - {nombre_cliente}")
-    win.geometry("550x450") # Un poco más alto para que quepa el filtro
+    # --- VENTANA MÁS ANCHA PARA QUE QUEPA EL AUTOR ---
+    win.geometry("700x450") 
     win.transient(root)
     win.grab_set()
     win.configure(bg="#F3E5F5") 
     
     tk.Label(win, text=f"Biblioteca Personal de:\n{nombre_cliente}", bg="#F3E5F5", font=("Helvetica", 12, "bold")).pack(pady=(15, 10))
     
-    # --- NUEVO: MARCO Y COMBOBOX PARA FILTROS ---
     frame_filtros = tk.Frame(win, bg="#F3E5F5")
     frame_filtros.pack(fill="x", padx=20, pady=(0, 10))
     
@@ -339,51 +339,46 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     cmb_filtro_origen.set("Todos")
     cmb_filtro_origen.pack(side="left", padx=10)
     
-    # --- MARCO DE LA TABLA ---
     frame_tabla = tk.Frame(win)
     frame_tabla.pack(fill="both", expand=True, padx=20, pady=(0, 20))
     
     scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical")
-    tabla_hist = ttk.Treeview(frame_tabla, columns=("titulo", "origen", "fecha"), show="headings", yscrollcommand=scroll_y.set)
+    # --- SE AÑADE LA COLUMNA "autor" ---
+    tabla_hist = ttk.Treeview(frame_tabla, columns=("titulo", "autor", "origen", "fecha"), show="headings", yscrollcommand=scroll_y.set)
     scroll_y.config(command=tabla_hist.yview)
     
-    # --- NUEVO: FUNCIÓN PARA ORDENAR AL HACER CLIC ---
     def ordenar_columna_historial(tv, col, reverse):
         l = [(tv.set(k, col), k) for k in tv.get_children('')]
-        # Intenta ordenar numéricamente si es posible, sino alfabéticamente
         try: l.sort(key=lambda t: float(t[0]), reverse=reverse)
         except ValueError: l.sort(reverse=reverse)
         for index, (val, k) in enumerate(l):
             tv.move(k, '', index)
-        # Actualiza el comando para la próxima vez que se haga clic (invierte el orden)
         tv.heading(col, command=lambda _col=col: ordenar_columna_historial(tv, _col, not reverse))
 
-    # Vinculamos la función de ordenar a los encabezados
     tabla_hist.heading("titulo", text="Título del Libro", command=lambda: ordenar_columna_historial(tabla_hist, "titulo", False))
+    # --- ENCABEZADO Y ORDENAMIENTO PARA EL AUTOR ---
+    tabla_hist.heading("autor", text="Autor", command=lambda: ordenar_columna_historial(tabla_hist, "autor", False))
     tabla_hist.heading("origen", text="Origen / Método", command=lambda: ordenar_columna_historial(tabla_hist, "origen", False))
     tabla_hist.heading("fecha", text="Fecha (Mes/Año)", command=lambda: ordenar_columna_historial(tabla_hist, "fecha", False))
     
-    tabla_hist.column("titulo", width=250)
+    tabla_hist.column("titulo", width=220)
+    tabla_hist.column("autor", width=150) # Ancho para el autor
     tabla_hist.column("origen", width=120, anchor="center")
     tabla_hist.column("fecha", width=100, anchor="center")
     
     scroll_y.pack(side="right", fill="y")
     tabla_hist.pack(side="left", fill="both", expand=True)
     
-    # --- NUEVO: LÓGICA DE DATOS EN MEMORIA PARA FILTRADO RÁPIDO ---
-    registros_completos = [] # Aquí guardaremos todo lo que traiga la BD
+    registros_completos = [] 
     
     def actualizar_vista(*args):
-        # 1. Limpiar tabla actual
         for item in tabla_hist.get_children():
             tabla_hist.delete(item)
             
-        # 2. Leer qué filtro está seleccionado
         filtro = cmb_filtro_origen.get()
         
-        # 3. Llenar tabla filtrada
         for fila in registros_completos:
-            origen_db = fila[1] # La columna "origen" es el índice 1
+            origen_db = fila[2] 
             mostrar = False
             
             if filtro == "Todos":
@@ -394,40 +389,58 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
                 mostrar = True
                 
             if mostrar:
-                tabla_hist.insert("", "end", values=fila)
+                fila_formateada = list(fila)
+                if fila_formateada[1] and fila_formateada[1] != 'None':
+                    fila_formateada[1] = str(fila_formateada[1]).upper()
+                else:
+                    fila_formateada[1] = "DESCONOCIDO"
+                
+                tabla_hist.insert("", "end", values=tuple(fila_formateada))
 
-    # Conectar el combobox con la función de actualizar
     cmb_filtro_origen.bind("<<ComboboxSelected>>", actualizar_vista)
     
-    # Extraer y cruzar datos desde la Base de Datos UNA SOLA VEZ
     try:
         conn = conexion.conectar_db()
         cursor = conn.cursor()
         
+        # --- CONSULTA SQL ANTI-DUPLICADOS ---
         query = """
-            SELECT l.titulo, 'Importación (Librero Antiguo)' AS origen, 'N/A' AS fecha
-            FROM librero_historico lh
-            JOIN libros l ON lh.libro_id = l.libro_id
-            WHERE lh.cliente_id = ?
-            
-            UNION
-            
-            SELECT l.titulo, 'Asignación App' AS origen, a.mes || '/' || a.ano AS fecha
+            SELECT 
+                l.titulo, 
+                -- Si autor_historico NO es nulo o vacío, úsalo. Si no, usa el autor de la tabla libros.
+                COALESCE(NULLIF(h.autor_historico, ''), l.autor) AS autor_final,
+                'Asignación App' AS origen, 
+                a.mes || '/' || a.ano AS fecha
             FROM asignaciones a
             JOIN libros l ON a.libro_suscripcion_id = l.libro_id
+            LEFT JOIN librero_historico h ON a.cliente_id = h.cliente_id AND a.libro_suscripcion_id = h.libro_id
             WHERE a.cliente_id = ? AND a.libro_suscripcion_id IS NOT NULL
+
+            UNION
+
+            SELECT 
+                l.titulo, 
+                COALESCE(NULLIF(lh.autor_historico, ''), l.autor) AS autor_final,
+                'Importación (Librero Antiguo)' AS origen, 
+                '--' AS fecha
+            FROM librero_historico lh
+            JOIN libros l ON lh.libro_id = l.libro_id
+            WHERE lh.cliente_id = ? AND lh.libro_id NOT IN (
+                SELECT a2.libro_suscripcion_id FROM asignaciones a2 WHERE a2.cliente_id = ? AND a2.libro_suscripcion_id IS NOT NULL
+            )
             
-            ORDER BY titulo
+            ORDER BY titulo;
         """
-        cursor.execute(query, (cliente_id, cliente_id))
-        registros_completos = cursor.fetchall() # Guardamos los datos en la memoria de la ventana
+        cursor.execute(query, (cliente_id, cliente_id, cliente_id))
+
+        registros_completos = cursor.fetchall() 
         conn.close()
         
         if not registros_completos:
-            tabla_hist.insert("", "end", values=("No hay libros registrados para esta clienta.", "", ""))
-            cmb_filtro_origen.config(state="disabled") # Apagamos el filtro si está vacío
+            tabla_hist.insert("", "end", values=("No hay libros registrados para esta clienta.", "", "", ""))
+            cmb_filtro_origen.config(state="disabled") 
         else:
-            actualizar_vista() # Llamamos a la vista inicial (que carga "Todos")
+            actualizar_vista() 
             
     except Exception as e:
         messagebox.showerror("Error BD", f"No se pudo cargar el historial: {e}", parent=win)
