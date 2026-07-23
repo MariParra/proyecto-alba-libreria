@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 # --- CONFIGURACIÓN ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SCRIPT_DIR)
-LIBREROS_DIR = os.path.join(BASE_DIR, "6_libreros")
-DIR_REPORTES = os.path.join(BASE_DIR, "4_output_reports")
+LIBREROS_DIR = os.path.join(BASE_DIR, "5_libreros")
+DIR_REPORTES = os.path.join(BASE_DIR, "3_output_reports")
 
 os.makedirs(LIBREROS_DIR, exist_ok=True)
 os.makedirs(DIR_REPORTES, exist_ok=True)

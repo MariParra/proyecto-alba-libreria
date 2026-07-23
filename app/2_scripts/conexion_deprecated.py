@@ -25,7 +25,7 @@ def realizar_respaldo_automatico(etiqueta="OPEN"):
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # La ruta ahora apunta a la subcarpeta específica para respaldos .db
-        carpeta_respaldos_sqlite = os.path.join(base_dir, "5_backups", "backup_sqlite", "self-acting")
+        carpeta_respaldos_sqlite = os.path.join(base_dir, "4_backups", "backup_sqlite", "self-acting")
         
         # -- CREAR CARPETA DE RESPALDOS SI NO EXISTE --
         os.makedirs(carpeta_respaldos_sqlite, exist_ok=True)

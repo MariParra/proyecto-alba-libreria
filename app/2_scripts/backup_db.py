@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
 
 # --- RUTAS DE RESPALDO ORGANIZADAS EN SUBCARPETAS ---
-BACKUP_DIR_RAIZ = os.path.join(BASE_DIR, "5_backups")
+BACKUP_DIR_RAIZ = os.path.join(BASE_DIR, "4_backups")
 BACKUP_DIR_SQLITE = os.path.join(BACKUP_DIR_RAIZ, "backup_sqlite", "manual")
 BACKUP_DIR_EXCEL = os.path.join(BACKUP_DIR_RAIZ, "backup_excel")
 

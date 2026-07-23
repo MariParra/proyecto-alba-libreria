@@ -16,10 +16,10 @@ posibles_rutas = [
 ]
 CSV_PATH = next((ruta for ruta in posibles_rutas if os.path.exists(ruta)), None)
 
-OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "4_output_reports", "migracion_asignaciones.sql")
-MISSING_CLIENTS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_clientes_faltantes.csv")
-MISSING_BOOKS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_libros_faltantes.csv")
-SKIPPED_ROWS_REPORT_PATH = os.path.join(BASE_DIR, "4_output_reports", "reporte_filas_omitidas.csv")
+OUTPUT_SQL_PATH = os.path.join(BASE_DIR, "3_output_reports", "migracion_asignaciones.sql")
+MISSING_CLIENTS_REPORT_PATH = os.path.join(BASE_DIR, "3_output_reports", "reporte_clientes_faltantes.csv")
+MISSING_BOOKS_REPORT_PATH = os.path.join(BASE_DIR, "3_output_reports", "reporte_libros_faltantes.csv")
+SKIPPED_ROWS_REPORT_PATH = os.path.join(BASE_DIR, "3_output_reports", "reporte_filas_omitidas.csv")
 
 def normalize_name(name):
     if not isinstance(name, str): return ""

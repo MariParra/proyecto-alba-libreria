@@ -8,7 +8,7 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "stock_precios.csv")
 DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
-DIR_REPORTES = os.path.join(BASE_DIR, "4_output_reports")
+DIR_REPORTES = os.path.join(BASE_DIR, "3_output_reports")
 os.makedirs(DIR_REPORTES, exist_ok=True) 
 TXT_NO_ENCONTRADOS = os.path.join(DIR_REPORTES, "libros_no_encontrados_stock.txt")
 
