@@ -291,7 +291,6 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_busqueda_filtros, text="Quitar Filtros", command=comandos_ui['cmd_limpiar_filtros'], bg="gray", fg="white", relief="flat", cursor="hand2", padx=10).grid(row=0, column=3, padx=5)
 
     # Fila 1: Filtros Combo
-        # Fila 1: Filtros Múltiples (Listbox)
     frame_listas = tk.Frame(frame_busqueda_filtros, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_listas.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10,0))
     
@@ -374,17 +373,25 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_bottom_v = tk.Frame(frame_form_ventas, bg="white")
     frame_bottom_v.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
 
+    # TOTALES
     frame_totales = tk.Frame(frame_bottom_v, bg="#F1F8E9", relief="sunken", borderwidth=1)
     frame_totales.pack(fill="x", pady=(5, 10), ipady=5)
+
+    # --- Fila de Subtotal ---
     tk.Label(frame_totales, text="Subtotal Libros:", font=font_pequena_bold, bg="#F1F8E9").grid(row=0, column=0, sticky="e", padx=5)
     widgets['lbl_v_subtotal'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
     widgets['lbl_v_subtotal'].grid(row=0, column=1, sticky="w")
+
+    # --- Fila de Costo Envío ---
     tk.Label(frame_totales, text="Costo Envío:", font=font_pequena_bold, bg="#F1F8E9").grid(row=1, column=0, sticky="e", padx=5)
-    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=font_pequena, bg="#F1F8E9")
+    widgets['lbl_v_costo_envio'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 10), bg="#F1F8E9")
     widgets['lbl_v_costo_envio'].grid(row=1, column=1, sticky="w")
+
+    # --- Fila de Total Venta ---
     tk.Label(frame_totales, text="TOTAL VENTA:", font=("Helvetica", 11, "bold"), bg="#F1F8E9").grid(row=2, column=0, sticky="e", padx=5, pady=(5,0))
-    widgets['lbl_v_total_final'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#F1F8E9")
-    widgets['lbl_v_total_final'].grid(row=2, column=1, sticky="w", pady=(5,0))
+    widgets['lbl_v_total'] = tk.Label(frame_totales, text="$ 0", font=("Helvetica", 11, "bold"), bg="#F1F8E9")
+    widgets['lbl_v_total'].grid(row=2, column=1, sticky="w", pady=(5,0))
+    
     frame_totales.grid_columnconfigure(1, weight=1)
 
     tk.Button(frame_bottom_v, text="💾 GUARDAR VENTA Y ACTUALIZAR STOCK", command=comandos_ui.get('cmd_v_guardar'), bg="#81BFB7", fg="white", font=font_pequena_bold, relief="flat", cursor="hand2", pady=8).pack(fill="x", pady=(0, 5))
@@ -432,9 +439,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     tk.Button(frame_btn_libros, text="❌ Quitar", command=comandos_ui.get('cmd_v_remove_libro'), bg="#D32F2F", fg="white", relief="flat", cursor="hand2").pack(side="right", expand=True, fill="x", padx=(2, 0))
 
     # Carrito
-    widgets['list_v_libros'] = tk.Listbox(frame_inner_v, height=3, font=font_pequena, selectbackground="#81BFB7")
-    widgets['list_v_libros'].pack(fill="x")
-
+    widgets['list_v_carrito'] = tk.Listbox(frame_inner_v, height=3, font=font_pequena, selectbackground="#81BFB7")
+    widgets['list_v_carrito'].pack(fill="x")
+    
     # Fila 5: Envío y Costo (LADO A LADO para ahorrar espacio)
     frame_ec = tk.Frame(frame_inner_v, bg="white")
     frame_ec.pack(fill="x", pady=(5, 0))

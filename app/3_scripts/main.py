@@ -1,12 +1,9 @@
 import tkinter as tk
+from tkinter import messagebox  # Importante para que funcione la ventanita de confirmación al salir
 from controlador import AppControlador
 import config
-from conexion import realizar_respaldo_automatico # <-- 1. IMPORTAR LA FUNCIÓN
 
 def iniciar_app():
-    # --- RESPALDO AL ABRIR LA APLICACIÓN ---
-    realizar_respaldo_automatico(etiqueta="OPEN")
-
     # 1. Instanciar la ventana principal
     root = tk.Tk()
     root.title("Alba Librería - Gestor Principal")
@@ -18,14 +15,13 @@ def iniciar_app():
     # 3. Inicializar la aplicación a través del controlador
     app = AppControlador(root)
 
-    # --- LÓGICA DE RESPALDO AL CERRAR ---
+    # --- LÓGICA DE CIERRE DE VENTANA LÍMPIA ---
     def al_cerrar_ventana():
         """
         Esta función se ejecuta cuando el usuario cierra la ventana.
-        Primero crea el respaldo y luego cierra la aplicación.
         """
-        if tk.messagebox.askokcancel("Salir", "¿Estás seguro de que quieres salir?"):
-            realizar_respaldo_automatico(etiqueta="CLOSE")
+        if messagebox.askokcancel("Salir", "¿Estás seguro de que quieres salir?"):
+            # Ya no hacemos el respaldo local, solo cerramos la app.
             root.destroy()
 
     # 4. Interceptar el evento de cierre de la ventana

@@ -591,7 +591,21 @@
         "encuadernacion":null
     },
     {
-        "titulo":"EL PRINCIPE CAUTIVO",
+        "titulo":"EL ESCLAVO (EL PRINCIPE CAUTIVO 1)",
+        "autor":"C. S. PACAT",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL GUERRERO (EL PRINCIPE CAUTIVO 2)",
+        "autor":"C. S. PACAT",
+        "genero":"FANTASIA",
+        "editorial":"URANO",
+        "encuadernacion":null
+    },
+    {
+        "titulo":"EL REY (EL PRINCIPE CAUTIVO 3)",
         "autor":"C. S. PACAT",
         "genero":"FANTASIA",
         "editorial":"URANO",
@@ -2629,5 +2643,8 @@
         "genero": "ROMANCE",
         "editorial": "V&R EDITORAS",
         "encuadernacion": null
+    },
+    {
+        "titulo": "HARRY POTTER Y LA PIEDRA FILOSOFAL"
     }
 ]

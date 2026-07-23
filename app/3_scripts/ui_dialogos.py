@@ -1,3 +1,5 @@
+# ui_dialogos.py - VERSIÓN ÍNTEGRA Y COMPLETAMENTE TRADUCIDA PARA POSTGRESQL (NUBE)
+
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import datetime
@@ -7,18 +9,15 @@ def abrir_dialogo_comentario(root, tabla, callback_refrescar):
     """Abre un diálogo para editar el campo de texto 'comentario'."""
     selected_iid = tabla.focus()
     if not selected_iid: return
-
     asignacion_id = tabla.set(selected_iid, "asignacion_id")
     valor_actual = tabla.set(selected_iid, "comentario")
 
-    # Usamos un Toplevel personalizado para más control que simpledialog
     win = tk.Toplevel(root)
     win.title("Editar Comentario")
     win.geometry("400x300")
     win.transient(root)
     win.grab_set()
     win.configure(bg="#FCE4EC")
-
     tk.Label(win, text="Comentario:", bg="#FCE4EC", font=("Helvetica", 10, "bold")).pack(pady=(10, 5))
     
     text_frame = tk.Frame(win, bd=1, relief="sunken")
@@ -32,11 +31,10 @@ def abrir_dialogo_comentario(root, tabla, callback_refrescar):
         nuevo_valor = text_widget.get("1.0", tk.END).strip()
         if not nuevo_valor:
             nuevo_valor = "SIN COMENTARIOS"
-
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            cursor.execute("UPDATE asignaciones SET comentario = ? WHERE asignacion_id = ?", (nuevo_valor, asignacion_id))
+            cursor.execute("UPDATE asignaciones SET comentario = %s WHERE asignacion_id = %s", (nuevo_valor, asignacion_id))
             conn.commit()
             conn.close()
             win.destroy()
@@ -45,7 +43,6 @@ def abrir_dialogo_comentario(root, tabla, callback_refrescar):
             messagebox.showerror("Error", f"No se pudo actualizar el comentario: {e}", parent=win)
 
     tk.Button(win, text="Guardar", command=guardar_comentario, bg="#81BFB7", fg="white", font=("Helvetica", 10, "bold")).pack(pady=10)
-
 
 def manejar_edicion_celda(event, root, widgets, callback_refrescar):
     tabla = widgets['tabla_clientes']
@@ -59,14 +56,12 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
 
     asignacion_id = tabla.set(selected_iid, "asignacion_id")
     
-    # --- LÓGICA DE DERIVACIÓN ---
     if selected_col_name == "fecha_asig":
         abrir_dialogo_fecha(root, tabla, callback_refrescar)
         return
     elif selected_col_name == "libro":
-        abrir_dialogo_asignar_libro(root, tabla, callback_refrescar, lambda: refrescar_inventario_global(widgets))
+        abrir_dialogo_asignar_libro(root, tabla, selected_iid, callback_refrescar, lambda: refrescar_inventario_global(widgets))
         return
-    # AÑADIDO: Manejo para la columna de comentario
     elif selected_col_name == "comentario":
         abrir_dialogo_comentario(root, tabla, callback_refrescar)
         return
@@ -91,6 +86,7 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
     if opciones_combo:
         x, y, w, h = tabla.bbox(selected_iid, col_display_id)
         valor_actual = tabla.set(selected_iid, selected_col_name)
+        
         cb = ttk.Combobox(tabla, values=opciones_combo, state="readonly")
         cb.place(x=x, y=y, width=w, height=h)
         cb.set(valor_actual if valor_actual else opciones_combo[0])
@@ -104,9 +100,9 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
                 cursor = conn.cursor()
                 if campo_bd == "metodo_entrega":
                     cliente_id = tabla.set(selected_iid, "cliente_id")
-                    cursor.execute("UPDATE suscripciones SET metodo_entrega = ? WHERE cliente_id = ?", (valor_guardar, cliente_id))
+                    cursor.execute("UPDATE suscripciones SET metodo_entrega = %s WHERE cliente_id = %s", (valor_guardar, cliente_id))
                 else:
-                    cursor.execute(f"UPDATE asignaciones SET {campo_bd} = ? WHERE asignacion_id = ?", (valor_guardar, asignacion_id))
+                    cursor.execute(f"UPDATE asignaciones SET {campo_bd} = %s WHERE asignacion_id = %s", (valor_guardar, asignacion_id))
                 conn.commit()
                 conn.close()
                 cb.destroy()
@@ -119,7 +115,6 @@ def manejar_edicion_celda(event, root, widgets, callback_refrescar):
         cb.bind("<Return>", guardar_cambio_combo)
         cb.bind("<<ComboboxSelected>>", guardar_cambio_combo)
 
-
 def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, callback_inventario):
     asignacion_id = tabla.set(item_id, "asignacion_id")
     cliente_nombre = tabla.set(item_id, "nombre")
@@ -128,16 +123,38 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         conn = conexion.conectar_db()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT libro_suscripcion_id FROM asignaciones WHERE asignacion_id = ?", (asignacion_id,))
+        cursor.execute("SELECT cliente_id, libro_suscripcion_id FROM asignaciones WHERE asignacion_id = %s", (asignacion_id,))
         res = cursor.fetchone()
-        current_libro_id = res[0] if res else None
-        
-        cursor.execute("SELECT s.generos_preferencia FROM asignaciones a JOIN suscripciones s ON a.cliente_id = s.cliente_id WHERE a.asignacion_id = ?", (asignacion_id,))
+        if not res:
+            messagebox.showerror("Error", "No se encontró la asignación.")
+            conn.close()
+            return
+            
+        cliente_id_actual = res[0]
+        current_libro_id = res[1]
+        # --- FIN DE LA OBTENCIÓN DEL CLIENTE_ID ---
+
+        cursor.execute("SELECT s.generos_preferencia FROM asignaciones a JOIN suscripciones s ON a.cliente_id = s.cliente_id WHERE a.asignacion_id = %s", (asignacion_id,))
         res_gen = cursor.fetchone()
         generos_str = res_gen[0] if res_gen and res_gen[0] else ""
         generos_preferidos = [g.strip().upper() for g in generos_str.split(',') if g.strip()]
         
-        cursor.execute("SELECT libro_id, titulo, stock, genero FROM libros ORDER BY titulo")
+        query = """
+        SELECT libro_id, titulo, stock, genero FROM libros 
+        WHERE stock > 0 
+        AND libro_id NOT IN (
+            -- Libros ya asignados en la app
+            SELECT libro_suscripcion_id FROM asignaciones WHERE cliente_id = %s AND libro_suscripcion_id IS NOT NULL
+            UNION
+            -- Libros de su librero histórico importado
+            SELECT libro_id FROM librero_historico WHERE cliente_id = %s AND libro_id IS NOT NULL
+        )
+        ORDER BY titulo;
+        """
+        
+        # --- PASAR LOS PARÁMETROS A LA CONSULTA ---
+        # Como el cliente_id es el mismo, se lo pasamos dos veces
+        cursor.execute(query, (cliente_id_actual, cliente_id_actual))
         todos_los_libros = cursor.fetchall()
         
         conn.close()
@@ -153,7 +170,6 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     for l_id, t, s, gen in todos_los_libros:
         texto_opcion = f"{t} (Stock: {s})"
         es_recomendado = any(pref in str(gen).strip().upper() or str(gen).strip().upper() in pref for pref in generos_preferidos)
-
         if es_recomendado:
             if s > 0: libros_recomendados_stock.append((texto_opcion, l_id))
             else: libros_recomendados_catalogo.append((texto_opcion, l_id))
@@ -177,32 +193,29 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     if not libros_recomendados_stock and generos_preferidos:
         lbl_alerta.pack()
 
-    # --- FRAME PARA LOS CHECKBOXES DE CONTROL ---
     frame_checks = tk.Frame(win, bg="#F7DAE7")
     frame_checks.pack(pady=5)
     
     usar_filtro_var = tk.BooleanVar(value=True if (libros_recomendados_stock or libros_recomendados_catalogo) else False)
-    incluir_sin_stock_var = tk.BooleanVar(value=False) # Por defecto, no mostramos los de catálogo
+    incluir_sin_stock_var = tk.BooleanVar(value=False)
     cb_libros = ttk.Combobox(win, state="readonly", width=70, font=("Helvetica", 10))
     
     def actualizar_opciones_combobox(*args):
         opciones_mostrar = ["(Sin Asignar)"]
-        
-        if usar_filtro_var.get(): # --- MODO FILTRADO POR GÉNERO ---
+        if usar_filtro_var.get():
             if libros_recomendados_stock:
                 opciones_mostrar.append("--- RECOMENDADOS EN STOCK ---")
                 opciones_mostrar.extend([txt for txt, l_id in libros_recomendados_stock])
             if incluir_sin_stock_var.get() and libros_recomendados_catalogo:
                 opciones_mostrar.append("--- RECOMENDADOS (CATÁLOGO / SIN STOCK) ---")
                 opciones_mostrar.extend([txt for txt, l_id in libros_recomendados_catalogo])
-        else: # --- MODO VER TODO EL INVENTARIO ---
+        else:
             if libros_todos_stock:
                 opciones_mostrar.append("--- TODO EL CATÁLOGO EN STOCK ---")
                 opciones_mostrar.extend([txt for txt, l_id in libros_todos_stock])
             if incluir_sin_stock_var.get() and libros_todos_catalogo:
                 opciones_mostrar.append("--- TODO EL CATÁLOGO (SIN STOCK) ---")
                 opciones_mostrar.extend([txt for txt, l_id in libros_todos_catalogo])
-
         cb_libros.config(values=opciones_mostrar)
         if valor_actual_str in opciones_mostrar: cb_libros.set(valor_actual_str)
         else: cb_libros.set(opciones_mostrar[0])
@@ -211,7 +224,6 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     if not (libros_recomendados_stock or libros_recomendados_catalogo):
         chk_filtro_genero.config(state="disabled")
     chk_filtro_genero.pack(side="left", padx=10)
-
     chk_sin_stock = tk.Checkbutton(frame_checks, text="Incluir sin stock (Catálogo)", variable=incluir_sin_stock_var, bg="#F7DAE7", command=actualizar_opciones_combobox, cursor="hand2")
     chk_sin_stock.pack(side="left", padx=10)
     
@@ -220,6 +232,7 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     
     frame_botones = tk.Frame(win, bg="#F7DAE7")
     frame_botones.pack(pady=15, fill="x", expand=True)
+
     def guardar_y_cerrar():
         seleccion_str = cb_libros.get()
         nuevo_libro_id = mapa_libros.get(seleccion_str, None)
@@ -232,12 +245,10 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
             conn = conexion.conectar_db()
             cursor = conn.cursor()
             if current_libro_id:
-                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
+                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = %s", (current_libro_id,))
             if nuevo_libro_id:
-                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = ?", (nuevo_libro_id,))
-                
-            cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = ? WHERE asignacion_id = ?", (nuevo_libro_id, asignacion_id))
-            
+                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = %s", (nuevo_libro_id,))
+            cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = %s WHERE asignacion_id = %s", (nuevo_libro_id, asignacion_id))
             conn.commit()
             conn.close()
             win.destroy()
@@ -250,13 +261,12 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         if not current_libro_id:
             messagebox.showinfo("Información", "Esta clienta ya se encuentra 'Sin Asignar'.", parent=win)
             return
-            
         if messagebox.askyesno("Confirmar", f"¿Quitar el libro a {cliente_nombre}?\n\nEl libro volverá al stock.", parent=win):
             try:
                 conn = conexion.conectar_db()
                 cursor = conn.cursor()
-                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = ?", (current_libro_id,))
-                cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = NULL WHERE asignacion_id = ?", (asignacion_id,))
+                cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = %s", (current_libro_id,))
+                cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = NULL WHERE asignacion_id = %s", (asignacion_id,))
                 conn.commit()
                 conn.close()
                 win.destroy()
@@ -268,7 +278,6 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
 
     tk.Button(frame_botones, text="Guardar Cambios", command=guardar_y_cerrar, bg="#81BFB7", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="left", padx=(30, 10))
     tk.Button(frame_botones, text="Quitar Asignación", command=quitar_y_cerrar, bg="#D32F2F", fg="white", font=("Helvetica", 10, "bold"), pady=6, width=15).pack(side="right", padx=(10, 30))
-
 
 def abrir_dialogo_fecha(root, tabla, callback_refrescar):
     selected_iid = tabla.focus()
@@ -291,7 +300,7 @@ def abrir_dialogo_fecha(root, tabla, callback_refrescar):
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            cursor.execute("UPDATE asignaciones SET fecha_asignacion = ? WHERE asignacion_id = ?", (entry_fecha.get().strip(), asignacion_id))
+            cursor.execute("UPDATE asignaciones SET fecha_asignacion = %s WHERE asignacion_id = %s", (entry_fecha.get().strip(), asignacion_id))
             conn.commit()
             conn.close()
             win.destroy()
@@ -323,7 +332,6 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     
     win = tk.Toplevel(root)
     win.title(f"Librero Histórico - {nombre_cliente}")
-    # --- VENTANA MÁS ANCHA PARA QUE QUEPA EL AUTOR ---
     win.geometry("700x450") 
     win.transient(root)
     win.grab_set()
@@ -343,7 +351,6 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     frame_tabla.pack(fill="both", expand=True, padx=20, pady=(0, 20))
     
     scroll_y = ttk.Scrollbar(frame_tabla, orient="vertical")
-    # --- SE AÑADE LA COLUMNA "autor" ---
     tabla_hist = ttk.Treeview(frame_tabla, columns=("titulo", "autor", "origen", "fecha"), show="headings", yscrollcommand=scroll_y.set)
     scroll_y.config(command=tabla_hist.yview)
     
@@ -356,13 +363,12 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
         tv.heading(col, command=lambda _col=col: ordenar_columna_historial(tv, _col, not reverse))
 
     tabla_hist.heading("titulo", text="Título del Libro", command=lambda: ordenar_columna_historial(tabla_hist, "titulo", False))
-    # --- ENCABEZADO Y ORDENAMIENTO PARA EL AUTOR ---
     tabla_hist.heading("autor", text="Autor", command=lambda: ordenar_columna_historial(tabla_hist, "autor", False))
     tabla_hist.heading("origen", text="Origen / Método", command=lambda: ordenar_columna_historial(tabla_hist, "origen", False))
     tabla_hist.heading("fecha", text="Fecha (Mes/Año)", command=lambda: ordenar_columna_historial(tabla_hist, "fecha", False))
     
     tabla_hist.column("titulo", width=220)
-    tabla_hist.column("autor", width=150) # Ancho para el autor
+    tabla_hist.column("autor", width=150)
     tabla_hist.column("origen", width=120, anchor="center")
     tabla_hist.column("fecha", width=100, anchor="center")
     
@@ -374,27 +380,22 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     def actualizar_vista(*args):
         for item in tabla_hist.get_children():
             tabla_hist.delete(item)
-            
         filtro = cmb_filtro_origen.get()
-        
         for fila in registros_completos:
             origen_db = fila[2] 
             mostrar = False
-            
             if filtro == "Todos":
                 mostrar = True
             elif filtro == "Importados (Librero Antiguo)" and "Importación" in origen_db:
                 mostrar = True
             elif filtro == "Asignados (App)" and "Asignación App" in origen_db:
                 mostrar = True
-                
             if mostrar:
                 fila_formateada = list(fila)
                 if fila_formateada[1] and fila_formateada[1] != 'None':
                     fila_formateada[1] = str(fila_formateada[1]).upper()
                 else:
                     fila_formateada[1] = "DESCONOCIDO"
-                
                 tabla_hist.insert("", "end", values=tuple(fila_formateada))
 
     cmb_filtro_origen.bind("<<ComboboxSelected>>", actualizar_vista)
@@ -403,21 +404,17 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
         conn = conexion.conectar_db()
         cursor = conn.cursor()
         
-        # --- CONSULTA SQL ANTI-DUPLICADOS ---
         query = """
             SELECT 
                 l.titulo, 
-                -- Si autor_historico NO es nulo o vacío, úsalo. Si no, usa el autor de la tabla libros.
                 COALESCE(NULLIF(h.autor_historico, ''), l.autor) AS autor_final,
                 'Asignación App' AS origen, 
-                a.mes || '/' || a.ano AS fecha
+                CONCAT(a.mes, '/', a.ano) AS fecha
             FROM asignaciones a
             JOIN libros l ON a.libro_suscripcion_id = l.libro_id
             LEFT JOIN librero_historico h ON a.cliente_id = h.cliente_id AND a.libro_suscripcion_id = h.libro_id
-            WHERE a.cliente_id = ? AND a.libro_suscripcion_id IS NOT NULL
-
+            WHERE a.cliente_id = %s AND a.libro_suscripcion_id IS NOT NULL
             UNION
-
             SELECT 
                 l.titulo, 
                 COALESCE(NULLIF(lh.autor_historico, ''), l.autor) AS autor_final,
@@ -425,14 +422,12 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
                 '--' AS fecha
             FROM librero_historico lh
             JOIN libros l ON lh.libro_id = l.libro_id
-            WHERE lh.cliente_id = ? AND lh.libro_id NOT IN (
-                SELECT a2.libro_suscripcion_id FROM asignaciones a2 WHERE a2.cliente_id = ? AND a2.libro_suscripcion_id IS NOT NULL
+            WHERE lh.cliente_id = %s AND lh.libro_id NOT IN (
+                SELECT a2.libro_suscripcion_id FROM asignaciones a2 WHERE a2.cliente_id = %s AND a2.libro_suscripcion_id IS NOT NULL
             )
-            
             ORDER BY titulo;
         """
         cursor.execute(query, (cliente_id, cliente_id, cliente_id))
-
         registros_completos = cursor.fetchall() 
         conn.close()
         
@@ -455,7 +450,6 @@ def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
         extras_actuales_str = ""
     lista_extras = [e.strip() for e in extras_actuales_str.split(",") if e.strip()]
     
-    # --- 1. CARGAR INVENTARIO ACTUAL ---
     titulos_inventario = []
     try:
         conn = conexion.conectar_db()
@@ -501,17 +495,16 @@ def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
             
     cb_nuevo.bind('<KeyRelease>', autocompletar)
     
-    # --- NUEVO: FUNCIÓN DE AUTOGUARDADO EN SEGUNDO PLANO ---
     def auto_guardar_bd():
         nuevos_extras = [listbox.get(i) for i in range(listbox.size())]
         extras_str = ", ".join(nuevos_extras)
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
-            cursor.execute("UPDATE asignaciones SET extras = ? WHERE asignacion_id = ?", (extras_str, asignacion_id))
+            cursor.execute("UPDATE asignaciones SET extras = %s WHERE asignacion_id = %s", (extras_str, asignacion_id))
             conn.commit()
             conn.close()
-            callback_asignaciones() # Refresca la tabla de atrás sin que te des cuenta
+            callback_asignaciones()
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar: {e}", parent=win)
 
@@ -526,7 +519,7 @@ def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original)
-                        VALUES (?, 'SIN INFORMACION', 'SIN INFORMACION', 'SIN INFORMACION', 'TAPA BLANDA', 0, 0.0, 0.0)
+                        VALUES (%s, 'SIN INFORMACION', 'SIN INFORMACION', 'SIN INFORMACION', 'TAPA BLANDA', 0, 0.0, 0.0)
                     """, (nuevo,))
                     conn.commit()
                     conn.close()
@@ -537,21 +530,21 @@ def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
                     messagebox.showerror("Error BD", f"No se pudo crear el libro: {e}", parent=win)
                     return
             else:
-                pass
+                return # Si dice que no, no lo añade
                 
         listbox.insert("end", nuevo)
         cb_nuevo.set("")
         cb_nuevo.config(values=titulos_inventario)
-        auto_guardar_bd() # <--- SE GUARDA SOLITO AL AÑADIR
+        auto_guardar_bd()
             
     def quitar_extra():
         seleccion = listbox.curselection()
         if seleccion:
             listbox.delete(seleccion[0])
-            auto_guardar_bd() # <--- SE GUARDA SOLITO AL QUITAR
+            auto_guardar_bd()
             
     tk.Button(frame_controles, text="Añadir", command=agregar_extra, bg="#0288D1", fg="white", cursor="hand2").pack(side="left", padx=5)
     tk.Button(frame_controles, text="Quitar", command=quitar_extra, bg="#D32F2F", fg="white", cursor="hand2").pack(side="right")
     
-    # --- EL BOTÓN DE ABAJO AHORA SOLO CIERRA LA VENTANA ---
     tk.Button(win, text="Cerrar Ventana", command=win.destroy, bg="#757575", fg="white", font=("Helvetica", 10, "bold"), pady=5).pack(fill="x", padx=20, pady=(10, 20))
+

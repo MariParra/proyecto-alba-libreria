@@ -1,6 +1,5 @@
---- REPORTE DE STOCK: LIBROS NO ENCONTRADOS (2026-07-20 18:02) ---
+--- REPORTE DE STOCK: LIBROS NO ENCONTRADOS (2026-07-23 10:50) ---
 Los siguientes títulos están en tu Excel, pero NO en tu Base de Datos.
 Revisa si hay errores de tipeo o si son libros nuevos que debes crear primero:
 
-- LA LECTURA DE VERANO
-- VIAJANDO CON MEGAN
+- GRIMM MORTAL

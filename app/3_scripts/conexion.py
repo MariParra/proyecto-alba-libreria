@@ -1,55 +1,31 @@
-import sqlite3
+import psycopg2
 import os
-import shutil
-import datetime
-import subprocess
-from config import DB_NAME
+from dotenv import load_dotenv
 
 def conectar_db():
-    # -- ESTABLECER CONEXION CON LA BASE DE DATOS --
-    return sqlite3.connect(DB_NAME)
-
-def realizar_respaldo_automatico(etiqueta="OPEN"):
     """
-    Crea un respaldo de la base de datos en la subcarpeta 'backup_sqlite',
-    usando la etiqueta proporcionada (ej: OPEN, CLOSE).
+    Se conecta a la base de datos PostgreSQL en la nube usando la URL 
+    almacenada en el archivo .env.
     """
-    print(f"Iniciando respaldo automático con etiqueta: {etiqueta}...")
-    
-    # -- VERIFICAR EXISTENCIA DE LA BASE DE DATOS --
-    if not os.path.exists(DB_NAME):
-        print(f"Advertencia: No se encontro la base de datos para respaldar: {DB_NAME}")
-        return
+    # 1. Cargar las variables del archivo .env
+    # Buscamos el archivo .env en la carpeta raíz del proyecto
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    ENV_PATH = os.path.join(BASE_DIR, ".env")
+    load_dotenv(ENV_PATH)
 
-    # -- CONSTRUIR RUTA DINÁMICA HACIA LA SUBCARPETA DE RESPALDOS SQLITE --
+    # 2. Obtener la URL de la base de datos
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise Exception("No se encontró la variable DATABASE_URL en el archivo .env. Asegúrate de que el archivo exista en la raíz del proyecto.")
+
+    # 3. Pequeña corrección para compatibilidad
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    # 4. Intentar conectar a la base de datos en la nube
     try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # La ruta ahora apunta a la subcarpeta específica para respaldos .db
-        carpeta_respaldos_sqlite = os.path.join(base_dir, "5_backups", "backup_sqlite", "self-acting")
-        
-        # -- CREAR CARPETA DE RESPALDOS SI NO EXISTE --
-        os.makedirs(carpeta_respaldos_sqlite, exist_ok=True)
-
+        conn = psycopg2.connect(db_url)
+        return conn
     except Exception as e:
-        print(f"Error al crear o encontrar la carpeta de respaldos: {e}")
-        return
-
-    # -- GENERAR NOMBRE DE RESPALDO CON FECHA, HORA Y ETIQUETA --
-    ahora = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    nombre_respaldo = os.path.join(carpeta_respaldos_sqlite, f"respaldo_evento_{ahora}_{etiqueta}.db")
-
-    # -- COPIAR ARCHIVO DE BASE DE DATOS AL RESPALDO --
-    try:
-        shutil.copy2(DB_NAME, nombre_respaldo)
-        print(f"  -> Respaldo '{etiqueta}' creado con éxito en: {nombre_respaldo}")
-    except Exception as e:
-        print(f"Error al realizar la copia de respaldo: {e}")
-
-def ejecutar_script_externo(nombre_script):
-    # -- VERIFICAR EXISTENCIA DEL SCRIPT EXTERNO --
-    if not os.path.exists(nombre_script):
-        raise FileNotFoundError(f"No se encontró el archivo '{nombre_script}'")
-        
-    # -- EJECUTAR SCRIPT COMO SUBPROCESO --
-    # Se usa subprocess.run para mayor control
-    return subprocess.run(["python", nombre_script], capture_output=True, text=True, check=True, encoding='utf-8')
+        # Si falla, lanzamos un error claro para saber qué pasó
+        raise Exception(f"No se pudo conectar a la base de datos en la nube. Revisa tu conexión a internet y la DATABASE_URL en el archivo .env. Detalle del error: {e}")
