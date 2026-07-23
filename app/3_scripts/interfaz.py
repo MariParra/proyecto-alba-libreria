@@ -108,14 +108,6 @@ def construir_interfaz(ventana, widgets, comandos_ui):
         # Usamos after para darle a Tkinter una fracción de segundo para procesar el clic
         mb_meses.after(10, lambda: mb_meses.event_generate('<Button-1>'))
         
-    def mantener_menu_abierto(event):
-        try:
-            # Forzamos al Menubutton a volver a desplegar su menú inmediatamente
-            mb_meses.focus_set()
-            mb_meses.event_generate('<Button-1>')
-        except:
-            pass
-        
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
     widgets['meses_vars'] = {}
@@ -552,7 +544,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     frame_tabla_ventas.pack(side="top", fill="both", expand=True)
     
     columnas_ventas = ("id", "fecha", "cliente", "libros", "total", "envio", "comentario")
+    
     widgets['tabla_ventas'] = ttk.Treeview(frame_tabla_ventas, columns=columnas_ventas, show="headings")
+    widgets['tabla_v_historial'] = widgets['tabla_ventas']
     
     frame_acciones_ventas = tk.Frame(frame_derecha_v, bg=config.COLOR_FONDO_PRINCIPAL)
     frame_acciones_ventas.pack(side="bottom", fill="x", pady=(10, 0))

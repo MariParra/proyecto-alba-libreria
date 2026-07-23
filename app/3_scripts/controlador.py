@@ -301,7 +301,7 @@ class AppControlador:
                     INSERT INTO libros (titulo, autor, genero, editorial, encuadernacion, stock, precio, precio_original) 
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (datos['titulo'], datos['autor'], datos['genero'], datos['editorial'], datos['encuadernacion'],
-                      int(datos['stock']), precio_base, precio_base))
+                    int(datos['stock']), precio_base, precio_base))
             conn.commit()
             conn.close()
             messagebox.showinfo("Éxito", "Libro guardado correctamente.")
@@ -927,6 +927,7 @@ class AppControlador:
         self.widgets['entry_v_comentario'].delete(0, tk.END)
         self.widgets['de_v_fecha'].set_date(datetime.date.today())
 
+    
     def v_guardar_venta(self):
         if not self.v_carrito_libros:
             messagebox.showwarning("Carrito Vacío", "No hay libros para vender."); return
@@ -975,10 +976,10 @@ class AppControlador:
                 # 2. Insertar en el librero histórico, evitando duplicados
                 # El autor histórico se deja como NULL porque el autor canónico está en la tabla 'libros'
                 cursor.execute("""
-                    INSERT INTO librero_historico (cliente_id, libro_id, autor_historico)
-                    VALUES (%s, %s, NULL)
+                    INSERT INTO librero_historico (cliente_id, libro_id, autor_historico, origen)
+                    VALUES (%s, %s, NULL, 'Venta Directa')
                     ON CONFLICT (cliente_id, libro_id) DO NOTHING;
-                """, (cliente_id, item['id']))  
+                """, (cliente_id, item['id'])) 
             conn.commit()
             messagebox.showinfo("Éxito", f"Venta registrada por ${total_final:,.0f} y stock actualizado.")
             self.v_limpiar_formulario()
@@ -991,7 +992,66 @@ class AppControlador:
         finally:
             if conn: conn.close()
 
+    def v_editar_comentario_venta(self, event):
+        tabla = self.widgets.get('tabla_ventas')
+        if not tabla: return
+        
+        region = tabla.identify_region(event.x, event.y)
+        if region != "cell": return
+
+        col_display_id = tabla.identify_column(event.x)
+        selected_col_name = tabla.column(col_display_id, 'id')
+        selected_iid = tabla.focus()
+        if not selected_iid: return
+
+        # 2. Comprobamos que sea la columna de comentario (sin importar mayúsculas)
+        if "coment" in selected_col_name.lower():
+            
+            try:
+                venta_id = tabla.set(selected_iid, "id")
+            except:
+                try:
+                    venta_id = tabla.set(selected_iid, "venta_id")
+                except:
+                    messagebox.showerror("Error", "No se encontró el ID de la venta.")
+                    return
+                    
+            valor_actual = tabla.set(selected_iid, "comentario")
+
+            # 3. Construir la ventana emergente
+            win = tk.Toplevel()
+            win.title("Editar Comentario de Venta")
+            win.geometry("400x280")
+            win.configure(bg="#F1F8E9") 
+            win.grab_set()
+
+            tk.Label(win, text="Editar Comentario:", bg="#F1F8E9", font=("Helvetica", 10, "bold")).pack(pady=(15, 5))
+            
+            text_widget = tk.Text(win, wrap="word", height=8, width=40, font=("Helvetica", 10))
+            text_widget.pack(padx=15, pady=5, fill="both", expand=True)
+            text_widget.insert("1.0", valor_actual if valor_actual and valor_actual != 'None' else "")
+
+            def guardar():
+                nuevo_valor = text_widget.get("1.0", tk.END).strip()
+                conn = None
+                try:
+                    conn = conexion.conectar_db()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE registro_ventas SET comentario = %s WHERE venta_id = %s", (nuevo_valor, venta_id))
+                    conn.commit()
+                    win.destroy()
+                    self.v_refrescar_tabla_historial() # Refrescamos para ver el cambio
+                except Exception as e:
+                    if conn: conn.rollback()
+                    messagebox.showerror("Error", f"No se pudo guardar el comentario: {e}", parent=win)
+                finally:
+                    if conn: conn.close()
+
+            tk.Button(win, text="Guardar Cambios", command=guardar, bg="#81BFB7", fg="white", font=("Helvetica", 10, "bold")).pack(pady=15)
+
+
     def v_refrescar_tabla_historial(self, cliente=None, fecha_desde=None, fecha_hasta=None):
+        self.widgets['tabla_ventas'].bind("<Double-1>", self.v_editar_comentario_venta)
         tabla = self.widgets['tabla_ventas']
         for item in tabla.get_children(): tabla.delete(item)
         
@@ -1032,40 +1092,68 @@ class AppControlador:
             messagebox.showerror("Error Cargando Historial", f"No se pudo cargar la tabla de ventas.\nDetalle: {e}")
 
     def v_eliminar_venta(self):
-        seleccion = self.widgets['tabla_ventas'].selection()
+        seleccion = self.widgets['tabla_v_historial'].selection()
         if not seleccion:
-            messagebox.showwarning("Sin Selección", "Por favor, selecciona una venta de la tabla para eliminar."); return
-            
-        venta_id = seleccion[0]
-        
-        if not messagebox.askyesno("Eliminar Venta", f"¿Estás segura de que deseas anular la venta #{venta_id}?\n\nEl stock de los libros se restaurará."):
+            messagebox.showwarning("Sin Selección", "Por favor, selecciona una venta de la tabla para eliminar.")
             return
-
+            
+        # --- BLINDAJE: Buscamos el ID en los dos nombres posibles ---
+        try:
+            venta_id = self.widgets['tabla_v_historial'].set(seleccion[0], "id")
+        except:
+            try:
+                venta_id = self.widgets['tabla_v_historial'].set(seleccion[0], "venta_id")
+            except:
+                messagebox.showerror("Error", "No se encontró la columna de ID en la tabla.")
+                return
+        
+        if not messagebox.askyesno("Confirmar Eliminación", f"¿Estás seguro de que deseas eliminar la venta con ID {venta_id}?\n\nEsta acción devolverá los libros al stock y los eliminará del historial de la clienta. Esta acción no se puede deshacer."):
+            return
+            
         conn = None
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT libros_vendidos FROM registro_ventas WHERE venta_id = %s", (venta_id,))
-            resultado = cursor.fetchone()
-            libros_str = resultado[0] if resultado else ""
+            # 1. Obtenemos los detalles de la venta ANTES de borrarla
+            cursor.execute("SELECT cliente_id, libros_vendidos FROM registro_ventas WHERE venta_id = %s", (venta_id,))
+            venta_info = cursor.fetchone()
+            if not venta_info:
+                messagebox.showerror("Error", "La venta ya no existe."); return
             
+            cliente_id, libros_str = venta_info
+            
+            # 2. Devolvemos el stock y eliminamos del historial
             if libros_str:
-                libros_vendidos = [l.strip() for l in libros_str.split(",") if l.strip()]
-                for libro_titulo in libros_vendidos:
-                    cursor.execute("UPDATE libros SET stock = stock + 1 WHERE titulo ILIKE %s", (libro_titulo,))
-            
+                titulos_vendidos = [titulo.strip().upper() for titulo in libros_str.split(',')]
+                for titulo in titulos_vendidos:
+                    # Buscamos el ID del libro para las operaciones
+                    cursor.execute("SELECT libro_id FROM libros WHERE titulo ILIKE %s", (titulo,))
+                    res_libro = cursor.fetchone()
+                    if res_libro:
+                        libro_id = res_libro[0]
+                        # Devolvemos el stock
+                        cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = %s", (libro_id,))
+                        # Eliminamos del historial
+                        cursor.execute("DELETE FROM librero_historico WHERE cliente_id = %s AND libro_id = %s AND origen = 'Venta Directa'", (cliente_id, libro_id))
+                        
+            # 3. Finalmente, eliminamos el registro de la venta
             cursor.execute("DELETE FROM registro_ventas WHERE venta_id = %s", (venta_id,))
             conn.commit()
-            messagebox.showinfo("Éxito", "Venta eliminada y stock restaurado.")
+            
+            messagebox.showinfo("Éxito", f"Venta ID {venta_id} eliminada correctamente. El stock y el historial han sido restaurados.")
+            
+            # Actualizamos la interfaz
             self.v_refrescar_tabla_historial()
             self.refrescar_inventario()
+            
         except Exception as e:
             if conn: conn.rollback()
-            messagebox.showerror("Error", f"No se pudo eliminar la venta: {e}")
+            messagebox.showerror("Error de Eliminación", f"No se pudo eliminar la venta: {e}")
         finally:
             if conn: conn.close()
-            
+
+    
     # --- MÉTODOS GENÉRICOS Y EXTERNOS ---
     def habilitar_copiar_celda(self, event, tabla):
         row_id = tabla.identify_row(event.y)

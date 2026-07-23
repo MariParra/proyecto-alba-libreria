@@ -340,7 +340,9 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     frame_filtros.pack(fill="x", padx=20, pady=(0, 10))
     
     tk.Label(frame_filtros, text="Filtrar por origen:", bg="#F3E5F5", font=("Helvetica", 9, "bold")).pack(side="left")
-    cmb_filtro_origen = ttk.Combobox(frame_filtros, state="readonly", values=["Todos", "Importados (Librero Antiguo)", "Asignados (App)"], width=25)
+
+    opciones_filtro = ["Todos", "Importación", "Asignación App", "Venta Directa"]
+    cmb_filtro_origen = ttk.Combobox(frame_filtros, state="readonly", values=opciones_filtro, width=25)
     cmb_filtro_origen.set("Todos")
     cmb_filtro_origen.pack(side="left", padx=10)
     
@@ -354,7 +356,7 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     def ordenar_columna_historial(tv, col, reverse):
         l = [(tv.set(k, col), k) for k in tv.get_children('')]
         try: l.sort(key=lambda t: float(t[0]), reverse=reverse)
-        except ValueError: l.sort(reverse=reverse)
+        except (ValueError, TypeError): l.sort(key=lambda t: str(t[0]), reverse=reverse)
         for index, (val, k) in enumerate(l):
             tv.move(k, '', index)
         tv.heading(col, command=lambda _col=col: ordenar_columna_historial(tv, _col, not reverse))
@@ -381,12 +383,16 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
         for fila in registros_completos:
             origen_db = fila[2] 
             mostrar = False
+
             if filtro == "Todos":
                 mostrar = True
-            elif filtro == "Importados (Librero Antiguo)" and "Importación" in origen_db:
+            elif filtro == "Importación" and "Importación" in origen_db:
                 mostrar = True
-            elif filtro == "Asignados (App)" and "Asignación App" in origen_db:
+            elif filtro == "Asignación App" and "Asignación App" in origen_db:
                 mostrar = True
+            elif filtro == "Venta Directa" and "Venta Directa" in origen_db:
+                mostrar = True
+                
             if mostrar:
                 fila_formateada = list(fila)
                 if fila_formateada[1] and fila_formateada[1] != 'None':
@@ -397,9 +403,10 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
 
     cmb_filtro_origen.bind("<<ComboboxSelected>>", actualizar_vista)
     
+    conn_hist = None
     try:
-        conn = conexion.conectar_db()
-        cursor = conn.cursor()
+        conn_hist = conexion.conectar_db()
+        cursor_hist = conn_hist.cursor()
         
         query = """
             SELECT 
@@ -415,7 +422,7 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
             SELECT 
                 l.titulo, 
                 COALESCE(NULLIF(lh.autor_historico, ''), l.autor) AS autor_final,
-                'Importación (Librero Antiguo)' AS origen, 
+                COALESCE(lh.origen, 'Importación') AS origen, 
                 '--' AS fecha
             FROM librero_historico lh
             JOIN libros l ON lh.libro_id = l.libro_id
@@ -424,9 +431,8 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
             )
             ORDER BY titulo;
         """
-        cursor.execute(query, (cliente_id, cliente_id, cliente_id))
-        registros_completos = cursor.fetchall() 
-        conn.close()
+        cursor_hist.execute(query, (cliente_id, cliente_id, cliente_id))
+        registros_completos = cursor_hist.fetchall() 
         
         if not registros_completos:
             tabla_hist.insert("", "end", values=("No hay libros registrados para esta clienta.", "", "", ""))
@@ -437,6 +443,8 @@ def abrir_dialogo_ver_historial(root, tabla_gestion_clientes):
     except Exception as e:
         messagebox.showerror("Error BD", f"No se pudo cargar el historial: {e}", parent=win)
         win.destroy()
+    finally:
+        if conn_hist: conn_hist.close()
         
 def abrir_dialogo_extras(root, tabla, item_id, callback_asignaciones):
     asignacion_id = tabla.set(item_id, "asignacion_id")
