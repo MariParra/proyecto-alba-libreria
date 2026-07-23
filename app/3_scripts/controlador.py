@@ -793,19 +793,49 @@ class AppControlador:
         self.v_refrescar_tabla_historial()
         self.widgets['de_v_fecha'].set_date(datetime.date.today())
 
+
+    # En controlador.py
+
     def v_refrescar_autocompletado(self):
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
+            
+            # --- Clientes ---
             cursor.execute("SELECT nombre FROM clientes ORDER BY nombre")
             self.v_lista_clientes = [row[0] for row in cursor.fetchall()]
+            
+            # Actualizamos las opciones visibles
             self.widgets['cmb_v_cliente']['values'] = self.v_lista_clientes
-            cursor.execute("SELECT titulo, precio FROM libros")
-            self.v_mapa_libros = {row[0].upper(): row[1] for row in cursor.fetchall()}
-            self.widgets['cmb_v_libros']['values'] = list(self.v_mapa_libros.keys())
+            self.widgets['cmb_v_cliente'].lista_original = self.v_lista_clientes 
+            
+            # --- Libros ---
+            query = """
+                SELECT 
+                    libro_id, 
+                    titulo, 
+                    CASE 
+                        WHEN precio > 0 THEN precio 
+                        ELSE precio_original 
+                    END AS precio_venta
+                FROM libros
+            """
+            cursor.execute(query)
+            
+            self.v_mapa_libros = {row[1].upper(): {'id': row[0], 'precio': row[2]} for row in cursor.fetchall()}
+            lista_libros = list(self.v_mapa_libros.keys())
+            
+            # Actualizamos las opciones visibles
+            self.widgets['cmb_v_libros']['values'] = lista_libros
+            # ¡NUEVO! Guardamos la lista completa "en secreto" dentro del widget
+            self.widgets['cmb_v_libros'].lista_original = lista_libros
+            
             conn.close()
         except Exception as e:
             print(f"Error actualizando autocompletados de venta: {e}")
+
+
+
 
     def v_autocompletar_cliente(self, event):
         widget = event.widget
@@ -837,10 +867,11 @@ class AppControlador:
                 self.v_refrescar_autocompletado()
             else:
                 return
-        
+        precio_base = self.v_mapa_libros.get(titulo, {}).get('precio', 0)
+        libro_id = self.v_mapa_libros.get(titulo, {}).get('id')
         precio_especial_str = self.widgets['entry_v_precio_custom'].get().strip()
-        precio_final = float(precio_especial_str) if precio_especial_str else self.v_mapa_libros.get(titulo, 0)
-        self.v_carrito_libros.append({'titulo': titulo, 'precio': precio_final})
+        precio_final = float(precio_especial_str) if precio_especial_str else precio_base
+        self.v_carrito_libros.append({'titulo': titulo, 'precio': precio_final, 'id': libro_id})
         self.v_actualizar_carrito_visual()
         
         self.widgets['cmb_v_libros'].set('')
@@ -936,9 +967,18 @@ class AppControlador:
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (cliente_id, fecha_str, nombres_libros_str, subtotal, costo_envio, total_final, envio, comentario))
             
-            for item in self.v_carrito_libros:
-                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE titulo ILIKE %s", (item['titulo'],))
                 
+            for item in self.v_carrito_libros:
+                # 1. Actualizar stock
+                cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = %s", (item['id'],))
+                
+                # 2. Insertar en el librero histórico, evitando duplicados
+                # El autor histórico se deja como NULL porque el autor canónico está en la tabla 'libros'
+                cursor.execute("""
+                    INSERT INTO librero_historico (cliente_id, libro_id, autor_historico)
+                    VALUES (%s, %s, NULL)
+                    ON CONFLICT (cliente_id, libro_id) DO NOTHING;
+                """, (cliente_id, item['id']))  
             conn.commit()
             messagebox.showinfo("Éxito", f"Venta registrada por ${total_final:,.0f} y stock actualizado.")
             self.v_limpiar_formulario()

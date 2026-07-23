@@ -2,6 +2,54 @@ import tkinter as tk
 from tkinter import ttk
 import config
 
+def autocompletar_cliente_venta(event, widgets):
+    if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab'): return
+    
+    combo = widgets['cmb_v_cliente']
+    texto_tecleado = combo.get().upper()
+    
+    # 1. Guardar dónde está el cursor de texto
+    pos_cursor = combo.index(tk.INSERT)
+    
+    lista_original = getattr(combo, 'lista_original', [])
+    
+    if texto_tecleado == "":
+        combo.config(values=lista_original)
+    else:
+        datos_filtrados = [item for item in lista_original if texto_tecleado in item.upper()]
+        combo.config(values=datos_filtrados)
+        
+    # 2. Forzar el despliegue simulando la tecla "Flecha Abajo"
+    combo.event_generate('<Down>')
+    
+    # 3. Devolver el cursor a su lugar exacto para que sigas escribiendo fluido
+    combo.icursor(pos_cursor)
+
+
+def autocompletar_libro_venta(event, widgets):
+    if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return', 'Tab'): return
+    
+    combo = widgets['cmb_v_libros']
+    texto_tecleado = combo.get().upper()
+    
+    # 1. Guardar dónde está el cursor de texto
+    pos_cursor = combo.index(tk.INSERT)
+    
+    lista_original = getattr(combo, 'lista_original', [])
+    
+    if texto_tecleado == "":
+        combo.config(values=lista_original)
+    else:
+        datos_filtrados = [item for item in lista_original if texto_tecleado in item.upper()]
+        combo.config(values=datos_filtrados)
+        
+    # 2. Forzar el despliegue simulando la tecla "Flecha Abajo"
+    combo.event_generate('<Down>')
+    
+    # 3. Devolver el cursor a su lugar exacto para que sigas escribiendo fluido
+    combo.icursor(pos_cursor)
+
+
 def construir_interfaz(ventana, widgets, comandos_ui):
     font_bold = ("Helvetica", 11, "bold")
     font_pequena = ("Helvetica", 9)
@@ -51,7 +99,15 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     menu_meses = tk.Menu(mb_meses, tearoff=0)
     mb_meses.config(menu=menu_meses)
     
-    # Evitar que se cierre al hacer clic
+    def accion_combinada_meses():
+        # 1. Primero, ejecuta la función original que filtra la tabla
+        if 'cmd_sincronizar_periodo' in comandos_ui:
+            comandos_ui['cmd_sincronizar_periodo']()
+        
+        # 2. Después, fuerza al menú a volver a abrirse
+        # Usamos after para darle a Tkinter una fracción de segundo para procesar el clic
+        mb_meses.after(10, lambda: mb_meses.event_generate('<Button-1>'))
+        
     def mantener_menu_abierto(event):
         try:
             # Forzamos al Menubutton a volver a desplegar su menú inmediatamente
@@ -64,10 +120,11 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     
     widgets['meses_vars'] = {}
     widgets['mb_meses'] = mb_meses
+    
     for mes in meses_lista:
         var = tk.BooleanVar(value=False)
         widgets['meses_vars'][mes] = var
-        menu_meses.add_checkbutton(label=mes, variable=var, command=comandos_ui['cmd_sincronizar_periodo'])
+        menu_meses.add_checkbutton(label=mes, variable=var, command=accion_combinada_meses)
         
     tk.Label(frame_controles_cli, text="Año:", bg=config.COLOR_FONDO_PRINCIPAL, font=font_bold).pack(side="left", padx=(10, 0))
     widgets['cmb_ano'] = ttk.Combobox(frame_controles_cli, values=[str(y) for y in range(2023, 2031)], width=6, state="readonly")
@@ -416,7 +473,7 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['cmb_v_cliente'] = ttk.Combobox(frame_inner_v, font=font_pequena)
     widgets['cmb_v_cliente'].pack(fill="x", ipady=2)
 
-    # Fila 3: Libro y Precio Especial (LADO A LADO para ahorrar espacio)
+    # Fila 3: Libro y Precio Especial
     frame_lp = tk.Frame(frame_inner_v, bg="white")
     frame_lp.pack(fill="x", pady=(8, 0))
     
@@ -426,6 +483,9 @@ def construir_interfaz(ventana, widgets, comandos_ui):
     widgets['cmb_v_libros'] = ttk.Combobox(frame_l, font=font_pequena)
     widgets['cmb_v_libros'].pack(fill="x", ipady=2)
 
+    widgets['cmb_v_libros'].bind('<KeyRelease>', lambda event: autocompletar_libro_venta(event, widgets))
+    widgets['cmb_v_cliente'].bind('<KeyRelease>', lambda event: autocompletar_cliente_venta(event, widgets))
+    
     frame_p = tk.Frame(frame_lp, bg="white")
     frame_p.pack(side="right", fill="x", expand=True, padx=(3, 0))
     tk.Label(frame_p, text="Precio Espec. ($):", bg="white", font=font_pequena_bold).pack(anchor="w")

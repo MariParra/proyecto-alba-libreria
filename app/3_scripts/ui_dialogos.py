@@ -119,6 +119,7 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     asignacion_id = tabla.set(item_id, "asignacion_id")
     cliente_nombre = tabla.set(item_id, "nombre")
     
+    conn = None
     try:
         conn = conexion.conectar_db()
         cursor = conn.cursor()
@@ -126,13 +127,8 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         cursor.execute("SELECT cliente_id, libro_suscripcion_id FROM asignaciones WHERE asignacion_id = %s", (asignacion_id,))
         res = cursor.fetchone()
         if not res:
-            messagebox.showerror("Error", "No se encontró la asignación.")
-            conn.close()
-            return
-            
-        cliente_id_actual = res[0]
-        current_libro_id = res[1]
-        # --- FIN DE LA OBTENCIÓN DEL CLIENTE_ID ---
+            messagebox.showerror("Error", "No se encontró la asignación."); return
+        cliente_id_actual, current_libro_id = res
 
         cursor.execute("SELECT s.generos_preferencia FROM asignaciones a JOIN suscripciones s ON a.cliente_id = s.cliente_id WHERE a.asignacion_id = %s", (asignacion_id,))
         res_gen = cursor.fetchone()
@@ -141,41 +137,42 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         
         query = """
         SELECT libro_id, titulo, stock, genero FROM libros 
-        WHERE stock > 0 
-        AND libro_id NOT IN (
-            -- Libros ya asignados en la app
+        WHERE libro_id NOT IN (
             SELECT libro_suscripcion_id FROM asignaciones WHERE cliente_id = %s AND libro_suscripcion_id IS NOT NULL
             UNION
-            -- Libros de su librero histórico importado
             SELECT libro_id FROM librero_historico WHERE cliente_id = %s AND libro_id IS NOT NULL
         )
         ORDER BY titulo;
         """
-        
-        # --- PASAR LOS PARÁMETROS A LA CONSULTA ---
-        # Como el cliente_id es el mismo, se lo pasamos dos veces
         cursor.execute(query, (cliente_id_actual, cliente_id_actual))
-        todos_los_libros = cursor.fetchall()
+        todos_los_libros_disponibles = cursor.fetchall()
         
-        conn.close()
     except Exception as e:
-        messagebox.showerror("Error", f"Error al acceder a BD: {e}")
-        return
+        messagebox.showerror("Error", f"Error al acceder a BD: {e}"); return
+    finally:
+        if conn: conn.close()
         
     libros_recomendados_stock = []
     libros_recomendados_catalogo = []
     libros_todos_stock = []
     libros_todos_catalogo = []
     
-    for l_id, t, s, gen in todos_los_libros:
+    for l_id, t, s, gen in todos_los_libros_disponibles:
         texto_opcion = f"{t} (Stock: {s})"
         es_recomendado = any(pref in str(gen).strip().upper() or str(gen).strip().upper() in pref for pref in generos_preferidos)
+
         if es_recomendado:
-            if s > 0: libros_recomendados_stock.append((texto_opcion, l_id))
-            else: libros_recomendados_catalogo.append((texto_opcion, l_id))
-        
-        if s > 0: libros_todos_stock.append((texto_opcion, l_id))
-        else: libros_todos_catalogo.append((texto_opcion, l_id))
+            # Si es recomendado, lo añadimos a la lista correspondiente y continuamos al siguiente libro
+            if s > 0:
+                libros_recomendados_stock.append((texto_opcion, l_id))
+            else:
+                libros_recomendados_catalogo.append((texto_opcion, l_id))
+        else:
+            # Si NO es recomendado, lo añadimos a la lista "todos" correspondiente
+            if s > 0:
+                libros_todos_stock.append((texto_opcion, l_id))
+            else:
+                libros_todos_catalogo.append((texto_opcion, l_id))
 
     mapa_libros = {txt: l_id for txt, l_id in (libros_todos_stock + libros_todos_catalogo)}
     valor_actual_str = next((txt for txt, l_id in mapa_libros.items() if l_id == current_libro_id), "(Sin Asignar)")
