@@ -5,7 +5,6 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 
-@st.cache_resource(ttl=3600)
 def get_db_connection() -> Client:
     """
     Crea y devuelve un cliente de Supabase usando los secretos
