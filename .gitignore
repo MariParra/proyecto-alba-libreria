@@ -1,0 +1,4 @@
+info/
+.env
+app/config/creedntials.json
+*.csv
