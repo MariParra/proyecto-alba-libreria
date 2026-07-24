@@ -1,29 +1,25 @@
-import psycopg2
-import os
+# app/2_scripts/utilidades.py
+# VERSIÓN PARA LA NUBE (STREAMLIT CLOUD)
+
 import streamlit as st
-from dotenv import load_dotenv
+from supabase import create_client, Client
+import pandas as pd
 
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-@st.cache_resource
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL)
+@st.cache_resource(ttl=3600)
+def get_db_connection() -> Client:
+    """
+    Crea y devuelve un cliente de Supabase usando los secretos
+    nativos de Streamlit Cloud.
+    """
+    url = st.secrets["connections"]["supabase"]["url"]
+    key = st.secrets["connections"]["supabase"]["key"]
+    
+    # Crea el cliente de Supabase directamente
+    supabase: Client = create_client(url, key)
+    return supabase
 
 def limpiar_texto(texto):
-    """Elimina espacios extra y convierte todo a MAYÚSCULAS."""
-    if not texto: return ""
-    return " ".join(str(texto).split()).upper()
-
-def ejecutar_query_escritura(query, params):
-    """Ejecuta INSERT, UPDATE o DELETE de forma segura."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-        conn.commit()
-        st.cache_data.clear()
-        return True, None
-    except psycopg2.Error as e:
-        conn.rollback()
-        return False, str(e)
+    """Función de utilidad para limpiar texto para búsquedas."""
+    if texto is None:
+        return ""
+    return str(texto).strip().lower()

@@ -1,63 +1,115 @@
 import streamlit as st
 import pandas as pd
-from utilidades import get_db_connection, ejecutar_query_escritura, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto
 
 def obtener_unicos(df, columna):
     return sorted(df[columna].dropna().astype(str).unique())
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def cargar_datos_completos():
+    """Carga todos los datos de la tabla 'inventario' desde Supabase."""
     conn = get_db_connection()
-    df = pd.read_sql("SELECT libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, precio_original FROM libros ORDER BY titulo", conn)
-    return df
+
+    response = (
+        conn
+        .table("inventario")
+        .select("*")
+        .execute()
+    )
+
+    return pd.DataFrame(response.data)
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio):
-    params = (
-        limpiar_texto(titulo), limpiar_texto(autor), limpiar_texto(editorial),
-        limpiar_texto(genero), limpiar_texto(encuadernacion),
-        stock, precio, precio
-    )
-    query = "INSERT INTO libros (titulo, autor, editorial, genero, encuadernacion, stock, precio, precio_original) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-    return ejecutar_query_escritura(query, params)
+    """Crea un nuevo libro usando el cliente de Supabase."""
+    conn = get_db_connection()
+    datos = {
+        "titulo": limpiar_texto(titulo),
+        "autor": limpiar_texto(autor),
+        "editorial": limpiar_texto(editorial),
+        "genero": limpiar_texto(genero),
+        "encuadernacion": limpiar_texto(encuadernacion),
+        "stock": stock,
+        "precio": precio,
+        "precio_original": precio
+    }
+    try:
+        conn.table("inventario").insert(datos).execute()
+        cargar_datos_completos.clear() # Limpia la caché para ver el cambio
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 def actualizar_libros_batch(df_editado):
+    """Actualiza múltiples libros a la vez detectando los cambios."""
     df_original = st.session_state.get('inventario_original')
     if df_original is None: return 0
+    
     df_original_comp = df_original.set_index('libro_id')
     df_editado_comp = df_editado.set_index('libro_id')
     diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
     filas_cambiadas = df_editado_comp[diff_mask]
+    
     if filas_cambiadas.empty: return 0
     
+    conn = get_db_connection()
     updates_count = 0
+    
     for libro_id, row in filas_cambiadas.iterrows():
         try:
-            query = "UPDATE libros SET autor=%s, editorial=%s, genero=%s, encuadernacion=%s, stock=%s, precio=%s WHERE libro_id=%s"
-            params = (
-                limpiar_texto(row['autor']), limpiar_texto(row['editorial']),
-                limpiar_texto(row['genero']), limpiar_texto(row['encuadernacion']),
-                int(row['stock']), float(row['precio']), libro_id
-            )
-            success, _ = ejecutar_query_escritura(query, params)
-            if success: updates_count += 1
-        except (ValueError, KeyError): continue
+            datos = {
+                "autor": limpiar_texto(row['autor']),
+                "editorial": limpiar_texto(row['editorial']),
+                "genero": limpiar_texto(row['genero']),
+                "encuadernacion": limpiar_texto(row['encuadernacion']),
+                "stock": int(row['stock']),
+                "precio": float(row['precio'])
+            }
+            conn.table("inventario").update(datos).eq("libro_id", libro_id).execute()
+            updates_count += 1
+        except Exception:
+            continue
+            
+    if updates_count > 0:
+        cargar_datos_completos.clear()
+        
     return updates_count
 
 def eliminar_libro(libro_id):
-    return ejecutar_query_escritura("DELETE FROM libros WHERE libro_id = %s", (libro_id,))
+    """Elimina un libro permanentemente."""
+    conn = get_db_connection()
+    try:
+        conn.table("inventario").delete().eq("libro_id", libro_id).execute()
+        cargar_datos_completos.clear()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 def aplicar_descuento_masivo(lista_ids, porcentaje):
+    """Aplica un descuento masivo calculando sobre el precio original."""
     if not lista_ids: return True, "No hay libros."
+    
+    conn = get_db_connection()
     factor = 1.0 - (porcentaje / 100.0)
-    query = "UPDATE libros SET precio = ROUND((precio_original * %s)::numeric, 0) WHERE libro_id = ANY(%s)"
-    return ejecutar_query_escritura(query, (factor, lista_ids))
+    
+    try:
+        # Obtenemos los precios originales actuales de los libros seleccionados
+        response = conn.table("inventario").select("libro_id, precio_original").in_("libro_id", lista_ids).execute()
+        
+        # Actualizamos cada uno con el nuevo precio calculado
+        for row in response.data:
+            nuevo_precio = round(row["precio_original"] * factor, 0)
+            conn.table("inventario").update({"precio": nuevo_precio}).eq("libro_id", row["libro_id"]).execute()
+            
+        cargar_datos_completos.clear()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 def mostrar_inventario():
     st.title("📦 Gestión de Inventario")
     df_inventario = cargar_datos_completos()
 
     # --- FILTROS GLOBALES ---
-    # Colocamos los filtros arriba de las pestañas para que afecten a todas las secciones
     with st.expander("🔍 Buscador y Filtros", expanded=False):
         busqueda_titulo = st.text_input("Buscar por Título:", placeholder="Ej: El Señor de los Anillos")
         
@@ -93,21 +145,20 @@ def mostrar_inventario():
         
         if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
             st.session_state.inventario_original = df_mostrar.copy()
-
+            
         config_columnas = {
             "autor": st.column_config.SelectboxColumn("Autor", options=obtener_unicos(df_inventario, 'autor'), required=True),
             "editorial": st.column_config.SelectboxColumn("Editorial", options=obtener_unicos(df_inventario, 'editorial'), required=True),
             "genero": st.column_config.SelectboxColumn("Género", options=obtener_unicos(df_inventario, 'genero')),
             "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=obtener_unicos(df_inventario, 'encuadernacion')),
         }
-
-        # Tabla editable sin capacidad de seleccionar filas (para no confundir con eliminar)
+        
         df_editado = st.data_editor(
             df_mostrar, use_container_width=True, hide_index=True,
             disabled=["libro_id", "titulo"], key="editor_inventario",
             column_config=config_columnas
         )
-
+        
         if not df_mostrar.equals(df_editado):
             if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
                 with st.spinner("Actualizando..."):
@@ -124,7 +175,7 @@ def mostrar_inventario():
             opciones_autor = [""] + obtener_unicos(df_inventario, 'autor')
             st.selectbox("Autor (Existente):", options=opciones_autor, key="autor_existente")
             st.text_input("O escribe un nuevo Autor:", key="autor_nuevo")
-
+            
             opciones_editorial = [""] + obtener_unicos(df_inventario, 'editorial')
             st.selectbox("Editorial (Existente):", options=opciones_editorial, key="editorial_existente")
             st.text_input("O escribe una nueva Editorial:", key="editorial_nueva")
@@ -132,11 +183,11 @@ def mostrar_inventario():
             opciones_genero = [""] + obtener_unicos(df_inventario, 'genero')
             st.selectbox("Género (Existente):", options=opciones_genero, key="genero_existente")
             st.text_input("O escribe un nuevo Género:", key="genero_nuevo")
-
+            
             opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
             st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="enc_existente")
             st.text_input("O escribe una nueva Encuadernación:", key="enc_nueva")
-
+            
             c1, c2 = st.columns(2)
             c1.number_input("Stock:", min_value=0, step=1, key="nuevo_stock")
             c2.number_input("Precio:", min_value=0.0, format="%.2f", key="nuevo_precio")
@@ -147,14 +198,16 @@ def mostrar_inventario():
                 editorial_final = s.editorial_nueva if s.editorial_nueva else s.editorial_existente
                 genero_final = s.genero_nuevo if s.genero_nuevo else s.genero_existente
                 enc_final = s.enc_nueva if s.enc_nueva else s.enc_existente
-
+                
                 if s.nuevo_titulo and autor_final and editorial_final:
                     success, error = crear_nuevo_libro(s.nuevo_titulo, autor_final, editorial_final, genero_final, enc_final, s.nuevo_stock, s.nuevo_precio)
                     if success:
                         st.success("¡Libro creado exitosamente!")
                         st.rerun()
-                    else: st.error(f"Error: {error}")
-                else: st.warning("Título, Autor y Editorial son obligatorios.")
+                    else: 
+                        st.error(f"Error: {error}")
+                else: 
+                    st.warning("Título, Autor y Editorial son obligatorios.")
 
     # 3. PESTAÑA DE DESCUENTOS
     with tab_desc:
@@ -170,7 +223,8 @@ def mostrar_inventario():
             if success:
                 st.success(f"¡Descuento del {porcentaje}% aplicado a {len(lista_ids)} libros!")
                 st.rerun()
-            else: st.error(error)
+            else: 
+                st.error(error)
 
     # 4. PESTAÑA DE ELIMINACIÓN
     with tab_eliminar:

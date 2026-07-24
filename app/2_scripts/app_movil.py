@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from vista_inventario import mostrar_inventario
 
-st.set_page_config(page_title="Alba Librería Móvil", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 
 load_dotenv()
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")

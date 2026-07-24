@@ -1,8 +1,6 @@
-# requirements.txt
-
 streamlit
 streamlit-oauth
-psycopg2-binary
 pandas
 python-dotenv
 packaging
+st-supabase-connection
