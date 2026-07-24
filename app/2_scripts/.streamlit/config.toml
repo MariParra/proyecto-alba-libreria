@@ -1,0 +1,19 @@
+# .streamlit/config.toml
+
+[theme]
+# --- IMPORTACIÓN DE LA TIPOGRAFÍA LATO (GOOGLE FONTS) ---
+# Le indicamos a Streamlit el nombre de la fuente y la URL de donde debe descargarla
+font = "Lato:https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap"
+
+# --- TU PALETA DE COLORES PASTEL ---
+# Color de acento (Botones principales, barras de selección): Tono durazno/naranja cálido
+primaryColor = "#EDAA8C"
+
+# Color de fondo principal: Tono crema/vainilla muy suave
+backgroundColor = "#FFFFFF"
+
+# Color de fondo secundario (Cuadros, tablas, áreas destacadas): Celeste pastel claro
+secondaryBackgroundColor = "#DEEBF0"
+
+# Color del texto: Azul/gris oscuro para un contraste legible
+textColor = "#455C6A"

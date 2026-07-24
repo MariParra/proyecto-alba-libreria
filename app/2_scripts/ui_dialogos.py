@@ -174,7 +174,7 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
             else:
                 libros_todos_catalogo.append((texto_opcion, l_id))
 
-    mapa_libros = {txt: l_id for txt, l_id in (libros_todos_stock + libros_todos_catalogo)}
+    mapa_libros = {txt: l_id for txt, l_id in (libros_recomendados_stock + libros_recomendados_catalogo + libros_todos_stock + libros_todos_catalogo)}
     valor_actual_str = next((txt for txt, l_id in mapa_libros.items() if l_id == current_libro_id), "(Sin Asignar)")
 
     win = tk.Toplevel(root)
@@ -230,8 +230,13 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
     frame_botones = tk.Frame(win, bg="#F7DAE7")
     frame_botones.pack(pady=15, fill="x", expand=True)
 
+    # En ui_dialogos_4.py, dentro de abrir_dialogo_asignar_libro
+
     def guardar_y_cerrar():
         seleccion_str = cb_libros.get()
+        # Asegurarnos de que el mapa_libros sea el correcto (con las 4 listas)
+        mapa_libros = {txt: l_id for txt, l_id in (libros_recomendados_stock + libros_recomendados_catalogo + libros_todos_stock + libros_todos_catalogo)}
+        
         nuevo_libro_id = mapa_libros.get(seleccion_str, None)
         
         if nuevo_libro_id == current_libro_id:
@@ -241,19 +246,36 @@ def abrir_dialogo_asignar_libro(root, tabla, item_id, callback_asignaciones, cal
         try:
             conn = conexion.conectar_db()
             cursor = conn.cursor()
+            
+            # Devolver stock si había un libro antes
             if current_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock + 1 WHERE libro_id = %s", (current_libro_id,))
+            
+            # Quitar stock del nuevo libro
             if nuevo_libro_id:
                 cursor.execute("UPDATE libros SET stock = stock - 1 WHERE libro_id = %s", (nuevo_libro_id,))
+            
+            # Actualizar la asignación
             cursor.execute("UPDATE asignaciones SET libro_suscripcion_id = %s WHERE asignacion_id = %s", (nuevo_libro_id, asignacion_id))
+            
             conn.commit()
             conn.close()
+            
+            # --- LA ÚNICA ACCIÓN NECESARIA ---
+            # Cerramos la ventana emergente
             win.destroy()
+            
+            # Y le decimos a la tabla principal que se recargue desde la BD
             callback_asignaciones()
-            callback_inventario()
+            
+            # Refrescamos el inventario por si acaso
+            if callback_inventario:
+                callback_inventario()
+
         except Exception as e:
             messagebox.showerror("Error BD", f"No se pudo guardar la asignación: {e}", parent=win)
 
+            
     def quitar_y_cerrar():
         if not current_libro_id:
             messagebox.showinfo("Información", "Esta clienta ya se encuentra 'Sin Asignar'.", parent=win)

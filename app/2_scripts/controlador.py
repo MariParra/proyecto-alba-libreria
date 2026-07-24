@@ -66,8 +66,7 @@ class AppControlador:
             'cmd_v_eliminar_venta': self.v_eliminar_venta
         }
         
-        refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda: self.refrescar_inventario(widgets=self.widgets)
-
+        refrescar_inventario_global.__globals__['refrescar_inventario_global'] = lambda *args: self.refrescar_inventario(widgets=self.widgets)
         interfaz.construir_interfaz(self.root, self.widgets, comandos_ui)
         
         mes_actual = list(MAPEO_MESES.keys())[datetime.datetime.now().month - 1]
@@ -523,7 +522,7 @@ class AppControlador:
             self.refrescar_todas_las_tablas() 
         except Exception as e: messagebox.showerror("Error BD", f"No se pudo eliminar al cliente: {e}")
 
-    # --- ASIGNACIONES Y SINCRONIZACIÓN (TRADUCIDA) ---
+    # --- ASIGNACIONES Y SINCRONIZACIÓN  ---
     def toggle_columnas_opcionales(self):
         columnas_base = ["asignacion_id", "cliente_id", "nombre", "ano", "mes", "libro", "extras", "tipo_envio", "fecha_asig", "estado", "pagado", "envio_pag", "comentario"]
         opcionales_visibles = []

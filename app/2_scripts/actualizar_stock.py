@@ -1,126 +1,104 @@
-import sqlite3
-import pandas as pd
+import psycopg2
 import os
 import json
-from datetime import datetime
+import csv
+from dotenv import load_dotenv
 
 # --- CONFIGURACIÓN DE RUTAS ---
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(SCRIPT_DIR)
+# AHORA BUSCA EL ARCHIVO CSV
 CSV_FILE_PATH = os.path.join(BASE_DIR, "1_input_data", "stock_precios.csv")
-DB_PATH = os.path.join(BASE_DIR, "2_database", "libreria.db")
-DIR_REPORTES = os.path.join(BASE_DIR, "3_output_reports")
-os.makedirs(DIR_REPORTES, exist_ok=True) 
-TXT_NO_ENCONTRADOS = os.path.join(DIR_REPORTES, "libros_no_encontrados_stock.txt")
 
+# --- CONEXIÓN A LA NUBE ---
+dotenv_path = os.path.join(os.path.dirname(BASE_DIR), '.env')
+load_dotenv(dotenv_path)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-def run_stock_update():
-    reporte = {
-        "libros_procesados": 0,
-        "libros_actualizados": 0,
-        "nuevos_libros": 0, # Usado para libros omitidos/no encontrados
-        "error": None
-    }
-
+def run_update():
+    reporte = {"libros_procesados": 0, "libros_actualizados": 0, "error": None, "detalles": []}
+    datos_actualizacion = []
+    
+    # 1. LEER EL ARCHIVO CSV
     try:
-        try:
-            df = pd.read_csv(CSV_FILE_PATH, sep=',')
-            if len(df.columns) < 2: raise ValueError
-        except:
-            df = pd.read_csv(CSV_FILE_PATH, sep=';')
-            
+        with open(CSV_FILE_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convertimos las cabeceras a minúsculas para evitar errores de tipeo en el Excel
+                row_limpia = {k.strip().lower(): v for k, v in row.items() if k}
+                
+                titulo = row_limpia.get("titulo") or row_limpia.get("título")
+                nuevo_stock = row_limpia.get("stock")
+                nuevo_precio = row_limpia.get("precio")
+                
+                if titulo and nuevo_stock is not None and nuevo_precio is not None:
+                    datos_actualizacion.append({
+                        "titulo": titulo.strip().upper(),
+                        "stock": nuevo_stock,
+                        "precio": nuevo_precio
+                    })
     except FileNotFoundError:
-        reporte["error"] = f"No se encontró el archivo 'stock_precios.csv'."
+        reporte["error"] = f"No se encontró el archivo {CSV_FILE_PATH}."
         print(json.dumps(reporte))
         return
     except Exception as e:
-        reporte["error"] = f"Error al leer el CSV: {e}"
+        reporte["error"] = f"Error al leer el CSV: {str(e)}"
         print(json.dumps(reporte))
         return
 
-    libros_faltantes = []
-    
-    # Detectar qué columnas opcionales vienen en el CSV (en minúsculas para evitar errores)
-    cols = [c.lower() for c in df.columns]
-    has_autor = 'autor' in cols
-    has_editorial = 'editorial' in cols
-
+    # 2. ACTUALIZAR EN LA BASE DE DATOS
+    conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = psycopg2.connect(DATABASE_URL)
         cursor = conn.cursor()
-
-        for index, row in df.iterrows():
-            # Convertimos las llaves a minúsculas para encontrar las columnas fácilmente
-            row_dict = {str(k).lower(): v for k, v in row.items()}
-            
-            titulo = str(row_dict.get('titulo', '')).strip().upper()
-            stock = row_dict.get('stock')
-            precio = row_dict.get('precio')
-
-            if not titulo or titulo == 'NAN':
-                continue
+        
+        for item in datos_actualizacion:
+            titulo = item["titulo"]
+            nuevo_stock = item["stock"]
+            nuevo_precio = item["precio"]
                 
             reporte["libros_procesados"] += 1
-
-            try:
-                stock_val = int(float(stock)) if pd.notna(stock) else 0
-                precio_val = float(str(precio).replace(',', '.')) if pd.notna(precio) else 0.0
-            except (ValueError, TypeError):
-                continue
-
-            cursor.execute("SELECT libro_id FROM libros WHERE UPPER(titulo) = ?", (titulo,))
-            libro_existente = cursor.fetchone()
-
-            if libro_existente:
-                libro_id = libro_existente[0]
+            
+            # Buscar el libro en la base de datos de PostgreSQL
+            cursor.execute("SELECT libro_id, precio, precio_original FROM libros WHERE titulo = %s", (titulo,))
+            libro_db = cursor.fetchone()
+            
+            if libro_db:
+                libro_id, precio_actual, precio_orig_actual = libro_db
                 
-                # Campos base obligatorios a actualizar
-                update_fields = ["stock = ?", "precio = ?", "precio_original = ?"]
-                params = [stock_val, precio_val, precio_val]
+                try:
+                    nuevo_precio_float = float(nuevo_precio)
+                    nuevo_stock_int = int(nuevo_stock)
+                except ValueError:
+                    reporte["detalles"].append(f"Error de formato (números) en: {titulo}")
+                    continue
                 
-                # --- ACTUALIZACIÓN DINÁMICA DE AUTOR ---
-                if has_autor and pd.notna(row_dict.get('autor')):
-                    autor_val = str(row_dict.get('autor')).strip().upper()
-                    if autor_val and autor_val != 'NAN':
-                        update_fields.append("autor = ?")
-                        params.append(autor_val)
-                        
-                # --- ACTUALIZACIÓN DINÁMICA DE EDITORIAL ---
-                if has_editorial and pd.notna(row_dict.get('editorial')):
-                    editorial_val = str(row_dict.get('editorial')).strip().upper()
-                    if editorial_val and editorial_val != 'NAN':
-                        update_fields.append("editorial = ?")
-                        params.append(editorial_val)
-                        
-                # Construimos la consulta final y la ejecutamos
-                params.append(libro_id)
-                query = f"UPDATE libros SET {', '.join(update_fields)} WHERE libro_id = ?"
+                # Actualizar stock, el nuevo precio como precio base y el precio anterior pasa a original
+                cursor.execute("""
+                    UPDATE libros 
+                    SET stock = %s, precio = %s, precio_original = %s 
+                    WHERE libro_id = %s
+                """, (nuevo_stock_int, nuevo_precio_float, precio_actual, libro_id))
                 
-                cursor.execute(query, tuple(params))
                 reporte["libros_actualizados"] += 1
+                reporte["detalles"].append(f"Actualizado: {titulo} (Stock: {nuevo_stock_int}, Precio: ${nuevo_precio_float})")
             else:
-                reporte["nuevos_libros"] += 1
-                libros_faltantes.append(titulo)
-
+                reporte["detalles"].append(f"No encontrado en BD: {titulo}")
+                
         conn.commit()
-
-        if libros_faltantes:
-            with open(TXT_NO_ENCONTRADOS, 'w', encoding='utf-8') as f:
-                f.write(f"--- REPORTE DE STOCK: LIBROS NO ENCONTRADOS ({datetime.now().strftime('%Y-%m-%d %H:%M')}) ---\n")
-                f.write("Los siguientes títulos están en tu Excel, pero NO en tu Base de Datos.\n")
-                f.write("Revisa si hay errores de tipeo o si son libros nuevos que debes crear primero:\n\n")
-                for t in libros_faltantes:
-                    f.write(f"- {t}\n")
-
-    except sqlite3.Error as e:
+        
+    except psycopg2.Error as e:
         reporte["error"] = f"Error de base de datos: {e}"
-        conn.rollback()
+        if conn: conn.rollback()
     except Exception as e:
-        reporte["error"] = f"Error inesperado: {e}"
+        reporte["error"] = str(e)
     finally:
-        if conn:
-            conn.close()
-    
-    print(json.dumps(reporte))
+        if conn: conn.close()
+        
+    # Imprimir el reporte final en formato JSON para que la interfaz lo pueda leer y mostrar en la ventanita
+    print(json.dumps(reporte, indent=2))
 
 if __name__ == "__main__":
-    run_stock_update()
+    run_update()
