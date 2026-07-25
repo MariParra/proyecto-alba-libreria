@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
-from vista_clientes import mostrar_clientes  # <-- AQUÍ IMPORTAMOS LA NUEVA VISTA
+from vista_clientes import mostrar_clientes
+from vista_asignaciones import mostrar_asignaciones
 
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 
@@ -93,11 +94,14 @@ else:
             st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
             st.rerun()
             
-        # <--- AQUÍ ESTÁ EL NUEVO BOTÓN DE CLIENTES --->
         if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
             st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
             st.rerun()
         
+        if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
+            st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
+            st.rerun()
+            
         st.markdown("---")
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.clear()
@@ -111,4 +115,6 @@ else:
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
             mostrar_caja()
         elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
-            mostrar_clientes()  # <--- AQUÍ SE MUESTRA LA NUEVA VISTA
+            mostrar_clientes()
+        elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
+            mostrar_asignaciones()
