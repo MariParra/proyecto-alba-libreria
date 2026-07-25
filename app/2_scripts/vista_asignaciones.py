@@ -4,8 +4,7 @@ import random
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 
-# --- FUNCIONES DE BASE DE DATOS (CON LÓGICA DE CIERRE) ---
-
+# --- FUNCIONES DE BASE DE DATOS ---
 @st.cache_data(ttl=60)
 def cargar_clientes_suscritos():
     conn = get_db_connection()
@@ -31,25 +30,30 @@ def cargar_asignaciones_mes(ano, mes):
         if df_asig.empty: return pd.DataFrame()
         
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
-        df_clientes = pd.DataFrame(res_clientes.data)
-        if not df_clientes.empty:
-            df_asig = df_asig.merge(df_clientes, on='cliente_id', how='left').rename(columns={'nombre': 'nombre_cliente'})
-        
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
+        
+        df_clientes = pd.DataFrame(res_clientes.data)
         df_libros = pd.DataFrame(res_libros.data)
-        if not df_libros.empty:
-            df_asig = df_asig.merge(df_libros, left_on='libro_suscripcion_id', right_on='libro_id', how='left').rename(columns={'titulo': 'titulo_libro'})
+        
+        if not df_clientes.empty:
+            df_asig = df_asig.merge(df_clientes, on='cliente_id', how='left')
+            df_asig.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
             
-        df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE")
+        if not df_libros.empty:
+            df_asig = df_asig.merge(df_libros, left_on='libro_suscripcion_id', right_on='libro_id', how='left')
+            df_asig.rename(columns={'titulo': 'titulo_libro'}, inplace=True)
+            
+        df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR")
         return df_asig
-    except Exception: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
-# --- FUNCIONES PARA MANEJAR EL CIERRE DE MES ---
+# --- CIERRE DE MES ---
 @st.cache_data(ttl=60)
 def verificar_mes_cerrado(ano, mes):
     conn = get_db_connection()
     try:
-        res = conn.table("meses_cerrados").select("id").eq("ano", ano).eq("mes", mes).execute()
+        res = conn.table("meses_cerrados").select("id").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         return len(res.data) > 0
     except: return False
 
@@ -57,60 +61,75 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": ano, "mes": mes, "fecha_cierre": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            datos = {"ano": int(ano), "mes": int(mes)}
             conn.table("meses_cerrados").insert(datos).execute()
+            verificar_mes_cerrado.clear()
+            return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
         else:
-            conn.table("meses_cerrados").delete().eq("ano", ano).eq("mes", mes).execute()
-        
-        verificar_mes_cerrado.clear()
-        return True, f"El mes {mes}/{ano} ha sido {'CERRADO' if cerrar else 'REABIERTO'}."
-    except Exception as e: return False, str(e)
+            conn.table("meses_cerrados").delete().eq("ano", int(ano)).eq("mes", int(mes)).execute()
+            verificar_mes_cerrado.clear()
+            return True, f"El mes {mes}/{ano} ha sido REABIERTO."
+    except Exception as e:
+        return False, str(e)
 
-# --- (Resto de funciones: comenzar_mes, asignar_libro, etc. con la corrección del int64) ---
+# --- ACCIONES ---
 def comenzar_mes(ano, mes):
     df_suscritos = cargar_clientes_suscritos()
-    if df_suscritos.empty: return False, "No hay clientes 'SUSCRITO'."
+    if df_suscritos.empty: return False, "No hay clientes con status 'SUSCRITO'."
     conn = get_db_connection()
     creados, errores = 0, 0
     for _, cliente in df_suscritos.iterrows():
         try:
-            conn.table("asignaciones").insert({
-                "cliente_id": int(cliente['cliente_id']), "ano": ano, "mes": mes,
+            datos = {
+                "cliente_id": int(cliente['cliente_id']), "ano": int(ano), "mes": int(mes),
                 "estado_envio": "Pendiente", "pagado": "No", "envio_pagado": "No",
                 "fecha_asignacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }).execute()
+            }
+            conn.table("asignaciones").insert(datos).execute()
             creados += 1
         except: errores += 1
     cargar_asignaciones_mes.clear()
-    return True, f"Se iniciaron {creados} suscripciones. {errores} ya existían."
+    if creados > 0: return True, f"Se iniciaron {creados} suscripciones. {errores} ya existían."
+    else: return False, "Todos los clientes suscritos ya estaban creados para este mes."
 
-def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, autor, ano, mes, stock_actual):
+def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual):
     conn = get_db_connection()
     try:
-        id_asig_py, id_cliente_py, id_libro_py = int(asignacion_id), int(cliente_id), int(libro_id)
+        # Conversión explícita para evitar el error int64 de Pandas
+        id_asig_py = int(asignacion_id)
+        id_cliente_py = int(cliente_id)
+        id_libro_py = int(libro_id)
+        stock_actual_py = int(stock_actual)
+        
         conn.table("asignaciones").update({"libro_suscripcion_id": id_libro_py}).eq("asignacion_id", id_asig_py).execute()
-        conn.table("libros").update({"stock": int(stock_actual) - 1}).eq("libro_id", id_libro_py).execute()
+        conn.table("libros").update({"stock": stock_actual_py - 1}).eq("libro_id", id_libro_py).execute()
+        
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", id_cliente_py).eq("libro_id", id_libro_py).execute()
         if not res_hist.data:
-            conn.table("librero_historico").insert({
+            datos_hist = {
                 "cliente_id": id_cliente_py, "libro_id": id_libro_py,
                 "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"
-            }).execute()
-        cargar_asignaciones_mes.clear(); cargar_libros_disponibles.clear()
+            }
+            conn.table("librero_historico").insert(datos_hist).execute()
+            
+        cargar_asignaciones_mes.clear()
+        cargar_libros_disponibles.clear()
         return True, ""
     except Exception as e: return False, str(e)
 
 def asignar_al_azar(df_pendientes, df_libros, ano, mes):
-    if df_pendientes.empty or df_libros.empty: return False, "No hay pendientes o no hay libros con stock."
+    if df_pendientes.empty or df_libros.empty: return False, "No hay pendientes o no hay libros disponibles."
     exitos = 0
     libros_temp = df_libros.copy()
+    
     for _, asig in df_pendientes.iterrows():
-        libros_disponibles = libros_temp[libros_temp['stock'] > 0]
-        if libros_disponibles.empty: break
-        libro_elegido = libros_disponibles.sample(1).iloc[0]
+        libros_disp = libros_temp[libros_temp['stock'] > 0]
+        if libros_disp.empty: break
+        
+        libro_elegido = libros_disp.sample(1).iloc[0]
         success, _ = asignar_libro_a_suscripcion(
-            asig['asignacion_id'], asig['cliente_id'], libro_elegido['libro_id'], 
-            libro_elegido['autor'], ano, mes, libro_elegido['stock']
+            int(asig['asignacion_id']), int(asig['cliente_id']), int(libro_elegido['libro_id']), 
+            libro_elegido['titulo'], libro_elegido['autor'], ano, mes, int(libro_elegido['stock'])
         )
         if success:
             exitos += 1
@@ -121,15 +140,18 @@ def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes):
     conn = get_db_connection()
     try:
         if pd.notna(libro_id) and libro_id:
-            conn.table("libros").update({"stock": int(conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute().data[0]['stock']) + 1}).eq("libro_id", int(libro_id)).execute()
-            conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
+            res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
+            if res_l.data:
+                conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
+            origen_str = f"ASIGNACIÓN {mes}/{ano}"
+            conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", origen_str).execute()
+            
         conn.table("asignaciones").delete().eq("asignacion_id", int(asignacion_id)).execute()
         cargar_asignaciones_mes.clear()
         return True, ""
     except Exception as e: return False, str(e)
 
 def actualizar_asignaciones_batch(df_editado):
-    # ... (sin cambios, ya es robusta)
     df_original = st.session_state.get('asignaciones_original')
     if df_original is None: return 0
     df_original_comp = df_original.set_index('asignacion_id')
@@ -137,20 +159,28 @@ def actualizar_asignaciones_batch(df_editado):
     diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
     filas_cambiadas = df_editado_comp[diff_mask]
     if filas_cambiadas.empty: return 0
-    conn, updates = get_db_connection(), 0
+    
+    conn = get_db_connection()
+    updates = 0
     for a_id, row in filas_cambiadas.iterrows():
         try:
-            datos = {"estado_envio": str(row['estado_envio']), "pagado": str(row['pagado']), "envio_pagado": str(row['envio_pagado']), "extras": str(row.get('extras', '')), "comentario": str(row.get('comentario', ''))}
+            datos = {
+                "estado_envio": str(row['estado_envio']), "pagado": str(row['pagado']),
+                "envio_pagado": str(row['envio_pagado']), "extras": str(row.get('extras', '')),
+                "comentario": str(row.get('comentario', ''))
+            }
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
         except: continue
     if updates > 0: cargar_asignaciones_mes.clear()
     return updates
 
-# --- INTERFAZ PRINCIPAL CON PESTAÑA DE CIERRE ---
+# --- INTERFAZ PRINCIPAL ---
+
 def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
-    meses_dict = {i+1: v for i, v in enumerate(["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"])}
+    
+    meses_dict = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
     
     with st.container(border=True):
         st.markdown("### 📅 Mes de Trabajo")
@@ -163,66 +193,126 @@ def mostrar_asignaciones():
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
 
     if mes_esta_cerrado:
-        st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes ir a la pestaña 'Cierre de Mes' y reabrirlo.", icon="🔒")
+        st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la pestaña '🔒 Cierre de Mes'.", icon="🔒")
 
+    # AQUÍ ESTÁN LAS 5 PESTAÑAS (INCLUYENDO CIERRE)
     tab_gestion, tab_asignar, tab_comenzar, tab_eliminar, tab_cierre = st.tabs(["📋 Gestión", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar", "🔒 Cierre de Mes"])
 
+    # --- 1. TABLA EDITABLE ---
     with tab_gestion:
         if df_mes.empty: st.warning("No hay registros para este mes. Ve a 'Comenzar Mes'.")
         else:
-            df_editado = st.data_editor(df_mes[['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'extras', 'comentario']], 
-                                        disabled=mes_esta_cerrado or ['asignacion_id', 'nombre_cliente', 'titulo_libro'], hide_index=True, use_container_width=True)
-            if not df_mes[['asignacion_id', 'estado_envio', 'pagado', 'envio_pagado', 'extras', 'comentario']].equals(df_editado[['asignacion_id', 'estado_envio', 'pagado', 'envio_pagado', 'extras', 'comentario']]):
-                st.session_state['asignaciones_original'] = df_mes
-                if st.button("💾 Guardar Cambios", type="primary", disabled=mes_esta_cerrado):
+            col_fa1, col_fa2 = st.columns(2)
+            filtro_estado = col_fa1.selectbox("Estado del Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
+            filtro_pagado = col_fa2.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+            
+            df_filtrado = df_mes.copy()
+            if filtro_estado != "Todos": df_filtrado = df_filtrado[df_filtrado['estado_envio'] == filtro_estado]
+            if filtro_pagado != "Todos": df_filtrado = df_filtrado[df_filtrado['pagado'] == filtro_pagado]
+            
+            st.caption("Doble clic en las celdas de Estado, Pagado, Extras y Comentario para actualizar.")
+            
+            columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'extras', 'comentario']
+            for col in columnas_mostrar:
+                if col not in df_filtrado.columns: df_filtrado[col] = ""
+                
+            df_mostrar = df_filtrado[columnas_mostrar].copy()
+            if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
+                st.session_state.asignaciones_original = df_mostrar.copy()
+                
+            df_editado = st.data_editor(
+                df_mostrar, 
+                disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro'], 
+                hide_index=True, use_container_width=True
+            )
+            
+            if not df_mostrar.equals(df_editado) and not mes_esta_cerrado:
+                if st.button("💾 Guardar Cambios", type="primary"):
                     num = actualizar_asignaciones_batch(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
+
+    # --- 2. ASIGNAR LIBROS ---
     with tab_asignar:
-        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes asignar libros.")
+        if mes_esta_cerrado:
+            st.warning("El mes está cerrado. No puedes asignar libros.")
         else:
-            df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE"]
-            st.metric("Suscripciones pendientes de libro", len(df_pendientes))
-            if not df_pendientes.empty:
-                if st.button("🎲 Aplicar Libros al Azar", type="primary"):
-                    ex, msg = asignar_al_azar(df_pendientes, cargar_libros_disponibles(), ano_sel, mes_num)
-                    if ex: st.success(msg), st.balloons(), st.rerun()
-                    else: st.error(msg)
-                asig_sel = st.selectbox("Asignación Manual:", [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist())
-                libro_sel = st.selectbox("Libro a asignar:", [""] + cargar_libros_disponibles()['titulo'].tolist())
-                if st.button("Asignar este libro"):
-                    if asig_sel and libro_sel:
-                        id_asig = int(asig_sel.split(" - ")[0][3:])
-                        cliente_row = df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]
-                        libro_row = cargar_libros_disponibles()[cargar_libros_disponibles()['titulo'] == libro_sel].iloc[0]
-                        ex, err = asignar_libro_a_suscripcion(id_asig, cliente_row['cliente_id'], libro_row['libro_id'], libro_row['autor'], ano_sel, mes_num, libro_row['stock'])
-                        if ex: st.success("¡Libro asignado!"), st.rerun()
-                        else: st.error(err)
+            if df_mes.empty: st.info("No hay suscripciones creadas para este mes.")
+            else:
+                df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
+                st.metric("Suscripciones pendientes de libro", len(df_pendientes))
+                
+                if not df_pendientes.empty:
+                    col_m1, col_m2 = st.columns(2)
+                    
+                    with col_m1:
+                        st.markdown("**🎲 Asignación Masiva**")
+                        if st.button("Aplicar Libros al Azar a todos", type="primary", use_container_width=True):
+                            df_libros = cargar_libros_disponibles()
+                            ex, msg = asignar_al_azar(df_pendientes, df_libros, ano_sel, mes_num)
+                            if ex: st.success(msg), st.balloons(), st.rerun()
+                            else: st.error(msg)
+                    
+                    with col_m2:
+                        st.markdown("**✏️ Asignación Manual**")
+                        df_libros = cargar_libros_disponibles()
+                        lista_pendientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
+                        asig_manual_sel = st.selectbox("Seleccionar Cliente Pendiente:", lista_pendientes)
+                        libro_manual_sel = st.selectbox("Seleccionar Libro:", [""] + df_libros['titulo'].tolist())
+                        
+                        if st.button("Asignar este libro", use_container_width=True):
+                            if asig_manual_sel and libro_manual_sel:
+                                id_asig = int(asig_manual_sel.split(" - ")[0].replace("ID:", ""))
+                                id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
+                                l_data = df_libros[df_libros['titulo'] == libro_manual_sel].iloc[0]
+                                
+                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data['autor'], ano_sel, mes_num, l_data['stock'])
+                                if ex: st.success("¡Libro asignado!"), st.rerun()
+                                else: st.error(err)
+                else:
+                    st.success("¡Todos los clientes de este mes ya tienen su libro asignado!")
+
+    # --- 3. COMENZAR MES ---
     with tab_comenzar:
-        if mes_esta_cerrado: st.warning("El mes está cerrado.")
+        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes generar nuevas filas.")
         else:
-            if st.button("🚀 Generar Registros del Mes", type="primary"):
-                ex, msg = comenzar_mes(ano_sel, mes_num)
-                if ex: st.success(msg), st.balloons(), st.rerun()
-                else: st.warning(msg)
+            st.markdown("#### 🚀 Inicializar Mes")
+            st.info(f"Se crearán filas en blanco para todos los clientes que tengan estado 'SUSCRITO' para {mes_sel} de {ano_sel}.")
+            if st.button("Generar Registros del Mes", type="primary", use_container_width=True):
+                with st.spinner("Generando tabla..."):
+                    ex, msg = comenzar_mes(ano_sel, mes_num)
+                    if ex: st.success(msg), st.balloons(), st.rerun()
+                    else: st.warning(msg)
+
+    # --- 4. ELIMINAR ---
     with tab_eliminar:
-        if mes_esta_cerrado: st.warning("El mes está cerrado.")
+        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes eliminar registros.")
         else:
-            asig_eliminar = st.selectbox("Selecciona registro a borrar:", [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist())
-            if asig_eliminar and st.button("🟥 ELIMINAR", type="primary"):
-                id_asig = int(asig_eliminar.split(" | ")[0][3:])
-                row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
-                ex, err = eliminar_asignacion(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num)
-                if ex: st.success("Registro eliminado."), st.rerun()
-                else: st.error(err)
+            st.markdown("#### 🗑️ Anular / Eliminar Suscripción")
+            if not df_mes.empty:
+                lista_eliminar = [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist()
+                asig_eliminar = st.selectbox("Selecciona el registro a borrar:", lista_eliminar)
+                if asig_eliminar:
+                    if st.button("🟥 ELIMINAR DEFINITIVAMENTE", type="primary"):
+                        id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
+                        row_data = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
+                        ex, err = eliminar_asignacion(id_asig, row_data.get('libro_suscripcion_id'), row_data['cliente_id'], ano_sel, mes_num)
+                        if ex: st.success("Registro eliminado y stock devuelto."), st.rerun()
+                        else: st.error(err)
+
+    # --- 5. CIERRE DE MES ---
     with tab_cierre:
         st.markdown("#### 🔒 Control de Cierre")
         if mes_esta_cerrado:
-            st.success(f"El mes {mes_sel} {ano_sel} está **CERRADO**.")
-            if st.button("🔓 Reabrir Mes"):
+            st.success(f"El mes de {mes_sel} {ano_sel} se encuentra actualmente **CERRADO**.")
+            st.caption("Al reabrir el mes podrás editar estados, asignar libros y hacer sincronizaciones nuevamente.")
+            if st.button("🔓 Reabrir Mes", type="secondary"):
                 ex, msg = cambiar_estado_mes(ano_sel, mes_num, cerrar=False)
-                st.success(msg), st.rerun()
+                if ex: st.success(msg), st.rerun()
+                else: st.error(msg)
         else:
-            st.info(f"El mes {mes_sel} {ano_sel} está **ABIERTO**.")
-            if st.button("🔒 CERRAR MES"):
+            st.info(f"El mes de {mes_sel} {ano_sel} se encuentra **ABIERTO**.")
+            st.caption("Al cerrar el mes, se bloquearán todas las ediciones para proteger los datos históricos.")
+            if st.button("🔒 CERRAR MES DEFINITIVAMENTE", type="primary"):
                 ex, msg = cambiar_estado_mes(ano_sel, mes_num, cerrar=True)
-                st.success(msg), st.rerun()
+                if ex: st.success(msg), st.balloons(), st.rerun()
+                else: st.error(msg)
