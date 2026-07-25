@@ -7,11 +7,7 @@ from dotenv import load_dotenv
 
 from vista_inventario import mostrar_inventario
 
-<<<<<<< HEAD
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
-=======
-st.set_page_config(page_title="Alba Librería Móvil", page_icon="📚", layout="wide")
->>>>>>> 641dc944116205db983a5a9d49e3e82ddfd3a511
 
 load_dotenv()
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -23,12 +19,8 @@ CORREOS_AUTORIZADOS = [
     "albalibreriadevelop@gmail.com",
     "develop.alba.libreria@gmail.com",
     "albalibreriachile@gmail.com",
-<<<<<<< HEAD
     "ividalavello@gmail.com",
     "mari.books.backup@gmail.com"
-=======
-    "ividalavello@gmail.com"
->>>>>>> 641dc944116205db983a5a9d49e3e82ddfd3a511
 ]
 
 oauth2 = OAuth2Component(
@@ -109,8 +101,4 @@ else:
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
             st.title("🛒 Caja y Ventas")
-<<<<<<< HEAD
             st.info("Próximamente: El sistema de ventas conectado al inventario.")
-=======
-            st.info("Próximamente: El sistema de ventas conectado al inventario.")
->>>>>>> 641dc944116205db983a5a9d49e3e82ddfd3a511

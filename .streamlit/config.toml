@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# .streamlit/config.toml
-
 [theme]
 # Color de acento para botones y elementos interactivos:
 # Usaremos el "Pastel Violet" que es vibrante y elegante.
@@ -20,11 +17,3 @@ textColor = "#5B5E93"
 
 # Tipografía:
 font = "Lato"
-=======
-[theme]
-primaryColor = "#EDAA8C"
-backgroundColor = "#1E1E24"
-secondaryBackgroundColor = "#2B2B36"
-textColor = "#FAFAFA"
-font = "sans serif"
->>>>>>> 641dc944116205db983a5a9d49e3e82ddfd3a511
