@@ -1,6 +1,3 @@
-# app/2_scripts/utilidades.py
-# VERSIÓN PARA LA NUBE (STREAMLIT CLOUD)
-
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
