@@ -18,14 +18,14 @@ CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 
-CORREOS_AUTORIZADOS = [
-    "mariana96.parra@gmail.com", 
-    "albalibreriadevelop@gmail.com",
-    "develop.alba.libreria@gmail.com",
-    "albalibreriachile@gmail.com",
-    "ividalavello@gmail.com"
-]
+# Lee la lista de correos desde los secretos de Streamlit
+CORREOS_AUTORIZADOS = st.secrets.get("authorization", {}).get("authorized_emails", [])
 
+
+if not CORREOS_AUTORIZADOS:
+    st.error("Error de configuración: No se encontró la lista de correos autorizados en los secretos de la plataforma.")
+    st.stop()
+    
 if CLIENT_ID and CLIENT_SECRET:
     oauth2 = OAuth2Component(
         client_id=CLIENT_ID, client_secret=CLIENT_SECRET,
