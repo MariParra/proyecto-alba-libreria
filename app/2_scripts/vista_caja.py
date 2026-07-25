@@ -14,7 +14,6 @@ def cargar_libros_caja():
 @st.cache_data(ttl=60)
 def cargar_clientes():
     conn = get_db_connection()
-    # Si la tabla no existe aún, esto evitará que la app se caiga
     try:
         response = conn.table("clientes").select("*").execute()
         return pd.DataFrame(response.data)
@@ -25,7 +24,6 @@ def cargar_clientes():
 def cargar_historial():
     conn = get_db_connection()
     try:
-        # Traemos las ventas uniendo los nombres de libros y clientes
         response = conn.table("ventas").select("*, libros(titulo), clientes(nombre)").execute()
         df = pd.DataFrame(response.data)
         if not df.empty:
@@ -33,10 +31,9 @@ def cargar_historial():
             df['nombre_cliente'] = df['clientes'].apply(lambda x: x['nombre'] if isinstance(x, dict) else 'Desconocido')
         return df
     except:
-        return pd.DataFrame(columns=['venta_id', 'fecha', 'cantidad', 'total', 'metodo_pago', 'titulo_libro', 'nombre_cliente'])
+        return pd.DataFrame(columns=['venta_id', 'fecha', 'cantidad', 'total', 'metodo_pago', 'modo_envio', 'titulo_libro', 'nombre_cliente'])
 
 def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
-    """Crea un cliente nuevo o actualiza uno existente si se rellenaron datos."""
     conn = get_db_connection()
     datos = {"nombre": limpiar_texto(nombre), "correo": limpiar_texto(correo), "telefono": limpiar_texto(telefono)}
     
@@ -47,41 +44,36 @@ def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
         response = conn.table("clientes").insert(datos).execute()
         return response.data[0]['cliente_id']
 
-def gestionar_libro(titulo, autor, precio, stock_a_sumar, libro_id_existente=None):
-    """Crea un libro rápido desde la caja o actualiza sus datos faltantes."""
+def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
     conn = get_db_connection()
-    datos = {"titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor), "precio": precio}
+    datos = {"titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor), "precio": precio_catalogo}
     
     if libro_id_existente:
         conn.table("libros").update(datos).eq("libro_id", libro_id_existente).execute()
         return libro_id_existente
     else:
         datos["stock"] = stock_a_sumar
-        datos["precio_original"] = precio
+        datos["precio_original"] = precio_catalogo
         response = conn.table("libros").insert(datos).execute()
         return response.data[0]['libro_id']
 
-def procesar_venta(libro_id, cliente_id, cantidad, total, metodo, stock_actual):
-    """Registra la venta y descuenta el stock."""
+def procesar_venta(libro_id, cliente_id, cantidad, total, metodo, envio, stock_actual):
     conn = get_db_connection()
     nuevo_stock = stock_actual - cantidad
     
     try:
-        # 1. Registrar Venta
         datos_venta = {
             "libro_id": libro_id,
             "cliente_id": cliente_id,
             "cantidad": cantidad,
             "total": total,
             "metodo_pago": metodo,
+            "modo_envio": envio,  # <--- NUEVO CAMPO DE ENVÍO
             "fecha": datetime.now().isoformat()
         }
         conn.table("ventas").insert(datos_venta).execute()
-        
-        # 2. Descontar Stock
         conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", libro_id).execute()
         
-        # Limpiar cachés
         cargar_libros_caja.clear()
         cargar_clientes.clear()
         cargar_historial.clear()
@@ -100,9 +92,6 @@ def mostrar_caja():
 
     tab_venta, tab_historial = st.tabs(["🛒 Nueva Venta", "📜 Historial"])
 
-    # ==========================================
-    # PESTAÑA 1: NUEVA VENTA (MÓVIL FRIENDLY)
-    # ==========================================
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Selecciona opción:", ["👤 Buscar Existente", "➕ Cliente Nuevo"], horizontal=True, label_visibility="collapsed")
@@ -118,7 +107,6 @@ def mostrar_caja():
                     c_id = int(datos_c['cliente_id'])
                     
                     with st.expander("✏️ Ver / Completar datos del cliente", expanded=False):
-                        st.caption("Si falta un dato, rellénalo aquí y se guardará automáticamente con la venta.")
                         c_nombre = st.text_input("Nombre:", value=datos_c['nombre'], key="c_nom")
                         c_correo = st.text_input("Correo:", value=datos_c.get('correo', ''), key="c_cor")
                         c_telefono = st.text_input("Teléfono:", value=datos_c.get('telefono', ''), key="c_tel")
@@ -135,7 +123,7 @@ def mostrar_caja():
         st.markdown("### 2️⃣ Datos del Libro")
         modo_libro = st.radio("Selecciona opción:", ["📚 Buscar Existente", "➕ Libro Rápido (No en catálogo)"], horizontal=True, label_visibility="collapsed")
         
-        l_id, l_titulo, l_autor, l_precio, l_stock_actual = None, "", "", 0.0, 0
+        l_id, l_titulo, l_autor, l_precio_catalogo, l_stock_actual = None, "", "", 0.0, 0
         
         if modo_libro == "📚 Buscar Existente":
             if not df_libros.empty:
@@ -146,88 +134,85 @@ def mostrar_caja():
                     l_id = int(datos_l['libro_id'])
                     l_stock_actual = int(datos_l['stock'])
                     
-                    with st.expander("✏️ Ver / Completar datos del libro", expanded=True):
+                    with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
+                        st.caption("Modifica esto SOLO si quieres cambiar los datos permanentes del catálogo.")
                         l_titulo = st.text_input("Título:", value=datos_l['titulo'], disabled=True)
                         l_autor = st.text_input("Autor:", value=datos_l.get('autor', ''))
-                        
-                        col3, col4 = st.columns(2)
-                        col3.metric("Stock Disponible", l_stock_actual)
-                        l_precio = col4.number_input("Precio ($):", value=float(datos_l['precio']), step=100.0)
+                        l_precio_catalogo = st.number_input("Precio Oficial en Catálogo ($):", value=float(datos_l['precio']), step=100.0)
+                    
+                    # Asignamos el precio del catálogo por defecto
+                    l_precio_catalogo = float(datos_l['precio'])
+                    l_titulo = datos_l['titulo']
             else:
                 st.warning("El inventario está vacío.")
         else:
             with st.container(border=True):
-                st.caption("Usa esto para vender un libro que no habías ingresado al sistema. Se agregará al inventario automáticamente.")
                 l_titulo = st.text_input("Título del libro:")
                 l_autor = st.text_input("Autor (Opcional):")
-                l_precio = st.number_input("Precio ($):", min_value=0.0, step=100.0)
-                l_stock_actual = 1 # Asumimos que hay al menos 1 si lo está vendiendo
+                l_precio_catalogo = st.number_input("Precio ($):", min_value=0.0, step=100.0)
+                l_stock_actual = 1 
 
         st.markdown("---")
         st.markdown("### 3️⃣ Detalle y Pago")
-        col5, col6 = st.columns(2)
+        
+        # --- NUEVO: PRECIO ESPECIAL DE VENTA ---
+        st.caption("Puedes aplicar un precio especial manualmente para esta venta.")
+        precio_a_cobrar = st.number_input("Precio Unitario a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
+        
+        col5, col6, col7 = st.columns(3)
         cantidad = col5.number_input("Cantidad a vender:", min_value=1, max_value=max(1, l_stock_actual), step=1)
         metodo_pago = col6.selectbox("Método de Pago:", ["Efectivo", "Tarjeta Débito", "Tarjeta Crédito", "Transferencia"])
         
-        total_pagar = float(l_precio) * cantidad
+        # --- NUEVO: MODO DE ENVÍO ---
+        modo_envio = col7.selectbox("Modo de Envío:", ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor"])
         
-        # Caja de Total Dinámica
+        total_pagar = precio_a_cobrar * cantidad
+        
         st.markdown(f"""
-        <div style="background-color: #E6F3E6; border: 2px solid #4CAF50; padding: 15px; border-radius: 10px; text-align: center;">
+        <div style="background-color: #E6F3E6; border: 2px solid #4CAF50; padding: 15px; border-radius: 10px; text-align: center; margin-top: 10px;">
             <h2 style="color: #2E7D32; margin:0;">Total a Pagar: ${total_pagar:,.0f}</h2>
         </div>
         """, unsafe_allow_html=True)
         
-        st.write("") # Espaciador
+        st.write("")
         
-        # VALIDACIONES Y BOTÓN DE VENTA
         if st.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
-            if not c_nombre:
-                st.error("⚠️ Debes ingresar o seleccionar el nombre del cliente.")
-            elif not l_titulo:
-                st.error("⚠️ Debes ingresar o seleccionar un libro.")
-            elif cantidad > l_stock_actual and modo_libro == "📚 Buscar Existente":
-                st.error("⚠️ No hay suficiente stock para realizar esta venta.")
+            if not c_nombre: st.error("⚠️ Falta el nombre del cliente.")
+            elif not l_titulo: st.error("⚠️ Falta seleccionar un libro.")
+            elif cantidad > l_stock_actual and modo_libro == "📚 Buscar Existente": st.error("⚠️ No hay suficiente stock.")
             else:
                 with st.spinner("Procesando..."):
-                    # 1. Gestionar Cliente (Crear o Actualizar info faltante)
                     final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_id)
+                    final_libro_id = gestionar_libro(l_titulo, l_autor, l_precio_catalogo, cantidad, l_id)
                     
-                    # 2. Gestionar Libro
-                    final_libro_id = gestionar_libro(l_titulo, l_autor, l_precio, cantidad, l_id)
-                    
-                    # 3. Registrar Venta
-                    exito, err = procesar_venta(final_libro_id, final_cliente_id, cantidad, total_pagar, metodo_pago, l_stock_actual)
+                    exito, err = procesar_venta(final_libro_id, final_cliente_id, cantidad, total_pagar, metodo_pago, modo_envio, l_stock_actual)
                     
                     if exito:
                         st.success("🎉 ¡Venta registrada con éxito!")
                         st.balloons()
-                        # Refrescar la página para limpiar los campos
                         st.rerun()
                     else:
                         st.error(f"Error al registrar: {err}")
 
-    # ==========================================
-    # PESTAÑA 2: HISTORIAL Y FILTROS
-    # ==========================================
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial()
         
         if df_ventas.empty:
-            st.info("Aún no hay ventas registradas en el sistema.")
+            st.info("Aún no hay ventas registradas.")
         else:
             with st.expander("🔍 Filtros de Historial", expanded=False):
-                f_cliente = st.selectbox("Filtrar por Cliente:", ["Todos"] + df_ventas['nombre_cliente'].unique().tolist())
-                f_metodo = st.selectbox("Filtrar por Método de Pago:", ["Todos"] + df_ventas['metodo_pago'].unique().tolist())
+                col_h1, col_h2 = st.columns(2)
+                f_cliente = col_h1.selectbox("Filtrar por Cliente:", ["Todos"] + df_ventas['nombre_cliente'].unique().tolist())
+                f_metodo = col_h2.selectbox("Filtrar por Método:", ["Todos"] + df_ventas['metodo_pago'].unique().tolist())
+                f_envio = st.selectbox("Filtrar por Envío:", ["Todos"] + df_ventas.get('modo_envio', pd.Series(["Retiro en tienda"])).unique().tolist())
             
             df_hist_filtrado = df_ventas.copy()
-            if f_cliente != "Todos":
-                df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['nombre_cliente'] == f_cliente]
-            if f_metodo != "Todos":
-                df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['metodo_pago'] == f_metodo]
+            if f_cliente != "Todos": df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['nombre_cliente'] == f_cliente]
+            if f_metodo != "Todos": df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['metodo_pago'] == f_metodo]
+            if f_envio != "Todos" and 'modo_envio' in df_hist_filtrado.columns: 
+                df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['modo_envio'] == f_envio]
             
-            # Tarjetas de resumen métrico
             total_recaudado = df_hist_filtrado['total'].sum()
             total_libros_vendidos = df_hist_filtrado['cantidad'].sum()
             
@@ -236,9 +221,10 @@ def mostrar_caja():
             c_res2.metric("Libros Vendidos", total_libros_vendidos)
             
             st.markdown("---")
-            # Mostrar la tabla limpia
+            # Ajustamos las columnas a mostrar para incluir el modo de envío
             columnas_mostrar = ['fecha', 'titulo_libro', 'nombre_cliente', 'cantidad', 'total', 'metodo_pago']
-            # Formatear fecha para que sea legible
+            if 'modo_envio' in df_hist_filtrado.columns:
+                columnas_mostrar.append('modo_envio')
+                
             df_hist_filtrado['fecha'] = pd.to_datetime(df_hist_filtrado['fecha']).dt.strftime('%d-%m-%Y %H:%M')
-            
             st.dataframe(df_hist_filtrado[columnas_mostrar], hide_index=True, use_container_width=True)
