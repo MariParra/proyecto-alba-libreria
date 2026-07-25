@@ -12,15 +12,6 @@ def cargar_libros_caja():
     return pd.DataFrame(response.data)
 
 @st.cache_data(ttl=60)
-def cargar_clientes():
-    conn = get_db_connection()
-    try:
-        response = conn.table("clientes").select("cliente_id, nombre, correo, telefono").execute()
-        return pd.DataFrame(response.data)
-    except:
-        return pd.DataFrame(columns=['cliente_id', 'nombre', 'correo', 'telefono'])
-
-@st.cache_data(ttl=60)
 def cargar_historial():
     """Carga el historial desde la tabla correcta: registro_ventas"""
     conn = get_db_connection()
@@ -34,11 +25,24 @@ def cargar_historial():
     except:
         return pd.DataFrame(columns=['venta_id', 'fecha_venta', 'libros_vendidos', 'subtotal_libros', 'valor_envio', 'monto_final', 'metodo_envio', 'comentario', 'nombre_cliente'])
 
+@st.cache_data(ttl=60)
+def cargar_clientes():
+    """Carga los clientes usando los nombres correctos del esquema."""
+    conn = get_db_connection()
+    try:
+        # AQUI ESTABA EL ERROR: Cambiamos 'correo' por 'email'
+        response = conn.table("clientes").select("cliente_id, nombre, email, telefono").execute()
+        return pd.DataFrame(response.data)
+    except Exception as e:
+        st.error(f"Error al cargar clientes: {e}")
+        return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono'])
+
 def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
-    """Crea o actualiza un cliente. Previene errores si la tabla falla."""
+    """Crea o actualiza un cliente. Mapea la variable 'correo' a la columna 'email'."""
     if not nombre: return None
     conn = get_db_connection()
-    datos = {"nombre": limpiar_texto(nombre), "correo": limpiar_texto(correo), "telefono": limpiar_texto(telefono)}
+    # AQUI ESTABA EL OTRO ERROR: La llave del diccionario debe ser 'email'
+    datos = {"nombre": limpiar_texto(nombre), "email": limpiar_texto(correo), "telefono": limpiar_texto(telefono)}
     try:
         if cliente_id_existente:
             conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
@@ -50,6 +54,7 @@ def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
     except Exception as e:
         st.error(f"Error al guardar el cliente: {e}")
         return None
+
 
 def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
     conn = get_db_connection()
