@@ -184,7 +184,6 @@ def mapear_sino(val):
     return v
 
 # --- INTERFAZ PRINCIPAL ---
-
 def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
     
@@ -200,7 +199,6 @@ def mostrar_asignaciones():
     df_mes = cargar_asignaciones_mes(ano_sel, mes_num)
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
     
-    # Estandarizamos los datos
     if not df_mes.empty:
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
         df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
@@ -208,7 +206,6 @@ def mostrar_asignaciones():
         df_mes['extras'] = df_mes['extras'].fillna("")
         df_mes['comentario'] = df_mes['comentario'].fillna("")
 
-        # --- NUEVO: DASHBOARD RESUMEN DEL MES ---
         total_cajas = len(df_mes)
         cajas_pagadas = len(df_mes[df_mes['pagado'] == 'SI'])
         cajas_pendientes = len(df_mes[df_mes['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])])
@@ -221,7 +218,6 @@ def mostrar_asignaciones():
         c_res3.metric("⏳ Por Preparar", cajas_pendientes)
         c_res4.metric("✅ Listas para Enviar", cajas_listas)
         st.markdown("---")
-        # ---------------------------------------
 
     if mes_esta_cerrado:
         st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la opción '🔒 Cierre de Mes'.", icon="🔒")
@@ -237,13 +233,19 @@ def mostrar_asignaciones():
         st.markdown(f"#### 📋 Gestión del Mes ({mes_sel} {ano_sel})")
         if df_mes.empty: st.warning("No hay registros para este mes. Ve a 'Comenzar Mes'.")
         else:
-            col_fa1, col_fa2 = st.columns(2)
+            # AÑADIMOS EL TERCER FILTRO DE LIBRO AQUÍ
+            col_fa1, col_fa2, col_fa3 = st.columns(3)
             filtro_estado = col_fa1.selectbox("Estado del Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
             filtro_pagado = col_fa2.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+            filtro_libro = col_fa3.selectbox("Libro Asignado:", ["Todos", "Sin Libro Asignado", "Con Libro Asignado"])
             
             df_filtrado = df_mes.copy()
             if filtro_estado != "Todos": df_filtrado = df_filtrado[df_filtrado['estado_envio'] == filtro_estado]
             if filtro_pagado != "Todos": df_filtrado = df_filtrado[df_filtrado['pagado'] == filtro_pagado]
+            if filtro_libro == "Sin Libro Asignado":
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
+            elif filtro_libro == "Con Libro Asignado":
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
             
             st.caption("Doble clic en las celdas para modificar. Los menús desplegables te ayudarán a no equivocarte.")
             
