@@ -19,7 +19,8 @@ CORREOS_AUTORIZADOS = [
     "albalibreriadevelop@gmail.com",
     "develop.alba.libreria@gmail.com",
     "albalibreriachile@gmail.com",
-    "ividalavello@gmail.com"
+    "ividalavello@gmail.com",
+    "mari.books.backup@gmail.com"
 ]
 
 oauth2 = OAuth2Component(
