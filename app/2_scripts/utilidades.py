@@ -18,4 +18,4 @@ def limpiar_texto(texto):
     """Función de utilidad para limpiar texto para búsquedas."""
     if texto is None:
         return ""
-    return str(texto).strip().lower()
+    return str(texto).strip().upper()
