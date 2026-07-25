@@ -61,7 +61,7 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": int(ano), "mes": int(mes)}
+            datos = {"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             conn.table("meses_cerrados").insert(datos).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
@@ -95,7 +95,6 @@ def comenzar_mes(ano, mes):
 def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual):
     conn = get_db_connection()
     try:
-        # Conversión explícita para evitar el error int64 de Pandas
         id_asig_py = int(asignacion_id)
         id_cliente_py = int(cliente_id)
         id_libro_py = int(libro_id)
@@ -129,7 +128,7 @@ def asignar_al_azar(df_pendientes, df_libros, ano, mes):
         libro_elegido = libros_disp.sample(1).iloc[0]
         success, _ = asignar_libro_a_suscripcion(
             int(asig['asignacion_id']), int(asig['cliente_id']), int(libro_elegido['libro_id']), 
-            libro_elegido['titulo'], libro_elegido['autor'], ano, mes, int(libro_elegido['stock'])
+            libro_elegido['titulo'], libro_elegido.get('autor', ''), ano, mes, int(libro_elegido['stock'])
         )
         if success:
             exitos += 1
@@ -193,13 +192,20 @@ def mostrar_asignaciones():
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
 
     if mes_esta_cerrado:
-        st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la pestaña '🔒 Cierre de Mes'.", icon="🔒")
+        st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la opción '🔒 Cierre de Mes'.", icon="🔒")
 
-    # AQUÍ ESTÁN LAS 5 PESTAÑAS (INCLUYENDO CIERRE)
-    tab_gestion, tab_asignar, tab_comenzar, tab_eliminar, tab_cierre = st.tabs(["📋 Gestión", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar", "🔒 Cierre de Mes"])
+    st.markdown("---")
+    
+    # NUEVO: Selector Desplegable en lugar de Pestañas (¡100% amigable para celulares!)
+    opcion_menu = st.selectbox(
+        "👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:",
+        ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar Registro", "🔒 Cierre de Mes"]
+    )
+    st.markdown("---")
 
     # --- 1. TABLA EDITABLE ---
-    with tab_gestion:
+    if opcion_menu == "📋 Gestión (Tabla Editable)":
+        st.markdown(f"#### 📋 Gestión del Mes ({mes_sel} {ano_sel})")
         if df_mes.empty: st.warning("No hay registros para este mes. Ve a 'Comenzar Mes'.")
         else:
             col_fa1, col_fa2 = st.columns(2)
@@ -232,7 +238,8 @@ def mostrar_asignaciones():
                     st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
 
     # --- 2. ASIGNAR LIBROS ---
-    with tab_asignar:
+    elif opcion_menu == "📚 Asignar Libros":
+        st.markdown("#### 📚 Asignar Libros")
         if mes_esta_cerrado:
             st.warning("El mes está cerrado. No puedes asignar libros.")
         else:
@@ -242,9 +249,7 @@ def mostrar_asignaciones():
                 st.metric("Suscripciones pendientes de libro", len(df_pendientes))
                 
                 if not df_pendientes.empty:
-                    col_m1, col_m2 = st.columns(2)
-                    
-                    with col_m1:
+                    with st.container(border=True):
                         st.markdown("**🎲 Asignación Masiva**")
                         if st.button("Aplicar Libros al Azar a todos", type="primary", use_container_width=True):
                             df_libros = cargar_libros_disponibles()
@@ -252,7 +257,7 @@ def mostrar_asignaciones():
                             if ex: st.success(msg), st.balloons(), st.rerun()
                             else: st.error(msg)
                     
-                    with col_m2:
+                    with st.container(border=True):
                         st.markdown("**✏️ Asignación Manual**")
                         df_libros = cargar_libros_disponibles()
                         lista_pendientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
@@ -265,17 +270,18 @@ def mostrar_asignaciones():
                                 id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
                                 l_data = df_libros[df_libros['titulo'] == libro_manual_sel].iloc[0]
                                 
-                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data['autor'], ano_sel, mes_num, l_data['stock'])
-                                if ex: st.success("¡Libro asignado!"), st.rerun()
-                                else: st.error(err)
+                                # Aplicamos .get('autor', '') para evitar cualquier error si falta el autor
+                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'])
+                                if ex: st.success("¡Libro asignado con éxito!"), st.rerun()
+                                else: st.error(f"Error: {err}")
                 else:
                     st.success("¡Todos los clientes de este mes ya tienen su libro asignado!")
 
     # --- 3. COMENZAR MES ---
-    with tab_comenzar:
+    elif opcion_menu == "🚀 Comenzar Mes":
+        st.markdown("#### 🚀 Inicializar Mes")
         if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes generar nuevas filas.")
         else:
-            st.markdown("#### 🚀 Inicializar Mes")
             st.info(f"Se crearán filas en blanco para todos los clientes que tengan estado 'SUSCRITO' para {mes_sel} de {ano_sel}.")
             if st.button("Generar Registros del Mes", type="primary", use_container_width=True):
                 with st.spinner("Generando tabla..."):
@@ -284,10 +290,10 @@ def mostrar_asignaciones():
                     else: st.warning(msg)
 
     # --- 4. ELIMINAR ---
-    with tab_eliminar:
+    elif opcion_menu == "🗑️ Eliminar Registro":
+        st.markdown("#### 🗑️ Anular / Eliminar Suscripción")
         if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes eliminar registros.")
         else:
-            st.markdown("#### 🗑️ Anular / Eliminar Suscripción")
             if not df_mes.empty:
                 lista_eliminar = [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist()
                 asig_eliminar = st.selectbox("Selecciona el registro a borrar:", lista_eliminar)
@@ -298,9 +304,11 @@ def mostrar_asignaciones():
                         ex, err = eliminar_asignacion(id_asig, row_data.get('libro_suscripcion_id'), row_data['cliente_id'], ano_sel, mes_num)
                         if ex: st.success("Registro eliminado y stock devuelto."), st.rerun()
                         else: st.error(err)
+            else:
+                st.info("No hay registros para eliminar este mes.")
 
     # --- 5. CIERRE DE MES ---
-    with tab_cierre:
+    elif opcion_menu == "🔒 Cierre de Mes":
         st.markdown("#### 🔒 Control de Cierre")
         if mes_esta_cerrado:
             st.success(f"El mes de {mes_sel} {ano_sel} se encuentra actualmente **CERRADO**.")
