@@ -9,4 +9,4 @@ app/5_libreros
 # Archivos temporales de Python (caché)
 __pycache__/
 *.pyc
-.streamlit/
+.streamlit/secrets.toml
