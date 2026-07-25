@@ -43,6 +43,41 @@ def actualizar_un_libro(libro_id, datos):
     except Exception as e:
         return False, str(e)
 
+def actualizar_libros_batch(df_editado):
+    """Actualiza múltiples libros a la vez detectando los cambios (Optimizado para PC)."""
+    df_original = st.session_state.get('inventario_original')
+    if df_original is None: return 0
+    
+    df_original_comp = df_original.set_index('libro_id')
+    df_editado_comp = df_editado.set_index('libro_id')
+    diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
+    filas_cambiadas = df_editado_comp[diff_mask]
+    
+    if filas_cambiadas.empty: return 0
+    
+    conn = get_db_connection()
+    updates_count = 0
+    
+    for libro_id, row in filas_cambiadas.iterrows():
+        try:
+            datos = {
+                "autor": limpiar_texto(row['autor']),
+                "editorial": limpiar_texto(row['editorial']),
+                "genero": limpiar_texto(row['genero']),
+                "encuadernacion": limpiar_texto(row['encuadernacion']),
+                "stock": int(row['stock']),
+                "precio": float(row['precio'])
+            }
+            conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
+            updates_count += 1
+        except Exception:
+            continue
+            
+    if updates_count > 0:
+        cargar_datos_completos.clear()
+        
+    return updates_count
+
 def eliminar_libro(libro_id):
     """Elimina un libro permanentemente de la tabla 'libros'."""
     conn = get_db_connection()
@@ -128,44 +163,77 @@ def mostrar_inventario():
         "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
 
-    # 1. PESTAÑA DE EDICIÓN MÓVIL (Formulario)
+    # 1. PESTAÑA DE EDICIÓN (DUAL: MÓVIL Y PC)
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
-        titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
-        titulo_a_editar = st.selectbox("Busca y selecciona un libro para editar:", titulos_filtrados, key="sel_editar")
+        modo_edicion = st.radio("Elige la vista de edición:", ["📱 Vista Móvil (Formulario)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
+        st.write("") # Espaciador
         
-        if titulo_a_editar:
-            libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
-            with st.form("form_editar"):
-                st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
+        if modo_edicion == "📱 Vista Móvil (Formulario)":
+            titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
+            titulo_a_editar = st.selectbox("Busca y selecciona un libro para editar:", titulos_filtrados, key="sel_editar")
+            
+            if titulo_a_editar:
+                libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
+                with st.form("form_editar"):
+                    st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
+                    
+                    col1, col2 = st.columns(2)
+                    nuevo_autor = col1.text_input("Autor:", value=libro['autor'])
+                    nueva_editorial = col2.text_input("Editorial:", value=libro['editorial'])
+                    
+                    col3, col4 = st.columns(2)
+                    nuevo_genero = col3.text_input("Género:", value=libro['genero'])
+                    nueva_encuadernacion = col4.text_input("Encuadernación:", value=libro['encuadernacion'])
+                    
+                    col5, col6 = st.columns(2)
+                    nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
+                    nuevo_precio = col6.number_input("Precio:", min_value=0.0, format="%.2f", value=float(libro['precio']))
+                    
+                    if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                        datos_actualizados = {
+                            "autor": limpiar_texto(nuevo_autor),
+                            "editorial": limpiar_texto(nueva_editorial),
+                            "genero": limpiar_texto(nuevo_genero),
+                            "encuadernacion": limpiar_texto(nueva_encuadernacion),
+                            "stock": nuevo_stock,
+                            "precio": nuevo_precio
+                        }
+                        exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
+                        if exito:
+                            st.success("¡Libro actualizado correctamente!")
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {error}")
+
+        else: # VISTA PC (Tabla Editable)
+            st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
+            
+            columnas_a_mostrar = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "precio"]
+            df_mostrar = df_filtrado[columnas_a_mostrar]
+            
+            if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
+                st.session_state.inventario_original = df_mostrar.copy()
                 
-                col1, col2 = st.columns(2)
-                nuevo_autor = col1.text_input("Autor:", value=libro['autor'])
-                nueva_editorial = col2.text_input("Editorial:", value=libro['editorial'])
-                
-                col3, col4 = st.columns(2)
-                nuevo_genero = col3.text_input("Género:", value=libro['genero'])
-                nueva_encuadernacion = col4.text_input("Encuadernación:", value=libro['encuadernacion'])
-                
-                col5, col6 = st.columns(2)
-                nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
-                nuevo_precio = col6.number_input("Precio:", min_value=0.0, format="%.2f", value=float(libro['precio']))
-                
-                if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                    datos_actualizados = {
-                        "autor": limpiar_texto(nuevo_autor),
-                        "editorial": limpiar_texto(nueva_editorial),
-                        "genero": limpiar_texto(nuevo_genero),
-                        "encuadernacion": limpiar_texto(nueva_encuadernacion),
-                        "stock": nuevo_stock,
-                        "precio": nuevo_precio
-                    }
-                    exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
-                    if exito:
-                        st.success("¡Libro actualizado correctamente!")
+            config_columnas = {
+                "autor": st.column_config.SelectboxColumn("Autor", options=obtener_unicos(df_inventario, 'autor'), required=True),
+                "editorial": st.column_config.SelectboxColumn("Editorial", options=obtener_unicos(df_inventario, 'editorial'), required=True),
+                "genero": st.column_config.SelectboxColumn("Género", options=obtener_unicos(df_inventario, 'genero')),
+                "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=obtener_unicos(df_inventario, 'encuadernacion')),
+            }
+            
+            df_editado = st.data_editor(
+                df_mostrar, use_container_width=True, hide_index=True,
+                disabled=["libro_id", "titulo"], key="editor_inventario",
+                column_config=config_columnas
+            )
+            
+            if not df_mostrar.equals(df_editado):
+                if st.button("💾 Guardar Cambios en Tabla", type="primary", use_container_width=True):
+                    with st.spinner("Actualizando datos..."):
+                        num_actualizados = actualizar_libros_batch(df_editado)
+                        st.success(f"¡Se actualizaron {num_actualizados} libros!")
                         st.rerun()
-                    else:
-                        st.error(f"Error: {error}")
 
     # 2. PESTAÑA DE CREACIÓN
     with tab_crear:
