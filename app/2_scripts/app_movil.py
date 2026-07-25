@@ -4,6 +4,7 @@ import os
 import base64
 import json
 from dotenv import load_dotenv
+from vista_caja import mostrar_caja
 
 from vista_inventario import mostrar_inventario
 
@@ -100,5 +101,4 @@ else:
         if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO":
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
-            st.title("🛒 Caja y Ventas")
-            st.info("Próximamente: El sistema de ventas conectado al inventario.")
+                mostrar_caja()
