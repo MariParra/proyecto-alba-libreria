@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 from utilidades import get_db_connection, limpiar_texto
 
-# --- FUNCIONES DE BASE DE DATOS ---
-
 def obtener_unicos(df, columna):
     if columna not in df.columns: return []
     return sorted(df[columna].dropna().astype(str).unique())
@@ -14,9 +12,7 @@ def cargar_todos_los_clientes():
     try:
         response = conn.table("clientes").select("*").execute()
         return pd.DataFrame(response.data)
-    except Exception as e:
-        st.error(f"Error al cargar clientes: {e}")
-        return pd.DataFrame()
+    except Exception as e: return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def cargar_librero_total_cliente(cliente_id):
@@ -25,8 +21,7 @@ def cargar_librero_total_cliente(cliente_id):
     try:
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         df_libros = pd.DataFrame(res_libros.data)
-    except:
-        df_libros = pd.DataFrame()
+    except: df_libros = pd.DataFrame()
 
     try:
         res_hist = conn.table("librero_historico").select("*").eq("cliente_id", cliente_id).execute()
@@ -35,7 +30,7 @@ def cargar_librero_total_cliente(cliente_id):
             if not df_libros.empty: df_hist = df_hist.merge(df_libros, on="libro_id", how="left")
             for _, row in df_hist.iterrows():
                 titulo = row.get('titulo', 'LIBRO EXTERNO / NO EN CATÁLOGO')
-                if pd.isna(titulo): titulo = 'LIBRO EXTERNO / NO EN CATÁLOGO'
+                if pd.isna(titulo): titulo = 'LIBRO EXTERNO'
                 libros_consolidados.append({"Título del Libro": str(titulo).upper(), "Origen": str(row.get('origen', 'HISTÓRICO')).upper(), "Detalle": f"Autor: {row.get('autor_historico', '-')}", "Fecha": "-"})
     except: pass
 
@@ -103,21 +98,17 @@ def mostrar_clientes():
         st.warning("No hay clientes registrados en el sistema.")
         return
 
-    # --- FILTROS GLOBALES ---
     with st.expander("🔍 Buscador y Filtros", expanded=False):
         col_f1, col_f2 = st.columns(2)
         f_nombre = col_f1.text_input("Buscar por Nombre:")
         f_status = col_f2.multiselect("Filtrar por Status:", obtener_unicos(df_clientes, 'status'))
-        
         col_f3, col_f4 = st.columns(2)
         f_email = col_f3.text_input("Buscar por Email:")
         f_telefono = col_f4.text_input("Buscar por Teléfono:")
-        
         col_f5, col_f6 = st.columns(2)
         f_instagram = col_f5.text_input("Buscar por Instagram:")
         f_rut = col_f6.text_input("Buscar por RUT:")
 
-    # Aplicar filtros
     df_filtrado = df_clientes.copy()
     if f_nombre: df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
     if f_status: df_filtrado = df_filtrado[df_filtrado['status'].isin(f_status)]
@@ -126,75 +117,64 @@ def mostrar_clientes():
     if f_instagram: df_filtrado = df_filtrado[df_filtrado['instagram'].str.contains(limpiar_texto(f_instagram), case=False, na=False)]
     if f_rut: df_filtrado = df_filtrado[df_filtrado['rut'].str.contains(limpiar_texto(f_rut), case=False, na=False)]
 
-    tab_todos, tab_individual = st.tabs(["👥 Directorio de Clientes", "👤 Perfil Individual"])
+    tab_todos, tab_individual = st.tabs(["👥 Directorio", "👤 Perfil Individual"])
     
-    # --- PESTAÑA 1: TODOS LOS CLIENTES ---
     with tab_todos:
         st.markdown(f"### 📋 Directorio ({len(df_filtrado)} clientes)")
-        modo_vista = st.radio("Elige la vista:", ["📱 Vista Móvil (Resumen)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
-        st.write("")
+        modo_vista = st.radio("Vista:", ["📱 Vista Móvil (Resumen)", "💻 Vista PC (Tabla Editable)"], horizontal=True, label_visibility="collapsed")
         
         columnas_mostrar = ['cliente_id', 'nombre', 'status', 'email', 'telefono', 'instagram', 'rut', 'direccion']
         for col in columnas_mostrar:
             if col not in df_filtrado.columns: df_filtrado[col] = ""
             
         if modo_vista == "📱 Vista Móvil (Resumen)":
-            st.caption("Selecciona las columnas que deseas ver en tu pantalla:")
+            st.caption("Selecciona qué columnas ver:")
             columnas_fijas = ['nombre', 'status']
             opcionales = [c for c in columnas_mostrar if c not in columnas_fijas + ['cliente_id']]
-            cols_extra = st.multiselect("Añadir/Quitar columnas:", options=opcionales, default=['telefono'])
-            
+            cols_extra = st.multiselect("Añadir/Quitar:", options=opcionales, default=['telefono'])
             st.dataframe(df_filtrado[columnas_fijas + cols_extra], hide_index=True, use_container_width=True)
-            
         else:
-            st.caption("Haz doble clic en las celdas para modificar directamente.")
+            st.caption("Doble clic en las celdas para modificar directamente.")
             df_mostrar = df_filtrado[columnas_mostrar].copy()
             if 'clientes_original' not in st.session_state or not st.session_state.clientes_original.equals(df_mostrar):
                 st.session_state.clientes_original = df_mostrar.copy()
-                
-            df_editado = st.data_editor(
-                df_mostrar, hide_index=True, use_container_width=True, disabled=['cliente_id', 'nombre']
-            )
-            
+            df_editado = st.data_editor(df_mostrar, hide_index=True, use_container_width=True, disabled=['cliente_id', 'nombre'])
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Clientes", type="primary"):
-                    with st.spinner("Actualizando clientes..."):
-                        num = actualizar_clientes_batch(df_editado)
-                        st.success(f"¡Se actualizaron {num} clientes!"), st.rerun()
+                    num = actualizar_clientes_batch(df_editado)
+                    st.success(f"¡Se actualizaron {num} clientes!"), st.rerun()
 
-    # --- PESTAÑA 2: INDIVIDUAL (Perfil y Librero) ---
     with tab_individual:
         lista_nombres = [""] + df_filtrado['nombre'].dropna().tolist()
-        cliente_seleccionado = st.selectbox("🔍 Escribe o selecciona el nombre del cliente (aplica filtros):", lista_nombres)
+        cliente_seleccionado = st.selectbox("🔍 Escribe o selecciona el nombre del cliente:", lista_nombres)
         
         if cliente_seleccionado:
             cliente_info = df_filtrado[df_filtrado['nombre'] == cliente_seleccionado].iloc[0]
             c_id = int(cliente_info['cliente_id'])
             
-            col_perfil, col_librero = st.columns([1, 1.5])
-            with col_perfil:
-                with st.container(border=True):
-                    st.markdown(f"#### 👤 Perfil ({cliente_info.get('status', 'REGULAR')})")
-                    with st.form("form_editar_cliente"):
-                        c_nombre = st.text_input("Nombre Completo:", value=cliente_info.get('nombre', ''))
-                        c_email = st.text_input("Email:", value=cliente_info.get('email', ''))
-                        c_telefono = st.text_input("Teléfono:", value=cliente_info.get('telefono', ''))
-                        c_instagram = st.text_input("Instagram:", value=cliente_info.get('instagram', ''))
-                        c_rut = st.text_input("RUT:", value=cliente_info.get('rut', ''))
-                        c_direccion = st.text_input("Dirección:", value=cliente_info.get('direccion', ''))
-                        
-                        if st.form_submit_button("💾 Guardar Perfil", type="primary", use_container_width=True):
-                            datos_act = {"nombre": limpiar_texto(c_nombre), "email": limpiar_texto(c_email), "telefono": limpiar_texto(c_telefono), "instagram": limpiar_texto(c_instagram), "rut": limpiar_texto(c_rut), "direccion": limpiar_texto(c_direccion)}
-                            exito, error = actualizar_datos_cliente(c_id, datos_act)
-                            if exito: st.success("¡Perfil actualizado!"), st.rerun()
-                            else: st.error(f"Error: {error}")
+            # --- VISTA 100% VERTICAL PARA MÓVILES ---
+            st.markdown(f"#### 👤 Perfil de Contacto ({cliente_info.get('status', 'REGULAR')})")
+            with st.container(border=True):
+                with st.form("form_editar_cliente"):
+                    c_nombre = st.text_input("Nombre Completo:", value=cliente_info.get('nombre', ''))
+                    c_email = st.text_input("Email:", value=cliente_info.get('email', ''))
+                    c_telefono = st.text_input("Teléfono:", value=cliente_info.get('telefono', ''))
+                    c_instagram = st.text_input("Instagram:", value=cliente_info.get('instagram', ''))
+                    c_rut = st.text_input("RUT:", value=cliente_info.get('rut', ''))
+                    c_direccion = st.text_input("Dirección:", value=cliente_info.get('direccion', ''))
+                    
+                    if st.form_submit_button("💾 Guardar Perfil", type="primary", use_container_width=True):
+                        datos_act = {"nombre": limpiar_texto(c_nombre), "email": limpiar_texto(c_email), "telefono": limpiar_texto(c_telefono), "instagram": limpiar_texto(c_instagram), "rut": limpiar_texto(c_rut), "direccion": limpiar_texto(c_direccion)}
+                        exito, error = actualizar_datos_cliente(c_id, datos_act)
+                        if exito: st.success("¡Perfil actualizado!"), st.rerun()
+                        else: st.error(f"Error: {error}")
             
-            with col_librero:
-                with st.container(border=True):
-                    st.markdown(f"#### 📚 Colección de Libros")
-                    df_librero = cargar_librero_total_cliente(c_id)
-                    if df_librero.empty:
-                        st.info("Aún no tiene libros en su historial.")
-                    else:
-                        st.metric("Total de libros únicos", len(df_librero))
-                        st.dataframe(df_librero, hide_index=True, use_container_width=True)
+            st.markdown("---")
+            st.markdown(f"#### 📚 Colección de Libros (Historial)")
+            with st.container(border=True):
+                df_librero = cargar_librero_total_cliente(c_id)
+                if df_librero.empty:
+                    st.info("Aún no tiene libros en su historial.")
+                else:
+                    st.metric("Total de libros únicos adquiridos", len(df_librero))
+                    st.dataframe(df_librero, hide_index=True, use_container_width=True)
