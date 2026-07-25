@@ -61,7 +61,7 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": int(ano), "mes": int(mes)}
+            datos = {"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             conn.table("meses_cerrados").insert(datos).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
@@ -198,8 +198,9 @@ def mostrar_asignaciones():
         mes_num = list(meses_dict.keys())[list(meses_dict.values()).index(mes_sel)]
 
     df_mes = cargar_asignaciones_mes(ano_sel, mes_num)
+    mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
     
-    # Estandarizamos los datos antes de mostrarlos para evitar el error de edición
+    # Estandarizamos los datos
     if not df_mes.empty:
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
         df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
@@ -207,12 +208,24 @@ def mostrar_asignaciones():
         df_mes['extras'] = df_mes['extras'].fillna("")
         df_mes['comentario'] = df_mes['comentario'].fillna("")
 
-    mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
+        # --- NUEVO: DASHBOARD RESUMEN DEL MES ---
+        total_cajas = len(df_mes)
+        cajas_pagadas = len(df_mes[df_mes['pagado'] == 'SI'])
+        cajas_pendientes = len(df_mes[df_mes['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])])
+        cajas_listas = len(df_mes[df_mes['estado_envio'].isin(['POR ENVIAR', 'POR RETIRAR'])])
+
+        st.markdown("### 📊 Resumen del Mes")
+        c_res1, c_res2, c_res3, c_res4 = st.columns(4)
+        c_res1.metric("📦 Total Cajas", total_cajas)
+        c_res2.metric("💳 Pagadas", f"{cajas_pagadas} / {total_cajas}")
+        c_res3.metric("⏳ Por Preparar", cajas_pendientes)
+        c_res4.metric("✅ Listas para Enviar", cajas_listas)
+        st.markdown("---")
+        # ---------------------------------------
 
     if mes_esta_cerrado:
         st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la opción '🔒 Cierre de Mes'.", icon="🔒")
 
-    st.markdown("---")
     opcion_menu = st.selectbox(
         "👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:",
         ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar Registro", "🔒 Cierre de Mes"]
@@ -239,7 +252,6 @@ def mostrar_asignaciones():
             if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                 st.session_state.asignaciones_original = df_mostrar.copy()
                 
-            # AQUI CONFIGURAMOS LOS DESPLEGABLES DIRECTO EN LA TABLA
             configuracion_columnas = {
                 "estado_envio": st.column_config.SelectboxColumn("Estado Envío", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
