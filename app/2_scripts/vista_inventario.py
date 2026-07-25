@@ -103,6 +103,7 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
     except Exception as e:
         return False, str(e)
 
+
 def mostrar_inventario():
     st.title("📦 Gestión de Inventario")
     df_inventario = cargar_datos_completos()
@@ -147,21 +148,39 @@ def mostrar_inventario():
         df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
         df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
 
-    # --- VISTA RESUMIDA (MÓVIL-FRIENDLY) ---
-    st.markdown(f"### 📋 Catálogo ({len(df_filtrado)} libros)")
-    st.caption("💡 Tip: Toca el título de cualquier columna para ordenar los datos ↕️")
-    
-    st.dataframe(
-        df_filtrado[['titulo', 'autor', 'stock', 'precio']], 
-        hide_index=True, 
-        use_container_width=True
-    )
-    st.markdown("---")
-
-    # --- PESTAÑAS DE ACCIONES ---
-    tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
-        "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
+    # =========================================================
+    # --- SUBSECCIONES (PESTAÑAS) ---
+    # =========================================================
+    tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
+        "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
+
+    # 0. PESTAÑA DE CATÁLOGO (Nueva Pestaña)
+    with tab_catalogo:
+        st.markdown(f"### 📋 Catálogo ({len(df_filtrado)} libros)")
+        st.caption("💡 Tip: Toca el título de cualquier columna para ordenar los datos ↕️")
+        
+        columnas_fijas = ['libro_id', 'titulo', 'stock']
+        
+        # Excluimos las columnas fijas y otras que no son útiles para el usuario (como created_at, precio_original)
+        columnas_opcionales_disponibles = [
+            col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'precio_original']
+        ]
+        
+        # Creamos el selector de columnas
+        columnas_extra_seleccionadas = st.multiselect(
+            "Añadir/Quitar columnas de la tabla:",
+            options=columnas_opcionales_disponibles,
+            default=['autor', 'precio', 'editorial']  # Columnas que aparecerán por defecto
+        )
+
+        columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
+        
+        st.dataframe(
+            df_filtrado[columnas_a_mostrar],
+            hide_index=True, 
+            use_container_width=True
+        )
 
     # 1. PESTAÑA DE EDICIÓN (DUAL: MÓVIL Y PC)
     with tab_editar:
@@ -209,8 +228,8 @@ def mostrar_inventario():
         else: # VISTA PC (Tabla Editable)
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
             
-            columnas_a_mostrar = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "precio"]
-            df_mostrar = df_filtrado[columnas_a_mostrar]
+            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "precio"]
+            df_mostrar = df_filtrado[columnas_tabla_pc]
             
             if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
                 st.session_state.inventario_original = df_mostrar.copy()
