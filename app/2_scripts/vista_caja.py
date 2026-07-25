@@ -3,10 +3,6 @@ import pandas as pd
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 
-# --- INICIALIZAR CARRITO ---
-if 'carrito_caja' not in st.session_state:
-    st.session_state.carrito_caja = []
-
 # --- FUNCIONES DE BASE DE DATOS ---
 
 @st.cache_data(ttl=60)
@@ -197,6 +193,9 @@ def actualizar_historial_batch(df_editado):
 
 def mostrar_caja():
     st.title("🛒 Caja y Ventas Rápidas")
+    # METER EL CARRITO AQUÍ ADENTRO:
+    if 'carrito_caja' not in st.session_state:
+        st.session_state['carrito_caja'] = []
     
     df_libros = cargar_libros_caja()
     df_clientes = cargar_clientes()
