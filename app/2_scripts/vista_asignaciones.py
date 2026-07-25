@@ -61,7 +61,7 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            datos = {"ano": int(ano), "mes": int(mes)}
             conn.table("meses_cerrados").insert(datos).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
@@ -82,7 +82,7 @@ def comenzar_mes(ano, mes):
         try:
             datos = {
                 "cliente_id": int(cliente['cliente_id']), "ano": int(ano), "mes": int(mes),
-                "estado_envio": "Pendiente", "pagado": "No", "envio_pagado": "No",
+                "estado_envio": "PENDIENTE PREPARACION", "pagado": "NO", "envio_pagado": "NO",
                 "fecha_asignacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             conn.table("asignaciones").insert(datos).execute()
@@ -164,15 +164,24 @@ def actualizar_asignaciones_batch(df_editado):
     for a_id, row in filas_cambiadas.iterrows():
         try:
             datos = {
-                "estado_envio": str(row['estado_envio']), "pagado": str(row['pagado']),
-                "envio_pagado": str(row['envio_pagado']), "extras": str(row.get('extras', '')),
-                "comentario": str(row.get('comentario', ''))
+                "estado_envio": str(row['estado_envio']).upper(), 
+                "pagado": str(row['pagado']).upper(),
+                "envio_pagado": str(row['envio_pagado']).upper(), 
+                "extras": str(row.get('extras', '')).upper(),
+                "comentario": str(row.get('comentario', '')).upper()
             }
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
         except: continue
     if updates > 0: cargar_asignaciones_mes.clear()
     return updates
+
+# --- FUNCIÓN DE LIMPIEZA DE DATOS (TRUE a SI) ---
+def mapear_sino(val):
+    v = str(val).upper()
+    if v in ["TRUE", "T", "1"]: return "SI"
+    if v in ["FALSE", "F", "0"]: return "NO"
+    return v
 
 # --- INTERFAZ PRINCIPAL ---
 
@@ -189,14 +198,21 @@ def mostrar_asignaciones():
         mes_num = list(meses_dict.keys())[list(meses_dict.values()).index(mes_sel)]
 
     df_mes = cargar_asignaciones_mes(ano_sel, mes_num)
+    
+    # Estandarizamos los datos antes de mostrarlos para evitar el error de edición
+    if not df_mes.empty:
+        df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
+        df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
+        df_mes['estado_envio'] = df_mes['estado_envio'].apply(lambda x: str(x).upper())
+        df_mes['extras'] = df_mes['extras'].fillna("")
+        df_mes['comentario'] = df_mes['comentario'].fillna("")
+
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
 
     if mes_esta_cerrado:
         st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la opción '🔒 Cierre de Mes'.", icon="🔒")
 
     st.markdown("---")
-    
-    # NUEVO: Selector Desplegable en lugar de Pestañas (¡100% amigable para celulares!)
     opcion_menu = st.selectbox(
         "👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:",
         ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar Registro", "🔒 Cierre de Mes"]
@@ -216,26 +232,32 @@ def mostrar_asignaciones():
             if filtro_estado != "Todos": df_filtrado = df_filtrado[df_filtrado['estado_envio'] == filtro_estado]
             if filtro_pagado != "Todos": df_filtrado = df_filtrado[df_filtrado['pagado'] == filtro_pagado]
             
-            st.caption("Doble clic en las celdas de Estado, Pagado, Extras y Comentario para actualizar.")
+            st.caption("Doble clic en las celdas para modificar. Los menús desplegables te ayudarán a no equivocarte.")
             
             columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'extras', 'comentario']
-            for col in columnas_mostrar:
-                if col not in df_filtrado.columns: df_filtrado[col] = ""
-                
             df_mostrar = df_filtrado[columnas_mostrar].copy()
             if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                 st.session_state.asignaciones_original = df_mostrar.copy()
                 
+            # AQUI CONFIGURAMOS LOS DESPLEGABLES DIRECTO EN LA TABLA
+            configuracion_columnas = {
+                "estado_envio": st.column_config.SelectboxColumn("Estado Envío", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
+                "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
+                "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True)
+            }
+                
             df_editado = st.data_editor(
                 df_mostrar, 
                 disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro'], 
+                column_config=configuracion_columnas,
                 hide_index=True, use_container_width=True
             )
             
             if not df_mostrar.equals(df_editado) and not mes_esta_cerrado:
                 if st.button("💾 Guardar Cambios", type="primary"):
-                    num = actualizar_asignaciones_batch(df_editado)
-                    st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
+                    with st.spinner("Actualizando..."):
+                        num = actualizar_asignaciones_batch(df_editado)
+                        st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
 
     # --- 2. ASIGNAR LIBROS ---
     elif opcion_menu == "📚 Asignar Libros":
@@ -270,7 +292,6 @@ def mostrar_asignaciones():
                                 id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
                                 l_data = df_libros[df_libros['titulo'] == libro_manual_sel].iloc[0]
                                 
-                                # Aplicamos .get('autor', '') para evitar cualquier error si falta el autor
                                 ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'])
                                 if ex: st.success("¡Libro asignado con éxito!"), st.rerun()
                                 else: st.error(f"Error: {err}")
