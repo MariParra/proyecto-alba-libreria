@@ -81,7 +81,25 @@ def procesar_venta(libro_id, cliente_id, cantidad, total, metodo, envio, stock_a
     except Exception as e:
         return False, str(e)
 
+def anular_venta(venta_id, libro_id, cantidad_vendida):
+    """Elimina la venta y restaura el stock del libro."""
+    conn = get_db_connection()
+    try:
+        # 1. Devolver el stock al libro
+        response = conn.table("libros").select("stock").eq("libro_id", libro_id).execute()
+        stock_actual = response.data[0]['stock']
+        nuevo_stock = stock_actual + cantidad_vendida
+        conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", libro_id).execute()
 
+        # 2. Eliminar el registro de la venta
+        conn.table("ventas").delete().eq("venta_id", venta_id).execute()
+        
+        cargar_libros_caja.clear()
+        cargar_historial.clear()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+    
 # --- INTERFAZ PRINCIPAL ---
 
 def mostrar_caja():
@@ -228,3 +246,47 @@ def mostrar_caja():
                 
             df_hist_filtrado['fecha'] = pd.to_datetime(df_hist_filtrado['fecha']).dt.strftime('%d-%m-%Y %H:%M')
             st.dataframe(df_hist_filtrado[columnas_mostrar], hide_index=True, use_container_width=True)
+            
+    # --- NUEVA PESTAÑA PARA ANULAR VENTAS ---
+    with tab_anular:
+        st.markdown("### 🚫 Anular Venta y Restaurar Stock")
+        st.warning("⚠️ Esta acción es irreversible. Al anular una venta, el registro se elimina y el stock del libro se restaura automáticamente.")
+        
+        if df_ventas.empty:
+            st.info("No hay ventas para anular.")
+        else:
+            # Creamos una etiqueta legible para el selector
+            df_ventas['etiqueta_anular'] = df_ventas.apply(
+                lambda row: f"ID: {row['venta_id']} - {pd.to_datetime(row['fecha']).strftime('%d/%m')} - {row['titulo_libro']} -> {row['nombre_cliente']}",
+                axis=1
+            )
+            lista_ventas_anular = [""] + df_ventas.sort_values('fecha', ascending=False)['etiqueta_anular'].tolist()
+            
+            venta_seleccionada = st.selectbox("Selecciona la venta a anular:", lista_ventas_anular)
+
+            if venta_seleccionada:
+                venta_a_anular = df_ventas[df_ventas['etiqueta_anular'] == venta_seleccionada].iloc[0]
+                
+                st.markdown("---")
+                st.markdown("**Detalles de la Venta Seleccionada:**")
+                st.json({
+                    "ID Venta": int(venta_a_anular['venta_id']),
+                    "Libro": venta_a_anular['titulo_libro'],
+                    "Cliente": venta_a_anular['nombre_cliente'],
+                    "Cantidad": int(venta_a_anular['cantidad']),
+                    "Total Cobrado": f"${venta_a_anular['total']:,.0f}",
+                    "Fecha": pd.to_datetime(venta_a_anular['fecha']).strftime('%d-%m-%Y %H:%M')
+                })
+                
+                if st.button("🟥 CONFIRMAR ANULACIÓN DE ESTA VENTA", type="primary", use_container_width=True):
+                    with st.spinner("Anulando venta y restaurando stock..."):
+                        exito, error = anular_venta(
+                            venta_id=int(venta_a_anular['venta_id']),
+                            libro_id=int(venta_a_anular['libro_id']),
+                            cantidad_vendida=int(venta_a_anular['cantidad'])
+                        )
+                        if exito:
+                            st.success("¡Venta anulada y stock restaurado con éxito!")
+                            st.rerun()
+                        else:
+                            st.error(f"Error al anular: {error}")
