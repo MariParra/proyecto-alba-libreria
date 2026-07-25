@@ -7,7 +7,7 @@ def obtener_unicos(df, columna):
 
 @st.cache_data(ttl=600)
 def cargar_datos_completos():
-    """Carga todos los datos de la tabla 'inventario' desde Supabase."""
+    """Carga todos los datos de la tabla 'libros' desde Supabase."""
     conn = get_db_connection()
 
     response = (
@@ -33,7 +33,7 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         "precio_original": precio
     }
     try:
-        conn.table("inventario").insert(datos).execute()
+        conn.table("libros").insert(datos).execute()
         cargar_datos_completos.clear() # Limpia la caché para ver el cambio
         return True, ""
     except Exception as e:
@@ -64,7 +64,7 @@ def actualizar_libros_batch(df_editado):
                 "stock": int(row['stock']),
                 "precio": float(row['precio'])
             }
-            conn.table("inventario").update(datos).eq("libro_id", libro_id).execute()
+            conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
             updates_count += 1
         except Exception:
             continue
@@ -78,7 +78,7 @@ def eliminar_libro(libro_id):
     """Elimina un libro permanentemente."""
     conn = get_db_connection()
     try:
-        conn.table("inventario").delete().eq("libro_id", libro_id).execute()
+        conn.table("libros").delete().eq("libro_id", libro_id).execute()
         cargar_datos_completos.clear()
         return True, ""
     except Exception as e:
@@ -98,7 +98,7 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
         # Actualizamos cada uno con el nuevo precio calculado
         for row in response.data:
             nuevo_precio = round(row["precio_original"] * factor, 0)
-            conn.table("inventario").update({"precio": nuevo_precio}).eq("libro_id", row["libro_id"]).execute()
+            conn.table("libros").update({"precio": nuevo_precio}).eq("libro_id", row["libro_id"]).execute()
             
         cargar_datos_completos.clear()
         return True, ""
