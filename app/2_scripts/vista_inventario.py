@@ -12,7 +12,7 @@ def cargar_datos_completos():
 
     response = (
         conn
-        .table("inventario")
+        .table("libros")
         .select("*")
         .execute()
     )
