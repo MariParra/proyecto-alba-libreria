@@ -23,16 +23,32 @@ def cargar_clientes():
 
 @st.cache_data(ttl=60)
 def cargar_historial():
-    """Carga el historial desde la tabla correcta: registro_ventas"""
+    """Carga el historial cruzando datos manualmente con Python para evitar errores de llaves foráneas."""
     conn = get_db_connection()
     try:
-        response = conn.table("registro_ventas").select("*, clientes(nombre)").execute()
-        df = pd.DataFrame(response.data)
-        if not df.empty:
-            df['nombre_cliente'] = df['clientes'].apply(lambda x: x['nombre'] if isinstance(x, dict) else 'Sin Cliente')
-        return df
-    except:
-        return pd.DataFrame(columns=['venta_id', 'fecha_venta', 'libros_vendidos', 'subtotal_libros', 'valor_envio', 'monto_final', 'metodo_envio', 'comentario', 'nombre_cliente'])
+        # 1. Traer ventas
+        res_ventas = conn.table("registro_ventas").select("*").execute()
+        df_ventas = pd.DataFrame(res_ventas.data)
+        
+        if df_ventas.empty:
+            return pd.DataFrame()
+            
+        # 2. Traer clientes
+        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+        df_clientes = pd.DataFrame(res_clientes.data)
+        
+        # 3. Cruzar datos
+        if not df_clientes.empty:
+            df_ventas = df_ventas.merge(df_clientes, on='cliente_id', how='left')
+            df_ventas.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
+            df_ventas['nombre_cliente'] = df_ventas['nombre_cliente'].fillna('Sin Cliente')
+        else:
+            df_ventas['nombre_cliente'] = 'Sin Cliente'
+            
+        return df_ventas
+    except Exception as e:
+        st.error(f"Error cargando historial: {e}")
+        return pd.DataFrame()
 
 def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
     if not nombre: return None
