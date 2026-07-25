@@ -1,12 +1,10 @@
 info/
 .env
-app/config/creedntials.json
+app/config/credentials.json
 *.csv
 app/3_output_reports
 app/4_backups
 app/5_libreros
-
-# Archivos temporales de Python (caché)
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
