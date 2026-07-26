@@ -400,7 +400,7 @@ def mostrar_asignaciones():
         "📋 Gestión (Tabla Editable)", 
         "📖 Asignar Libro Principal", 
         "➕ Agregar Extras y Envío", 
-        "🚀 Comenzar Mes", 
+        "🚀 🚀 Generar / Actualizar Mes", 
         "🗑️ Eliminar/Quitar Libros", 
         "🔒 Cierre de Mes"
     ]
@@ -608,14 +608,27 @@ def mostrar_asignaciones():
     # ==========================================================
     # 4. COMENZAR MES
     # ==========================================================
-    elif opcion_menu == "🚀 Comenzar Mes":
-        if mes_esta_cerrado: st.warning("Mes cerrado.")
+    elif opcion_menu == "🚀 Generar / Actualizar Mes":
+        if mes_esta_cerrado: 
+            st.warning("Mes cerrado. No se pueden generar nuevos registros.")
         else:
-            st.info(f"Se crearán filas para clientes 'ACTIVA' y se cargará su cobro base en Monto Total.")
-            if st.button("Generar Registros del Mes", type="primary"):
-                ex, msg = comenzar_mes(ano_sel, mes_num)
-                if ex: st.success(msg), st.rerun()
-                else: st.warning(msg)
+            with st.container(border=True):
+                st.markdown("### 🚀 Generar Cajas o Agregar Nuevos Clientes")
+                st.info(
+                    "💡 **¿Cómo usar esta herramienta?**\n\n"
+                    "1. **A principio de mes:** Crea las cajas en blanco para todas tus clientas en estado 'ACTIVA'.\n"
+                    "2. **A mitad de mes (Clientes Rezagados):** Si se inscriben nuevas clientas y ya hiciste el 'Sync' con Google Sheets, presiona este botón nuevamente.\n\n"
+                    "🛡️ **Tranquilidad:** El sistema es inteligente. **Solo agregará a las personas nuevas** sin duplicar, borrar, ni alterar los libros de las cajas que ya tenías armadas.\n\n"
+                    "*¡Puedes presionarlo las veces que necesites con total seguridad!*"
+                )
+                
+                if st.button("Crear Registros Faltantes del Mes", type="primary", use_container_width=True):
+                    ex, msg = comenzar_mes(ano_sel, mes_num)
+                    if ex: 
+                        st.success(msg)
+                        st.rerun()
+                    else: 
+                        st.warning(msg)
 
     # ==========================================================
     # 5. ELIMINAR O QUITAR LIBROS
