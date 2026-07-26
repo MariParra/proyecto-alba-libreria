@@ -137,7 +137,13 @@ def mostrar_herramientas():
             exito = sync_google_sheets()
             
             if exito:
-                # Si todo salió bien, espera 3 segundos para que leas el mensaje y luego recarga
-                time.sleep(5)
+                # 1. Creamos un espacio de texto dinámico en la pantalla
+                mensaje_cuenta_regresiva = st.empty()
+                
+                # 2. Hacemos un ciclo de 3 a 1, esperando un segundo por vuelta
+                for segundos in range(4, 0, -1):
+                    mensaje_cuenta_regresiva.info(f"🔄 Sincronización exitosa. Actualizando métricas en {segundos} segundos...")
+                    time.sleep(1)
+                
+                # 3. Recargamos la pantalla cuando termina la cuenta
                 st.rerun()
-            # Si 'exito' es False (hubo error), NO hace st.rerun(), dejando el error fijo en pantalla.
