@@ -5,12 +5,14 @@ import base64
 import json
 from dotenv import load_dotenv
 
+# --- IMPORTACIÓN DE VISTAS ---
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
 from vista_clientes import mostrar_clientes
 from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
+from vista_libreros import mostrar_importacion_libreros  # Importación del nuevo módulo
 
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 
@@ -22,7 +24,6 @@ REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 # Lee la lista de correos desde los secretos de Streamlit
 CORREOS_AUTORIZADOS = st.secrets.get("authorization", {}).get("authorized_emails", [])
-
 
 if not CORREOS_AUTORIZADOS:
     st.error("Error de configuración: No se encontró la lista de correos autorizados en los secretos de la plataforma.")
@@ -86,7 +87,6 @@ def mostrar_login():
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
 
-
 # --- LÓGICA PRINCIPAL ---
 if "usuario_logeado" not in st.session_state:
     st.session_state["usuario_logeado"] = False
@@ -127,6 +127,7 @@ else:
         if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
             st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
             st.rerun()
+            
         st.markdown("---") # Un separador visual
         
         if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
@@ -135,6 +136,11 @@ else:
             
         if st.button("🛠️ HERRAMIENTAS Y SYNC", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
             st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
+            st.rerun()
+            
+        # Corregido: Limpiamos espacio al inicio del texto y cambiamos la validación del color de "Herramientas" a "Libreros"
+        if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
+            st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
             st.rerun()
             
         st.markdown("---")
@@ -158,3 +164,5 @@ else:
             mostrar_dashboard()
         elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
             mostrar_herramientas()
+        elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
+            mostrar_importacion_libreros()
