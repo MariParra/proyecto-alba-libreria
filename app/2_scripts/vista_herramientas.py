@@ -25,7 +25,7 @@ def sync_google_sheets():
     exito = False
     try:
         # 1. Leemos la clave desde la estructura correcta
-        b64_str = st.secrets["gcp_creds"]["creds_json_b64"]
+        b64_str = st.secrets["gcp_service_account"]["creds_json_b64"]
         
         # 2. Decodificamos
         json_str = base64.b64decode(b64_str).decode('utf-8')
