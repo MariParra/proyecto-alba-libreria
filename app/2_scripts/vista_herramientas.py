@@ -21,10 +21,10 @@ def obtener_resumen_clientes():
 
 def sync_google_sheets():
     """
-    Sincronización Total (Clientes + Suscripciones) basada en tu lógica original.
+    Sincronización Total (Clientes + Suscripciones) decodificando el JSON completo desde Base64.
     """
     try:
-        # 1. Traemos el Base64 gigante desde los secretos
+        # 1. Traemos el Base64 gigante desde la variable de secretos GCP_B64
         b64_str = st.secrets["GCP_B64"]
         
         # 2. Lo decodificamos de vuelta a su formato original JSON
@@ -39,17 +39,6 @@ def sync_google_sheets():
             
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
         
-        # Bloque Diagnóstico Rápido
-        st.markdown("#### 📑 Vista previa de lo que leyó el sistema:")
-        if not df.empty:
-            st.dataframe(df.head(5), use_container_width=True)
-        else:
-            st.warning("⚠️ Atención: La planilla de Google Sheets está vacía.")
-            return
-            
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'.")
-        return
     except Exception as e:
         st.error(f"Error de conexión con Google: {e}")
         return
@@ -57,7 +46,7 @@ def sync_google_sheets():
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
-            # Búsqueda dinámica de las columnas de tu Excel (igual que en tu sync.py)
+            # Lógica de sincronización (sin cambios)
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_estado = next((c for c in df.columns if 'estado' in c.lower() or 'status' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower() or 'celular' in c.lower()), None)
@@ -69,7 +58,6 @@ def sync_google_sheets():
             procesados, clientes_nuevos, clientes_actualizados = 0, 0, 0
             
             for index, row in df.iterrows():
-                # Extracción de datos del Excel
                 nombre_sync = limpiar_texto(str(row.get(col_nombre, "")))
                 if not nombre_sync or nombre_sync == "SIN INFORMACION": continue
                 
@@ -79,12 +67,10 @@ def sync_google_sheets():
                 tel_sync = limpiar_texto(str(row.get(col_telefono, ""))) if col_telefono else ""
                 email_sync = limpiar_texto(str(row.get(col_email, ""))) if col_email else ""
                 
-                # Datos para la tabla Suscripciones
                 fecha_sync = str(row.get(col_fecha, "")) if col_fecha else ""
                 generos_sync = str(row.get(col_generos, "")) if col_generos else ""
                 metodo_sync = str(row.get(col_metodo, "")) if col_metodo else ""
                 
-                # --- PASO 1: DOBLE BÚSQUEDA INTELIGENTE (CLIENTE) ---
                 res_nombre = conn.table("clientes").select("*").eq("nombre", nombre_sync).execute()
                 res_email = conn.table("clientes").select("*").eq("email", email_sync).execute() if email_sync else None
                 
@@ -94,51 +80,35 @@ def sync_google_sheets():
                 elif res_email and res_email.data:
                     cliente_existente = res_email.data[0]
                 
-                # --- PASO 2: ACTUALIZAR O INSERTAR CLIENTE ---
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']
                     datos_c_actualizar = {}
-                    
                     if estado_sync and estado_sync != str(cliente_existente.get('status', '')).upper():
                         datos_c_actualizar['status'] = estado_sync
                     if tel_sync and tel_sync != cliente_existente.get('telefono'):
                         datos_c_actualizar['telefono'] = tel_sync
                     if email_sync and email_sync != cliente_existente.get('email'):
                         datos_c_actualizar['email'] = email_sync
-                        
                     if datos_c_actualizar:
                         conn.table("clientes").update(datos_c_actualizar).eq("cliente_id", c_id).execute()
                         clientes_actualizados += 1
                 else:
-                    res_insert = conn.table("clientes").insert({
-                        'nombre': nombre_sync, 'email': email_sync, 'telefono': tel_sync, 'status': estado_sync
-                    }).execute()
+                    res_insert = conn.table("clientes").insert({'nombre': nombre_sync, 'email': email_sync, 'telefono': tel_sync, 'status': estado_sync}).execute()
                     c_id = res_insert.data[0]['cliente_id']
                     clientes_nuevos += 1
                 
-                # --- PASO 3: ACTUALIZAR O INSERTAR SUSCRIPCIÓN ---
                 res_sub = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", c_id).execute()
-                
-                datos_sub = {
-                    "fecha_pago": fecha_sync,
-                    "metodo_entrega": metodo_sync,
-                    "generos_preferencia": generos_sync
-                }
-                
+                datos_sub = {"fecha_pago": fecha_sync, "metodo_entrega": metodo_sync, "generos_preferencia": generos_sync}
                 if res_sub.data:
-                    # Actualiza la suscripción existente con los nuevos datos del Excel
                     s_id = res_sub.data[0]['suscripcion_id']
                     conn.table("suscripciones").update(datos_sub).eq("suscripcion_id", s_id).execute()
                 else:
-                    # Crea una nueva suscripción con valor base $0 para que tú lo asignes luego
                     datos_sub["cliente_id"] = c_id
                     datos_sub["valor_suscripcion"] = 0.0
                     conn.table("suscripciones").insert(datos_sub).execute()
-                    
                 procesados += 1
                 
-        st.success(f"🎉 Sincronización Total Finalizada. Total de filas procesadas: {procesados} | Clientes Nuevos: {clientes_nuevos} | Clientes Actualizados: {clientes_actualizados}")
-        st.info("💡 Se han actualizado también los planes, géneros y fechas de pago en la tabla de Suscripciones.")
+        st.success(f"🎉 Sincronización Total Finalizada. Total: {procesados} | Nuevos: {clientes_nuevos} | Actualizados: {clientes_actualizados}")
         st.cache_data.clear()
         
     except Exception as e:
@@ -146,7 +116,6 @@ def sync_google_sheets():
 
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
-    
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
@@ -157,10 +126,7 @@ def mostrar_herramientas():
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización Total con Google Sheets")
-        st.info("💡 **Lógica 2.0:** El sistema leerá a todos los clientes del Excel. Actualizará sus datos de contacto y su estado. Luego, **actualizará sus preferencias de géneros, método de envío y fecha de pago** en su respectivo plan de suscripción.")
-        
+        st.info("💡 **Lógica 2.0:** El sistema leerá el Excel y actualizará los datos de contacto y las preferencias de suscripción.")
         if st.button("🚀 Iniciar Sincronización de Clientes y Suscripciones", type="primary", use_container_width=True):
             sync_google_sheets()
-            # Mostramos un botón para refrescar en caso de que queramos limpiar la previsualización
-            if st.button("🔄 Refrescar Pantalla", use_container_width=True):
-                st.rerun()
+            st.rerun()
