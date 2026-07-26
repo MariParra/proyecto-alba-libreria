@@ -23,11 +23,12 @@ def obtener_resumen_clientes():
 def sync_google_sheets():
     """
     Sincroniza leyendo explícitamente el 'Estado' desde Google Sheets y respetándolo.
+    Utiliza el manejo de secretos nativo de Streamlit para evitar errores de formato.
     """
     try:
-        # Leemos las credenciales (strict=False ayuda a procesar los \n del JSON crudo)
-        creds_json_str = st.secrets["gcp_service_account"]["credentials"]
-        creds_dict = json.loads(creds_json_str, strict=False)
+        # --- LECTURA DIRECTA DEL SECRETO FORMATEADO ---
+        # Streamlit entrega las credenciales como un diccionario listo para usar.
+        creds_dict = st.secrets["gcp_service_account"]
         
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
@@ -36,15 +37,15 @@ def sync_google_sheets():
             df = pd.DataFrame(worksheet.get_all_records())
         st.success("✅ Conexión exitosa con Google Sheets.")
     except Exception as e:
-        st.error(f"Error al conectar con Google Sheets. Revisa el nombre y los secretos. Error: {e}")
+        st.error(f"Error al conectar con Google Sheets. Revisa que el nombre de la hoja sea correcto y que las credenciales estén bien formateadas en los 'Secrets'. Error: {e}")
         return
 
+    # ... (El resto de la función no necesita cambios)
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando clientes en la base de datos..."):
-            # Buscar columnas dinámicamente
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
-            col_estado = next((c for c in df.columns if 'estado' in c.lower() or 'status' in c.lower()), None)
+            col_estado = next((c for c in df.columns if 'estado cliente' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower()), None)
             col_email = next((c for c in df.columns if 'correo' in c.lower() or 'email' in c.lower()), None)
             
@@ -54,8 +55,7 @@ def sync_google_sheets():
                 nombre_sync = limpiar_texto(str(row.get(col_nombre, "")))
                 if not nombre_sync or nombre_sync == "SIN INFORMACION": continue
                 
-                # Leemos el estado exacto del Google Sheet
-                estado_sync = str(row.get(col_estado, "")).strip().upper() if col_estado else ""
+                estado_sync = str(row.get(col_estado, "")).strip().upper() if col_estado else None
                 tel_sync = limpiar_texto(str(row.get(col_telefono, ""))) if col_telefono else ""
                 email_sync = limpiar_texto(str(row.get(col_email, ""))) if col_email else ""
 
@@ -64,12 +64,10 @@ def sync_google_sheets():
                 if res.data:
                     cliente_existente = res.data[0]
                     c_id = cliente_existente['cliente_id']
-                    
                     datos_a_actualizar = {}
-                    # Respetamos absolutamente el estado que viene de la hoja
+                    
                     if estado_sync and estado_sync != cliente_existente.get('status', '').upper():
                         datos_a_actualizar['status'] = estado_sync
-                        
                     if tel_sync and tel_sync != cliente_existente.get('telefono'):
                         datos_a_actualizar['telefono'] = tel_sync
                     if email_sync and email_sync != cliente_existente.get('email'):
@@ -79,7 +77,6 @@ def sync_google_sheets():
                         conn.table("clientes").update(datos_a_actualizar).eq("cliente_id", c_id).execute()
                         actualizados += 1
                 else:
-                    # CLIENTE NUEVO
                     conn.table("clientes").insert({
                         'nombre': nombre_sync, 
                         'email': email_sync, 
@@ -90,7 +87,7 @@ def sync_google_sheets():
                 
                 procesados += 1
 
-        st.success(f"🎉 Sync completado. Total procesados: {procesados} | Clientes Nuevos Creados: {nuevos} | Clientes Actualizados: {actualizados}")
+        st.success(f"🎉 Sync completado. Total: {procesados} | Nuevos: {nuevos} | Actualizados: {actualizados}")
         st.cache_data.clear()
 
     except Exception as e:
