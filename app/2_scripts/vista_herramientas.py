@@ -6,9 +6,8 @@ from utilidades import get_db_connection, limpiar_texto
 
 def sync_google_sheets():
     """
-    Sincroniza los clientes desde Google Sheets. Asigna el estado 'ACTIVA' a todos
-    los clientes procesados desde el formulario, protegiendo los datos de contacto
-    existentes de ser borrados.
+    Sincroniza los clientes desde Google Sheets respetando la columna 'Estado cliente'
+    y muestra un resumen detallado por estado al finalizar.
     """
     try:
         # Cargar credenciales de forma segura
@@ -33,12 +32,21 @@ def sync_google_sheets():
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_telefono = next((c for c in df.columns if 'fono' in c.lower() or 'celular' in c.lower()), None)
             
+            # Detección explícita de "Estado cliente"
+            col_estado = next(
+                (c for c in df.columns if 'estado cliente' in c.lower() or 'estado' in c.lower() or 'status' in c.lower()), 
+                None
+            )
+            
             procesados, nuevos, actualizados = 0, 0, 0
             
             for index, row in df.iterrows():
                 nombre_sync = limpiar_texto(row.get(col_nombre, ""))
                 if not nombre_sync or nombre_sync == "SIN INFORMACION":
                     continue
+                
+                # Leemos el estado traído desde la fila
+                estado_sync = limpiar_texto(str(row.get(col_estado, ""))) if col_estado else None
                 
                 # Buscamos si el cliente ya existe en nuestra base de datos
                 res = conn.table("clientes").select("*").eq("nombre", nombre_sync).limit(1).execute()
@@ -47,11 +55,13 @@ def sync_google_sheets():
                     # CLIENTE EXISTENTE: Actualización protegida
                     cliente_existente = res.data[0]
                     c_id = cliente_existente['cliente_id']
+                    datos_a_actualizar = {}
                     
-                    # El único dato que actualizamos obligatoriamente es el estado a 'ACTIVA'
-                    datos_a_actualizar = {'status': 'ACTIVA'}
-                    
-                    # Email y Teléfono solo se actualizan si el formulario trae un dato nuevo y útil
+                    # Actualiza el estado solo si viene en la planilla Y es distinto al actual
+                    if estado_sync and estado_sync != cliente_existente.get('status'):
+                        datos_a_actualizar['status'] = estado_sync
+
+                    # Email y Teléfono protegidos
                     email_sync = limpiar_texto(str(row.get(col_email, "")))
                     if email_sync and email_sync != cliente_existente.get('email'):
                         datos_a_actualizar['email'] = email_sync
@@ -60,24 +70,45 @@ def sync_google_sheets():
                     if tel_sync and tel_sync != cliente_existente.get('telefono'):
                         datos_a_actualizar['telefono'] = tel_sync
                     
-                    conn.table("clientes").update(datos_a_actualizar).eq("cliente_id", c_id).execute()
-                    actualizados += 1
+                    # Solo hace UPDATE si hay algún cambio real
+                    if datos_a_actualizar:
+                        conn.table("clientes").update(datos_a_actualizar).eq("cliente_id", c_id).execute()
+                        actualizados += 1
                 else:
-                    # CLIENTE NUEVO: Se crea con el estado 'ACTIVA'
+                    # CLIENTE NUEVO
                     email_sync = limpiar_texto(str(row.get(col_email, "")))
                     tel_sync = limpiar_texto(str(row.get(col_telefono, "")))
+                    
                     conn.table("clientes").insert({
                         'nombre': nombre_sync, 
                         'email': email_sync, 
                         'telefono': tel_sync, 
-                        'status': 'ACTIVA' # Estado correcto
+                        'status': estado_sync if estado_sync else 'ACTIVA'
                     }).execute()
                     nuevos += 1
                 
                 procesados += 1
 
-        st.success(f"🎉 Sincronización completada. Total: {procesados} | Nuevos: {nuevos} | Actualizados: {actualizados}")
+        # Limpiar caché de datos para reflejar los cambios en Streamlit
         st.cache_data.clear()
+
+        # Mensaje principal de éxito
+        st.success(f"🎉 Sincronización completada. Total procesados: **{procesados}** | Nuevos: **{nuevos}** | Actualizados: **{actualizados}**")
+        
+        # --- DESGLOSE DE ESTADOS ---
+        # Consultamos los estados de todos los clientes en la BD para armar el conteo
+        res_estados = conn.table("clientes").select("status").execute()
+        if res_estados.data:
+            df_estados = pd.DataFrame(res_estados.data)
+            conteo_estados = df_estados['status'].value_counts()
+
+            st.markdown("#### 📊 Desglose total de clientes por estado en la Base de Datos:")
+            
+            # Mostramos métricas dinámicas en columnas
+            cols = st.columns(len(conteo_estados))
+            for i, (estado, cantidad) in enumerate(conteo_estados.items()):
+                with cols[i]:
+                    st.metric(label=f"Estado: {estado}", value=f"{cantidad} clientes")
 
     except Exception as e:
         st.error(f"Error crítico durante la sincronización con la base de datos: {e}")
@@ -88,7 +119,7 @@ def mostrar_herramientas():
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización con Google Sheets")
-        st.info("💡 **Lógica de Sincronización:** Este proceso asignará el estado **'ACTIVA'** a todos los clientes del formulario. Se protegerán los datos de contacto ya existentes y limpios en tu base de datos.")
+        st.info("💡 **Lógica de Sincronización:** Se actualizarán o registrarán los clientes respetando el valor de la columna **Estado cliente** de Google Sheets. Los datos de contacto limpios y existentes en tu base de datos se mantendrán protegidos.")
         
         if st.button("🚀 Iniciar Sincronización de Clientes", type="primary", use_container_width=True):
             sync_google_sheets()
