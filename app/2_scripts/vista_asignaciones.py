@@ -25,7 +25,7 @@ def cargar_valores_suscripcion():
 def cargar_libros_disponibles():
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, stock").gt("stock", 0).execute()
+        res = conn.table("libros").select("libro_id, titulo, autor, precio, stock").gt("stock", 0).execute()
         return pd.DataFrame(res.data)
     except: return pd.DataFrame()
 
@@ -53,8 +53,7 @@ def cargar_asignaciones_mes(ano, mes):
             
         df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR")
         return df_asig
-    except Exception as e:
-        return pd.DataFrame()
+    except Exception as e: return pd.DataFrame()
 
 # --- CIERRE DE MES ---
 @st.cache_data(ttl=60)
@@ -69,31 +68,26 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().isoformat()}
-            conn.table("meses_cerrados").insert(datos).execute()
+            conn.table("meses_cerrados").insert({"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().isoformat()}).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
         else:
             conn.table("meses_cerrados").delete().eq("ano", int(ano)).eq("mes", int(mes)).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido REABIERTO."
-    except Exception as e:
-        return False, str(e)
+    except Exception as e: return False, str(e)
 
 # --- ACCIONES ---
 def comenzar_mes(ano, mes):
     df_suscritos = cargar_clientes_suscritos()
     df_valores = cargar_valores_suscripcion()
-    
-    if df_suscritos.empty: return False, "No hay clientes con status 'SUSCRITO'."
+    if df_suscritos.empty: return False, "No hay clientes 'SUSCRITO'."
     conn = get_db_connection()
     creados, errores = 0, 0
     
     for _, cliente in df_suscritos.iterrows():
         try:
             c_id = int(cliente['cliente_id'])
-            
-            # Buscar el valor base de su suscripción
             val_sub = 0.0
             if not df_valores.empty and c_id in df_valores['cliente_id'].values:
                 val_sub = float(df_valores[df_valores['cliente_id'] == c_id]['valor_suscripcion'].iloc[0])
@@ -101,23 +95,20 @@ def comenzar_mes(ano, mes):
             datos = {
                 "cliente_id": c_id, "ano": int(ano), "mes": int(mes),
                 "estado_envio": "PENDIENTE PREPARACION", "pagado": "NO", "envio_pagado": "NO",
-                "valor_envio": 0.0, "monto_total": val_sub,
+                "valor_envio": 0.0, "valor_extras": 0.0, "monto_total": val_sub,
                 "fecha_asignacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             conn.table("asignaciones").insert(datos).execute()
             creados += 1
         except: errores += 1
-        
     cargar_asignaciones_mes.clear()
-    if creados > 0: return True, f"Se iniciaron {creados} suscripciones. {errores} ya existían."
+    if creados > 0: return True, f"Se iniciaron {creados} suscripciones."
     else: return False, "Todos los clientes suscritos ya estaban creados para este mes."
 
-def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual, libros_extras=[]):
+def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual, libros_extras=[], valor_extras_calculado=0.0):
     conn = get_db_connection()
     try:
-        id_asig_py = int(asignacion_id)
-        id_cliente_py = int(cliente_id)
-        id_libro_py = int(libro_id)
+        id_asig_py, id_cliente_py, id_libro_py = int(asignacion_id), int(cliente_id), int(libro_id)
         
         # 1. Descontar libro principal
         conn.table("libros").update({"stock": int(stock_actual) - 1}).eq("libro_id", id_libro_py).execute()
@@ -128,9 +119,7 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
             res_le = conn.table("libros").select("libro_id, stock, autor").eq("titulo", extra_titulo).execute()
             if res_le.data:
                 le_id, le_stock, le_autor = res_le.data[0]['libro_id'], res_le.data[0]['stock'], res_le.data[0]['autor']
-                # Descontar stock extra
                 conn.table("libros").update({"stock": le_stock - 1}).eq("libro_id", le_id).execute()
-                # Guardar en histórico extra
                 res_hist_le = conn.table("librero_historico").select("registro_id").eq("cliente_id", id_cliente_py).eq("libro_id", le_id).execute()
                 if not res_hist_le.data:
                     conn.table("librero_historico").insert({
@@ -139,13 +128,27 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
                     }).execute()
                 nombres_extras.append(extra_titulo)
 
-        # 3. Actualizar Asignación
-        datos_update = {"libro_suscripcion_id": id_libro_py}
+        # 3. Traer datos actuales de asignación para sumar
+        res_asig = conn.table("asignaciones").select("extras, valor_extras, valor_envio").eq("asignacion_id", id_asig_py).execute()
+        extras_actual = res_asig.data[0].get('extras', '') or ''
+        v_ext_actual = float(res_asig.data[0].get('valor_extras') or 0.0)
+        v_env_actual = float(res_asig.data[0].get('valor_envio') or 0.0)
+        
+        # Recalcular Total
+        res_sub = conn.table("suscripciones").select("valor_suscripcion").eq("cliente_id", id_cliente_py).execute()
+        val_sub = float(res_sub.data[0]['valor_suscripcion']) if res_sub.data else 0.0
+        
+        nuevo_valor_extras = v_ext_actual + valor_extras_calculado
+        nuevo_monto_total = val_sub + v_env_actual + nuevo_valor_extras
+        
+        # Actualizar Asignación
+        datos_update = {
+            "libro_suscripcion_id": id_libro_py,
+            "valor_extras": nuevo_valor_extras,
+            "monto_total": nuevo_monto_total
+        }
         if nombres_extras:
-            res_asig = conn.table("asignaciones").select("extras").eq("asignacion_id", id_asig_py).execute()
-            extras_actual = res_asig.data[0].get('extras', '') or ''
-            nuevo_extra = extras_actual + (" | " if extras_actual else "") + "EXTRAS: " + ", ".join(nombres_extras)
-            datos_update["extras"] = nuevo_extra
+            datos_update["extras"] = extras_actual + (" | " if extras_actual else "") + "EXTRAS: " + ", ".join(nombres_extras)
             
         conn.table("asignaciones").update(datos_update).eq("asignacion_id", id_asig_py).execute()
         
@@ -157,8 +160,7 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
                 "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"
             }).execute()
             
-        cargar_asignaciones_mes.clear()
-        cargar_libros_disponibles.clear()
+        cargar_asignaciones_mes.clear(); cargar_libros_disponibles.clear()
         return True, ""
     except Exception as e: return False, str(e)
 
@@ -166,11 +168,9 @@ def asignar_al_azar(df_pendientes, df_libros, ano, mes):
     if df_pendientes.empty or df_libros.empty: return False, "No hay pendientes o no hay libros disponibles."
     exitos = 0
     libros_temp = df_libros.copy()
-    
     for _, asig in df_pendientes.iterrows():
         libros_disp = libros_temp[libros_temp['stock'] > 0]
         if libros_disp.empty: break
-        
         libro_elegido = libros_disp.sample(1).iloc[0]
         success, _ = asignar_libro_a_suscripcion(
             int(asig['asignacion_id']), int(asig['cliente_id']), int(libro_elegido['libro_id']), 
@@ -184,14 +184,12 @@ def asignar_al_azar(df_pendientes, df_libros, ano, mes):
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
     try:
-        # Devolver stock principal
         if pd.notna(libro_id) and libro_id:
             res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
             if res_l.data:
                 conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
             conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
             
-        # Devolver stock de extras
         if texto_extras and "EXTRAS:" in str(texto_extras):
             partes = str(texto_extras).split("EXTRAS:")
             if len(partes) > 1:
@@ -224,23 +222,20 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
     
     for a_id, row in filas_cambiadas.iterrows():
         try:
-            # Buscar cliente y valor de su suscripción
             c_id = df_mes_completo[df_mes_completo['asignacion_id'] == a_id].iloc[0]['cliente_id']
             val_sub = 0.0
             if not df_valores.empty and c_id in df_valores['cliente_id'].values:
                 val_sub = float(df_valores[df_valores['cliente_id'] == c_id]['valor_suscripcion'].iloc[0])
             
-            v_envio = float(row.get('valor_envio', 0.0))
-            m_total = val_sub + v_envio # Recalcula el total automáticamente
+            v_envio = float(row.get('valor_envio', 0.0) or 0.0)
+            v_extras = float(row.get('valor_extras', 0.0) or 0.0)
+            m_total = val_sub + v_envio + v_extras # RECALCULA EL TOTAL AQUI
             
             datos = {
-                "estado_envio": str(row['estado_envio']).upper(), 
-                "pagado": str(row['pagado']).upper(),
-                "envio_pagado": str(row['envio_pagado']).upper(), 
-                "extras": str(row.get('extras', '')).upper(),
+                "estado_envio": str(row['estado_envio']).upper(), "pagado": str(row['pagado']).upper(),
+                "envio_pagado": str(row['envio_pagado']).upper(), "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')).upper(),
-                "valor_envio": v_envio,
-                "monto_total": m_total
+                "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total
             }
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
@@ -257,7 +252,6 @@ def mapear_sino(val):
 # --- INTERFAZ PRINCIPAL ---
 def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
-    
     meses_dict = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
     
     with st.container(border=True):
@@ -277,6 +271,7 @@ def mostrar_asignaciones():
         df_mes['extras'] = df_mes['extras'].fillna("")
         df_mes['comentario'] = df_mes['comentario'].fillna("")
         df_mes['valor_envio'] = df_mes.get('valor_envio', 0.0)
+        df_mes['valor_extras'] = df_mes.get('valor_extras', 0.0)
         df_mes['monto_total'] = df_mes.get('monto_total', 0.0)
 
         total_cajas = len(df_mes)
@@ -292,18 +287,14 @@ def mostrar_asignaciones():
         c_res4.metric("✅ Listas para Enviar", cajas_listas)
         st.markdown("---")
 
-    if mes_esta_cerrado:
-        st.error(f"🔒 **MES CERRADO:** El mes de {mes_sel.upper()} {ano_sel} está bloqueado. Para modificarlo, debes reabrirlo en la opción '🔒 Cierre de Mes'.", icon="🔒")
+    if mes_esta_cerrado: st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado.", icon="🔒")
 
-    opcion_menu = st.selectbox(
-        "👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:",
-        ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar Registro", "🔒 Cierre de Mes"]
-    )
+    opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros", "🚀 Comenzar Mes", "🗑️ Eliminar Registro", "🔒 Cierre de Mes"])
     st.markdown("---")
 
     if opcion_menu == "📋 Gestión (Tabla Editable)":
         st.markdown(f"#### 📋 Gestión del Mes ({mes_sel} {ano_sel})")
-        if df_mes.empty: st.warning("No hay registros para este mes. Ve a 'Comenzar Mes'.")
+        if df_mes.empty: st.warning("No hay registros para este mes.")
         else:
             col_fa1, col_fa2, col_fa3 = st.columns(3)
             filtro_estado = col_fa1.selectbox("Estado del Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
@@ -316,119 +307,100 @@ def mostrar_asignaciones():
             if filtro_libro == "Sin Libro Asignado": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
             elif filtro_libro == "Con Libro Asignado": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
             
-            st.caption("Doble clic en las celdas para modificar. El Monto Total se calculará automáticamente al guardar.")
+            st.caption("Modifica y guarda. El Monto Total sumará: Suscripción Base + Extras + Envío.")
             
-            # Agregamos las nuevas columnas financieras
-            columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'monto_total', 'extras', 'comentario']
+            columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
             df_mostrar = df_filtrado[columnas_mostrar].copy()
-            
             if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                 st.session_state.asignaciones_original = df_mostrar.copy()
                 
-            configuracion_columnas = {
-                "estado_envio": st.column_config.SelectboxColumn("Estado Envío", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
+            config_cols = {
+                "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
-                "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", min_value=0.0, format="$%.0f"),
+                "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
+                "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
                 "monto_total": st.column_config.NumberColumn("Monto Total ($)", format="$%.0f")
             }
                 
-            df_editado = st.data_editor(
-                df_mostrar, 
-                # El monto total se calcula solo, por lo que bloqueamos su edición manual
-                disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'monto_total'], 
-                column_config=configuracion_columnas,
-                hide_index=True, use_container_width=True
-            )
+            df_editado = st.data_editor(df_mostrar, disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'monto_total'], column_config=config_cols, hide_index=True, use_container_width=True)
             
             if not df_mostrar.equals(df_editado) and not mes_esta_cerrado:
                 if st.button("💾 Guardar Cambios", type="primary"):
-                    with st.spinner("Calculando totales y actualizando..."):
+                    with st.spinner("Calculando totales..."):
                         num = actualizar_asignaciones_batch(df_editado, df_mes)
                         st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
 
     elif opcion_menu == "📚 Asignar Libros":
-        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes asignar libros.")
+        if mes_esta_cerrado: st.warning("Mes cerrado. No puedes asignar.")
         else:
-            if df_mes.empty: st.info("No hay suscripciones creadas para este mes.")
+            if df_mes.empty: st.info("No hay suscripciones.")
             else:
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
-                st.metric("Suscripciones pendientes de libro", len(df_pendientes))
-                
+                st.metric("Pendientes", len(df_pendientes))
                 if not df_pendientes.empty:
                     with st.container(border=True):
                         st.markdown("**🎲 Asignación Masiva**")
-                        if st.button("Aplicar Libros al Azar a todos", type="primary", use_container_width=True):
-                            df_libros = cargar_libros_disponibles()
-                            ex, msg = asignar_al_azar(df_pendientes, df_libros, ano_sel, mes_num)
+                        if st.button("Aplicar al Azar a todos", type="primary"):
+                            ex, msg = asignar_al_azar(df_pendientes, cargar_libros_disponibles(), ano_sel, mes_num)
                             if ex: st.success(msg), st.balloons(), st.rerun()
                             else: st.error(msg)
                     
                     with st.container(border=True):
-                        st.markdown("**✏️ Asignación Manual (con extras)**")
+                        st.markdown("**✏️ Asignación Manual (con extras calculados)**")
                         df_libros = cargar_libros_disponibles()
-                        lista_pendientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
+                        asig_manual_sel = st.selectbox("Cliente Pendiente:", [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist())
+                        libro_manual_sel = st.selectbox("Libro Principal:", [""] + df_libros['titulo'].tolist())
                         
-                        asig_manual_sel = st.selectbox("Seleccionar Cliente Pendiente:", lista_pendientes)
-                        libro_manual_sel = st.selectbox("Seleccionar Libro Principal:", [""] + df_libros['titulo'].tolist())
+                        st.caption("Si eliges libros extra, se cobrarán y descontarán automáticamente.")
+                        libros_extras_sel = st.multiselect("Libros Extras Adicionales:", [t for t in df_libros['titulo'].tolist() if t != ""])
                         
-                        # NUEVO: Selector de Libros Extras
-                        st.caption("Si eliges libros extra, se descontarán del stock y se añadirán a la columna Extras.")
-                        libros_extras_sel = st.multiselect("Libros Extras Adicionales (Opcional):", [t for t in df_libros['titulo'].tolist() if t != ""])
-                        
-                        if st.button("Asignar estos libros", use_container_width=True):
+                        if st.button("Asignar estos libros"):
                             if asig_manual_sel and libro_manual_sel:
                                 id_asig = int(asig_manual_sel.split(" - ")[0].replace("ID:", ""))
                                 id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
                                 l_data = df_libros[df_libros['titulo'] == libro_manual_sel].iloc[0]
                                 
-                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'], libros_extras_sel)
-                                if ex: st.success("¡Libro(s) asignado(s) con éxito!"), st.rerun()
-                                else: st.error(f"Error: {err}")
-                else:
-                    st.success("¡Todos los clientes de este mes ya tienen su libro asignado!")
+                                val_calculado_extras = 0.0
+                                for extr in libros_extras_sel: val_calculado_extras += float(df_libros[df_libros['titulo'] == extr].iloc[0]['precio'])
+                                
+                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'], libros_extras_sel, val_calculado_extras)
+                                if ex: st.success("¡Libro asignado!"), st.rerun()
+                                else: st.error(err)
+                else: st.success("¡Todos listos!")
 
     elif opcion_menu == "🚀 Comenzar Mes":
-        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes generar nuevas filas.")
+        if mes_esta_cerrado: st.warning("Mes cerrado.")
         else:
-            st.markdown("#### 🚀 Inicializar Mes")
-            st.info(f"Se crearán filas en blanco para todos los clientes 'SUSCRITO' para {mes_sel} de {ano_sel}. El Monto Total se calculará según la tabla suscripciones.")
-            if st.button("Generar Registros del Mes", type="primary", use_container_width=True):
-                with st.spinner("Generando tabla..."):
-                    ex, msg = comenzar_mes(ano_sel, mes_num)
-                    if ex: st.success(msg), st.balloons(), st.rerun()
-                    else: st.warning(msg)
+            st.info(f"Se crearán filas para clientes 'SUSCRITO' y se cargará su cobro base en Monto Total.")
+            if st.button("Generar Registros del Mes", type="primary"):
+                ex, msg = comenzar_mes(ano_sel, mes_num)
+                if ex: st.success(msg), st.balloons(), st.rerun()
+                else: st.warning(msg)
 
     elif opcion_menu == "🗑️ Eliminar Registro":
-        if mes_esta_cerrado: st.warning("El mes está cerrado. No puedes eliminar registros.")
+        if mes_esta_cerrado: st.warning("Mes cerrado.")
         else:
-            st.markdown("#### 🗑️ Anular / Eliminar Suscripción")
             if not df_mes.empty:
-                lista_eliminar = [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist()
-                asig_eliminar = st.selectbox("Selecciona el registro a borrar:", lista_eliminar)
-                if asig_eliminar:
-                    if st.button("🟥 ELIMINAR DEFINITIVAMENTE", type="primary"):
-                        id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
-                        row_data = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
-                        ex, err = eliminar_asignacion(id_asig, row_data.get('libro_suscripcion_id'), row_data['cliente_id'], ano_sel, mes_num, row_data.get('extras', ''))
-                        if ex: st.success("Registro eliminado y stock devuelto."), st.rerun()
-                        else: st.error(err)
-            else:
-                st.info("No hay registros para eliminar este mes.")
+                asig_eliminar = st.selectbox("Selecciona registro:", [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist())
+                if asig_eliminar and st.button("🟥 ELIMINAR DEFINITIVAMENTE", type="primary"):
+                    id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
+                    row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
+                    ex, err = eliminar_asignacion(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num, row.get('extras', ''))
+                    if ex: st.success("Registro eliminado."), st.rerun()
+                    else: st.error(err)
 
     elif opcion_menu == "🔒 Cierre de Mes":
         st.markdown("#### 🔒 Control de Cierre")
         if mes_esta_cerrado:
-            st.success(f"El mes de {mes_sel} {ano_sel} se encuentra actualmente **CERRADO**.")
-            st.caption("Al reabrir el mes podrás editar estados, asignar libros y hacer sincronizaciones nuevamente.")
+            st.success(f"El mes {mes_sel} {ano_sel} está **CERRADO**.")
             if st.button("🔓 Reabrir Mes", type="secondary"):
-                ex, msg = cambiar_estado_mes(ano_sel, mes_num, cerrar=False)
+                ex, msg = cambiar_estado_mes(ano_sel, mes_num, False)
                 if ex: st.success(msg), st.rerun()
                 else: st.error(msg)
         else:
-            st.info(f"El mes de {mes_sel} {ano_sel} se encuentra **ABIERTO**.")
-            st.caption("Al cerrar el mes, se bloquearán todas las ediciones para proteger los datos históricos.")
+            st.info(f"El mes {mes_sel} {ano_sel} está **ABIERTO**.")
             if st.button("🔒 CERRAR MES DEFINITIVAMENTE", type="primary"):
-                ex, msg = cambiar_estado_mes(ano_sel, mes_num, cerrar=True)
+                ex, msg = cambiar_estado_mes(ano_sel, mes_num, True)
                 if ex: st.success(msg), st.balloons(), st.rerun()
                 else: st.error(msg)
