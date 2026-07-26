@@ -43,45 +43,45 @@ def decodificar_token(token):
     return json.loads(base64.b64decode(payload).decode("utf-8")).get("email")
 
 def mostrar_login():
-    # Usamos columnas para centrar la tarjeta de login en la pantalla
     col1, col2, col3 = st.columns([1, 1.5, 1])
-    
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True) # Espaciador superior
-        
-        # Creamos una tarjeta con borde
+        st.markdown("<br><br>", unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown("<h1 style='text-align: center; color: #4A4D7E; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
             st.markdown("<h4 style='text-align: center; color: #666; margin-top: 0;'>Portal Administrativo</h4>", unsafe_allow_html=True)
             st.markdown("---")
             st.markdown("<p style='text-align: center; font-size: 1.1em;'>Bienvenida al sistema integral de gestión de inventario, ventas y suscripciones.</p>", unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True) # Espaciador
+            st.markdown("<br>", unsafe_allow_html=True)
             
             if not oauth2:
                 st.error("⚠️ Faltan las credenciales de Google en los secretos.")
                 return
                 
-            # El botón de Google ahora se ve más integrado
-            result = oauth2.authorize_button(
-                name="Continuar con Google", 
-                icon="https://www.google.com/favicon.ico",
-                redirect_uri=REDIRECT_URI, 
-                scope="openid email profile", 
-                key="google_login", 
-                use_container_width=True
-            )
-            
-            if result and "token" in result:
-                email = decodificar_token(result["token"].get("id_token"))
-                if email and email.lower() in [e.lower() for e in CORREOS_AUTORIZADOS]:
-                    st.session_state["usuario_logeado"] = True
-                    st.session_state["email_usuario"] = email
-                    st.rerun()
-                else:
-                    st.error(f"⛔ Acceso denegado: El correo {email} no tiene permisos para acceder a este sistema.")
+            try:
+                result = oauth2.authorize_button(
+                    name="Continuar con Google", 
+                    icon="https://www.google.com/favicon.ico",
+                    redirect_uri=REDIRECT_URI, 
+                    scope="openid email profile", 
+                    key="google_login", 
+                    use_container_width=True
+                )
+                
+                if result and "token" in result:
+                    email = decodificar_token(result["token"].get("id_token"))
+                    if email and email.lower() in [e.lower() for e in CORREOS_AUTORIZADOS]:
+                        st.session_state["usuario_logeado"] = True
+                        st.session_state["email_usuario"] = email
+                        st.rerun()
+                    else:
+                        st.error(f"⛔ Acceso denegado: El correo {email} no tiene permisos.")
+            except Exception as e:
+                # SI HAY UN ERROR DE URL VIEJA, LO ATRAPAMOS AQUÍ Y LIMPIAMOS
+                st.warning("🔄 Sesión caducada o enlace antiguo. Limpiando caché...")
+                st.query_params.clear()
+                import time; time.sleep(1)
+                st.rerun()
         
-        # Mensaje de seguridad al pie de la tarjeta
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
 
 
