@@ -20,7 +20,8 @@ def obtener_resumen_clientes():
 
 def sync_google_sheets():
     """
-    Sincronización Total (Clientes + Suscripciones) decodificando el JSON completo desde Base64.
+    Sincronización Total (Clientes + Suscripciones).
+    Adaptada para leer formularios con preguntas muy largas como encabezados.
     """
     exito = False
     try:
@@ -36,43 +37,64 @@ def sync_google_sheets():
             spreadsheet = gc.open("INSCRIPCIONES CAJA MENSUAL") 
             worksheet = spreadsheet.worksheet("formulario")
             df = pd.DataFrame(worksheet.get_all_records())
+        
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
-        exito = True # Marcamos como éxito parcial
+        exito = True 
         
     except Exception as e:
         st.error(f"Error de conexión con Google: {e}")
-        return False # Falló, no continuamos
+        return False 
 
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
-            # Lógica de sincronización (sin cambios)
-            col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
-            col_estado = next((c for c in df.columns if 'estado' in c.lower()), None)
-            col_telefono = next((c for c in df.columns if 'tel' in c.lower()), None)
-            col_email = next((c for c in df.columns if 'correo' in c.lower()), None)
-            col_fecha = next((c for c in df.columns if 'pago' in c.lower()), None)
-            col_generos = next((c for c in df.columns if 'géneros' in c.lower()), None)
-            col_metodo = next((c for c in df.columns if 'entrega' in c.lower()), None)
+            
+            # --- MAPEO INTELIGENTE DE COLUMNAS (SOPORTA PREGUNTAS LARGAS) ---
+            col_nombre, col_estado, col_telefono, col_email = None, None, None, None
+            col_fecha, col_generos, col_metodo = None, None, None
+            
+            for c in df.columns:
+                cl = str(c).lower()
+                if 'nombre' in cl and 'datos de envío' not in cl: col_nombre = c
+                elif 'estado' in cl: col_estado = c
+                elif 'teléfono' in cl or 'telefono' in cl: col_telefono = c
+                elif 'correo' in cl or 'email' in cl: col_email = c
+                elif 'fecha de pago' in cl: col_fecha = c
+                elif 'género' in cl or 'genero' in cl: col_generos = c
+                elif 'entrega' in cl: col_metodo = c
+
+            # Si por alguna razón no encuentra la de nombre, asume que es la segunda (después de Marca Temporal)
+            if not col_nombre and len(df.columns) > 2: col_nombre = df.columns[2]
             
             procesados, clientes_nuevos, clientes_actualizados = 0, 0, 0
             
             for index, row in df.iterrows():
-                nombre_sync = limpiar_texto(str(row.get(col_nombre, "")))
-                if not nombre_sync or nombre_sync == "SIN INFORMACION": continue
+                # Extracción súper segura con validación de existencia de columnas
+                nombre_raw = row[col_nombre] if col_nombre in df.columns else ""
+                nombre_sync = limpiar_texto(str(nombre_raw))
+                if not nombre_sync or nombre_sync == "SIN INFORMACION" or nombre_sync == "NAN": continue
                 
-                estado_sync = str(row.get(col_estado, "")).strip().upper() if col_estado else "ACTIVA"
-                if not estado_sync or estado_sync in ["", "NONE"]: estado_sync = "ACTIVA"
-                
-                # Tu nueva regla de negocio
+                estado_raw = row[col_estado] if col_estado in df.columns else "ACTIVA"
+                estado_sync = str(estado_raw).strip().upper()
+                if not estado_sync or estado_sync in ["", "NONE", "NAN"]: estado_sync = "ACTIVA"
                 if estado_sync == "INACTIVO": estado_sync = "NO ACTIVA"
 
-                tel_sync = limpiar_texto(str(row.get(col_telefono, "")))
-                email_sync = limpiar_texto(str(row.get(col_email, "")))
-                fecha_sync = str(row.get(col_fecha, ""))
-                generos_sync = str(row.get(col_generos, ""))
-                metodo_sync = str(row.get(col_metodo, ""))
+                tel_raw = row[col_telefono] if col_telefono in df.columns else ""
+                tel_sync = limpiar_texto(str(tel_raw))
+
+                email_raw = row[col_email] if col_email and col_email in df.columns else ""
+                email_sync = limpiar_texto(str(email_raw))
+
+                fecha_raw = row[col_fecha] if col_fecha in df.columns else ""
+                fecha_sync = str(fecha_raw).strip()
+
+                generos_raw = row[col_generos] if col_generos in df.columns else ""
+                generos_sync = str(generos_raw).strip()
+
+                metodo_raw = row[col_metodo] if col_metodo in df.columns else ""
+                metodo_sync = str(metodo_raw).strip()
                 
+                # Búsqueda e inserción
                 res_nombre = conn.table("clientes").select("*").eq("nombre", nombre_sync).execute()
                 res_email = conn.table("clientes").select("*").eq("email", email_sync).execute() if email_sync else None
                 
@@ -97,8 +119,14 @@ def sync_google_sheets():
                     c_id = res_insert.data[0]['cliente_id']
                     clientes_nuevos += 1
                 
+                # Actualización de Suscripciones (Manejo de strings seguros)
                 res_sub = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", c_id).execute()
-                datos_sub = {"fecha_pago": fecha_sync, "metodo_entrega": metodo_sync, "generos_preferencia": generos_sync}
+                datos_sub = {
+                    "fecha_pago": fecha_sync if fecha_sync != "nan" else "", 
+                    "metodo_entrega": metodo_sync if metodo_sync != "nan" else "", 
+                    "generos_preferencia": generos_sync if generos_sync != "nan" else ""
+                }
+                
                 if res_sub.data:
                     conn.table("suscripciones").update(datos_sub).eq("cliente_id", c_id).execute()
                 else:
@@ -121,12 +149,12 @@ def mostrar_herramientas():
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Clientes Registrados", total_cli)
     c2.metric("🟢 Activos", activos_cli)
-    c3.metric("🔴 No Activos", inactivos_cli) # Actualizado a "No Activos"
+    c3.metric("🔴 No Activos", inactivos_cli)
     st.markdown("---")
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización Total con Google Sheets")
-        st.info("💡 **Lógica 2.0:** Actualiza datos de contacto y preferencias de suscripción.")
+        st.info("💡 **Lógica 2.0:** Actualiza datos de contacto y preferencias de suscripción leyendo tu formulario dinámico.")
         
         if st.button("🚀 Iniciar Sincronización", type="primary", use_container_width=True):
             exito = sync_google_sheets()
