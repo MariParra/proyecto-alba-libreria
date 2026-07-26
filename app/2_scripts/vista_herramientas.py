@@ -18,11 +18,15 @@ def obtener_resumen_clientes():
 
 def sync_google_sheets():
     """
-    Sincroniza leyendo el 'Estado' desde Google Sheets y respetándolo.
+    Sincroniza los clientes desde Google Sheets utilizando la estructura nativa oficial de Streamlit Secrets.
     """
     try:
-        # Obtenemos el diccionario puro desde Streamlit (sin alterar nada)
-        creds_dict = dict(st.secrets["gcp_service_account"])
+        # --- SOLUCIÓN DEL FORO: Convertir explícitamente a un diccionario real de Python ---
+        creds_dict = st.secrets["gcp_service_account"].to_dict()
+        
+        # Opcional: nos aseguramos de que no queden caracteres de escape rotos en la private_key
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace('\\n', '\n')
         
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
@@ -31,7 +35,7 @@ def sync_google_sheets():
             df = pd.DataFrame(worksheet.get_all_records())
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
     except gspread.exceptions.SpreadsheetNotFound:
-        st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'. Recuerda compartir la hoja con el correo del robot.")
+        st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'. Recuerda compartir la hoja con el correo del robot ('client_email').")
         return
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets. Detalle: {e}")
@@ -102,4 +106,3 @@ def mostrar_herramientas():
         if st.button("🚀 Iniciar Sincronización de Clientes", type="primary", use_container_width=True):
             sync_google_sheets()
             st.rerun()
-
