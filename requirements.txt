@@ -4,3 +4,4 @@ pandas
 python-dotenv
 packaging
 st-supabase-connection
+gspread
