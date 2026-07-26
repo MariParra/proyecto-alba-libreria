@@ -3,8 +3,8 @@ import gspread
 import pandas as pd
 import json
 import base64
-from utilidades import get_db_connection, limpiar_texto
 import time
+from utilidades import get_db_connection, limpiar_texto
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -13,9 +13,7 @@ def obtener_resumen_clientes():
         res = conn.table("clientes").select("status").execute()
         df = pd.DataFrame(res.data)
         if df.empty: return 0, 0, 0
-        total = len(df)
-        activos = len(df[df['status'] == 'ACTIVA'])
-        inactivos = len(df[df['status'] == 'NO ACTIVA'])
+        total, activos, inactivos = len(df), len(df[df['status'] == 'ACTIVA']), len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
     except:
         return 0, 0, 0
@@ -24,11 +22,12 @@ def sync_google_sheets():
     """
     Sincronización Total (Clientes + Suscripciones) decodificando el JSON completo desde Base64.
     """
+    exito = False
     try:
-        # 1. Leemos la clave Base64 DESDE DENTRO del bloque que sí funciona
-        b64_str = st.secrets["gcp_service_account"]["credentials_b64"]
+        # 1. Leemos la clave desde la estructura correcta
+        b64_str = st.secrets["gcp_creds"]["creds_json_b64"]
         
-        # 2. Lo decodificamos de vuelta a su formato original JSON
+        # 2. Decodificamos
         json_str = base64.b64decode(b64_str).decode('utf-8')
         creds_dict = json.loads(json_str)
 
@@ -37,24 +36,24 @@ def sync_google_sheets():
             spreadsheet = gc.open("INSCRIPCIONES CAJA MENSUAL") 
             worksheet = spreadsheet.worksheet("formulario")
             df = pd.DataFrame(worksheet.get_all_records())
-            
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
+        exito = True # Marcamos como éxito parcial
         
     except Exception as e:
         st.error(f"Error de conexión con Google: {e}")
-        return False
-    
+        return False # Falló, no continuamos
+
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
             # Lógica de sincronización (sin cambios)
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
-            col_estado = next((c for c in df.columns if 'estado' in c.lower() or 'status' in c.lower()), None)
-            col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower() or 'celular' in c.lower()), None)
-            col_email = next((c for c in df.columns if 'correo' in c.lower() or 'email' in c.lower()), None)
-            col_fecha = next((c for c in df.columns if 'fecha de pago' in c.lower() or 'pago' in c.lower()), None)
-            col_generos = next((c for c in df.columns if 'géneros' in c.lower() or 'generos' in c.lower()), None)
-            col_metodo = next((c for c in df.columns if 'método de entrega' in c.lower() or 'entrega' in c.lower()), None)
+            col_estado = next((c for c in df.columns if 'estado' in c.lower()), None)
+            col_telefono = next((c for c in df.columns if 'tel' in c.lower()), None)
+            col_email = next((c for c in df.columns if 'correo' in c.lower()), None)
+            col_fecha = next((c for c in df.columns if 'pago' in c.lower()), None)
+            col_generos = next((c for c in df.columns if 'géneros' in c.lower()), None)
+            col_metodo = next((c for c in df.columns if 'entrega' in c.lower()), None)
             
             procesados, clientes_nuevos, clientes_actualizados = 0, 0, 0
             
@@ -63,23 +62,23 @@ def sync_google_sheets():
                 if not nombre_sync or nombre_sync == "SIN INFORMACION": continue
                 
                 estado_sync = str(row.get(col_estado, "")).strip().upper() if col_estado else "ACTIVA"
-                if not estado_sync or estado_sync == "NONE" or estado_sync == "": estado_sync = "ACTIVA"
+                if not estado_sync or estado_sync in ["", "NONE"]: estado_sync = "ACTIVA"
                 
-                tel_sync = limpiar_texto(str(row.get(col_telefono, ""))) if col_telefono else ""
-                email_sync = limpiar_texto(str(row.get(col_email, ""))) if col_email else ""
-                
-                fecha_sync = str(row.get(col_fecha, "")) if col_fecha else ""
-                generos_sync = str(row.get(col_generos, "")) if col_generos else ""
-                metodo_sync = str(row.get(col_metodo, "")) if col_metodo else ""
+                # Tu nueva regla de negocio
+                if estado_sync == "INACTIVO": estado_sync = "NO ACTIVA"
+
+                tel_sync = limpiar_texto(str(row.get(col_telefono, "")))
+                email_sync = limpiar_texto(str(row.get(col_email, "")))
+                fecha_sync = str(row.get(col_fecha, ""))
+                generos_sync = str(row.get(col_generos, ""))
+                metodo_sync = str(row.get(col_metodo, ""))
                 
                 res_nombre = conn.table("clientes").select("*").eq("nombre", nombre_sync).execute()
                 res_email = conn.table("clientes").select("*").eq("email", email_sync).execute() if email_sync else None
                 
                 cliente_existente = None
-                if res_nombre.data:
-                    cliente_existente = res_nombre.data[0]
-                elif res_email and res_email.data:
-                    cliente_existente = res_email.data[0]
+                if res_nombre.data: cliente_existente = res_nombre.data[0]
+                elif res_email and res_email.data: cliente_existente = res_email.data[0]
                 
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']
@@ -101,49 +100,39 @@ def sync_google_sheets():
                 res_sub = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", c_id).execute()
                 datos_sub = {"fecha_pago": fecha_sync, "metodo_entrega": metodo_sync, "generos_preferencia": generos_sync}
                 if res_sub.data:
-                    s_id = res_sub.data[0]['suscripcion_id']
-                    conn.table("suscripciones").update(datos_sub).eq("suscripcion_id", s_id).execute()
+                    conn.table("suscripciones").update(datos_sub).eq("cliente_id", c_id).execute()
                 else:
-                    datos_sub["cliente_id"] = c_id
-                    datos_sub["valor_suscripcion"] = 0.0
+                    datos_sub.update({"cliente_id": c_id, "valor_suscripcion": 0.0})
                     conn.table("suscripciones").insert(datos_sub).execute()
                 procesados += 1
                 
-        st.success(f"🎉 Sincronización Total Finalizada. Total: {procesados} | Nuevos: {clientes_nuevos} | Actualizados: {clientes_actualizados}")
+        st.success(f"🎉 Sincronización Finalizada. Filas procesadas: {procesados} | Clientes nuevos: {clientes_nuevos} | Clientes actualizados: {clientes_actualizados}")
         st.cache_data.clear()
+        return True
         
     except Exception as e:
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 
-import time # <--- Asegúrate de agregar import time en la parte de arriba de tu script si no lo tienes
-
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
-    
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Clientes Registrados", total_cli)
-    c2.metric("🟢 Suscripciones (ACTIVA)", activos_cli)
-    c3.metric("🔴 Clientes (NO ACTIVA)", inactivos_cli) # Actualizado con tu nueva regla
+    c2.metric("🟢 Activos", activos_cli)
+    c3.metric("🔴 No Activos", inactivos_cli) # Actualizado a "No Activos"
     st.markdown("---")
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización Total con Google Sheets")
-        st.info("💡 **Lógica 2.0:** El sistema leerá el Excel y actualizará los datos de contacto y las preferencias de suscripción.")
+        st.info("💡 **Lógica 2.0:** Actualiza datos de contacto y preferencias de suscripción.")
         
-        if st.button("🚀 Iniciar Sincronización de Clientes y Suscripciones", type="primary", use_container_width=True):
+        if st.button("🚀 Iniciar Sincronización", type="primary", use_container_width=True):
             exito = sync_google_sheets()
-            
             if exito:
-                # 1. Creamos un espacio de texto dinámico en la pantalla
                 mensaje_cuenta_regresiva = st.empty()
-                
-                # 2. Hacemos un ciclo de 3 a 1, esperando un segundo por vuelta
-                for segundos in range(4, 0, -1):
-                    mensaje_cuenta_regresiva.info(f"🔄 Sincronización exitosa. Actualizando métricas en {segundos} segundos...")
+                for segundos in range(3, 0, -1):
+                    mensaje_cuenta_regresiva.info(f"🔄 Actualizando métricas en {segundos} segundos...")
                     time.sleep(1)
-                
-                # 3. Recargamos la pantalla cuando termina la cuenta
                 st.rerun()
