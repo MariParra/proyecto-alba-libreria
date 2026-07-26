@@ -53,7 +53,8 @@ def cargar_asignaciones_mes(ano, mes):
             
         df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR")
         return df_asig
-    except Exception as e: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
 # --- CIERRE DE MES ---
 @st.cache_data(ttl=60)
@@ -105,7 +106,7 @@ def comenzar_mes(ano, mes):
     if creados > 0: return True, f"Se iniciaron {creados} suscripciones."
     else: return False, "Todos los clientes suscritos ya estaban creados para este mes."
 
-def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual, libros_extras=[], valor_extras_calculado=0.0):
+def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, autor, ano, mes, stock_actual, libros_extras=[], valor_extras_calculado=0.0, extras_texto_libre=""):
     conn = get_db_connection()
     try:
         id_asig_py, id_cliente_py, id_libro_py = int(asignacion_id), int(cliente_id), int(libro_id)
@@ -113,7 +114,7 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
         # 1. Descontar libro principal
         conn.table("libros").update({"stock": int(stock_actual) - 1}).eq("libro_id", id_libro_py).execute()
         
-        # 2. Gestionar Libros Extras
+        # 2. Gestionar Libros Extras (del catálogo)
         nombres_extras = []
         for extra_titulo in libros_extras:
             res_le = conn.table("libros").select("libro_id, stock, autor").eq("titulo", extra_titulo).execute()
@@ -127,6 +128,10 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
                         "autor_historico": limpiar_texto(le_autor), "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"
                     }).execute()
                 nombres_extras.append(extra_titulo)
+
+        # Añadir también los extras en texto libre a la lista de nombres
+        if extras_texto_libre.strip():
+            nombres_extras.append(limpiar_texto(extras_texto_libre))
 
         # 3. Traer datos actuales de asignación para sumar
         res_asig = conn.table("asignaciones").select("extras, valor_extras, valor_envio").eq("asignacion_id", id_asig_py).execute()
@@ -190,6 +195,7 @@ def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_ext
                 conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
             conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
             
+        # Intentar devolver stock de extras del catálogo
         if texto_extras and "EXTRAS:" in str(texto_extras):
             partes = str(texto_extras).split("EXTRAS:")
             if len(partes) > 1:
@@ -227,13 +233,16 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             if not df_valores.empty and c_id in df_valores['cliente_id'].values:
                 val_sub = float(df_valores[df_valores['cliente_id'] == c_id]['valor_suscripcion'].iloc[0])
             
-            v_envio = float(row.get('valor_envio', 0.0) or 0.0)
-            v_extras = float(row.get('valor_extras', 0.0) or 0.0)
-            m_total = val_sub + v_envio + v_extras # RECALCULA EL TOTAL AQUI
+            # Aseguramos que son números reales
+            v_envio = float(row.get('valor_envio', 0.0))
+            v_extras = float(row.get('valor_extras', 0.0))
+            m_total = val_sub + v_envio + v_extras
             
             datos = {
-                "estado_envio": str(row['estado_envio']).upper(), "pagado": str(row['pagado']).upper(),
-                "envio_pagado": str(row['envio_pagado']).upper(), "extras": str(row.get('extras', '')).upper(),
+                "estado_envio": str(row['estado_envio']).upper(), 
+                "pagado": str(row['pagado']).upper(),
+                "envio_pagado": str(row['envio_pagado']).upper(), 
+                "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')).upper(),
                 "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total
             }
@@ -265,14 +274,17 @@ def mostrar_asignaciones():
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
     
     if not df_mes.empty:
+        # Formateo estricto para evitar errores en st.data_editor
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
         df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
         df_mes['estado_envio'] = df_mes['estado_envio'].apply(lambda x: str(x).upper())
-        df_mes['extras'] = df_mes['extras'].fillna("")
-        df_mes['comentario'] = df_mes['comentario'].fillna("")
-        df_mes['valor_envio'] = df_mes.get('valor_envio', 0.0)
-        df_mes['valor_extras'] = df_mes.get('valor_extras', 0.0)
-        df_mes['monto_total'] = df_mes.get('monto_total', 0.0)
+        df_mes['extras'] = df_mes['extras'].fillna("").astype(str)
+        df_mes['comentario'] = df_mes['comentario'].fillna("").astype(str)
+        
+        # FORZAMOS A TIPO FLOAT PARA QUE STREAMLIT PERMITA EDITAR COMO NÚMEROS
+        df_mes['valor_envio'] = pd.to_numeric(df_mes.get('valor_envio', 0), errors='coerce').fillna(0.0)
+        df_mes['valor_extras'] = pd.to_numeric(df_mes.get('valor_extras', 0), errors='coerce').fillna(0.0)
+        df_mes['monto_total'] = pd.to_numeric(df_mes.get('monto_total', 0), errors='coerce').fillna(0.0)
 
         total_cajas = len(df_mes)
         cajas_pagadas = len(df_mes[df_mes['pagado'] == 'SI'])
@@ -307,7 +319,7 @@ def mostrar_asignaciones():
             if filtro_libro == "Sin Libro Asignado": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
             elif filtro_libro == "Con Libro Asignado": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
             
-            st.caption("Modifica y guarda. El Monto Total sumará: Suscripción Base + Extras + Envío.")
+            st.caption("Doble clic en las celdas para modificar. El Monto Total se calculará automáticamente al guardar.")
             
             columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
             df_mostrar = df_filtrado[columnas_mostrar].copy()
@@ -318,12 +330,17 @@ def mostrar_asignaciones():
                 "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
-                "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
-                "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
+                "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f", min_value=0.0),
+                "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f", min_value=0.0),
                 "monto_total": st.column_config.NumberColumn("Monto Total ($)", format="$%.0f")
             }
                 
-            df_editado = st.data_editor(df_mostrar, disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'monto_total'], column_config=config_cols, hide_index=True, use_container_width=True)
+            df_editado = st.data_editor(
+                df_mostrar, 
+                disabled=columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'monto_total'], 
+                column_config=config_cols, 
+                hide_index=True, use_container_width=True
+            )
             
             if not df_mostrar.equals(df_editado) and not mes_esta_cerrado:
                 if st.button("💾 Guardar Cambios", type="primary"):
@@ -347,25 +364,36 @@ def mostrar_asignaciones():
                             else: st.error(msg)
                     
                     with st.container(border=True):
-                        st.markdown("**✏️ Asignación Manual (con extras calculados)**")
+                        st.markdown("**✏️ Asignación Manual (con extras)**")
                         df_libros = cargar_libros_disponibles()
                         asig_manual_sel = st.selectbox("Cliente Pendiente:", [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist())
                         libro_manual_sel = st.selectbox("Libro Principal:", [""] + df_libros['titulo'].tolist())
                         
-                        st.caption("Si eliges libros extra, se cobrarán y descontarán automáticamente.")
-                        libros_extras_sel = st.multiselect("Libros Extras Adicionales:", [t for t in df_libros['titulo'].tolist() if t != ""])
+                        st.markdown("---")
+                        st.markdown("**Libros Extras (Del Catálogo)**")
+                        st.caption("Si eliges libros de aquí, se cobrarán y descontarán de tu stock automáticamente.")
+                        libros_extras_sel = st.multiselect("Seleccionar extras del catálogo:", [t for t in df_libros['titulo'].tolist() if t != ""])
                         
-                        if st.button("Asignar estos libros"):
+                        st.markdown("**Extras Libres (No en Catálogo)**")
+                        st.caption("Ejemplo: 'Lápiz varita mágica, Libro XYZ'. Se agregarán como texto y podrás sumar su valor manual.")
+                        extras_texto_libre = st.text_input("Extras fuera de catálogo (separados por coma):")
+                        valor_extras_libres = st.number_input("Valor a cobrar por estos extras libres ($):", min_value=0.0, step=500.0)
+                        
+                        if st.button("Asignar estos libros", type="primary"):
                             if asig_manual_sel and libro_manual_sel:
                                 id_asig = int(asig_manual_sel.split(" - ")[0].replace("ID:", ""))
                                 id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
                                 l_data = df_libros[df_libros['titulo'] == libro_manual_sel].iloc[0]
                                 
-                                val_calculado_extras = 0.0
+                                val_calculado_extras = valor_extras_libres
                                 for extr in libros_extras_sel: val_calculado_extras += float(df_libros[df_libros['titulo'] == extr].iloc[0]['precio'])
                                 
-                                ex, err = asignar_libro_a_suscripcion(id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'], libros_extras_sel, val_calculado_extras)
-                                if ex: st.success("¡Libro asignado!"), st.rerun()
+                                ex, err = asignar_libro_a_suscripcion(
+                                    id_asig, id_cliente, l_data['libro_id'], l_data['titulo'], 
+                                    l_data.get('autor', ''), ano_sel, mes_num, l_data['stock'], 
+                                    libros_extras_sel, val_calculado_extras, extras_texto_libre
+                                )
+                                if ex: st.success("¡Asignación completada!"), st.rerun()
                                 else: st.error(err)
                 else: st.success("¡Todos listos!")
 
