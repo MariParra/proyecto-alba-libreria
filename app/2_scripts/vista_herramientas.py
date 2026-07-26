@@ -2,16 +2,37 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
-import base64  # Importante
+import base64
 from utilidades import get_db_connection, limpiar_texto
+
+# --- FUNCIÓN QUE FALTABA ---
+def obtener_resumen_clientes():
+    """Se conecta a la BD para contar el total de clientes y su estado."""
+    conn = get_db_connection()
+    try:
+        res = conn.table("clientes").select("status").execute()
+        df = pd.DataFrame(res.data)
+        if df.empty:
+            return 0, 0, 0
+        
+        total = len(df)
+        activos = len(df[df['status'] == 'ACTIVA'])
+        inactivos = len(df[df['status'] == 'INACTIVO'])
+        
+        return total, activos, inactivos
+    except:
+        return 0, 0, 0
 
 def obtener_credenciales_google():
     """Decodifica la clave privada desde Base64 y construye las credenciales."""
     sec = st.secrets["gcp_service_account"]
     
-    # Decodificar la clave privada desde Base64
     clave_b64 = sec.get("private_key_b64", "")
-    clave_privada_limpia = base64.b64decode(clave_b64).decode('utf-8')
+    if not clave_b64:
+        # Fallback por si la clave no está en formato b64
+        clave_privada_limpia = str(sec.get("private_key", "")).replace('\\n', '\n')
+    else:
+        clave_privada_limpia = base64.b64decode(clave_b64).decode('utf-8')
 
     return {
         "type": str(sec.get("type", "")),
@@ -42,7 +63,6 @@ def sync_google_sheets():
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando clientes en la base de datos..."):
-            # Lógica de sincronización (sin cambios)
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_estado = next((c for c in df.columns if 'estado cliente' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower()), None)
@@ -79,7 +99,7 @@ def sync_google_sheets():
 
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
-    # ... (Métricas y resto de la interfaz sin cambios)
+    
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
