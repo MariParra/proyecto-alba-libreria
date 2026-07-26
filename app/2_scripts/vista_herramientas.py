@@ -5,47 +5,45 @@ import json
 import base64
 from utilidades import get_db_connection, limpiar_texto
 
-# --- FUNCIÓN QUE FALTABA ---
+# --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
-    """Se conecta a la BD para contar el total de clientes y su estado."""
     conn = get_db_connection()
     try:
         res = conn.table("clientes").select("status").execute()
         df = pd.DataFrame(res.data)
-        if df.empty:
-            return 0, 0, 0
-        
+        if df.empty: return 0, 0, 0
         total = len(df)
         activos = len(df[df['status'] == 'ACTIVA'])
-        inactivos = len(df[df['status'] == 'INACTIVO'])
-        
+        inactivos = len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
     except:
         return 0, 0, 0
 
+# --- TRADUCTOR UNIVERSAL DE CREDENCIALES (VERSIÓN FINAL) ---
 def obtener_credenciales_google():
-    """Decodifica la clave privada desde Base64 y construye las credenciales."""
+    """
+    Construye el diccionario de credenciales desde cero y decodifica
+    la clave privada desde Base64 para garantizar el formato correcto.
+    """
+    creds = {}
     sec = st.secrets["gcp_service_account"]
-    
-    clave_b64 = sec.get("private_key_b64", "")
-    if not clave_b64:
-        # Fallback por si la clave no está en formato b64
-        clave_privada_limpia = str(sec.get("private_key", "")).replace('\\n', '\n')
-    else:
-        clave_privada_limpia = base64.b64decode(clave_b64).decode('utf-8')
 
-    return {
-        "type": str(sec.get("type", "")),
-        "project_id": str(sec.get("project_id", "")),
-        "private_key_id": str(sec.get("private_key_id", "")),
-        "private_key": clave_privada_limpia,
-        "client_email": str(sec.get("client_email", "")),
-        "client_id": str(sec.get("client_id", "")),
-        "auth_uri": str(sec.get("auth_uri", "")),
-        "token_uri": str(sec.get("token_uri", "")),
-        "auth_provider_x509_cert_url": str(sec.get("auth_provider_x509_cert_url", "")),
-        "client_x509_cert_url": str(sec.get("client_x509_cert_url", ""))
-    }
+    # Reconstruimos el diccionario campo por campo
+    creds["type"] = sec.get("type")
+    creds["project_id"] = sec.get("project_id")
+    creds["private_key_id"] = sec.get("private_key_id")
+    creds["client_email"] = sec.get("client_email")
+    creds["client_id"] = sec.get("client_id")
+    creds["auth_uri"] = sec.get("auth_uri")
+    creds["token_uri"] = sec.get("token_uri")
+    creds["auth_provider_x509_cert_url"] = sec.get("auth_provider_x509_cert_url")
+    creds["client_x509_cert_url"] = sec.get("client_x509_cert_url")
+    
+    # Decodificamos la clave desde Base64
+    clave_b64 = sec.get("private_key_b64", "")
+    creds["private_key"] = base64.b64decode(clave_b64).decode('utf-8')
+    
+    return creds
 
 def sync_google_sheets():
     try:
@@ -63,6 +61,7 @@ def sync_google_sheets():
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando clientes en la base de datos..."):
+            # Lógica de sincronización (sin cambios)
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_estado = next((c for c in df.columns if 'estado cliente' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower()), None)
@@ -72,9 +71,11 @@ def sync_google_sheets():
             for index, row in df.iterrows():
                 nombre_sync = limpiar_texto(str(row.get(col_nombre, "")))
                 if not nombre_sync: continue
+                
                 estado_sync = str(row.get(col_estado, "")).strip().upper() if col_estado else None
                 tel_sync = limpiar_texto(str(row.get(col_telefono, "")))
                 email_sync = limpiar_texto(str(row.get(col_email, "")))
+                
                 res = conn.table("clientes").select("*").eq("nombre", nombre_sync).limit(1).execute()
                 if res.data:
                     c_id = res.data[0]['cliente_id']
@@ -114,3 +115,4 @@ def mostrar_herramientas():
         if st.button("🚀 Iniciar Sincronización de Clientes", type="primary", use_container_width=True):
             sync_google_sheets()
             st.rerun()
+
