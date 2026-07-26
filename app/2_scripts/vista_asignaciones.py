@@ -561,7 +561,7 @@ def mostrar_asignaciones():
                 if ex: st.success(msg), st.balloons(), st.rerun()
                 else: st.warning(msg)
 
-        elif opcion_menu == "🗑️ Eliminar Registro":
+    elif opcion_menu == "🗑️ Eliminar Registro":
         if mes_esta_cerrado: st.warning("Mes cerrado. No puedes modificar registros.")
         else:
             st.markdown("#### 🗑️ Opciones de Eliminación y Corrección")
