@@ -2,7 +2,7 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
-import textwrap  # <- La magia para reconstruir el PEM
+import base64
 from utilidades import get_db_connection, limpiar_texto
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
@@ -19,46 +19,30 @@ def obtener_resumen_clientes():
     except:
         return 0, 0, 0
 
-# --- RECONSTRUCTOR DE PEM MÁGICO ---
-def obtener_credenciales_google():
-    sec = st.secrets["gcp_service_account"]
-    
-    # 1. Tomamos la "sopa de letras" cruda
-    raw_key = sec.get("private_key_raw", "")
-    
-    # Por seguridad, si el usuario pegó los encabezados por error, se los quitamos
-    clean_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
-    clean_key = clean_key.replace("\\n", "").replace("\n", "").replace(" ", "")
-    
-    # 2. Cortamos el texto exactamente cada 64 caracteres (Estándar PEM estricto)
-    lineas = textwrap.wrap(clean_key, 64)
-    cuerpo_pem = "\n".join(lineas)
-    
-    # 3. Ensamblamos la llave final perfecta
-    llave_perfecta = f"-----BEGIN PRIVATE KEY-----\n{cuerpo_pem}\n-----END PRIVATE KEY-----\n"
-
-    return {
-        "type": str(sec.get("type", "")),
-        "project_id": str(sec.get("project_id", "")),
-        "private_key_id": str(sec.get("private_key_id", "")),
-        "private_key": llave_perfecta,  # <-- Aquí pasamos la llave reconstruida e impecable
-        "client_email": str(sec.get("client_email", "")),
-        "client_id": str(sec.get("client_id", "")),
-        "auth_uri": str(sec.get("auth_uri", "")),
-        "token_uri": str(sec.get("token_uri", "")),
-        "auth_provider_x509_cert_url": str(sec.get("auth_provider_x509_cert_url", "")),
-        "client_x509_cert_url": str(sec.get("client_x509_cert_url", ""))
-    }
-
 def sync_google_sheets():
+    """
+    Sincroniza los clientes decodificando el archivo JSON completo desde Base64.
+    ¡A prueba de errores de formato!
+    """
     try:
-        creds_dict = obtener_credenciales_google()
+        # 1. Traemos el Base64 gigante desde los secretos
+        b64_str = st.secrets["GCP_B64"]
+        
+        # 2. Lo decodificamos de vuelta a su formato original JSON perfecto
+        json_str = base64.b64decode(b64_str).decode('utf-8')
+        creds_dict = json.loads(json_str)
+
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
             spreadsheet = gc.open("INSCRIPCIONES CAJA MENSUAL") 
             worksheet = spreadsheet.worksheet("formulario")
             df = pd.DataFrame(worksheet.get_all_records())
+            
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
+        
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'. Revisa que esté compartida con el correo del robot.")
+        return
     except Exception as e:
         st.error(f"Error de conexión con Google: {e}")
         return
@@ -72,6 +56,7 @@ def sync_google_sheets():
             col_email = next((c for c in df.columns if 'correo' in c.lower() or 'email' in c.lower()), None)
             
             procesados, nuevos, actualizados = 0, 0, 0
+            
             for index, row in df.iterrows():
                 nombre_sync = limpiar_texto(str(row.get(col_nombre, "")))
                 if not nombre_sync: continue
@@ -81,15 +66,17 @@ def sync_google_sheets():
                 email_sync = limpiar_texto(str(row.get(col_email, "")))
                 
                 res = conn.table("clientes").select("*").eq("nombre", nombre_sync).limit(1).execute()
+                
                 if res.data:
                     c_id = res.data[0]['cliente_id']
                     datos_a_actualizar = {}
-                    if estado_sync and estado_sync != res.data[0].get('status', ''):
+                    if estado_sync and estado_sync != res.data[0].get('status', '').upper():
                         datos_a_actualizar['status'] = estado_sync
                     if tel_sync and tel_sync != res.data[0].get('telefono'):
                         datos_a_actualizar['telefono'] = tel_sync
                     if email_sync and email_sync != res.data[0].get('email'):
                         datos_a_actualizar['email'] = email_sync
+                        
                     if datos_a_actualizar:
                         conn.table("clientes").update(datos_a_actualizar).eq("cliente_id", c_id).execute()
                         actualizados += 1
@@ -99,9 +86,12 @@ def sync_google_sheets():
                         'status': estado_sync if estado_sync else 'ACTIVA'
                     }).execute()
                     nuevos += 1
+                    
                 procesados += 1
+                
         st.success(f"🎉 Sync completado. Total: {procesados} | Nuevos: {nuevos} | Actualizados: {actualizados}")
         st.cache_data.clear()
+        
     except Exception as e:
         st.error(f"Error crítico durante la sincronización: {e}")
 
