@@ -1,10 +1,19 @@
-info/
+# --- Archivos de Configuración y Secretos ---
 .env
 app/config/credentials.json
+.streamlit/secrets.toml
+
+# --- Archivos de Datos y Reportes ---
 *.csv
-app/3_output_reports
-app/4_backups
-app/5_libreros
+app/3_output_reports/
+app/4_backups/
+app/5_libreros/
+
+# --- Carpetas Deprecadas e Info ---
+info/
+deprecated_app/
+
+# --- Archivos Temporales de Python ---
 __pycache__/
 *.pyc
-.streamlit/secrets.toml
+
