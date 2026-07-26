@@ -362,7 +362,7 @@ def mostrar_asignaciones():
         df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
         df_mes['estado_envio'] = df_mes['estado_envio'].apply(lambda x: str(x).upper())
         df_mes['extras'] = df_mes['extras'].fillna("").astype(str)
-        df_mes['comentario'] = df_mes['comentario'].fillna("").astype(str)
+        df_mes['comentario'] = df_mes['comentario'].apply(lambda x: "" if pd.isna(x) or str(x).upper() == "NONE" else str(x))
         
         df_mes['valor_envio'] = pd.to_numeric(df_mes.get('valor_envio', 0), errors='coerce').fillna(0.0)
         df_mes['valor_extras'] = pd.to_numeric(df_mes.get('valor_extras', 0), errors='coerce').fillna(0.0)
@@ -442,8 +442,10 @@ def mostrar_asignaciones():
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
                 "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                 "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
-                "monto_total": st.column_config.NumberColumn("Monto Total ($)", format="$%.0f")
+                "monto_total": st.column_config.NumberColumn("Monto Total ($)", format="$%.0f"),
+                "comentario": st.column_config.TextColumn("Comentario", max_chars=300, help="Notas adicionales del pedido") # <--- AGREGAR ESTA LÍNEA
             }
+
                 
             df_editado = st.data_editor(
                 df_mostrar, 
