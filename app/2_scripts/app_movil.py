@@ -11,6 +11,7 @@ from vista_clientes import mostrar_clientes
 from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
+from vista_libreros import mostrar_importacion_libreros
 
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 
@@ -137,6 +138,10 @@ else:
             st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
             st.rerun()
             
+        if st.button(" 📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
+            st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
+            st.rerun()
+            
         st.markdown("---")
         
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
@@ -158,3 +163,5 @@ else:
             mostrar_dashboard()
         elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
             mostrar_herramientas()
+        elif st.session_state.pagina_actual == " 📔 IMPORTAR LIBREROS":
+            mostrar_importacion_libreros()
