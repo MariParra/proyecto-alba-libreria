@@ -275,6 +275,52 @@ def asignar_al_azar(df_pendientes, df_libros, ano, mes):
             libros_temp.loc[libros_temp['libro_id'] == libro_elegido['libro_id'], 'stock'] -= 1
     return True, f"Se asignaron {exitos} libros al azar."
 
+def desasignar_libros(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
+    """Quita los libros de la caja, devuelve el stock y deja la fila en blanco (Pendiente)."""
+    conn = get_db_connection()
+    try:
+        # 1. Devolver stock principal y limpiar de histórico
+        if pd.notna(libro_id) and libro_id:
+            res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
+            if res_l.data:
+                conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
+            conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
+            
+        # 2. Devolver stock de extras del catálogo y limpiar histórico extra
+        if texto_extras and "EXTRAS:" in str(texto_extras):
+            partes = str(texto_extras).split("EXTRAS:")
+            if len(partes) > 1:
+                titulos = partes[1].split(",")
+                for t in titulos:
+                    t = t.strip()
+                    res_le = conn.table("libros").select("libro_id, stock").eq("titulo", t).execute()
+                    if res_le.data:
+                        le_id, le_stock = res_le.data[0]['libro_id'], res_le.data[0]['stock']
+                        conn.table("libros").update({"stock": le_stock + 1}).eq("libro_id", le_id).execute()
+                        conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", le_id).eq("origen", f"ASIGNACIÓN EXTRA {mes}/{ano}").execute()
+
+        # 3. Limpiar los campos en la tabla (volver a Pendiente y recalcular sin extras)
+        res_asig = conn.table("asignaciones").select("valor_envio").eq("asignacion_id", int(asignacion_id)).execute()
+        v_envio = float(res_asig.data[0].get('valor_envio', 0.0)) if res_asig.data else 0.0
+        
+        res_sub = conn.table("suscripciones").select("valor_suscripcion").eq("cliente_id", int(cliente_id)).execute()
+        val_sub = float(res_sub.data[0]['valor_suscripcion']) if res_sub.data else 0.0
+        
+        nuevo_monto = val_sub + v_envio
+
+        conn.table("asignaciones").update({
+            "libro_suscripcion_id": None,
+            "extras": "",
+            "valor_extras": 0.0,
+            "monto_total": nuevo_monto
+        }).eq("asignacion_id", int(asignacion_id)).execute()
+        
+        cargar_asignaciones_mes.clear()
+        cargar_libros_disponibles.clear()
+        return True, ""
+    except Exception as e: 
+        return False, str(e)
+
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
     try:
@@ -515,17 +561,42 @@ def mostrar_asignaciones():
                 if ex: st.success(msg), st.balloons(), st.rerun()
                 else: st.warning(msg)
 
-    elif opcion_menu == "🗑️ Eliminar Registro":
-        if mes_esta_cerrado: st.warning("Mes cerrado.")
+        elif opcion_menu == "🗑️ Eliminar Registro":
+        if mes_esta_cerrado: st.warning("Mes cerrado. No puedes modificar registros.")
         else:
+            st.markdown("#### 🗑️ Opciones de Eliminación y Corrección")
             if not df_mes.empty:
-                asig_eliminar = st.selectbox("Selecciona registro:", [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist())
-                if asig_eliminar and st.button("🟥 ELIMINAR DEFINITIVAMENTE", type="primary"):
-                    id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
-                    row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
-                    ex, err = eliminar_asignacion(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num, row.get('extras', ''))
-                    if ex: st.success("Registro eliminado."), st.rerun()
-                    else: st.error(err)
+                df_con_libros = df_mes[df_mes['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
+                
+                col_e1, col_e2 = st.columns(2)
+                
+                with col_e1:
+                    with st.container(border=True):
+                        st.markdown("##### 🧹 1. Vaciar Caja (Quitar Libros)")
+                        st.caption("Quita el libro y los extras asignados por error. Devuelve el stock al inventario, pero mantiene la fila del cliente lista para reasignar.")
+                        if not df_con_libros.empty:
+                            asig_vaciar = st.selectbox("Selecciona cliente a vaciar:", [""] + df_con_libros.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist())
+                            if asig_vaciar and st.button("🧹 VACIAR LIBROS DE ESTA CAJA", type="primary"):
+                                id_asig = int(asig_vaciar.split(" | ")[0].replace("ID:", ""))
+                                row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
+                                ex, err = desasignar_libros(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num, row.get('extras', ''))
+                                if ex: st.success("Libros devueltos al stock. La caja vuelve a estar PENDIENTE."), st.rerun()
+                                else: st.error(err)
+                        else: st.info("No hay cajas con libros asignados para vaciar.")
+                
+                with col_e2:
+                    with st.container(border=True):
+                        st.markdown("##### 🟥 2. Eliminar Registro Completo")
+                        st.caption("Borra definitivamente la fila del cliente para este mes (usa esto solo si el cliente canceló su suscripción este mes).")
+                        asig_eliminar = st.selectbox("Selecciona registro a borrar:", [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} | {x['nombre_cliente']} | {x['titulo_libro']}", axis=1).tolist())
+                        if asig_eliminar and st.button("🟥 ELIMINAR FILA DEFINITIVAMENTE"):
+                            id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
+                            row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
+                            ex, err = eliminar_asignacion(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num, row.get('extras', ''))
+                            if ex: st.success("Registro eliminado."), st.rerun()
+                            else: st.error(err)
+            else:
+                st.info("No hay registros para gestionar este mes.")
 
     elif opcion_menu == "🔒 Cierre de Mes":
         st.markdown("#### 🔒 Control de Cierre")
