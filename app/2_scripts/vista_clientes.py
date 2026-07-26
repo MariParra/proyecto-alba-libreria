@@ -2,73 +2,29 @@ import streamlit as st
 import pandas as pd
 from utilidades import get_db_connection, limpiar_texto
 
-def obtener_unicos(df, columna):
-    if columna not in df.columns: return []
-    return sorted(df[columna].dropna().astype(str).unique())
+# --- FUNCIONES DE BASE DE DATOS (CLIENTES) ---
+@st.cache_data(ttl=60)
+def cargar_clientes():
+    conn = get_db_connection()
+    try:
+        res = conn.table("clientes").select("*").execute()
+        return pd.DataFrame(res.data)
+    except Exception as e:
+        st.error(f"Error al cargar clientes: {e}")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def cargar_todos_los_clientes():
+def cargar_historial_cliente(cliente_id):
     conn = get_db_connection()
     try:
-        response = conn.table("clientes").select("*").execute()
-        return pd.DataFrame(response.data)
-    except Exception as e: return pd.DataFrame()
+        res = conn.table("librero_historico").select("*, libros(titulo)").eq("cliente_id", cliente_id).execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty and 'libros' in df.columns:
+            df['titulo'] = df['libros'].apply(lambda x: x['titulo'] if isinstance(x, dict) else "")
+        return df
+    except: return pd.DataFrame()
 
-@st.cache_data(ttl=60)
-def cargar_librero_total_cliente(cliente_id):
-    conn = get_db_connection()
-    libros_consolidados = []
-    try:
-        res_libros = conn.table("libros").select("libro_id, titulo").execute()
-        df_libros = pd.DataFrame(res_libros.data)
-    except: df_libros = pd.DataFrame()
-
-    try:
-        res_hist = conn.table("librero_historico").select("*").eq("cliente_id", cliente_id).execute()
-        if res_hist.data:
-            df_hist = pd.DataFrame(res_hist.data)
-            if not df_libros.empty: df_hist = df_hist.merge(df_libros, on="libro_id", how="left")
-            for _, row in df_hist.iterrows():
-                titulo = row.get('titulo', 'LIBRO EXTERNO / NO EN CATÁLOGO')
-                if pd.isna(titulo): titulo = 'LIBRO EXTERNO'
-                libros_consolidados.append({"Título del Libro": str(titulo).upper(), "Origen": str(row.get('origen', 'HISTÓRICO')).upper(), "Detalle": f"Autor: {row.get('autor_historico', '-')}", "Fecha": "-"})
-    except: pass
-
-    try:
-        res_ventas = conn.table("registro_ventas").select("libros_vendidos, fecha_venta, metodo_envio").eq("cliente_id", cliente_id).execute()
-        for row in res_ventas.data:
-            items = row.get('libros_vendidos', '').split(" | ")
-            for item in items:
-                partes = item.split(" x ", 1)
-                titulo = partes[1] if len(partes) == 2 else item
-                fecha = pd.to_datetime(row.get('fecha_venta', '')).strftime('%d-%m-%Y') if row.get('fecha_venta', '') else "-"
-                libros_consolidados.append({"Título del Libro": titulo.upper(), "Origen": "VENTA CAJA", "Detalle": f"Envío: {row.get('metodo_envio', '-')}", "Fecha": fecha})
-    except: pass
-
-    try:
-        res_asig = conn.table("asignaciones").select("*").eq("cliente_id", cliente_id).execute()
-        if res_asig.data:
-            df_asig = pd.DataFrame(res_asig.data)
-            if not df_libros.empty: df_asig = df_asig.merge(df_libros, left_on='libro_suscripcion_id', right_on='libro_id', how='left')
-            for _, row in df_asig.iterrows():
-                titulo = row.get('titulo', f"LIBRO ID {row.get('libro_suscripcion_id')}")
-                if pd.isna(titulo): titulo = f"LIBRO ID {row.get('libro_suscripcion_id')}"
-                libros_consolidados.append({"Título del Libro": str(titulo).upper(), "Origen": f"ASIGNACIÓN {row.get('mes', '')}/{row.get('ano', '')}", "Detalle": f"Estado: {row.get('estado_envio', '-')}", "Fecha": row.get('fecha_asignacion', '-')})
-    except: pass
-
-    df = pd.DataFrame(libros_consolidados)
-    if not df.empty: df = df.drop_duplicates(subset=['Título del Libro']) 
-    return df
-
-def actualizar_datos_cliente(cliente_id, datos):
-    conn = get_db_connection()
-    try:
-        conn.table("clientes").update(datos).eq("cliente_id", cliente_id).execute()
-        cargar_todos_los_clientes.clear()
-        return True, ""
-    except Exception as e: return False, str(e)
-
-def actualizar_clientes_batch(df_editado):
+def actualizar_cliente_batch(df_editado):
     df_original = st.session_state.get('clientes_original')
     if df_original is None: return 0
     df_original_comp = df_original.set_index('cliente_id')
@@ -81,100 +37,207 @@ def actualizar_clientes_batch(df_editado):
     updates = 0
     for c_id, row in filas_cambiadas.iterrows():
         try:
-            datos = {"nombre": limpiar_texto(row['nombre']), "email": limpiar_texto(row['email']), "telefono": limpiar_texto(row['telefono']), "instagram": limpiar_texto(row['instagram']), "rut": limpiar_texto(row['rut']), "direccion": limpiar_texto(row['direccion']), "status": limpiar_texto(row['status'])}
-            conn.table("clientes").update(datos).eq("cliente_id", c_id).execute()
+            datos = {
+                "nombre": limpiar_texto(str(row.get('nombre', ''))),
+                "email": limpiar_texto(str(row.get('email', ''))),
+                "telefono": limpiar_texto(str(row.get('telefono', ''))),
+                "direccion": limpiar_texto(str(row.get('direccion', ''))),
+                "rut": limpiar_texto(str(row.get('rut', ''))),
+                "status": str(row.get('status', 'CLIENTE REGULAR')).upper()
+            }
+            conn.table("clientes").update(datos).eq("cliente_id", int(c_id)).execute()
             updates += 1
         except: continue
-    if updates > 0: cargar_todos_los_clientes.clear()
+    if updates > 0: cargar_clientes.clear()
+    return updates
+
+# --- FUNCIONES DE BASE DE DATOS (SUSCRIPCIONES BASE) ---
+
+def emparejar_suscripciones():
+    """Magia: Detecta clientes con estado 'ACTIVA' que no estén en la tabla suscripciones y les crea una fila en blanco."""
+    conn = get_db_connection()
+    try:
+        # --- AQUÍ ESTÁ EL AJUSTE CLAVE: Filtramos por status = 'ACTIVA' ---
+        res_cli = conn.table("clientes").select("cliente_id").eq("status", "ACTIVA").execute()
+        res_sub = conn.table("suscripciones").select("cliente_id").execute()
+        
+        ids_cli = [c['cliente_id'] for c in res_cli.data] if res_cli.data else []
+        ids_sub = [s['cliente_id'] for s in res_sub.data] if res_sub.data else []
+        
+        faltantes = set(ids_cli) - set(ids_sub)
+        for c_id in faltantes:
+            conn.table("suscripciones").insert({
+                "cliente_id": int(c_id),
+                "valor_suscripcion": 0.0,
+                "fecha_pago": "",
+                "metodo_entrega": "Retiro en tienda",
+                "generos_preferencia": ""
+            }).execute()
+        if faltantes: cargar_suscripciones_base.clear()
+    except Exception: pass
+
+@st.cache_data(ttl=60)
+def cargar_suscripciones_base():
+    conn = get_db_connection()
+    try:
+        res_sub = conn.table("suscripciones").select("*").execute()
+        res_cli = conn.table("clientes").select("cliente_id, nombre, status").execute()
+        
+        df_sub = pd.DataFrame(res_sub.data)
+        df_cli = pd.DataFrame(res_cli.data)
+        
+        if df_sub.empty: return pd.DataFrame()
+        if not df_cli.empty:
+            return df_sub.merge(df_cli, on='cliente_id', how='left')
+        return df_sub
+    except: return pd.DataFrame()
+
+def actualizar_suscripciones_batch(df_editado):
+    df_original = st.session_state.get('suscripciones_original')
+    if df_original is None: return 0
+    df_original_comp = df_original.set_index('suscripcion_id')
+    df_editado_comp = df_editado.set_index('suscripcion_id')
+    diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
+    filas_cambiadas = df_editado_comp[diff_mask]
+    if filas_cambiadas.empty: return 0
+    
+    conn = get_db_connection()
+    updates = 0
+    for s_id, row in filas_cambiadas.iterrows():
+        try:
+            datos = {
+                "fecha_pago": str(row.get('fecha_pago', '')),
+                "metodo_entrega": str(row.get('metodo_entrega', '')),
+                "generos_preferencia": str(row.get('generos_preferencia', '')),
+                "valor_suscripcion": float(row.get('valor_suscripcion', 0.0))
+            }
+            conn.table("suscripciones").update(datos).eq("suscripcion_id", int(s_id)).execute()
+            updates += 1
+        except: continue
+    if updates > 0: cargar_suscripciones_base.clear()
     return updates
 
 
 # --- INTERFAZ PRINCIPAL ---
 
 def mostrar_clientes():
-    st.title("👥 Gestión de Clientes y Librero")
-    df_clientes = cargar_todos_los_clientes()
-    if df_clientes.empty:
-        st.warning("No hay clientes registrados en el sistema.")
-        return
-
-    with st.expander("🔍 Buscador y Filtros", expanded=False):
-        col_f1, col_f2 = st.columns(2)
-        f_nombre = col_f1.text_input("Buscar por Nombre:")
-        f_status = col_f2.multiselect("Filtrar por Status:", obtener_unicos(df_clientes, 'status'))
-        col_f3, col_f4 = st.columns(2)
-        f_email = col_f3.text_input("Buscar por Email:")
-        f_telefono = col_f4.text_input("Buscar por Teléfono:")
-        col_f5, col_f6 = st.columns(2)
-        f_instagram = col_f5.text_input("Buscar por Instagram:")
-        f_rut = col_f6.text_input("Buscar por RUT:")
-
-    df_filtrado = df_clientes.copy()
-    if f_nombre: df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
-    if f_status: df_filtrado = df_filtrado[df_filtrado['status'].isin(f_status)]
-    if f_email: df_filtrado = df_filtrado[df_filtrado['email'].str.contains(limpiar_texto(f_email), case=False, na=False)]
-    if f_telefono: df_filtrado = df_filtrado[df_filtrado['telefono'].str.contains(limpiar_texto(f_telefono), case=False, na=False)]
-    if f_instagram: df_filtrado = df_filtrado[df_filtrado['instagram'].str.contains(limpiar_texto(f_instagram), case=False, na=False)]
-    if f_rut: df_filtrado = df_filtrado[df_filtrado['rut'].str.contains(limpiar_texto(f_rut), case=False, na=False)]
-
-    tab_todos, tab_individual = st.tabs(["👥 Directorio", "👤 Perfil Individual"])
+    st.title("👥 Gestión de Clientes y CRM")
     
-    with tab_todos:
-        st.markdown(f"### 📋 Directorio ({len(df_filtrado)} clientes)")
-        modo_vista = st.radio("Vista:", ["📱 Vista Móvil (Resumen)", "💻 Vista PC (Tabla Editable)"], horizontal=True, label_visibility="collapsed")
-        
-        columnas_mostrar = ['cliente_id', 'nombre', 'status', 'email', 'telefono', 'instagram', 'rut', 'direccion']
-        for col in columnas_mostrar:
-            if col not in df_filtrado.columns: df_filtrado[col] = ""
-            
-        if modo_vista == "📱 Vista Móvil (Resumen)":
-            st.caption("Selecciona qué columnas ver:")
-            columnas_fijas = ['nombre', 'status']
-            opcionales = [c for c in columnas_mostrar if c not in columnas_fijas + ['cliente_id']]
-            cols_extra = st.multiselect("Añadir/Quitar:", options=opcionales, default=['telefono'])
-            st.dataframe(df_filtrado[columnas_fijas + cols_extra], hide_index=True, use_container_width=True)
+    df_clientes = cargar_clientes()
+    
+    tab_directorio, tab_ficha, tab_suscripciones = st.tabs(["📁 Directorio General", "👤 Ficha Individual y Librero", "💳 Planes de Suscripción (Valores)"])
+    
+    # ==========================================
+    # 1. DIRECTORIO GENERAL
+    # ==========================================
+    with tab_directorio:
+        st.markdown("### 📁 Directorio de Clientes")
+        if df_clientes.empty: st.warning("No hay clientes registrados.")
         else:
-            st.caption("Doble clic en las celdas para modificar directamente.")
+            col_f1, col_f2 = st.columns(2)
+            f_nombre = col_f1.text_input("🔍 Buscar por Nombre (Directorio):")
+            f_status = col_f2.selectbox("Filtrar por Status:", ["Todos"] + df_clientes['status'].unique().tolist())
+            
+            df_filtrado = df_clientes.copy()
+            if f_nombre: df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
+            if f_status != "Todos": df_filtrado = df_filtrado[df_filtrado['status'] == f_status]
+            
+            columnas_mostrar = ['cliente_id', 'nombre', 'email', 'telefono', 'rut', 'direccion', 'status']
             df_mostrar = df_filtrado[columnas_mostrar].copy()
+            
             if 'clientes_original' not in st.session_state or not st.session_state.clientes_original.equals(df_mostrar):
                 st.session_state.clientes_original = df_mostrar.copy()
-            df_editado = st.data_editor(df_mostrar, hide_index=True, use_container_width=True, disabled=['cliente_id', 'nombre'])
+                
+            config_cols = {
+                "cliente_id": st.column_config.NumberColumn("ID", disabled=True),
+                # --- NUEVO: Los estados válidos ahora incluyen 'ACTIVA' en lugar de 'SUSCRITO' ---
+                "status": st.column_config.SelectboxColumn("Status", options=["CLIENTE REGULAR", "ACTIVA", "INACTIVO"], required=True)
+            }
+            
+            st.caption("Doble clic en las celdas para modificar datos.")
+            df_editado = st.data_editor(df_mostrar, column_config=config_cols, hide_index=True, use_container_width=True)
+            
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Clientes", type="primary"):
-                    num = actualizar_clientes_batch(df_editado)
+                    num = actualizar_cliente_batch(df_editado)
                     st.success(f"¡Se actualizaron {num} clientes!"), st.rerun()
 
-    with tab_individual:
-        lista_nombres = [""] + df_filtrado['nombre'].dropna().tolist()
-        cliente_seleccionado = st.selectbox("🔍 Escribe o selecciona el nombre del cliente:", lista_nombres)
-        
-        if cliente_seleccionado:
-            cliente_info = df_filtrado[df_filtrado['nombre'] == cliente_seleccionado].iloc[0]
-            c_id = int(cliente_info['cliente_id'])
+    # ==========================================
+    # 2. FICHA DEL CLIENTE
+    # ==========================================
+    with tab_ficha:
+        st.markdown("### 👤 Ficha del Cliente y Librero Histórico")
+        if df_clientes.empty: st.warning("No hay clientes.")
+        else:
+            lista_clientes = [""] + df_clientes.apply(lambda x: f"ID:{x['cliente_id']} - {x['nombre']}", axis=1).tolist()
+            cliente_sel = st.selectbox("Buscar Cliente:", lista_clientes)
             
-            # --- VISTA 100% VERTICAL PARA MÓVILES ---
-            st.markdown(f"#### 👤 Perfil de Contacto ({cliente_info.get('status', 'REGULAR')})")
-            with st.container(border=True):
-                with st.form("form_editar_cliente"):
-                    c_nombre = st.text_input("Nombre Completo:", value=cliente_info.get('nombre', ''))
-                    c_email = st.text_input("Email:", value=cliente_info.get('email', ''))
-                    c_telefono = st.text_input("Teléfono:", value=cliente_info.get('telefono', ''))
-                    c_instagram = st.text_input("Instagram:", value=cliente_info.get('instagram', ''))
-                    c_rut = st.text_input("RUT:", value=cliente_info.get('rut', ''))
-                    c_direccion = st.text_input("Dirección:", value=cliente_info.get('direccion', ''))
-                    
-                    if st.form_submit_button("💾 Guardar Perfil", type="primary", use_container_width=True):
-                        datos_act = {"nombre": limpiar_texto(c_nombre), "email": limpiar_texto(c_email), "telefono": limpiar_texto(c_telefono), "instagram": limpiar_texto(c_instagram), "rut": limpiar_texto(c_rut), "direccion": limpiar_texto(c_direccion)}
-                        exito, error = actualizar_datos_cliente(c_id, datos_act)
-                        if exito: st.success("¡Perfil actualizado!"), st.rerun()
-                        else: st.error(f"Error: {error}")
-            
-            st.markdown("---")
-            st.markdown(f"#### 📚 Colección de Libros (Historial)")
-            with st.container(border=True):
-                df_librero = cargar_librero_total_cliente(c_id)
-                if df_librero.empty:
-                    st.info("Aún no tiene libros en su historial.")
+            if cliente_sel:
+                c_id = int(cliente_sel.split(" - ")[0].replace("ID:", ""))
+                datos_c = df_clientes[df_clientes['cliente_id'] == c_id].iloc[0]
+                
+                st.markdown(f"#### {datos_c['nombre']}")
+                c1, c2, c3 = st.columns(3)
+                c1.markdown(f"**Email:** {datos_c.get('email', '-')}")
+                c2.markdown(f"**Teléfono:** {datos_c.get('telefono', '-')}")
+                c3.markdown(f"**Status:** {datos_c.get('status', '-')}")
+                
+                df_historial = cargar_historial_cliente(c_id)
+                st.markdown("##### 📚 Librero Histórico")
+                if df_historial.empty: st.info("Este cliente aún no tiene libros en su historial.")
                 else:
-                    st.metric("Total de libros únicos adquiridos", len(df_librero))
-                    st.dataframe(df_librero, hide_index=True, use_container_width=True)
+                    st.dataframe(df_historial[['origen', 'titulo', 'autor_historico']], hide_index=True, use_container_width=True)
+
+    # ==========================================
+    # 3. VALORES DE SUSCRIPCIÓN
+    # ==========================================
+    with tab_suscripciones:
+        st.markdown("### 💳 Valores Base de Suscripción")
+        st.info("💡 **Configuración de Planes:** Aquí defines cuánto paga cada cliente con suscripción ACTIVA, sus días de pago y preferencias. Al iniciar un nuevo mes de Asignaciones, el sistema usará estos valores automáticamente.")
+        
+        # MAGIA: Revisa todos los clientes y empareja automáticamente a los nuevos con estado 'ACTIVA'
+        emparejar_suscripciones()
+        
+        df_subs = cargar_suscripciones_base()
+        
+        if df_subs.empty:
+            st.warning("No hay suscripciones configuradas. Asegúrate de tener clientes con el estado 'ACTIVA' en el Directorio General.")
+        else:
+            # Ordenar para que los inactivos queden abajo
+            df_subs = df_subs.sort_values(by="status", ascending=False)
+            
+            col_mostrar_sub = ['suscripcion_id', 'nombre', 'status', 'fecha_pago', 'metodo_entrega', 'generos_preferencia', 'valor_suscripcion']
+            for c in col_mostrar_sub:
+                if c not in df_subs.columns: df_subs[c] = ""
+                
+            df_mostrar_sub = df_subs[col_mostrar_sub].copy()
+            df_mostrar_sub['valor_suscripcion'] = pd.to_numeric(df_mostrar_sub['valor_suscripcion'], errors='coerce').fillna(0.0)
+            
+            if 'suscripciones_original' not in st.session_state or not st.session_state.suscripciones_original.equals(df_mostrar_sub):
+                st.session_state.suscripciones_original = df_mostrar_sub.copy()
+            
+            config_cols_sub = {
+                "suscripcion_id": st.column_config.NumberColumn("ID Sub", disabled=True),
+                "nombre": st.column_config.TextColumn("Cliente", disabled=True),
+                "status": st.column_config.TextColumn("Estado en Directorio", disabled=True),
+                "fecha_pago": st.column_config.TextColumn("Día de Pago (Ej: 05)"),
+                "metodo_entrega": st.column_config.SelectboxColumn("Método Entrega Base", options=["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor"]),
+                "generos_preferencia": st.column_config.TextColumn("Géneros Preferidos"),
+                "valor_suscripcion": st.column_config.NumberColumn("Valor Suscripción ($)", format="$%.0f", min_value=0.0)
+            }
+            
+            st.caption("Doble clic en las celdas para asignar el precio y detalles fijos de la suscripción.")
+            df_editado_sub = st.data_editor(
+                df_mostrar_sub,
+                column_config=config_cols_sub,
+                disabled=['suscripcion_id', 'nombre', 'status'],
+                hide_index=True,
+                use_container_width=True
+            )
+            
+            if not df_mostrar_sub.equals(df_editado_sub):
+                if st.button("💾 Guardar Planes de Suscripción", type="primary"):
+                    with st.spinner("Actualizando base de suscripciones..."):
+                        num = actualizar_suscripciones_batch(df_editado_sub)
+                        st.success(f"¡Se actualizaron {num} planes de clientes!")
+                        st.rerun()
