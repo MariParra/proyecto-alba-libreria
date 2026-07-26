@@ -18,14 +18,11 @@ def obtener_resumen_clientes():
 
 def sync_google_sheets():
     """
-    Sincroniza los clientes desde Google Sheets con un reparador de clave privada.
+    Sincroniza leyendo el 'Estado' desde Google Sheets y respetándolo.
     """
     try:
-        # --- LECTURA Y REPARACIÓN DE LA CLAVE ---
-        creds_dict = st.secrets["gcp_service_account"].to_dict()
-        
-        # Esta es la línea mágica: repara los saltos de línea de la clave privada
-        creds_dict["private_key"] = creds_dict["private_key"].replace('\\n', '\n')
+        # Obtenemos el diccionario puro desde Streamlit (sin alterar nada)
+        creds_dict = dict(st.secrets["gcp_service_account"])
         
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
@@ -33,11 +30,13 @@ def sync_google_sheets():
             worksheet = spreadsheet.worksheet("formulario")
             df = pd.DataFrame(worksheet.get_all_records())
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'. Recuerda compartir la hoja con el correo del robot.")
+        return
     except Exception as e:
-        st.error(f"Error de conexión: {e}. Revisa el formato de los secretos y el nombre de la hoja.")
+        st.error(f"Error al conectar con Google Sheets. Detalle: {e}")
         return
 
-    # ... (El resto del código para sincronizar la base de datos no cambia)
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando clientes en la base de datos..."):
@@ -62,7 +61,8 @@ def sync_google_sheets():
                     cliente_existente = res.data[0]
                     c_id = cliente_existente['cliente_id']
                     datos_a_actualizar = {}
-                    if estado_sync and estado_sync != cliente_existente.get('status', ''):
+                    
+                    if estado_sync and estado_sync != cliente_existente.get('status', '').upper():
                         datos_a_actualizar['status'] = estado_sync
                     if tel_sync and tel_sync != cliente_existente.get('telefono'):
                         datos_a_actualizar['telefono'] = tel_sync
