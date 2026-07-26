@@ -104,7 +104,8 @@ def comenzar_mes(ano, mes):
     if creados > 0: return True, f"Se iniciaron {creados} suscripciones."
     else: return False, "Todas las suscripciones ya estaban creadas."
 
-def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_prin_id, stock_prin, ano, mes, libros_extras=[], titulo_nuevo_extra="", valor_total_extras=0.0):
+# --- FUNCIÓN DE ASIGNACIÓN MEJORADA (CON ENVÍO INCORPORADO) ---
+def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_prin_id, stock_prin, ano, mes, libros_extras=[], titulo_nuevo_extra="", valor_total_extras=0.0, valor_envio=0.0):
     conn = get_db_connection()
     try:
         a_id, c_id = int(asignacion_id), int(cliente_id)
@@ -143,19 +144,22 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_prin_id, stock_
                     conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": le_id, "autor_historico": limpiar_texto(le_autor), "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"}).execute()
                 nombres_extras.append(extra_titulo)
 
-        # 4. Actualizar Valores y String de Extras
-        res_asig = conn.table("asignaciones").select("extras, valor_extras, valor_envio").eq("asignacion_id", a_id).execute()
+        # 4. Actualizar Valores y String de Extras (Sumando también el Envío)
+        res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", a_id).execute()
         extras_actual = str(res_asig.data[0].get('extras', ''))
         v_ext_actual = float(res_asig.data[0].get('valor_extras') or 0.0)
-        v_env_actual = float(res_asig.data[0].get('valor_envio') or 0.0)
         
         res_sub = conn.table("suscripciones").select("valor_suscripcion").eq("cliente_id", c_id).execute()
         val_sub = float(res_sub.data[0]['valor_suscripcion']) if res_sub.data else 0.0
         
         nuevo_valor_extras = v_ext_actual + float(valor_total_extras)
-        nuevo_monto_total = val_sub + v_env_actual + nuevo_valor_extras
+        nuevo_monto_total = val_sub + float(valor_envio) + nuevo_valor_extras
         
-        datos_update = {"valor_extras": nuevo_valor_extras, "monto_total": nuevo_monto_total}
+        datos_update = {
+            "valor_envio": float(valor_envio),
+            "valor_extras": nuevo_valor_extras,
+            "monto_total": nuevo_monto_total
+        }
         
         if nombres_extras:
             if "EXTRAS:" in extras_actual:
@@ -342,9 +346,6 @@ def mostrar_asignaciones():
     opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", ["📋 Gestión (Tabla Editable)", "📚 Asignar Libros y Extras", "🚀 Comenzar Mes", "🗑️ Eliminar/Quitar Libros", "🔒 Cierre de Mes"])
     st.markdown("---")
 
-    # ==========================================================
-    # 1. TABLA EDITABLE
-    # ==========================================================
     if opcion_menu == "📋 Gestión (Tabla Editable)":
         if df_mes.empty: st.warning("No hay registros para este mes.")
         else:
@@ -385,11 +386,12 @@ def mostrar_asignaciones():
             
             if not df_mostrar.equals(df_editado) and not mes_esta_cerrado:
                 if st.button("💾 Guardar Cambios (Recalcula Total)", type="primary"):
-                    num = actualizar_asignaciones_batch(df_editado, df_mes)
-                    st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
+                    with st.spinner("Calculando totales..."):
+                        num = actualizar_asignaciones_batch(df_editado, df_mes)
+                        st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
 
     # ==========================================================
-    # 2. ASIGNAR LIBROS Y EXTRAS (CON CONDICIÓN DE FILTRADO RESTAURADA)
+    # ASIGNAR LIBROS Y EXTRAS (CON COBRO DE ENVÍO INCLUIDO)
     # ==========================================================
     elif opcion_menu == "📚 Asignar Libros y Extras":
         if mes_esta_cerrado: st.warning("Mes cerrado.")
@@ -397,14 +399,11 @@ def mostrar_asignaciones():
             if df_mes.empty: st.info("No hay suscripciones.")
             else:
                 df_libros = cargar_libros_disponibles()
-                
-                # RESTAURADO: Buscamos únicamente clientes que tengan estado "⏳ PENDIENTE DE ASIGNAR"
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
                 
                 with st.container(border=True):
-                    st.markdown("### ✏️ Panel de Asignación (Principal y Extras)")
+                    st.markdown("### ✏️ Panel de Asignación (Principal, Extras y Envío)")
                     
-                    # RESTAURADO: El selector de clientes solo listará a quienes NO tengan libro asignado
                     lista_clientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
                     asig_manual_sel = st.selectbox("1. Seleccionar Cliente Sin Libro:", lista_clientes)
                     
@@ -416,6 +415,10 @@ def mostrar_asignaciones():
                     
                     nuevo_extra_tit = st.text_input("Crear Nuevo Libro Extra (Si no está en catálogo):")
                     nuevo_extra_precio = st.number_input("Precio Oficial del Nuevo Libro ($):", 0) if nuevo_extra_tit else 0
+                    
+                    # --- NUEVA CASILLA: COBRO DE ENVÍO INCORPORADA ---
+                    st.markdown("#### 🚚 Despacho y Envío")
+                    cobro_envio_manual = st.number_input("Monto de Despacho / Envío para esta caja ($):", min_value=0.0, step=500.0, value=0.0)
                     
                     st.markdown("---")
                     if libros_extras_sel or nuevo_extra_tit:
@@ -448,14 +451,13 @@ def mostrar_asignaciones():
                                 
                             ex, err = asignar_libro_a_suscripcion(
                                 id_asig, id_cliente, l_id_prin, stock_prin, ano_sel, mes_num,
-                                libros_extras_sel, nuevo_extra_tit, total_cobro_extras
+                                libros_extras_sel, nuevo_extra_tit, total_cobro_extras, cobro_envio_manual # Pasamos el valor del envío
                             )
                             if ex: st.success("¡Asignación guardada con éxito!"), st.rerun()
                             else: st.error(err)
                         else:
                             st.error("Debes seleccionar un cliente.")
 
-                # RESTAURADO: El bloque de asignación al azar para los pendientes
                 with st.container(border=True):
                     st.markdown("### 🎲 Asignación al Azar (Masiva)")
                     st.caption("Esta herramienta repartirá de forma automática libros disponibles a todos los clientes que aún digan '⏳ PENDIENTE DE ASIGNAR'.")
@@ -468,9 +470,6 @@ def mostrar_asignaciones():
                         else:
                             st.warning("No hay clientes pendientes de asignar este mes.")
 
-    # ==========================================================
-    # 3. COMENZAR MES
-    # ==========================================================
     elif opcion_menu == "🚀 Comenzar Mes":
         if mes_esta_cerrado: st.warning("Mes cerrado.")
         else:
@@ -480,9 +479,6 @@ def mostrar_asignaciones():
                 if ex: st.success(msg), st.rerun()
                 else: st.warning(msg)
 
-    # ==========================================================
-    # 4. ELIMINAR O QUITAR LIBROS
-    # ==========================================================
     elif opcion_menu == "🗑️ Eliminar/Quitar Libros":
         if mes_esta_cerrado: st.warning("Mes cerrado.")
         else:
@@ -553,9 +549,6 @@ def mostrar_asignaciones():
             else:
                 st.info("No hay registros.")
 
-    # ==========================================================
-    # 5. CIERRE DE MES
-    # ==========================================================
     elif opcion_menu == "🔒 Cierre de Mes":
         if mes_esta_cerrado:
             st.success(f"El mes {mes_sel} {ano_sel} está **CERRADO**.")
