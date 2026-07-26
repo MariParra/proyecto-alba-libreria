@@ -4,13 +4,30 @@ import pandas as pd
 import json
 from utilidades import get_db_connection, limpiar_texto
 
+# --- NUEVA FUNCIÓN: RESUMEN DE CLIENTES ---
+def obtener_resumen_clientes():
+    conn = get_db_connection()
+    try:
+        res = conn.table("clientes").select("status").execute()
+        df = pd.DataFrame(res.data)
+        if df.empty: return 0, 0, 0
+        
+        total = len(df)
+        activos = len(df[df['status'] == 'ACTIVA'])
+        inactivos = len(df[df['status'] == 'INACTIVO'])
+        
+        return total, activos, inactivos
+    except:
+        return 0, 0, 0
+
 def sync_google_sheets():
     """
     Sincroniza leyendo explícitamente el 'Estado' desde Google Sheets y respetándolo.
     """
     try:
+        # Leemos las credenciales (strict=False ayuda a procesar los \n del JSON crudo)
         creds_json_str = st.secrets["gcp_service_account"]["credentials"]
-        creds_dict = json.loads(creds_json_str)
+        creds_dict = json.loads(creds_json_str, strict=False)
         
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
@@ -25,7 +42,7 @@ def sync_google_sheets():
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando clientes en la base de datos..."):
-            # Buscar columnas dinámicamente según lo que me indicaste
+            # Buscar columnas dinámicamente
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_estado = next((c for c in df.columns if 'estado' in c.lower() or 'status' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower()), None)
@@ -73,7 +90,7 @@ def sync_google_sheets():
                 
                 procesados += 1
 
-        st.success(f"🎉 Sync completado. Total: {procesados} | Nuevos: {nuevos} | Actualizados: {actualizados}")
+        st.success(f"🎉 Sync completado. Total procesados: {procesados} | Clientes Nuevos Creados: {nuevos} | Clientes Actualizados: {actualizados}")
         st.cache_data.clear()
 
     except Exception as e:
@@ -81,8 +98,21 @@ def sync_google_sheets():
 
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
+    
+    # --- NUEVO: MÉTRICAS DE CLIENTES ---
+    total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
+    st.markdown("### 👥 Resumen del Directorio")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Clientes Registrados", total_cli)
+    c2.metric("🟢 Suscripciones (ACTIVA)", activos_cli)
+    c3.metric("🔴 Clientes (INACTIVO)", inactivos_cli)
+    
+    st.markdown("---")
+    
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización con Google Sheets")
         st.info("💡 **Lógica:** El sistema leerá la columna 'Estado cliente' y respetará esa decisión. Si alguien ya existía, su estado se actualizará a lo que diga la planilla.")
         if st.button("🚀 Iniciar Sincronización de Clientes", type="primary", use_container_width=True):
             sync_google_sheets()
+            # Refrescamos la pantalla para que las métricas de arriba se actualicen al instante
+            st.rerun()

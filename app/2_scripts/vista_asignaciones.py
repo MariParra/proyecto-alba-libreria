@@ -112,7 +112,7 @@ def gestionar_extras_y_cobros(asignacion_id, cliente_id, ano, mes, valor_envio, 
         a_id, c_id = int(asignacion_id), int(cliente_id)
         nombres_extras = []
         
-        # 1. Descontar stock extras del catálogo (No sumamos precio aquí, usamos el que pasaste por UI)
+        # 1. Descontar stock extras del catálogo
         for titulo in libros_extras_cat:
             res_le = conn.table("libros").select("libro_id, stock, autor").eq("titulo", titulo).execute()
             if res_le.data:
@@ -127,9 +127,32 @@ def gestionar_extras_y_cobros(asignacion_id, cliente_id, ano, mes, valor_envio, 
                     }).execute()
                 nombres_extras.append(titulo)
                 
-        # 2. Sumar texto libre
+        # 2. Gestionar texto libre (CREAR EN INVENTARIO SI NO EXISTE)
         if texto_libre.strip():
-            nombres_extras.append(limpiar_texto(texto_libre))
+            items_libres = [x.strip() for x in texto_libre.split(",")]
+            for item in items_libres:
+                if not item: continue
+                titulo_cl = limpiar_texto(item)
+                
+                res_exist = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_cl).execute()
+                if res_exist.data:
+                    le_id, le_stock = res_exist.data[0]['libro_id'], res_exist.data[0]['stock']
+                    conn.table("libros").update({"stock": le_stock - 1}).eq("libro_id", le_id).execute()
+                else:
+                    # Lo creamos en el inventario
+                    res_new = conn.table("libros").insert({
+                        "titulo": titulo_cl, "autor": "EXTRA/NUEVO", "precio": 0, "stock": 0
+                    }).execute()
+                    le_id = res_new.data[0]['libro_id']
+                
+                res_hist_le = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", le_id).execute()
+                if not res_hist_le.data:
+                    conn.table("librero_historico").insert({
+                        "cliente_id": c_id, "libro_id": le_id,
+                        "autor_historico": "EXTRA/NUEVO", "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"
+                    }).execute()
+                
+                nombres_extras.append(titulo_cl)
             
         # 3. Datos actuales y recalcular totales
         res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", a_id).execute()
@@ -139,7 +162,6 @@ def gestionar_extras_y_cobros(asignacion_id, cliente_id, ano, mes, valor_envio, 
         res_sub = conn.table("suscripciones").select("valor_suscripcion").eq("cliente_id", c_id).execute()
         val_sub = float(res_sub.data[0]['valor_suscripcion']) if res_sub.data else 0.0
         
-        # AQUÍ USAMOS EL VALOR QUE ESCRIBISTE EN LA PANTALLA
         nuevo_valor_extras = valor_extras_viejos + float(valor_total_extras_a_sumar)
         nuevo_monto_total = val_sub + float(valor_envio) + nuevo_valor_extras
         
@@ -179,8 +201,30 @@ def asignar_libro_a_suscripcion(asignacion_id, cliente_id, libro_id, titulo, aut
                     }).execute()
                 nombres_extras.append(extra_titulo)
 
+        # Gestionar texto libre (CREAR EN INVENTARIO SI NO EXISTE)
         if extras_texto_libre.strip():
-            nombres_extras.append(limpiar_texto(extras_texto_libre))
+            items_libres = [x.strip() for x in extras_texto_libre.split(",")]
+            for item in items_libres:
+                if not item: continue
+                titulo_cl = limpiar_texto(item)
+                
+                res_exist = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_cl).execute()
+                if res_exist.data:
+                    le_id, le_stock = res_exist.data[0]['libro_id'], res_exist.data[0]['stock']
+                    conn.table("libros").update({"stock": le_stock - 1}).eq("libro_id", le_id).execute()
+                else:
+                    res_new = conn.table("libros").insert({
+                        "titulo": titulo_cl, "autor": "EXTRA/NUEVO", "precio": 0, "stock": 0
+                    }).execute()
+                    le_id = res_new.data[0]['libro_id']
+                
+                res_hist_le = conn.table("librero_historico").select("registro_id").eq("cliente_id", id_cliente_py).eq("libro_id", le_id).execute()
+                if not res_hist_le.data:
+                    conn.table("librero_historico").insert({
+                        "cliente_id": id_cliente_py, "libro_id": le_id,
+                        "autor_historico": "EXTRA/NUEVO", "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"
+                    }).execute()
+                nombres_extras.append(titulo_cl)
 
         res_asig = conn.table("asignaciones").select("extras, valor_extras, valor_envio").eq("asignacion_id", id_asig_py).execute()
         extras_actual = res_asig.data[0].get('extras', '') or ''
@@ -360,10 +404,7 @@ def mostrar_asignaciones():
                     col_m3, col_m4 = st.columns(2)
                     extras_libres_txt = col_m3.text_input("➕ Libros Nuevos / Extras fuera de catálogo:")
                     
-                    # Calcular precio sugerido en vivo según el catálogo
                     precio_sugerido = sum([float(df_libros[df_libros['titulo'] == extr].iloc[0]['precio']) for extr in extras_cat_sel])
-                    
-                    # Esta es la celda mágica que te permite modificar el precio final de los extras
                     precio_total_extras = col_m4.number_input("💰 Total a cobrar por TODOS los extras (Modificable):", value=float(precio_sugerido), step=500.0)
                     
                     if st.button("Actualizar Caja del Cliente", type="primary"):
@@ -445,9 +486,7 @@ def mostrar_asignaciones():
                         st.markdown("**Libros Nuevos / Extras (No en Catálogo)**")
                         extras_texto_libre = st.text_input("Escribe los títulos (Ej: Harry Potter 4, stickers):")
                         
-                        # Calculamos precio sugerido al instante
                         precio_sugerido = sum([float(df_libros[df_libros['titulo'] == extr].iloc[0]['precio']) for extr in libros_extras_sel])
-                        
                         valor_total_extras = st.number_input("💰 Valor TOTAL a cobrar por estos extras (Modificable):", value=float(precio_sugerido), step=500.0)
                         
                         if st.button("Asignar estos libros", type="primary"):
