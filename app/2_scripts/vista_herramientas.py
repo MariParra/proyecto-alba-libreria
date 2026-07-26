@@ -4,6 +4,7 @@ import pandas as pd
 import json
 import base64
 from utilidades import get_db_connection, limpiar_texto
+import time
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -115,19 +116,28 @@ def sync_google_sheets():
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 
+import time # <--- Asegúrate de agregar import time en la parte de arriba de tu script si no lo tienes
+
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
+    
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Clientes Registrados", total_cli)
     c2.metric("🟢 Suscripciones (ACTIVA)", activos_cli)
-    c3.metric("🔴 Clientes (INACTIVO)", inactivos_cli)
+    c3.metric("🔴 Clientes (NO ACTIVA)", inactivos_cli) # Actualizado con tu nueva regla
     st.markdown("---")
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización Total con Google Sheets")
         st.info("💡 **Lógica 2.0:** El sistema leerá el Excel y actualizará los datos de contacto y las preferencias de suscripción.")
+        
         if st.button("🚀 Iniciar Sincronización de Clientes y Suscripciones", type="primary", use_container_width=True):
-            sync_google_sheets()
-            st.rerun()
+            exito = sync_google_sheets()
+            
+            if exito:
+                # Si todo salió bien, espera 3 segundos para que leas el mensaje y luego recarga
+                time.sleep(5)
+                st.rerun()
+            # Si 'exito' es False (hubo error), NO hace st.rerun(), dejando el error fijo en pantalla.
