@@ -9,6 +9,8 @@ from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
 from vista_clientes import mostrar_clientes
 from vista_asignaciones import mostrar_asignaciones
+from vista_dashboard import mostrar_dashboard
+from vista_herramientas import mostrar_herramientas
 
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 
@@ -125,8 +127,18 @@ else:
         if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
             st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
             st.rerun()
+        st.markdown("---") # Un separador visual
+        
+        if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
+            st.session_state.pagina_actual = "📊 DASHBOARD"
+            st.rerun()
+            
+        if st.button("🛠️ HERRAMIENTAS Y SYNC", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
+            st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
+            st.rerun()
             
         st.markdown("---")
+        
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.clear()
             st.rerun()
@@ -142,3 +154,7 @@ else:
             mostrar_clientes()
         elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
             mostrar_asignaciones()
+        elif st.session_state.pagina_actual == "📊 DASHBOARD":
+            mostrar_dashboard()
+        elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
+            mostrar_herramientas()
