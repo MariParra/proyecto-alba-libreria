@@ -24,10 +24,18 @@ def sync_google_sheets():
     Sincronización Total (Clientes + Suscripciones) decodificando el JSON completo desde Base64.
     """
     try:
-        # 1. Traemos el Base64 gigante desde la variable de secretos GCP_B64
+        # --- VERIFICACIÓN DE LLAVES EN VIVO ---
+        llaves_visibles = list(st.secrets.keys())
+        
+        # Si no encuentra GCP_B64, nos mostrará qué variables sí puede ver
+        if "GCP_B64" not in st.secrets:
+            st.error(f"⚠️ El servidor de Streamlit no encuentra 'GCP_B64'. Las variables que sí puede ver actualmente son: {llaves_visibles}")
+            st.info("💡 Consejo: Realiza un 'Reboot' a tu aplicación desde el panel de Streamlit Cloud para que cargue los Secrets nuevos.")
+            return
+            
         b64_str = st.secrets["GCP_B64"]
         
-        # 2. Lo decodificamos de vuelta a su formato original JSON
+        # Decodificación de vuelta a JSON
         json_str = base64.b64decode(b64_str).decode('utf-8')
         creds_dict = json.loads(json_str)
 
@@ -46,7 +54,6 @@ def sync_google_sheets():
     conn = get_db_connection()
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
-            # Lógica de sincronización (sin cambios)
             col_nombre = next((c for c in df.columns if 'nombre' in c.lower()), df.columns[0])
             col_estado = next((c for c in df.columns if 'estado' in c.lower() or 'status' in c.lower()), None)
             col_telefono = next((c for c in df.columns if 'tel' in c.lower() or 'fono' in c.lower() or 'celular' in c.lower()), None)
