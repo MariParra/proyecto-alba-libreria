@@ -119,7 +119,7 @@ def mostrar_herramientas():
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización con Google Sheets")
-        st.info("💡 **Lógica de Sincronización:** Se actualizarán los datos y estados respetando exactamente lo que indique la columna **Estado cliente** de la planilla. RUT, dirección y datos limpios se mantienen intactos.")
+        st.info("💡 **Lógica de Sincronización:** Se actualizarán o registrarán los clientes respetando el valor de la columna **Estado cliente** de Google Sheets. Los datos de contacto limpios y existentes en tu base de datos se mantendrán protegidos.")
         
         if st.button("🚀 Iniciar Sincronización de Clientes", type="primary", use_container_width=True):
             sync_google_sheets()
