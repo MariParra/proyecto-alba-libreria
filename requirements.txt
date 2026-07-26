@@ -1,6 +1,0 @@
-streamlit
-streamlit-oauth
-pandas
-python-dotenv
-packaging
-st-supabase-connection
