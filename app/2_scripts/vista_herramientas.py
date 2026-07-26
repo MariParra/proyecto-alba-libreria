@@ -14,7 +14,7 @@ def obtener_resumen_clientes():
         if df.empty: return 0, 0, 0
         total = len(df)
         activos = len(df[df['status'] == 'ACTIVA'])
-        inactivos = len(df[df['status'] == 'INACTIVO'])
+        inactivos = len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
     except:
         return 0, 0, 0
