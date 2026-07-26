@@ -12,7 +12,7 @@ app/5_libreros/
 # --- Carpetas Deprecadas e Info ---
 info/
 deprecated_app/
-
+app/config
 # --- Archivos Temporales de Python ---
 __pycache__/
 *.pyc
