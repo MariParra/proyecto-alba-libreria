@@ -404,8 +404,8 @@ def mostrar_asignaciones():
                 with st.container(border=True):
                     st.markdown("### ✏️ Panel de Asignación (Principal, Extras y Envío)")
                     
-                    lista_clientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
-                    asig_manual_sel = st.selectbox("1. Seleccionar Cliente Sin Libro:", lista_clientes)
+                    lista_clientes = [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']} ({'SIN LIBRO' if x['titulo_libro']=='⏳ PENDIENTE DE ASIGNAR' else 'YA TIENE LIBRO'})", axis=1).tolist()
+                    asig_manual_sel = st.selectbox("1. Seleccionar Cliente (Para libro principal o agregar extras):", lista_clientes)
                     
                     st.markdown("#### 📖 Libro Principal")
                     libro_manual_sel = st.selectbox("Seleccionar Libro Principal:", [""] + df_libros['titulo'].tolist())
