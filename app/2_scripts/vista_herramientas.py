@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
+import base64  # <--- NUEVA IMPORTACIÓN
 from utilidades import get_db_connection, limpiar_texto
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
@@ -16,17 +17,38 @@ def obtener_resumen_clientes():
     except:
         return 0, 0, 0
 
+# --- TRADUCTOR Y DECODIFICADOR BASE64 ---
+def obtener_credenciales_google():
+    """Decodifica la clave privada desde Base64 y construye las credenciales."""
+    sec = st.secrets["gcp_service_account"]
+    
+    # Decodificar la clave privada desde Base64 a su formato original con saltos de línea
+    clave_b64 = sec.get("private_key_b64", "")
+    if clave_b64:
+        clave_privada_limpia = base64.b64decode(clave_b64).decode('utf-8')
+    else:
+        # Fallback de emergencia por si se usó la normal
+        clave_privada_limpia = str(sec.get("private_key", "")).replace('\\n', '\n')
+
+    return {
+        "type": str(sec.get("type", "")),
+        "project_id": str(sec.get("project_id", "")),
+        "private_key_id": str(sec.get("private_key_id", "")),
+        "private_key": clave_privada_limpia, # Aquí va la clave ya decodificada
+        "client_email": str(sec.get("client_email", "")),
+        "client_id": str(sec.get("client_id", "")),
+        "auth_uri": str(sec.get("auth_uri", "")),
+        "token_uri": str(sec.get("token_uri", "")),
+        "auth_provider_x509_cert_url": str(sec.get("auth_provider_x509_cert_url", "")),
+        "client_x509_cert_url": str(sec.get("client_x509_cert_url", ""))
+    }
+
 def sync_google_sheets():
     """
-    Sincroniza los clientes desde Google Sheets utilizando la estructura nativa oficial de Streamlit Secrets.
+    Sincroniza los clientes desde Google Sheets utilizando credenciales blindadas en Base64.
     """
     try:
-        # --- SOLUCIÓN DEL FORO: Convertir explícitamente a un diccionario real de Python ---
-        creds_dict = st.secrets["gcp_service_account"].to_dict()
-        
-        # Opcional: nos aseguramos de que no queden caracteres de escape rotos en la private_key
-        if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace('\\n', '\n')
+        creds_dict = obtener_credenciales_google()
         
         with st.spinner("Conectando con Google Sheets..."):
             gc = gspread.service_account_from_dict(creds_dict)
@@ -34,11 +56,12 @@ def sync_google_sheets():
             worksheet = spreadsheet.worksheet("formulario")
             df = pd.DataFrame(worksheet.get_all_records())
         st.success("✅ ¡Conexión exitosa con Google Sheets!")
+        
     except gspread.exceptions.SpreadsheetNotFound:
         st.error("❌ Error: No se encontró la hoja 'INSCRIPCIONES CAJA MENSUAL'. Recuerda compartir la hoja con el correo del robot ('client_email').")
         return
     except Exception as e:
-        st.error(f"Error al conectar con Google Sheets. Detalle: {e}")
+        st.error(f"Error de conexión con Google: {e}")
         return
 
     conn = get_db_connection()
@@ -85,7 +108,7 @@ def sync_google_sheets():
                 
                 procesados += 1
 
-        st.success(f"🎉 Sync completado. Total: {procesados} | Nuevos: {nuevos} | Actualizados: {actualizados}")
+        st.success(f"🎉 Sync completado. Total procesados: {procesados} | Clientes Nuevos Creados: {nuevos} | Clientes Actualizados: {actualizados}")
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Error crítico durante la sincronización: {e}")
@@ -95,9 +118,9 @@ def mostrar_herramientas():
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Clientes", total_cli)
-    c2.metric("🟢 Activos", activos_cli)
-    c3.metric("🔴 Inactivos", inactivos_cli)
+    c1.metric("Total Clientes Registrados", total_cli)
+    c2.metric("🟢 Suscripciones (ACTIVA)", activos_cli)
+    c3.metric("🔴 Clientes (INACTIVO)", inactivos_cli)
     st.markdown("---")
     
     with st.container(border=True):
