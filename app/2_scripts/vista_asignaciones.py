@@ -61,16 +61,23 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
     try:
         if cerrar:
-            datos = {"ano": int(ano), "mes": int(mes), "fecha_cierre": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            # Usamos isoformat() que es el estándar perfecto para campos 'timestamp'
+            datos = {
+                "ano": int(ano), 
+                "mes": int(mes), 
+                "fecha_cierre": datetime.now().isoformat()
+            }
             conn.table("meses_cerrados").insert(datos).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido CERRADO con éxito."
         else:
+            # Al reabrir, borramos el registro. Al volver a cerrar, se creará uno nuevo con la nueva hora.
             conn.table("meses_cerrados").delete().eq("ano", int(ano)).eq("mes", int(mes)).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido REABIERTO."
     except Exception as e:
         return False, str(e)
+
 
 # --- ACCIONES ---
 def comenzar_mes(ano, mes):
