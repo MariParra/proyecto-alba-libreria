@@ -12,10 +12,14 @@ from vista_clientes import mostrar_clientes
 from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
-from vista_libreros import mostrar_importacion_libreros  # Importación del nuevo módulo
+from vista_libreros import mostrar_importacion_libreros
+
+# Nuevas importaciones añadidas
+from vista_creacion_masiva import mostrar_creacion_masiva_libros
+from vista_actualizacion_masiva import mostrar_actualizacion_masiva
+from vista_reportes import mostrar_reportes 
 
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
-
 load_dotenv()
 
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -107,7 +111,7 @@ else:
         st.markdown(mensaje_bienvenida_html, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.markdown("## 🧭 NAVEGACIÓN")
+        st.markdown("### 🧭 NAVEGACIÓN")
         
         if "pagina_actual" not in st.session_state:
             st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
@@ -128,8 +132,6 @@ else:
             st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
             st.rerun()
             
-        st.markdown("---") # Un separador visual
-        
         if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
             st.session_state.pagina_actual = "📊 DASHBOARD"
             st.rerun()
@@ -138,11 +140,26 @@ else:
             st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
             st.rerun()
             
-        # Corregido: Limpiamos espacio al inicio del texto y cambiamos la validación del color de "Herramientas" a "Libreros"
         if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
             st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
             st.rerun()
+
+        # --- NUEVA SECCIÓN DE ADMINISTRACIÓN AVANZADA ---
+        st.markdown("---")
+        st.markdown("### ⚙️ ADMIN AVANZADA")
+        
+        if st.button("📥 REPORTES Y DESCARGAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS" else "secondary"):
+            st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
+            st.rerun()
+
+        if st.button("✨ CREACIÓN MASIVA (LIBROS)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS)" else "secondary"):
+            st.session_state.pagina_actual = "✨ CREACIÓN MASIVA (LIBROS)"
+            st.rerun()
             
+        if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
+            st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
+            st.rerun()
+
         st.markdown("---")
         
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
@@ -166,3 +183,11 @@ else:
             mostrar_herramientas()
         elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
             mostrar_importacion_libreros()
+            
+        # --- NUEVAS RUTAS AÑADIDAS ---
+        elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
+            mostrar_reportes()
+        elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS)":
+            mostrar_creacion_masiva_libros()
+        elif st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA":
+            mostrar_actualizacion_masiva()
