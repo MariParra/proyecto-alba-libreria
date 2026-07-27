@@ -690,9 +690,13 @@ def mostrar_asignaciones():
                 )
                 
                 if st.button("Crear Registros Faltantes del Mes", type="primary", use_container_width=True):
+                    # 1. Limpiamos la caché de las funciones relevantes ANTES de hacer nada.
+                    cargar_asignaciones_mes.clear()
+                    cargar_clientes_suscritos.clear()
+                    df_mes_fresco = cargar_asignaciones_mes(ano_sel, mes_num)
                     # Creamos un espacio para la barra de progreso
                     progress_placeholder = st.empty()
-                    ex, msg = comenzar_mes(ano_sel, mes_num, df_mes, progress_placeholder)
+                    ex, msg = comenzar_mes(ano_sel, mes_num, df_mes_fresco, progress_placeholder)
                     
                     if ex: 
                         st.success(msg)
