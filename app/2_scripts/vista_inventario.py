@@ -112,7 +112,7 @@ def mostrar_inventario():
         if st.button("🔄 Refrescar Datos", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
-
+   df_inventario = cargar_datos_completos()
     # --- FILTROS GLOBALES ---
     with st.expander("🔍 Buscador y Filtros", expanded=False):
         busqueda_titulo = st.text_input("Buscar por Título:", placeholder="Ej: El Señor de los Anillos")
