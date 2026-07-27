@@ -1,15 +1,61 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import json
+
 from utilidades import get_db_connection, limpiar_texto
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
 @st.cache_data(ttl=60)
-def cargar_libros_caja():
+def cargar_historial():
+    """
+    Carga el historial de ventas y procesa la columna 'libros_vendidos'
+    para que sea legible, ya sea en formato de texto antiguo o en JSON nuevo.
+    """
     conn = get_db_connection()
-    response = conn.table("libros").select("libro_id, titulo, autor, precio, stock").execute()
-    return pd.DataFrame(response.data)
+    try:
+        res_ventas = conn.table("registro_ventas").select("*").order("venta_id", desc=True).execute()
+        if not res_ventas.data:
+            return pd.DataFrame()
+
+        df_ventas = pd.DataFrame(res_ventas.data)
+        
+        # --- LÓGICA INTELIGENTE DE VISUALIZACIÓN ---
+        def formatear_libros(libros_data):
+            if not isinstance(libros_data, str) or not libros_data.strip():
+                return "Sin Detalle"
+            
+            # Intenta leerlo como JSON
+            if libros_data.strip().startswith('['):
+                try:
+                    lista_libros = json.loads(libros_data)
+                    # Extrae "cantidad x titulo" de cada libro en el JSON
+                    return " | ".join([f"{item.get('cantidad', 1)} x {item.get('titulo', 'N/A')}" for item in lista_libros])
+                except json.JSONDecodeError:
+                    # Si falla el parseo de JSON, devuelve el texto original
+                    return libros_data
+            else:
+                # Si no es un JSON, es el formato de texto antiguo, lo devolvemos tal cual
+                return libros_data
+
+        df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
+        # ----------------------------------------------
+
+        # Unir con nombres de clientes
+        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+        if res_clientes.data:
+            df_clientes = pd.DataFrame(res_clientes.data)
+            df_ventas = df_ventas.merge(df_clientes, on='cliente_id', how='left')
+            df_ventas.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
+            df_ventas['nombre_cliente'] = df_ventas['nombre_cliente'].fillna('Cliente Eliminado')
+        else:
+            df_ventas['nombre_cliente'] = 'Sin Cliente'
+            
+        return df_ventas
+    except Exception as e:
+        st.error(f"Error cargando historial: {e}")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def cargar_clientes():
