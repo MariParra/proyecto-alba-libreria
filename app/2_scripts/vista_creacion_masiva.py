@@ -74,93 +74,56 @@ def generar_plantilla_ventas():
             worksheet.set_column(i, i, 20)
     return output.getvalue()
 
-def procesar_ventas_masivas(df):
+def procesar_nuevos_libros(df):
     conn = get_db_connection()
-    exitos, errores = 0, []
-
-    # Mapas para cruzar datos
-    res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
-    res_libros = conn.table("libros").select("libro_id, titulo, autor").execute()
+    exitos, duplicados, errores = 0, 0, []
     
-    map_clientes = {normalizar_texto(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
-    map_libros = {normalizar_texto(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
-
-    # Limpieza de nulos
-    df['Valor_Envio'] = df['Valor_Envio'].fillna(0)
-    df['Cantidad'] = df['Cantidad'].fillna(1)
-    df['Precio_Unitario'] = df['Precio_Unitario'].fillna(0)
+    res_libros = conn.table("libros").select("titulo, autor").execute()
+    catalogo_actual = [(str(l['titulo']).strip().lower(), str(l.get('autor', '')).strip().lower()) for l in res_libros.data] if res_libros.data else []
     
-    # LÓGICA INTELIGENTE: Agrupar filas que tengan la misma Fecha y Cliente en 1 sola venta
-    grupos = df.groupby(['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente'])
+    barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
+    total_filas = len(df)
     
-    barra_progreso = st.progress(0, text="Procesando ventas...")
-    total_grupos = len(grupos)
-    actual = 0
-
-    for (fecha_raw, cliente_nombre), grupo in grupos:
-        actual += 1
-        barra_progreso.progress(actual / total_grupos, text=f"Procesando venta {actual} de {total_grupos}...")
+    # Definimos cuáles son las columnas de texto que deben limpiarse
+    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion']
+    
+    for indice, fila in df.iterrows():
+        barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        try:
-            # 1. Validar Cliente
-            cliente_norm = normalizar_texto(cliente_nombre)
-            if cliente_norm not in map_clientes:
-                errores.append(f"Venta {fecha_raw}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
-                continue
-            cliente_id = map_clientes[cliente_norm]
-
-            # 2. Construir la lista de libros de esta boleta
-            libros_vendidos = []
-            subtotal = 0.0
-
-            for _, fila in grupo.iterrows():
-                titulo = str(fila.get('Titulo_Libro', ''))
-                titulo_norm = normalizar_texto(titulo)
-                
-                libro_info = map_libros.get(titulo_norm)
-                libro_id = int(libro_info['libro_id']) if libro_info else None
-                autor_libro = libro_info['autor'] if libro_info else "Desconocido"
-
-                cant = int(fila['Cantidad'])
-                precio_u = float(fila['Precio_Unitario'])
-                
-                libros_vendidos.append({
-                    "libro_id": libro_id,
-                    "titulo": titulo,
-                    "autor": autor_libro,
-                    "cantidad": cant,
-                    "precio": precio_u
-                })
-                subtotal += (cant * precio_u)
-
-            # 3. Tomar datos generales de la primera fila del grupo
-            valor_envio = float(grupo['Valor_Envio'].iloc[0])
-            metodo_envio = str(grupo['Metodo_Envio'].iloc[0]) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "No especificado"
-            comentario = str(grupo['Comentario'].iloc[0]) if pd.notna(grupo['Comentario'].iloc[0]) else "Importación Masiva"
-            fecha_str = str(fecha_raw).split()[0] # Cortar si trae horas (Ej. '2023-05-12 00:00')
+        # Validamos usando la función que quita tildes y pone en mayúsculas
+        titulo_limpio = normalizar_texto(fila.get('titulo', ''))
+        autor_limpio = normalizar_texto(fila.get('autor', ''))
+        
+        if not titulo_limpio:
+            errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
+            continue
             
-            monto_final = subtotal + valor_envio
-
-            # 4. Insertar la Venta Consolidada
-            venta_data = {
-                "cliente_id": cliente_id,
-                "fecha_venta": fecha_str,
-                "libros_vendidos": json.dumps(libros_vendidos),
-                "subtotal_libros": subtotal,
-                "valor_envio": valor_envio,
-                "monto_final": monto_final,
-                "metodo_envio": metodo_envio,
-                "comentario": comentario
-            }
-
-            conn.table("registro_ventas").insert(venta_data).execute()
+        if (titulo_limpio.lower(), autor_limpio.lower()) in catalogo_actual:
+            duplicados += 1
+            errores.append(f"Fila {indice + 2}: El libro '{titulo_limpio}' ya existe.")
+            continue
+            
+        try:
+            nuevo_libro = {}
+            for col in df.columns:
+                if pd.isna(fila[col]):
+                    nuevo_libro[col] = None
+                elif col in columnas_texto:
+                    # --- 🛠️ LA MAGIA OCURRE AQUÍ ---
+                    # Aplicamos la normalización (UPPER y sin tildes) a todos los textos
+                    nuevo_libro[col] = normalizar_texto(fila[col])
+                else:
+                    # Para columnas numéricas como stock o precio, guardamos el valor tal cual
+                    nuevo_libro[col] = fila[col]
+                    
+            conn.table("libros").insert(nuevo_libro).execute()
             exitos += 1
-
+            catalogo_actual.append((titulo_limpio.lower(), autor_limpio.lower()))
         except Exception as e:
-            errores.append(f"Error en Venta de {cliente_nombre} ({fecha_raw}): {str(e)}")
-
+            errores.append(f"Fila {indice + 2} ('{titulo_limpio}'): Error -> {str(e)}")
+            
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
-    return exitos, errores
+    return exitos, duplicados, errores
 
 # ==========================================
 # --- VISTA PRINCIPAL ---
