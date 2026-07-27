@@ -128,8 +128,18 @@ def mostrar_inventario():
     with col_inv1:
         st.title("📦 Gestión de Inventario")
     with col_inv2:
-        if st.button("🔄 Refrescar Datos", use_container_width=True):
+        if st.button("🔄 Refrescar Datos", type="secondary", use_container_width=True):
+            # 1. Limpiamos la caché de datos
             st.cache_data.clear()
+            
+            # 2. Mostramos el mensaje de confirmación
+            st.toast("✅ ¡Datos actualizados! La aplicación ha sido refrescada.", icon="🔄")
+            
+            # 3. Esperamos un instante para que el mensaje sea visible antes de recargar
+            import time
+            time.sleep(1) 
+            
+            # 4. Recargamos la página
             st.rerun()
     df_inventario = cargar_datos_completos()
     # --- FILTROS GLOBALES ---
