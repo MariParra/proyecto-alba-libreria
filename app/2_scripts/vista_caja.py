@@ -6,7 +6,17 @@ import json
 from utilidades import get_db_connection, limpiar_texto
 
 # --- FUNCIONES DE BASE DE DATOS ---
-
+@st.cache_data(ttl=60)
+def cargar_libros_caja():
+    """Carga los libros con su información esencial para la venta."""
+    conn = get_db_connection()
+    try:
+        response = conn.table("libros").select("libro_id, titulo, autor, precio, stock").execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error cargando libros para la caja: {e}")
+        return pd.DataFrame()
+    
 @st.cache_data(ttl=60)
 def cargar_historial():
     """
