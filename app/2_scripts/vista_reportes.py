@@ -5,17 +5,32 @@ from utilidades import get_db_connection
 
 # --- FUNCIÓN DE UTILIDAD PARA GENERAR EXCEL ---
 def convertir_df_a_excel(df):
-    """Convierte un DataFrame de pandas a un archivo Excel en memoria."""
+    """
+    Convierte un DataFrame de pandas a un archivo Excel en memoria.
+    Esta versión es más robusta y maneja correctamente los valores nulos.
+    """
     output = io.BytesIO()
     # Usamos xlsxwriter como motor para generar el archivo
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Datos')
         
-        # UX: Auto-ajustar el ancho de las columnas para que se lea bien al abrir
+        # UX: Auto-ajustar el ancho de las columnas para que se lea bien
         worksheet = writer.sheets['Datos']
+        
         for i, col in enumerate(df.columns):
-            column_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-            worksheet.set_column(i, i, column_len)
+            # Lógica mejorada para calcular el ancho de la columna
+            # 1. Rellenamos los valores nulos con una cadena vacía para evitar errores
+            # 2. Convertimos todo a string para poder medir la longitud
+            # 3. Obtenemos el largo máximo entre los datos y el título de la columna
+            try:
+                max_len = max(
+                    df[col].fillna('').astype(str).map(len).max(), # Largo máximo del contenido
+                    len(str(col)) # Largo del título de la columna
+                ) + 2 # Añadimos un pequeño margen
+                worksheet.set_column(i, i, max_len)
+            except (ValueError, TypeError):
+                # Si la columna está completamente vacía o tiene un error, usamos un ancho por defecto
+                worksheet.set_column(i, i, 15)
             
     return output.getvalue()
 
