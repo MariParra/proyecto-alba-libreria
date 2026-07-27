@@ -30,32 +30,43 @@ def procesar_nuevos_libros(df):
     exitos, duplicados, errores = 0, 0, []
     
     res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(str(l['titulo']).strip().lower(), str(l.get('autor', '')).strip().lower()) for l in res_libros.data] if res_libros.data else []
+    catalogo_actual = [(normalizar_texto(l['titulo']), normalizar_texto(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
     total_filas = len(df)
     
+    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion']
+    
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
-        titulo_excel = str(fila.get('titulo', '')).strip()
-        autor_excel = str(fila.get('autor', '')).strip()
         
-        if not titulo_excel or titulo_excel.lower() == 'nan':
+        titulo_limpio = normalizar_texto(fila.get('titulo', ''))
+        autor_limpio = normalizar_texto(fila.get('autor', ''))
+        
+        if not titulo_limpio:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
             continue
             
-        if (titulo_excel.lower(), autor_excel.lower()) in catalogo_actual:
+        if (titulo_limpio, autor_limpio) in catalogo_actual:
             duplicados += 1
-            errores.append(f"Fila {indice + 2}: El libro '{titulo_excel}' ya existe.")
+            errores.append(f"Fila {indice + 2}: El libro '{titulo_limpio}' ya existe.")
             continue
             
         try:
-            nuevo_libro = {col: (None if pd.isna(fila[col]) else fila[col]) for col in df.columns}
+            nuevo_libro = {}
+            for col in df.columns:
+                if pd.isna(fila[col]):
+                    nuevo_libro[col] = None
+                elif col in columnas_texto:
+                    nuevo_libro[col] = normalizar_texto(fila[col])
+                else:
+                    nuevo_libro[col] = fila[col]
+                    
             conn.table("libros").insert(nuevo_libro).execute()
             exitos += 1
-            catalogo_actual.append((titulo_excel.lower(), autor_excel.lower()))
+            catalogo_actual.append((titulo_limpio, autor_limpio))
         except Exception as e:
-            errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error -> {str(e)}")
+            errores.append(f"Fila {indice + 2} ('{titulo_limpio}'): Error -> {str(e)}")
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, duplicados, errores
@@ -74,56 +85,81 @@ def generar_plantilla_ventas():
             worksheet.set_column(i, i, 20)
     return output.getvalue()
 
-def procesar_nuevos_libros(df):
+# --- FUNCIÓN RESTAURADA ---
+def procesar_ventas_masivas(df):
     conn = get_db_connection()
-    exitos, duplicados, errores = 0, 0, []
+    exitos, errores = 0, []
+
+    res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+    res_libros = conn.table("libros").select("libro_id, titulo, autor").execute()
     
-    res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(str(l['titulo']).strip().lower(), str(l.get('autor', '')).strip().lower()) for l in res_libros.data] if res_libros.data else []
+    map_clientes = {normalizar_texto(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
+    map_libros = {normalizar_texto(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
+
+    df['Valor_Envio'] = pd.to_numeric(df['Valor_Envio'], errors='coerce').fillna(0)
+    df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(1)
+    df['Precio_Unitario'] = pd.to_numeric(df['Precio_Unitario'], errors='coerce').fillna(0)
     
-    barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
-    total_filas = len(df)
+    grupos = df.groupby(['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente'])
     
-    # Definimos cuáles son las columnas de texto que deben limpiarse
-    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion']
-    
-    for indice, fila in df.iterrows():
-        barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
+    barra_progreso = st.progress(0, text="Procesando ventas...")
+    total_grupos = len(grupos)
+    actual = 0
+
+    for (fecha_raw, cliente_nombre), grupo in grupos:
+        actual += 1
+        barra_progreso.progress(actual / total_grupos, text=f"Procesando venta {actual} de {total_grupos}...")
         
-        # Validamos usando la función que quita tildes y pone en mayúsculas
-        titulo_limpio = normalizar_texto(fila.get('titulo', ''))
-        autor_limpio = normalizar_texto(fila.get('autor', ''))
-        
-        if not titulo_limpio:
-            errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
-            continue
-            
-        if (titulo_limpio.lower(), autor_limpio.lower()) in catalogo_actual:
-            duplicados += 1
-            errores.append(f"Fila {indice + 2}: El libro '{titulo_limpio}' ya existe.")
-            continue
-            
         try:
-            nuevo_libro = {}
-            for col in df.columns:
-                if pd.isna(fila[col]):
-                    nuevo_libro[col] = None
-                elif col in columnas_texto:
-                    # --- 🛠️ LA MAGIA OCURRE AQUÍ ---
-                    # Aplicamos la normalización (UPPER y sin tildes) a todos los textos
-                    nuevo_libro[col] = normalizar_texto(fila[col])
-                else:
-                    # Para columnas numéricas como stock o precio, guardamos el valor tal cual
-                    nuevo_libro[col] = fila[col]
-                    
-            conn.table("libros").insert(nuevo_libro).execute()
-            exitos += 1
-            catalogo_actual.append((titulo_limpio.lower(), autor_limpio.lower()))
-        except Exception as e:
-            errores.append(f"Fila {indice + 2} ('{titulo_limpio}'): Error -> {str(e)}")
+            cliente_norm = normalizar_texto(cliente_nombre)
+            if cliente_norm not in map_clientes:
+                errores.append(f"Venta {fecha_raw}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
+                continue
+            cliente_id = map_clientes[cliente_norm]
+
+            libros_vendidos = []
+            subtotal = 0.0
+
+            for _, fila in grupo.iterrows():
+                titulo = str(fila.get('Titulo_Libro', ''))
+                titulo_norm = normalizar_texto(titulo)
+                
+                libro_info = map_libros.get(titulo_norm)
+                libro_id = int(libro_info['libro_id']) if libro_info else None
+                autor_libro = libro_info['autor'] if libro_info else "Desconocido"
+
+                cant = int(fila['Cantidad'])
+                precio_u = float(fila['Precio_Unitario'])
+                
+                libros_vendidos.append({
+                    "libro_id": libro_id, "titulo": titulo, "autor": autor_libro,
+                    "cantidad": cant, "precio": precio_u
+                })
+                subtotal += (cant * precio_u)
+
+            valor_envio = float(grupo['Valor_Envio'].iloc[0])
+            metodo_envio = str(grupo['Metodo_Envio'].iloc[0]) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "No especificado"
+            comentario = str(grupo['Comentario'].iloc[0]) if pd.notna(grupo['Comentario'].iloc[0]) else "Importación Masiva"
+            fecha_str = str(fecha_raw).split()[0]
             
+            monto_final = subtotal + valor_envio
+
+            venta_data = {
+                "cliente_id": cliente_id, "fecha_venta": fecha_str,
+                "libros_vendidos": json.dumps(libros_vendidos, ensure_ascii=False),
+                "subtotal_libros": subtotal, "valor_envio": valor_envio,
+                "monto_final": monto_final, "metodo_envio": metodo_envio,
+                "comentario": comentario
+            }
+
+            conn.table("registro_ventas").insert(venta_data).execute()
+            exitos += 1
+
+        except Exception as e:
+            errores.append(f"Error en Venta de {cliente_nombre} ({fecha_raw}): {str(e)}")
+
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
-    return exitos, duplicados, errores
+    return exitos, errores
 
 # ==========================================
 # --- VISTA PRINCIPAL ---
@@ -132,17 +168,14 @@ def mostrar_creacion_masiva_libros():
     st.title("✨ Importación Masiva (Libros y Ventas)")
     st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel.")
     
-    # Creamos las dos pestañas para separar la lógica de negocio
     tab_libros, tab_ventas = st.tabs(["📚 Nuevos Libros", "🛒 Ventas Pasadas"])
     
     with tab_libros:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Libros")
             st.download_button(
-                label="📥 Descargar Plantilla Libros (.xlsx)",
-                data=generar_plantilla_libros(),
-                file_name="plantilla_nuevos_libros.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 Descargar Plantilla Libros (.xlsx)", data=generar_plantilla_libros(),
+                file_name="plantilla_nuevos_libros.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         with st.container(border=True):
             st.markdown("### Paso 2: Sube tu Excel Lleno")
@@ -169,10 +202,8 @@ def mostrar_creacion_masiva_libros():
             st.markdown("### Paso 1: Descarga la Plantilla de Ventas")
             st.info("💡 **Tip UX:** Si una clienta compró 3 libros en el mismo día, usa 3 filas en el Excel con la misma fecha y el mismo nombre. El sistema las agrupará en una sola Venta/Boleta automáticamente calculando los subtotales.")
             st.download_button(
-                label="📥 Descargar Plantilla Ventas (.xlsx)",
-                data=generar_plantilla_ventas(),
-                file_name="plantilla_ventas_pasadas.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 Descargar Plantilla Ventas (.xlsx)", data=generar_plantilla_ventas(),
+                file_name="plantilla_ventas_pasadas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         with st.container(border=True):
             st.markdown("### Paso 2: Sube el Archivo de Ventas")
