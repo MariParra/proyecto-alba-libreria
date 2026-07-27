@@ -16,29 +16,44 @@ def actualizar_estado_envio(asignacion_id, nuevo_estado):
         st.error(f"Error al actualizar: {e}")
 
 def cargar_datos_para_kanban(ano, mes):
-    """Carga y une los datos de asignaciones y clientes para el Kanban."""
+    """Carga y une los datos de asignaciones y clientes para el Kanban, asegurando la consistencia de tipos."""
     conn = get_db_connection()
     try:
-        # Traemos las asignaciones del mes con la info necesaria
         res_asig = conn.table("asignaciones").select("asignacion_id, cliente_id, fecha_asignacion, estado_envio").eq("ano", ano).eq("mes", mes).order("fecha_asignacion", desc=True).execute()
         df_asig = pd.DataFrame(res_asig.data) if res_asig.data else pd.DataFrame()
 
         if df_asig.empty:
             return pd.DataFrame()
 
-        # Traemos clientes para cruzar nombres y direcciones
-        ids_clientes = df_asig['cliente_id'].unique().tolist()
-        res_clientes = conn.table("clientes").select("cliente_id, nombre, direccion").in_("cliente_id", ids_clientes).execute()
+        # --- CORRECCIÓN CLAVE ---
+        # Forzamos que la columna cliente_id sea numérica y luego entera.
+        # errors='coerce' convierte cualquier valor no numérico en NaN (Not a Number)
+        df_asig['cliente_id'] = pd.to_numeric(df_asig['cliente_id'], errors='coerce')
+        # Eliminamos cualquier fila donde el cliente_id sea inválido (NaN)
+        df_asig.dropna(subset=['cliente_id'], inplace=True)
+        # Finalmente, convertimos a entero
+        df_asig['cliente_id'] = df_asig['cliente_id'].astype(int)
+        # ------------------------
+
+        # Traemos todos los clientes de una vez para optimizar
+        res_clientes = conn.table("clientes").select("cliente_id, nombre, direccion").execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
 
         if not df_clientes.empty:
+            # Aseguramos que la columna de join en la tabla de clientes también sea entera
+            df_clientes['cliente_id'] = df_clientes['cliente_id'].astype(int)
+            
+            # Ahora el merge funcionará correctamente
             df_completo = df_asig.merge(df_clientes, on="cliente_id", how="left")
-            # Forzamos un estado por defecto si es nulo, para que aparezca en la primera columna
             df_completo['estado_envio'] = df_completo['estado_envio'].fillna('PENDIENTE PREPARACION').str.upper()
+            
+            # Rellenamos el nombre solo si el merge falló por alguna razón extrema
+            df_completo['nombre'] = df_completo['nombre'].fillna('Cliente No Encontrado')
             return df_completo
             
-        return df_asig # Devolvemos solo asignaciones si no hay clientes
-    except:
+        return df_asig
+    except Exception as e:
+        st.error(f"Error cargando datos para Kanban: {e}")
         return pd.DataFrame()
 
 # --- FUNCIONES DE BASE DE DATOS ---
