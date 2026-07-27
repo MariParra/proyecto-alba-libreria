@@ -1,6 +1,7 @@
-8import streamlit as st
+import streamlit as st
 import pandas as pd
 import io
+import math
 from utilidades import get_db_connection
 
 def generar_plantilla_libros():
@@ -21,12 +22,9 @@ def procesar_nuevos_libros(df):
     conn = get_db_connection()
     exitos = 0
     errores = []
-    duplicados = 0
+    lista_duplicados = []
     
-    # 1. Reemplazar valores NaN de pandas por None nativo de Python
-    df_clean = df.where(pd.notnull(df), None)
-    
-    # 2. Traer catálogo actual para validar duplicados (en mayúsculas para comparar homogéneamente)
+    # 1. Traer catálogo actual para validar duplicados
     res_libros = conn.table("libros").select("titulo, autor").execute()
     catalogo_actual = set()
     if res_libros.data:
@@ -37,62 +35,59 @@ def procesar_nuevos_libros(df):
                 catalogo_actual.add((t, a))
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
-    total_filas = len(df_clean)
+    total_filas = len(df)
     
-    for indice, fila in df_clean.iterrows():
+    for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        # Convertir título y autor a MAYÚSCULAS
         titulo_excel = str(fila.get('titulo', '') or '').strip().upper()
         autor_excel = str(fila.get('autor', '') or '').strip().upper()
         
-        # Validación UX: Título es obligatorio
-        if not titulo_excel or titulo_excel in ['NONE', 'NAN', '']:
+        # Validación: Título es obligatorio y no puede ser nulo
+        if not titulo_excel or titulo_excel in ['NONE', 'NAN', 'NAT']:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
             continue
             
-        # Validación UX: Evitar duplicados
+        # Validación: Evitar duplicados
         if (titulo_excel, autor_excel) in catalogo_actual:
-            duplicados += 1
-            errores.append(f"Fila {indice + 2}: El libro '{titulo_excel}' de '{autor_excel}' ya existe en la base de datos.")
+            lista_duplicados.append(f"Fila {indice + 2}: El libro '{titulo_excel}' de '{autor_excel}' ya existe en la base de datos.")
             continue
             
         try:
             nuevo_libro = {}
-            for col in df_clean.columns:
+            for col in df.columns:
                 val = fila[col]
-                if val is None:
+                
+                # Manejar valores nulos o NaN de Pandas/NumPy
+                if pd.isna(val) or val is None:
                     nuevo_libro[col] = None
-                elif hasattr(val, 'item'):  # Convierte int64, float64 de numpy a int/float
-                    nuevo_libro[col] = val.item()
+                elif hasattr(val, 'item'):  # Convertir numpy int64/float64 a tipos nativos
+                    v = val.item()
+                    nuevo_libro[col] = None if (isinstance(v, float) and math.isnan(v)) else v
                 elif isinstance(val, str):
-                    # --- CONVERSIÓN A MAYÚSCULAS ---
-                    val_str = val.strip().upper()
-                    nuevo_libro[col] = val_str if val_str not in ['NONE', 'NAN', ''] else None
+                    val_clean = val.strip().upper()
+                    nuevo_libro[col] = val_clean if val_clean not in ['NONE', 'NAN', ''] else None
                 else:
                     nuevo_libro[col] = val
 
-            # Asegurar que título y autor estén limpios y en MAYÚSCULAS
+            # Formato asegurado
             nuevo_libro['titulo'] = titulo_excel
             nuevo_libro['autor'] = autor_excel if autor_excel else None
 
-            # Insertar en Supabase
+            # Inserción en BD
             res = conn.table("libros").insert(nuevo_libro).execute()
             
             if res.data and len(res.data) > 0:
                 exitos += 1
                 catalogo_actual.add((titulo_excel, autor_excel))
             else:
-                errores.append(
-                    f"Fila {indice + 2} ('{titulo_excel}'): La BD no devolvió los datos insertados. "
-                    f"Verifica las políticas RLS en la tabla 'libros' de Supabase."
-                )
+                errores.append(f"Fila {indice + 2} ('{titulo_excel}'): La BD no confirmó la inserción. Revisa políticas RLS en Supabase.")
             
         except Exception as e:
-            errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error en BD -> {str(e)}")
+            errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error -> {str(e)}")
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
-    return exitos, duplicados, errores
+    return exitos, lista_duplicados, errores
 
 def mostrar_creacion_masiva_libros():
     st.title("✨ Agregar Nuevos Libros al Catálogo")
@@ -130,20 +125,20 @@ def mostrar_creacion_masiva_libros():
                     st.markdown("### 📋 Resumen de la Carga")
                     c1, c2, c3 = st.columns(3)
                     c1.metric("✅ Nuevos Ingresados", exitos)
-                    c2.metric("⚠️ Duplicados Omitidos", duplicados)
-                    c3.metric("❌ Errores", len(errores) - duplicados)
+                    c2.metric("⚠️ Duplicados Omitidos", len(duplicados))
+                    c3.metric("❌ Errores", len(errores))
                     
                     if exitos > 0:
                         st.balloons()
-                        st.success(f"¡{exitos} libros se añadieron exitosamente a tu catálogo!")
+                        st.success(f"¡{exitos} libro(s) se añadieron exitosamente a tu catálogo!")
                         
-                    if errores:
+                    if duplicados or errores:
                         st.warning("Detalle de las filas no procesadas:")
                         with st.expander("Ver lista de conflictos y errores"):
+                            for d in duplicados:
+                                st.write(f"⚠️ {d}")
                             for err in errores:
-                                st.write(err)
+                                st.write(f"❌ {err}")
 
 if __name__ == '__main__':
     mostrar_creacion_masiva_libros()
-
-
