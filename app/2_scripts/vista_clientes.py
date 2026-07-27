@@ -32,19 +32,42 @@ def obtener_historial_completo(cliente_id):
         if libros_venta:
             historial.append(pd.DataFrame(libros_venta))
 
-    if not historial: return pd.DataFrame()
+        if not historial: return pd.DataFrame()
 
+    # Consolidar los datos
     df_consolidado = pd.concat(historial, ignore_index=True).dropna(subset=['libro_id'])
     
     if not df_consolidado.empty:
-        ids_libros = df_consolidado['libro_id'].unique().tolist()
-        res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros).execute()
+        # --- 🛠️ CORRECCIÓN: LIMPIEZA ESTRICTA DE IDs ---
+        ids_libros_limpios = []
+        for val in df_consolidado['libro_id'].unique():
+            try:
+                # Convertimos a float primero por si viene como '1.0' y luego a int estricto
+                id_entero = int(float(val))
+                ids_libros_limpios.append(id_entero)
+            except (ValueError, TypeError):
+                # Si hay algún dato basura que no sea número, lo ignoramos
+                continue
+                
+        # Si después de limpiar la lista quedó vacía, retornamos
+        if not ids_libros_limpios:
+            return pd.DataFrame()
+
+        # Hacemos la consulta con la lista perfectamente limpia
+        res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
+        
         if res_libros.data:
             df_nombres = pd.DataFrame(res_libros.data)
+            
+            # Aseguramos que la columna original en el DataFrame también sea entera para que el cruce (merge) sea exacto
+            df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
+            
+            # Cruzamos los datos
             df_final = df_consolidado.merge(df_nombres, on="libro_id", how="left")
             return df_final[['titulo', 'autor', 'Fuente']].fillna("Desconocido")
             
     return pd.DataFrame()
+
 
 def cargar_todos_los_clientes():
     conn = get_db_connection()

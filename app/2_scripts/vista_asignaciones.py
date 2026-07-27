@@ -464,7 +464,7 @@ def mostrar_asignaciones():
                 df_filtrado = df_kanban[df_kanban['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])]
                 for _, row in df_filtrado.iterrows():
                     with st.container(border=True):
-                        st.markdown(f"**{row.get('nombre_cliente', 'Cliente Desconocido')}**")
+                        st.markdown(f"**{row.get('nombre', 'Cliente Desconocido')}**")
                         st.caption(f"📍 {row.get('direccion', 'Sin dirección')}")
                         if st.button("▶️ Mover a 'Listo'", key=f"btn_p_{row['asignacion_id']}", use_container_width=True):
                             actualizar_estado_envio(row['asignacion_id'], 'POR ENVIAR')
