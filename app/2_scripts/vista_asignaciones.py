@@ -4,58 +4,6 @@ import random
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 
-def actualizar_estado_envio(asignacion_id, nuevo_estado):
-    """Actualiza el estado del envío en la base de datos y refresca la vista."""
-    conn = get_db_connection()
-    try:
-        conn.table("asignaciones").update({"estado_envio": nuevo_estado}).eq("asignacion_id", asignacion_id).execute()
-        st.toast(f"✅ Envío actualizado a '{nuevo_estado}'")
-        # Limpiamos la cache para que los datos se recarguen
-        cargar_asignaciones_mes.clear()
-    except Exception as e:
-        st.error(f"Error al actualizar: {e}")
-
-def cargar_datos_para_kanban(ano, mes):
-    """Carga y une los datos de asignaciones y clientes para el Kanban, asegurando la consistencia de tipos."""
-    conn = get_db_connection()
-    try:
-        res_asig = conn.table("asignaciones").select("asignacion_id, cliente_id, fecha_asignacion, estado_envio").eq("ano", ano).eq("mes", mes).order("fecha_asignacion", desc=True).execute()
-        df_asig = pd.DataFrame(res_asig.data) if res_asig.data else pd.DataFrame()
-
-        if df_asig.empty:
-            return pd.DataFrame()
-
-        # --- CORRECCIÓN CLAVE ---
-        # Forzamos que la columna cliente_id sea numérica y luego entera.
-        # errors='coerce' convierte cualquier valor no numérico en NaN (Not a Number)
-        df_asig['cliente_id'] = pd.to_numeric(df_asig['cliente_id'], errors='coerce')
-        # Eliminamos cualquier fila donde el cliente_id sea inválido (NaN)
-        df_asig.dropna(subset=['cliente_id'], inplace=True)
-        # Finalmente, convertimos a entero
-        df_asig['cliente_id'] = df_asig['cliente_id'].astype(int)
-        # ------------------------
-
-        # Traemos todos los clientes de una vez para optimizar
-        res_clientes = conn.table("clientes").select("cliente_id, nombre, direccion").execute()
-        df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
-
-        if not df_clientes.empty:
-            # Aseguramos que la columna de join en la tabla de clientes también sea entera
-            df_clientes['cliente_id'] = df_clientes['cliente_id'].astype(int)
-            
-            # Ahora el merge funcionará correctamente
-            df_completo = df_asig.merge(df_clientes, on="cliente_id", how="left")
-            df_completo['estado_envio'] = df_completo['estado_envio'].fillna('PENDIENTE PREPARACION').str.upper()
-            
-            # Rellenamos el nombre solo si el merge falló por alguna razón extrema
-            df_completo['nombre'] = df_completo['nombre'].fillna('Cliente No Encontrado')
-            return df_completo
-            
-        return df_asig
-    except Exception as e:
-        st.error(f"Error cargando datos para Kanban: {e}")
-        return pd.DataFrame()
-
 # --- FUNCIONES DE BASE DE DATOS ---
 @st.cache_data(ttl=60)
 def cargar_clientes_suscritos():
@@ -449,7 +397,6 @@ def mostrar_asignaciones():
     if mes_esta_cerrado: st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado.", icon="🔒")
 
     opciones_menu = [
-        "🚚 Tablero de Logística (Kanban)",
         "📋 Gestión (Tabla Editable)", 
         "📖 Asignar Libro Principal", 
         "➕ Agregar Extras y Envío", 
@@ -459,66 +406,7 @@ def mostrar_asignaciones():
     ]
     opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", opciones_menu)
     st.markdown("---")
-    # ==========================================================
-    # K. VISTA KANBAN DE LOGÍSTICA
-    # ==========================================================
-    if opcion_menu == "🚚 Tablero de Logística (Kanban)":
-        st.info("Gestiona los despachos de forma visual. Mueve las tarjetas entre columnas con los botones de acción.")
-        df_kanban = cargar_datos_para_kanban(ano_sel, mes_num)
-
-        if df_kanban.empty:
-            st.warning("No hay asignaciones en este mes para mostrar en el tablero.")
-        else:
-            # Definimos las columnas visuales del Kanban
-            col_pendientes, col_listas, col_finalizadas = st.columns(3)
-
-            # Columna 1: Pendientes de Preparación
-            with col_pendientes:
-                st.markdown("<h4 style='text-align: center; color: #D32F2F; background-color: #FFEBEE; padding: 10px; border-radius: 5px;'>⏳ POR PREPARAR</h4>", unsafe_allow_html=True)
-                # Filtramos los estados que corresponden a esta columna
-                df_filtrado = df_kanban[df_kanban['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])]
-                for _, row in df_filtrado.iterrows():
-                    with st.container(border=True):
-                        st.markdown(f"**{row.get('nombre', 'Cliente Desconocido')}**")
-                        st.caption(f"📍 {row.get('direccion', 'Sin dirección')}")
-                        if st.button("▶️ Mover a 'Listo'", key=f"btn_p_{row['asignacion_id']}", use_container_width=True):
-                            actualizar_estado_envio(row['asignacion_id'], 'POR ENVIAR')
-                            st.rerun()
-
-            # Columna 2: Listas para Enviar/Retirar
-            with col_listas:
-                st.markdown("<h4 style='text-align: center; color: #1976D2; background-color: #E3F2FD; padding: 10px; border-radius: 5px;'>✅ LISTO</h4>", unsafe_allow_html=True)
-                df_filtrado = df_kanban[df_kanban['estado_envio'].isin(['POR ENVIAR', 'POR RETIRAR'])]
-                for _, row in df_filtrado.iterrows():
-                    with st.container(border=True):
-                        st.markdown(f"**{row.get('nombre_cliente', 'Cliente Desconocido')}**")
-                        st.caption(f"📦 Estado actual: {row['estado_envio']}")
-                        c1, c2 = st.columns(2)
-                        # Botón para retroceder
-                        if c1.button("◀️ Volver", key=f"btn_l_back_{row['asignacion_id']}", use_container_width=True):
-                            actualizar_estado_envio(row['asignacion_id'], 'EN PREPARACION')
-                            st.rerun()
-                        # Botón para avanzar
-                        if c2.button("▶️ Finalizar", key=f"btn_l_fwd_{row['asignacion_id']}", type="primary", use_container_width=True):
-                            nuevo_estado = 'ENVIADO' if row['estado_envio'] == 'POR ENVIAR' else 'RETIRADO'
-                            actualizar_estado_envio(row['asignacion_id'], nuevo_estado)
-                            st.rerun()
-            
-            # Columna 3: Finalizadas
-            with col_finalizadas:
-                st.markdown("<h4 style='text-align: center; color: #388E3C; background-color: #E8F5E9; padding: 10px; border-radius: 5px;'>🏁 FINALIZADO</h4>", unsafe_allow_html=True)
-                df_filtrado = df_kanban[df_kanban['estado_envio'].isin(['ENVIADO', 'RETIRADO'])]
-                # Mostramos solo las últimas 15 para no saturar la vista
-                for _, row in df_filtrado.head(15).iterrows():
-                    with st.container(border=True):
-                        st.markdown(f"**{row.get('nombre_cliente', 'Cliente Desconocido')}**")
-                        st.caption(f"🎉 {row['estado_envio']}")
-                        if st.button(" deshacer", key=f"btn_f_back_{row['asignacion_id']}", use_container_width=True):
-                            nuevo_estado = 'POR ENVIAR' if row['estado_envio'] == 'ENVIADO' else 'POR RETIRAR'
-                            actualizar_estado_envio(row['asignacion_id'], nuevo_estado)
-                            st.rerun()
-                if len(df_filtrado) > 15:
-                    st.caption(f"...y {len(df_filtrado) - 15} más.")
+    
     # ==========================================================
     # 1. TABLA EDITABLE
     # ==========================================================
