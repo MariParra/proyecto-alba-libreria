@@ -53,35 +53,36 @@ def procesar_nuevos_libros(df):
             continue
             
         try:
-            # Construir el diccionario convirtiendo tipos de NumPy a tipos nativos de Python
             nuevo_libro = {}
             for col in df_clean.columns:
                 val = fila[col]
                 if val is None:
                     nuevo_libro[col] = None
-                elif hasattr(val, 'item'):  # Convierte int64, float64, etc., de NumPy a int/float de Python
+                elif hasattr(val, 'item'):
                     nuevo_libro[col] = val.item()
                 elif isinstance(val, str):
                     nuevo_libro[col] = val.strip()
                 else:
                     nuevo_libro[col] = val
 
-            # Asegurar que titulo y autor tengan el formato limpio
             nuevo_libro['titulo'] = titulo_excel
             nuevo_libro['autor'] = autor_excel if autor_excel else None
 
-            # Insertar en BD
+            # --- INSERTAR Y MOSTRAR RESPUESTA REAL ---
             res = conn.table("libros").insert(nuevo_libro).execute()
             
-            # Verificar si realmente retornó datos insertados
-            if res.data:
+            # Esto te mostrará en la app qué devolvió exactamente la BD
+            st.write("🔍 **Respuesta de la BD para fila:**", res.data)
+
+            if res.data and len(res.data) > 0:
                 exitos += 1
                 catalogo_actual.append((titulo_excel.lower(), autor_excel.lower()))
             else:
-                errores.append(f"Fila {indice + 2} ('{titulo_excel}'): La base de datos no devolvió respuesta de confirmación.")
+                errores.append(f"Fila {indice + 2} ('{titulo_excel}'): La BD aceptó la solicitud pero no guardó la fila (Posible problema de RLS).")
             
         except Exception as e:
-            errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error en BD -> {str(e)}")
+            errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error -> {str(e)}")
+            
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, duplicados, errores
