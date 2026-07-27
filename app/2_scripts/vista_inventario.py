@@ -6,7 +6,7 @@ def obtener_unicos(df, columna):
     """Devuelve una lista ordenada de valores únicos de una columna del DataFrame."""
     return sorted(df[columna].dropna().astype(str).unique())
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=5)
 def cargar_datos_completos():
     """Carga todos los datos de la tabla 'libros' desde Supabase."""
     conn = get_db_connection()
