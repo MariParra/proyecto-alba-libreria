@@ -143,30 +143,46 @@ def sync_google_sheets():
         return False
 
 def mostrar_herramienta_limpieza():
-    st.markdown("### 🧹 Limpieza de Libros Importados por Error")
-    st.info("Esta herramienta detecta libros creados accidentalmente (Stock 0, Precio $0 y sin Editorial) para eliminarlos masivamente.")
-    
+    """
+    Función interna de limpieza que busca y elimina por lotes 
+    los libros importados erróneamente sin entorpecer el catálogo.
+    Maneja filtros más amplios para el campo editorial (nulos, vacíos o "None").
+    """
     conn = get_db_connection()
     
     try:
-        # 1. Buscar los libros "fantasma" que cumplen con el patrón del error
-        res = conn.table("libros").select("libro_id, titulo, autor, stock, precio, editorial").eq("stock", 0).eq("precio", 0).is_("editorial", "null").execute()
+        # 1. Buscamos TODOS los libros con stock 0 y precio 0 (sin filtrar editorial en la BD para evitar limitaciones de Supabase)
+        res = conn.table("libros").select("libro_id, titulo, autor, stock, precio, editorial").eq("stock", 0).eq("precio", 0).execute()
         
         if not res.data:
-            st.success("✅ No se detectaron libros fantasma. Tu catálogo está limpio.")
+            st.success("✅ No se detectaron libros con stock 0 y precio $0. Tu catálogo está limpio.")
             return
-
-        df_basura = pd.DataFrame(res.data)
-        st.warning(f"⚠️ Se han detectado **{len(df_basura)}** libros sospechosos.")
+            
+        df_candidatos = pd.DataFrame(res.data)
         
-        # 2. Vista previa por seguridad UX
+        # 2. Filtramos localmente en Python (que es mucho más flexible y seguro que Supabase para manejar textos vacíos o nulos)
+        # Esto atrapará editoriales que sean None, NaN, vacías "", espacios " " o la palabra "None" / "null"
+        df_basura = df_candidatos[
+            df_candidatos['editorial'].isna() | 
+            (df_candidatos['editorial'].astype(str).str.strip() == "") | 
+            (df_candidatos['editorial'].astype(str).str.lower() == "none") | 
+            (df_candidatos['editorial'].astype(str).str.lower() == "null")
+        ]
+        
+        if df_basura.empty:
+            st.success("✅ No se encontraron libros fantasma (con editorial vacía). Tus libros en stock 0 están seguros.")
+            return
+            
+        st.warning(f"⚠️ Se han detectado **{len(df_basura)}** libros sospechosos que cumplen el patrón del error.")
+        
+        # 3. Vista previa por seguridad UX
         with st.expander("👀 Revisar lista de libros que se van a eliminar", expanded=True):
             st.dataframe(df_basura, hide_index=True, use_container_width=True)
             
-        st.error("Al hacer clic en eliminar, estos libros desaparecerán del catálogo. Asegúrate de que no haya libros reales en esta lista.")
+        st.error("Al hacer clic en eliminar, estos libros desaparecerán del catálogo permanentemente.")
         confirmacion = st.checkbox("Confirmo que revisé la tabla y deseo borrar estos libros.")
         
-        # 3. Borrado por Lotes (Para que no se caiga la base de datos por exceso de datos)
+        # 4. Borrado por Lotes
         if st.button("🗑️ Eliminar permanentemente", type="primary", disabled=not confirmacion):
             with st.spinner("Eliminando libros... esto puede tomar unos segundos."):
                 ids_a_borrar = df_basura['libro_id'].tolist()
@@ -177,11 +193,13 @@ def mostrar_herramienta_limpieza():
                     lote = ids_a_borrar[i : i + lote_size]
                     conn.table("libros").delete().in_("libro_id", lote).execute()
                     
-                st.success(f"¡Limpieza completada! Se eliminaron {len(ids_a_borrar)} libros fantasma.")
+                st.success(f"¡Limpieza completada! Se eliminaron {len(ids_a_borrar)} libros fantasma de tu base de datos.")
+                st.cache_data.clear() # Limpiamos la caché del catálogo
                 st.rerun()
-
+                
     except Exception as e:
         st.error(f"Ocurrió un error al intentar limpiar la base de datos: {e}")
+
 
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
