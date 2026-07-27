@@ -59,31 +59,56 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
     except:
         return df_catalogo, []
 
+# En tu archivo vista_asignaciones.py
+
 @st.cache_data(ttl=60)
 def cargar_asignaciones_mes(ano, mes):
+    """
+    Carga las asignaciones del mes, uniendo los nombres de clientes y libros.
+    Es robusta contra fallos de caché y datos nulos.
+    """
     conn = get_db_connection()
     try:
-        res_asig = conn.table("asignaciones").select("*").eq("ano", ano).eq("mes", mes).execute()
-        df_asig = pd.DataFrame(res_asig.data)
-        if df_asig.empty: return pd.DataFrame()
+        # 1. Obtenemos las asignaciones del mes
+        res_asig = conn.table("asignaciones").select("*").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         
+        # Si no hay datos, retornamos una tabla vacía con columnas definidas para evitar errores
+        if not res_asig.data:
+            columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
+            return pd.DataFrame(columns=columnas_esperadas)
+            
+        df_asig = pd.DataFrame(res_asig.data)
+        
+        # 2. Obtenemos TODOS los clientes y libros para el cruce
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         
-        df_clientes = pd.DataFrame(res_clientes.data)
-        df_libros = pd.DataFrame(res_libros.data)
-        
-        if not df_clientes.empty:
-            df_asig = df_asig.merge(df_clientes, on='cliente_id', how='left')
+        # 3. Hacemos los merges de forma segura
+        if res_clientes.data:
+            df_clientes = pd.DataFrame(res_clientes.data)
+            df_asig = pd.merge(df_asig, df_clientes, on='cliente_id', how='left')
             df_asig.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
+            df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
+        else:
+            df_asig['nombre_cliente'] = 'Sin Clientes'
             
-        if not df_libros.empty:
-            df_asig = df_asig.merge(df_libros, left_on='libro_suscripcion_id', right_on='libro_id', how='left')
+        if res_libros.data:
+            # Aseguramos que la columna a unir sea del tipo correcto
+            df_asig['libro_suscripcion_id'] = pd.to_numeric(df_asig['libro_suscripcion_id'], errors='coerce')
+            df_libros = pd.DataFrame(res_libros.data)
+            df_asig = pd.merge(df_asig, df_libros, left_on='libro_suscripcion_id', right_on='libro_id', how='left')
             df_asig.rename(columns={'titulo': 'titulo_libro'}, inplace=True)
+            df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR", inplace=True)
+        else:
+            df_asig['titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
             
-        df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR")
         return df_asig
-    except Exception as e: return pd.DataFrame()
+
+    except Exception as e:
+        # Si algo falla, devolvemos una tabla vacía para no romper la app
+        st.error(f"Error crítico al cargar asignaciones: {e}")
+        return pd.DataFrame()
+
 
 # --- CIERRE DE MES ---
 @st.cache_data(ttl=60)
