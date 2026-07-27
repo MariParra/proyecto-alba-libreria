@@ -107,13 +107,32 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
     except Exception as e: return False, str(e)
 
 # --- ACCIONES ---
-def comenzar_mes(ano, mes):
+def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     df_suscritos = cargar_clientes_suscritos()
     df_valores = cargar_valores_suscripcion()
-    if df_suscritos.empty: return False, "No hay clientes activos."
+    
+    if df_suscritos.empty:
+        return False, "No hay clientes con estado 'ACTIVA' en tu base de datos."
+
+    # Filtramos para encontrar solo los clientes que FALTAN por crear
+    if not df_mes_actual.empty:
+        clientes_ya_creados = df_mes_actual['cliente_id'].unique()
+        df_faltantes = df_suscritos[~df_suscritos['cliente_id'].isin(clientes_ya_creados)]
+    else:
+        df_faltantes = df_suscritos
+
+    if df_faltantes.empty:
+        return True, "✅ ¡Todo al día! No se encontraron nuevos clientes activos para agregar al mes."
+
     conn = get_db_connection()
     creados, errores = 0, 0
-    for _, cliente in df_suscritos.iterrows():
+    total_a_crear = len(df_faltantes)
+    
+    # Usamos una barra de progreso para la UX
+    barra_progreso = progress_placeholder.progress(0, text=f"Iniciando creación de {total_a_crear} cajas...")
+
+    for i, (_, cliente) in enumerate(df_faltantes.iterrows()):
+        barra_progreso.progress((i + 1) / total_a_crear, text=f"📦 Creando caja para: {cliente['nombre']} ({i+1}/{total_a_crear})")
         try:
             c_id = int(cliente['cliente_id'])
             val_sub = 0.0
@@ -128,10 +147,15 @@ def comenzar_mes(ano, mes):
             }
             conn.table("asignaciones").insert(datos).execute()
             creados += 1
-        except: errores += 1
+        except:
+            errores += 1
+            
     cargar_asignaciones_mes.clear()
-    if creados > 0: return True, f"Se iniciaron {creados} suscripciones."
-    else: return False, "Todas las suscripciones ya estaban creadas."
+    
+    if creados > 0:
+        return True, f"🎉 ¡Éxito! Se crearon {creados} nuevas cajas para el mes."
+    else:
+        return False, f"Ocurrieron {errores} errores durante el proceso."
 
 def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, ano, mes, titulo, autor):
     conn = get_db_connection()
@@ -628,18 +652,40 @@ def mostrar_asignaciones():
         else:
             with st.container(border=True):
                 st.markdown("### 🚀 Generar Cajas o Agregar Nuevos Clientes")
+                
+                # --- MÉTRICAS DE ESTADO ACTUAL ---
+                df_suscritos_activos = cargar_clientes_suscritos()
+                total_clientes_activos = len(df_suscritos_activos)
+                
+                if not df_mes.empty:
+                    clientes_en_mes = df_mes['cliente_id'].nunique()
+                    clientes_faltantes = total_clientes_activos - clientes_en_mes
+                else:
+                    clientes_en_mes = 0
+                    clientes_faltantes = total_clientes_activos
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("👥 Total Clientes Activos", total_clientes_activos)
+                col2.metric("📦 Cajas Creadas en el Mes", clientes_en_mes)
+                col3.metric("⏳ Cajas Pendientes por Crear", max(0, clientes_faltantes), help="Clientes activos que aún no tienen una caja para este mes.")
+                st.markdown("---")
+                # --------------------------------
+
                 st.info(
                     "💡 **¿Cómo usar esta herramienta?**\n\n"
                     "1. **A principio de mes:** Crea las cajas en blanco para todas tus clientas en estado 'ACTIVA'.\n"
-                    "2. **A mitad de mes (Clientes Rezagados):** Si se inscriben nuevas clientas y ya hiciste el 'Sync' con Google Sheets, presiona este botón nuevamente.\n\n"
-                    "🛡️ **Tranquilidad:** El sistema es inteligente. **Solo agregará a las personas nuevas** sin duplicar, borrar, ni alterar los libros de las cajas que ya tenías armadas.\n\n"
-                    "*¡Puedes presionarlo las veces que necesites con total seguridad!*"
+                    "2. **A mitad de mes:** Si se inscriben nuevas clientas, presiona este botón nuevamente para agregarlas.\n\n"
+                    "🛡️ **Tranquilidad:** El sistema es inteligente y **solo agregará a las clientas faltantes**."
                 )
                 
                 if st.button("Crear Registros Faltantes del Mes", type="primary", use_container_width=True):
-                    ex, msg = comenzar_mes(ano_sel, mes_num)
+                    # Creamos un espacio para la barra de progreso
+                    progress_placeholder = st.empty()
+                    ex, msg = comenzar_mes(ano_sel, mes_num, df_mes, progress_placeholder)
+                    
                     if ex: 
                         st.success(msg)
+                        st.balloons()
                         st.rerun()
                     else: 
                         st.warning(msg)
