@@ -142,10 +142,6 @@ def sync_google_sheets():
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 
-import pandas as pd
-from utilidades import get_db_connection
-import streamlit as st
-
 def mostrar_herramienta_limpieza():
     st.markdown("### 🧹 Limpieza de Libros Importados por Error")
     st.info("Esta herramienta detecta libros creados accidentalmente (Stock 0, Precio $0 y sin Editorial) para eliminarlos masivamente.")
