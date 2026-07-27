@@ -131,6 +131,7 @@ def mostrar_creacion_masiva_libros():
                     if exitos > 0:
                         st.balloons()
                         st.success(f"¡{exitos} libro(s) se añadieron exitosamente a tu catálogo!")
+                        st.cache_data.clear()
                         
                     if duplicados or errores:
                         st.warning("Detalle de las filas no procesadas:")
