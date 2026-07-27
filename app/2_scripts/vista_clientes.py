@@ -92,7 +92,7 @@ def mostrar_clientes():
     ])
 
         # ---------------------------------------------------------
-    # PESTAÑA 1: FICHA E HISTORIAL (CON FIDELIZACIÓN)
+    # PESTAÑA 1: FICHA E HISTORIAL (CON FIDELIDAD POR COMPRAS REALES)
     # ---------------------------------------------------------
     with tab_ficha:
         st.markdown("### Consultar Información del Cliente")
@@ -105,18 +105,28 @@ def mostrar_clientes():
                 cliente_data = df_clientes[df_clientes['nombre'] == cliente_sel].iloc[0]
                 c_id = cliente_data['cliente_id']
                 
-                # Cargar historial primero para calcular el nivel de fidelidad
+                # 1. Cargamos el historial completo para mostrarlo en la tabla
                 df_historial = obtener_historial_completo(c_id)
-                cantidad_libros = len(df_historial) if not df_historial.empty else 0
                 
-                # --- LÓGICA DE FIDELIZACIÓN UX ---
-                if cantidad_libros == 0:
+                # 2. CALCULAR COMPRAS REALES (Excluyendo 'Librero Histórico')
+                # Filtramos las filas cuyo origen NO sea de importación histórica
+                if not df_historial.empty:
+                    df_compras_reales = df_historial[
+                        df_historial['Fuente'].str.contains("Suscripción", case=False, na=False) | 
+                        df_historial['Fuente'].str.contains("Venta Directa", case=False, na=False)
+                    ]
+                    cantidad_compras = len(df_compras_reales)
+                else:
+                    cantidad_compras = 0
+                
+                # --- LÓGICA DE FIDELIZACIÓN UX (Basado solo en compras) ---
+                if cantidad_compras == 0:
                     nivel, color, icono = "Nuevo Lector", "gray", "🌱"
-                elif cantidad_libros <= 5:
+                elif cantidad_compras <= 3:
                     nivel, color, icono = "Lector Bronce", "orange", "🥉"
-                elif cantidad_libros <= 15:
+                elif cantidad_compras <= 10:
                     nivel, color, icono = "Lector Plata", "blue", "🥈"
-                elif cantidad_libros <= 30:
+                elif cantidad_compras <= 20:
                     nivel, color, icono = "Lector Oro", "green", "🥇"
                 else:
                     nivel, color, icono = "Lector Diamante", "violet", "💎"
@@ -136,18 +146,21 @@ def mostrar_clientes():
                     color_estado = "green" if estado == "ACTIVA" else "red"
                     col_b.markdown(f"**Status:** :{color_estado}[{estado}]")
                     
-                    # Panel destacado de Fidelidad
-                    col_c.markdown(f"<div style='text-align:center; padding:10px; background-color:#f8f9fa; border-radius:10px;'>"
-                                f"<h3 style='margin:0;'>{icono}</h3>"
-                                f"<p style='margin:0; font-weight:bold; color:{color};'>{nivel}</p>"
-                                f"<p style='margin:0; font-size:12px;'>{cantidad_libros} libros en historial</p>"
-                                f"</div>", unsafe_allow_html=True)
+                    # Panel destacado de Fidelidad (Muestra compras y nivel)
+                    col_c.markdown(f"""
+                    <div style='text-align:center; padding:10px; background-color:#f8f9fa; border-radius:10px; border: 1px solid #e9ecef;'>
+                        <h3 style='margin:0;'>{icono}</h3>
+                        <p style='margin:0; font-weight:bold; color:{color}; font-size:1.1em;'>{nivel}</p>
+                        <p style='margin:3px 0 0 0; font-size:11px; color:#6c757d;'>{cantidad_compras} compras en Alba</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # Mostrar la tabla del historial
+                # Mostrar la tabla del historial completo (para que sigan viendo el librero histórico de consulta)
                 st.markdown("#### 📚 Historial de Lectura Unificado")
                 if df_historial.empty:
                     st.info("El cliente aún no tiene libros asociados en su historial.")
                 else:
+                    st.success(f"La clienta tiene un total de **{len(df_historial)}** libros registrados en su ficha unificada.")
                     st.dataframe(df_historial, use_container_width=True, hide_index=True)
 
 
