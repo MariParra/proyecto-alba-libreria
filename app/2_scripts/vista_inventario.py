@@ -105,8 +105,13 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
 
 
 def mostrar_inventario():
-    st.title("📦 Gestión de Inventario")
-    df_inventario = cargar_datos_completos()
+    col_inv1, col_inv2 = st.columns([3, 1])
+    with col_inv1:
+        st.title("📦 Gestión de Inventario")
+    with col_inv2:
+        if st.button("🔄 Refrescar Datos", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     # --- FILTROS GLOBALES ---
     with st.expander("🔍 Buscador y Filtros", expanded=False):
