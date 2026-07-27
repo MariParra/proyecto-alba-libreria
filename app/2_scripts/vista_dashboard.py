@@ -27,10 +27,29 @@ def cargar_datos_base():
     df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
     
     return df_ventas, df_asig, df_clientes
-
+def mostrar_alertas_proactivas():
+    conn = get_db_connection()
+    try:
+        # Buscar libros con stock 3 o inferior
+        res_stock = conn.table("libros").select("titulo, stock").lte("stock", 3).execute()
+        libros_criticos = res_stock.data if res_stock.data else []
+        
+        if libros_criticos:
+            # 1. Alerta Flotante (Toast UX)
+            st.toast(f"🚨 Tienes {len(libros_criticos)} libros con stock crítico.", icon="⚠️")
+            
+            # 2. Banner visual en la parte superior del Dashboard
+            with st.expander(f"⚠️ Alerta Operativa: {len(libros_criticos)} libros requieren reabastecimiento", expanded=True):
+                st.error("Los siguientes libros están a punto de agotarse o ya no tienen stock:")
+                for l in libros_criticos:
+                    st.markdown(f"- **{l['titulo']}** (Stock actual: `{l['stock']}` unidades)")
+    except Exception:
+        pass # Silenciamos errores si falla la conexión para no dañar el dashboard
+    
 def mostrar_dashboard():
     st.title("📈 Panel de Control y Estadísticas")
     
+    mostrar_alertas_proactivas()
     df_ventas, df_asig, df_clientes = cargar_datos_base()
     
     # --- UI: FILTROS GLOBALES ---

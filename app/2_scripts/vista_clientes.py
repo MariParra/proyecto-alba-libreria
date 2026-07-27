@@ -68,8 +68,8 @@ def mostrar_clientes():
         "🗑️ Eliminar"
     ])
 
-    # ---------------------------------------------------------
-    # PESTAÑA 1: FICHA E HISTORIAL
+        # ---------------------------------------------------------
+    # PESTAÑA 1: FICHA E HISTORIAL (CON FIDELIZACIÓN)
     # ---------------------------------------------------------
     with tab_ficha:
         st.markdown("### Consultar Información del Cliente")
@@ -82,9 +82,26 @@ def mostrar_clientes():
                 cliente_data = df_clientes[df_clientes['nombre'] == cliente_sel].iloc[0]
                 c_id = cliente_data['cliente_id']
                 
-                # Tarjeta de información de contacto (Diseño UX)
+                # Cargar historial primero para calcular el nivel de fidelidad
+                df_historial = obtener_historial_completo(c_id)
+                cantidad_libros = len(df_historial) if not df_historial.empty else 0
+                
+                # --- LÓGICA DE FIDELIZACIÓN UX ---
+                if cantidad_libros == 0:
+                    nivel, color, icono = "Nuevo Lector", "gray", "🌱"
+                elif cantidad_libros <= 5:
+                    nivel, color, icono = "Lector Bronce", "orange", "🥉"
+                elif cantidad_libros <= 15:
+                    nivel, color, icono = "Lector Plata", "blue", "🥈"
+                elif cantidad_libros <= 30:
+                    nivel, color, icono = "Lector Oro", "green", "🥇"
+                else:
+                    nivel, color, icono = "Lector Diamante", "violet", "💎"
+
+                # Tarjeta de información de contacto y Fidelidad (Diseño UX)
                 with st.container(border=True):
-                    col_a, col_b = st.columns(2)
+                    col_a, col_b, col_c = st.columns(3)
+                    
                     col_a.markdown(f"**📧 Email:** {cliente_data.get('email', 'N/A')}")
                     col_a.markdown(f"**📱 Teléfono:** {cliente_data.get('telefono', 'N/A')}")
                     col_a.markdown(f"**🆔 RUT:** {cliente_data.get('rut', 'N/A')}")
@@ -95,15 +112,21 @@ def mostrar_clientes():
                     estado = cliente_data.get('status', 'N/A')
                     color_estado = "green" if estado == "ACTIVA" else "red"
                     col_b.markdown(f"**Status:** :{color_estado}[{estado}]")
+                    
+                    # Panel destacado de Fidelidad
+                    col_c.markdown(f"<div style='text-align:center; padding:10px; background-color:#f8f9fa; border-radius:10px;'>"
+                                f"<h3 style='margin:0;'>{icono}</h3>"
+                                f"<p style='margin:0; font-weight:bold; color:{color};'>{nivel}</p>"
+                                f"<p style='margin:0; font-size:12px;'>{cantidad_libros} libros en historial</p>"
+                                f"</div>", unsafe_allow_html=True)
 
-                # Historial unificado
+                # Mostrar la tabla del historial
                 st.markdown("#### 📚 Historial de Lectura Unificado")
-                with st.spinner("Cargando historial de compras, suscripciones e importaciones..."):
-                    df_historial = obtener_historial_completo(c_id)
-                    if df_historial.empty:
-                        st.info("El cliente aún no tiene libros asociados en su historial.")
-                    else:
-                        st.dataframe(df_historial, use_container_width=True, hide_index=True)
+                if df_historial.empty:
+                    st.info("El cliente aún no tiene libros asociados en su historial.")
+                else:
+                    st.dataframe(df_historial, use_container_width=True, hide_index=True)
+
 
     # ---------------------------------------------------------
     # PESTAÑA 2: NUEVO CLIENTE
