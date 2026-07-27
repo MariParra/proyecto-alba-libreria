@@ -5,14 +5,12 @@ from utilidades import get_db_connection
 
 def generar_plantilla_libros():
     """Genera un archivo Excel vacío solo con los encabezados necesarios."""
-    # Omitimos libro_id porque la base de datos lo genera automáticamente
     columnas = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 'stock', 'precio', 'precio_original']
     df_vacio = pd.DataFrame(columns=columnas)
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_vacio.to_excel(writer, index=False, sheet_name='Nuevos Libros')
-        # Ajustar ancho de columnas para que sea amigable
         worksheet = writer.sheets['Nuevos Libros']
         for i, col in enumerate(columnas):
             worksheet.set_column(i, i, 15)
@@ -25,21 +23,27 @@ def procesar_nuevos_libros(df):
     errores = []
     duplicados = 0
     
-    # 1. Traer catálogo actual para validar duplicados
+    # 1. Reemplazar valores NaN de pandas por None nativo de Python
+    df_clean = df.where(pd.notnull(df), None)
+    
+    # 2. Traer catálogo actual para validar duplicados
     res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(str(l['titulo']).strip().lower(), str(l.get('autor', '')).strip().lower()) for l in res_libros.data] if res_libros.data else []
+    catalogo_actual = [
+        (str(l['titulo']).strip().lower(), str(l.get('autor', '') or '').strip().lower()) 
+        for l in res_libros.data
+    ] if res_libros.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
-    total_filas = len(df)
+    total_filas = len(df_clean)
     
-    for indice, fila in df.iterrows():
+    for indice, fila in df_clean.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        titulo_excel = str(fila.get('titulo', '')).strip()
-        autor_excel = str(fila.get('autor', '')).strip()
+        titulo_excel = str(fila.get('titulo', '') or '').strip()
+        autor_excel = str(fila.get('autor', '') or '').strip()
         
         # Validación UX: Título es obligatorio
-        if not titulo_excel or titulo_excel.lower() == 'nan':
+        if not titulo_excel or titulo_excel.lower() in ['none', 'nan', '']:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
             continue
             
@@ -50,17 +54,34 @@ def procesar_nuevos_libros(df):
             continue
             
         try:
-            # Preparar el diccionario de inserción limpiando valores nulos
+            # Construir diccionario convirtiendo tipos de NumPy/Pandas a Python puro
             nuevo_libro = {}
-            for col in df.columns:
+            for col in df_clean.columns:
                 val = fila[col]
-                nuevo_libro[col] = None if pd.isna(val) else val
-                
-            # Insertar en BD
-            conn.table("libros").insert(nuevo_libro).execute()
-            exitos += 1
-            # Añadir a la lista local para evitar duplicados dentro del mismo Excel
-            catalogo_actual.append((titulo_excel.lower(), autor_excel.lower()))
+                if val is None:
+                    nuevo_libro[col] = None
+                elif hasattr(val, 'item'):  # Convierte int64, float64 de numpy a int/float
+                    nuevo_libro[col] = val.item()
+                elif isinstance(val, str):
+                    nuevo_libro[col] = val.strip()
+                else:
+                    nuevo_libro[col] = val
+
+            nuevo_libro['titulo'] = titulo_excel
+            nuevo_libro['autor'] = autor_excel if autor_excel else None
+
+            # Insertar en Supabase
+            res = conn.table("libros").insert(nuevo_libro).execute()
+            
+            # Comprobar si realmente guardó la fila
+            if res.data and len(res.data) > 0:
+                exitos += 1
+                catalogo_actual.append((titulo_excel.lower(), autor_excel.lower()))
+            else:
+                errores.append(
+                    f"Fila {indice + 2} ('{titulo_excel}'): La BD no devolvió los datos insertados. "
+                    f"Verifica las políticas RLS en la tabla 'libros' de Supabase."
+                )
             
         except Exception as e:
             errores.append(f"Fila {indice + 2} ('{titulo_excel}'): Error en BD -> {str(e)}")
@@ -101,12 +122,11 @@ def mostrar_creacion_masiva_libros():
                 with st.spinner("Creando registros..."):
                     exitos, duplicados, errores = procesar_nuevos_libros(df)
                     
-                    # Feedback claro al usuario
                     st.markdown("### 📋 Resumen de la Carga")
                     c1, c2, c3 = st.columns(3)
                     c1.metric("✅ Nuevos Ingresados", exitos)
                     c2.metric("⚠️ Duplicados Omitidos", duplicados)
-                    c3.metric("❌ Errores", len(errores) - duplicados) # Errores que no son de duplicidad
+                    c3.metric("❌ Errores", len(errores) - duplicados)
                     
                     if exitos > 0:
                         st.balloons()
@@ -120,3 +140,4 @@ def mostrar_creacion_masiva_libros():
 
 if __name__ == '__main__':
     mostrar_creacion_masiva_libros()
+                                
