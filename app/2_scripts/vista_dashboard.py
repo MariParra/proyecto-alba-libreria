@@ -39,7 +39,7 @@ def mostrar_alertas_proactivas():
         libros_criticos = res_stock.data if res_stock.data else []
         if libros_criticos:
             st.toast(f"🚨 Tienes {len(libros_criticos)} libros con stock crítico.", icon="⚠️")
-            with st.expander(f"⚠️ Alerta Operativa: {len(libros_criticos)} libros requieren reabastecimiento", expanded=True):
+            with st.expander(f"⚠️ Alerta Operativa: {len(libros_criticos)} libros requieren reabastecimiento", expanded=False):
                 st.error("Los siguientes libros están a punto de agotarse o ya no tienen stock:")
                 for l in libros_criticos:
                     st.markdown(f"- **{l['titulo']}** (Stock actual: `{l['stock']}` unidades)")
