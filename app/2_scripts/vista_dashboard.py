@@ -3,6 +3,64 @@ import pandas as pd
 import datetime
 from utilidades import get_db_connection
 
+def obtener_top_libros_populares(fecha_inicio, fecha_fin):
+    """
+    Consolida las ventas directas y las asignaciones del periodo seleccionado 
+    para identificar los 10 libros más populares.
+    """
+    conn = get_db_connection()
+    conteo_libros = {}
+
+    try:
+        # 1. Procesar Asignaciones del periodo
+        res_asig = conn.table("asignaciones").select("libro_suscripcion_id, fecha_asignacion").execute()
+        df_asig = pd.DataFrame(res_asig.data) if res_asig.data else pd.DataFrame()
+        if not df_asig.empty:
+            df_asig['fecha_asignacion'] = pd.to_datetime(df_asig['fecha_asignacion'], errors='coerce')
+            # Filtrar por fecha
+            df_asig = df_asig[(df_asig['fecha_asignacion'] >= pd.to_datetime(fecha_inicio)) & 
+                               (df_asig['fecha_asignacion'] <= pd.to_datetime(fecha_fin))]
+            
+            for libro_id in df_asig['libro_suscripcion_id'].dropna().astype(int):
+                conteo_libros[libro_id] = conteo_libros.get(libro_id, 0) + 1
+
+        # 2. Procesar Ventas Directas del periodo
+        res_ventas = conn.table("registro_ventas").select("libros_vendidos, fecha_venta").execute()
+        df_ventas = pd.DataFrame(res_ventas.data) if res_ventas.data else pd.DataFrame()
+        if not df_ventas.empty:
+            df_ventas['fecha_venta'] = pd.to_datetime(df_ventas['fecha_venta'], errors='coerce')
+            df_ventas = df_ventas[(df_ventas['fecha_venta'] >= pd.to_datetime(fecha_inicio)) & 
+                                 (df_ventas['fecha_venta'] <= pd.to_datetime(fecha_fin))]
+            
+            for _, row in df_ventas.iterrows():
+                try:
+                    libros = json.loads(row['libros_vendidos'])
+                    for l in libros:
+                        l_id = l.get('libro_id')
+                        if l_id:
+                            conteo_libros[int(l_id)] = conteo_libros.get(int(l_id), 0) + 1
+                except:
+                    continue
+
+        if not conteo_libros:
+            return pd.DataFrame()
+
+        # 3. Cruzar con títulos de libros
+        ids_libros = list(conteo_libros.keys())
+        res_detalles = conn.table("libros").select("libro_id, titulo").in_("libro_id", ids_libros).execute()
+        df_detalles = pd.DataFrame(res_detalles.data) if res_detalles.data else pd.DataFrame()
+
+        if not df_detalles.empty:
+            df_detalles['Cantidad'] = df_detalles['libro_id'].map(conteo_libros)
+            # Ordenar de mayor a menor y tomar el Top 10
+            df_top = df_detalles.sort_values(by="Cantidad", ascending=False).head(10)
+            return df_top.set_index('titulo')[['Cantidad']]
+            
+    except Exception as e:
+        st.error(f"Error generando ranking de libros: {e}")
+        
+    return pd.DataFrame()
+
 @st.cache_data(ttl=60)
 def cargar_datos_base():
     """Carga los datos crudos desde la base de datos."""
@@ -109,17 +167,26 @@ def mostrar_dashboard():
     st.markdown("<br>", unsafe_allow_html=True)
     col_izq, col_der = st.columns(2)
     
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_izq, col_der = st.columns(2)
+    
     with col_izq:
+        # (Aquí mantienes el gráfico de cantidad de asignaciones diarias/mensuales)
         with st.container(border=True):
             st.markdown(f"#### 📊 Cantidad de Asignaciones ({texto_freq})")
-            if not df_a_filt.empty:
-                # Contar asignaciones en el tiempo
-                conteo_asig = df_a_filt.groupby(df_a_filt['fecha_asignacion'].dt.to_period(frecuencia)).size().rename("Cantidad Asignaciones")
-                conteo_asig.index = conteo_asig.index.astype(str)
-                # Gráfico de barras, ideal para conteos (volumen)
-                st.bar_chart(conteo_asig, use_container_width=True, color="#4CAF50")
+            # ... tu gráfico de barras de asignaciones ...
+
+    with col_der:
+        # ¡AÑADIMOS EL TOP 10 DE LIBROS POPULARES AQUÍ!
+        with st.container(border=True):
+            st.markdown("#### 🔥 Top 10 Libros Más Populares (Ventas + Suscripción)")
+            df_populares = obtener_top_libros_populares(fecha_inicio, fecha_fin)
+            
+            if not df_populares.empty:
+                # Usamos un gráfico de barras horizontal (Streamlit lo hace automáticamente si los datos están bien indexados)
+                st.bar_chart(df_populares, use_container_width=True, color="#9C27B0") # Color Púrpura elegante
             else:
-                st.info("No hay asignaciones registradas en estas fechas.")
+                st.info("No hay suficientes ventas o asignaciones en este rango de fechas para generar el ranking.")
 
     with col_der:
         with st.container(border=True):
