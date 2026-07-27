@@ -203,7 +203,7 @@ def mostrar_herramientas():
                 mensaje_cuenta_regresiva = st.empty()
                 for segundos in range(3, 0, -1):
                     mensaje_cuenta_regresiva.info(f"🔄 Actualizando métricas en {segundos} segundos...")
-                    time.sleep(1)
+                    time.sleep(10)
                 st.rerun()
     
     st.markdown("---")
