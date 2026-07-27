@@ -3,26 +3,19 @@ import pandas as pd
 import json
 from utilidades import get_db_connection
 
-# --- FUNCIONES DE BASE DE DATOS ---
+# En tu archivo vista_clientes.py
 
-import pandas as pd
-import json
-from utilidades import get_db_connection
-
-# REEMPLAZA LA FUNCIÓN ENTERA POR ESTA VERSIÓN
 def obtener_historial_completo(cliente_id):
+    # --- 🛠️ CORRECCIÓN: Definimos las columnas esperadas al inicio ---
+    columnas_finales = ['Título', 'Autor', 'Fuente']
+    
     conn = get_db_connection()
     historial = []
 
     # 1. Librero Histórico
     res_hist = conn.table("librero_historico").select("libro_id, origen, autor_historico").eq("cliente_id", cliente_id).execute()
     if res_hist.data:
-        df_hist = pd.DataFrame(res_hist.data).rename(columns={"origen": "Fuente"})
-        # Añadimos la columna 'autor' para que la estructura sea consistente
-        if 'autor_historico' in df_hist.columns:
-            df_hist.rename(columns={'autor_historico': 'autor'}, inplace=True)
-        else:
-            df_hist['autor'] = "N/A"
+        df_hist = pd.DataFrame(res_hist.data).rename(columns={"origen": "Fuente", "autor_historico": "Autor"})
         historial.append(df_hist)
 
     # 2. Asignaciones
@@ -30,7 +23,7 @@ def obtener_historial_completo(cliente_id):
     if res_asig.data:
         df_asig = pd.DataFrame(res_asig.data).rename(columns={"libro_suscripcion_id": "libro_id"})
         df_asig['Fuente'] = "Suscripción (" + pd.to_datetime(df_asig['fecha_asignacion']).dt.strftime('%Y-%m-%d') + ")"
-        df_asig['autor'] = "N/A" # Las asignaciones no tienen autor directo
+        df_asig['Autor'] = "N/A"
         historial.append(df_asig)
 
     # 3. Ventas Directas
@@ -43,7 +36,7 @@ def obtener_historial_completo(cliente_id):
                 for item in items:
                     libros_venta.append({
                         "libro_id": item.get('libro_id'),
-                        "autor": item.get('autor', 'N/A'),
+                        "Autor": item.get('autor', 'N/A'),
                         "Fuente": f"Venta Directa ({v['fecha_venta']})"
                     })
             except (json.JSONDecodeError, TypeError):
@@ -51,48 +44,44 @@ def obtener_historial_completo(cliente_id):
         if libros_venta:
             historial.append(pd.DataFrame(libros_venta))
 
-    # --- 🛠️ CORRECCIÓN DE SEGURIDAD ---
-    # Si la lista está vacía (cliente 100% nuevo), retornamos una tabla vacía para evitar el error.
+    # Si la lista está vacía, retornamos una tabla vacía PERO con las columnas correctas
     if not historial:
-        return pd.DataFrame()
-    # ------------------------------------
+        return pd.DataFrame(columns=columnas_finales)
 
-    # Ahora la concatenación es segura
-    df_consolidado = pd.concat(historial, ignore_index=True).dropna(subset=['libro_id'])
+    df_consolidado = pd.concat(historial, ignore_index=True)
+    df_consolidado.dropna(subset=['libro_id'], inplace=True)
 
-    if not df_consolidado.empty:
-        # Limpieza estricta de IDs
-        ids_libros_limpios = []
-        for val in df_consolidado['libro_id'].unique():
-            try:
-                ids_libros_limpios.append(int(float(val)))
-            except (ValueError, TypeError):
-                continue
+    if df_consolidado.empty:
+        return pd.DataFrame(columns=columnas_finales)
 
-        if not ids_libros_limpios:
-            return pd.DataFrame()
+    ids_libros_limpios = []
+    for val in df_consolidado['libro_id'].unique():
+        try:
+            ids_libros_limpios.append(int(float(val)))
+        except (ValueError, TypeError):
+            continue
 
-        # Hacemos la consulta con la lista limpia
-        res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
+    if not ids_libros_limpios:
+        return pd.DataFrame(columns=columnas_finales)
 
-        if res_libros.data:
-            df_nombres = pd.DataFrame(res_libros.data)
-            df_nombres.rename(columns={'autor': 'autor_catalogo'}, inplace=True) # Renombrar para no chocar
-            
-            df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
+    res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
 
-            # Usamos un 'inner' join para mostrar solo libros que existen en el catálogo
-            df_final = df_consolidado.merge(df_nombres, on="libro_id", how="inner")
-            
-            # Lógica para usar el mejor autor disponible
-            df_final['autor_final'] = df_final.apply(
-                lambda row: row['autor_catalogo'] if pd.notna(row['autor_catalogo']) and row['autor_catalogo'] != 'N/A' else row['autor'],
-                axis=1
-            )
-            
-            return df_final[['titulo', 'autor_final', 'Fuente']].rename(columns={'autor_final': 'Autor'})
-
-    return pd.DataFrame()
+    if not res_libros.data:
+        return pd.DataFrame(columns=columnas_finales)
+        
+    df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
+    
+    df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
+    
+    df_final = df_consolidado.merge(df_nombres, on="libro_id", how="inner")
+    
+    # Lógica para usar el mejor autor disponible
+    df_final['Autor'] = df_final.apply(
+        lambda row: row['autor_catalogo'] if pd.notna(row['autor_catalogo']) and row['autor_catalogo'] != 'N/A' else row['Autor'],
+        axis=1
+    )
+    
+    return df_final[columnas_finales]
 
 
 def cargar_todos_los_clientes():
