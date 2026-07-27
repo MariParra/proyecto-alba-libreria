@@ -161,6 +161,21 @@ else:
             st.rerun()
 
         st.markdown("---")
+        if st.button("🔄 Refrescar Toda la App", type="secondary", use_container_width=True):
+            # 1. Limpiamos la caché de datos
+            st.cache_data.clear()
+            
+            # 2. Mostramos el mensaje de confirmación
+            st.toast("✅ ¡Datos actualizados! La aplicación ha sido refrescada.", icon="🔄")
+            
+            # 3. Esperamos un instante para que el mensaje sea visible antes de recargar
+            import time
+            time.sleep(1) 
+            
+            # 4. Recargamos la página
+            st.rerun()
+        
+        st.markdown("---")
         
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.clear()
