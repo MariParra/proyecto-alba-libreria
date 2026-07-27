@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import random
+import time
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 
@@ -701,6 +702,7 @@ def mostrar_asignaciones():
                     if ex: 
                         st.success(msg)
                         st.balloons()
+                        time.sleep(15)
                         st.rerun()
                     else: 
                         st.warning(msg)

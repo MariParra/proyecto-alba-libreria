@@ -85,7 +85,6 @@ def generar_plantilla_ventas():
             worksheet.set_column(i, i, 20)
     return output.getvalue()
 
-# --- FUNCIÓN RESTAURADA ---
 def procesar_ventas_masivas(df):
     conn = get_db_connection()
     exitos, errores = 0, []
@@ -161,6 +160,70 @@ def procesar_ventas_masivas(df):
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, errores
 
+# ====================================================
+# --- LÓGICA 3: IMPORTACIÓN DE SUSCRIPCIONES ---
+# ====================================================
+
+def generar_plantilla_suscripciones():
+    """Genera una plantilla Excel pre-rellenada con todos los clientes."""
+    conn = get_db_connection()
+    try:
+        # Obtenemos todos los clientes
+        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+        df_clientes = pd.DataFrame(res_clientes.data)
+        
+        # Añadimos la columna para que el usuario rellene
+        df_clientes['valor_suscripcion'] = ''
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_clientes.to_excel(writer, index=False, sheet_name='Suscripciones')
+            worksheet = writer.sheets['Suscripciones']
+            worksheet.set_column('A:A', 10) # cliente_id
+            worksheet.set_column('B:B', 30) # nombre
+            worksheet.set_column('C:C', 20) # valor_suscripcion
+        return output.getvalue()
+    except Exception as e:
+        st.error(f"Error al generar plantilla de suscripciones: {e}")
+        return None
+
+def procesar_suscripciones_masivas(df):
+    """Actualiza o crea suscripciones basadas en el Excel subido."""
+    conn = get_db_connection()
+    actualizados, creados, errores = 0, 0, []
+
+    # Limpiamos el DataFrame de filas sin valor de suscripción
+    df.dropna(subset=['valor_suscripcion'], inplace=True)
+    df['valor_suscripcion'] = pd.to_numeric(df['valor_suscripcion'], errors='coerce')
+    df.dropna(subset=['valor_suscripcion'], inplace=True)
+
+    barra_progreso = st.progress(0, text="Procesando suscripciones...")
+    total_filas = len(df)
+
+    for i, fila in df.iterrows():
+        barra_progreso.progress((i + 1) / total_filas, text=f"Procesando cliente {i+1}/{total_filas}...")
+        try:
+            cliente_id = int(fila['cliente_id'])
+            valor = float(fila['valor_suscripcion'])
+
+            # Verificamos si ya existe una suscripción para ese cliente
+            res = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", cliente_id).execute()
+            
+            datos = {"cliente_id": cliente_id, "valor_suscripcion": valor}
+
+            if res.data:
+                # Si existe, la actualizamos (UPSERT)
+                conn.table("suscripciones").update(datos).eq("cliente_id", cliente_id).execute()
+                actualizados += 1
+            else:
+                # Si no existe, la creamos
+                conn.table("suscripciones").insert(datos).execute()
+                creados += 1
+        except Exception as e:
+            errores.append(f"Fila {i+2}: Error con cliente ID {fila.get('cliente_id', 'N/A')} -> {str(e)}")
+
+    barra_progreso.progress(1.0, text="¡Carga finalizada!")
+    return actualizados, creados, errores
 # ==========================================
 # --- VISTA PRINCIPAL ---
 # ==========================================
@@ -168,7 +231,7 @@ def mostrar_creacion_masiva_libros():
     st.title("✨ Importación Masiva (Libros y Ventas)")
     st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel.")
     
-    tab_libros, tab_ventas = st.tabs(["📚 Nuevos Libros", "🛒 Ventas Pasadas"])
+    tab_libros, tab_ventas, tab_suscripciones = st.tabs(["📚 Nuevos Libros", "🛒 Ventas Pasadas", "🐧 Suscripciones"])
     
     with tab_libros:
         with st.container(border=True):
@@ -225,3 +288,37 @@ def mostrar_creacion_masiva_libros():
                             if errores_v:
                                 with st.expander("Ver lista de conflictos (Clientes no encontrados)"):
                                     for err in errores_v: st.write(err)
+    with tab_suscripciones:
+        with st.container(border=True):
+            st.markdown("### Paso 1: Descarga la Plantilla Inteligente")
+            st.info("La plantilla se generará con los IDs y Nombres de todos tus clientes actuales.")
+            st.download_button(
+                label="📥 Descargar Plantilla Suscripciones (.xlsx)",
+                data=generar_plantilla_suscripciones(),
+                file_name="plantilla_suscripciones.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with st.container(border=True):
+            st.markdown("### Paso 2: Sube el archivo con los valores")
+            st.warning("El sistema solo procesará las filas donde la columna `valor_suscripcion` tenga un número.")
+            archivo_subs = st.file_uploader("Sube el archivo de suscripciones", type=["xlsx"], key="up_subs")
+            
+            if archivo_subs:
+                df_s = pd.read_excel(archivo_subs, engine='openpyxl')
+                if 'cliente_id' not in df_s.columns or 'valor_suscripcion' not in df_s.columns:
+                    st.error("🛑 El archivo no es válido. Usa la plantilla de suscripciones.")
+                else:
+                    if st.button("🚀 Actualizar/Crear Suscripciones", type="primary", use_container_width=True):
+                        with st.spinner("Procesando suscripciones..."):
+                            actualizados, creados, errores = procesar_suscripciones_masivas(df_s)
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("✅ Actualizadas", actualizados)
+                            c2.metric("✨ Nuevas Creadas", creados)
+                            c3.metric("❌ Errores", len(errores))
+                            if actualizados > 0 or creados > 0: 
+                                st.balloons()
+                                st.success("¡Valores de suscripción guardados correctamente!")
+                            if errores:
+                                with st.expander("Ver lista de conflictos"):
+                                    for err in errores: st.write(err)
