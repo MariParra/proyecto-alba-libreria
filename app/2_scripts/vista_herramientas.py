@@ -206,9 +206,9 @@ def mostrar_herramientas():
                     time.sleep(1)
                 st.rerun()
     
-        st.markdown("---")
+    st.markdown("---")
     
-    # Encabezado visual e informativo
+    # Encabezado visual, descriptivo e instructivo para UX robusta
     st.markdown("### 🧹 Corrección de Catálogo (Eliminar libros fantasma)")
     
     st.info(
@@ -224,7 +224,7 @@ def mostrar_herramientas():
         "que no haya libros reales antes de borrarlos."
     )
     
-    # Llamamos a la función
+    # Llamamos a la función interna sin títulos repetidos
     mostrar_herramienta_limpieza()
 
                 
