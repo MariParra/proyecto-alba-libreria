@@ -152,8 +152,8 @@ else:
             st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
             st.rerun()
 
-        if st.button("✨ CREACIÓN MASIVA (LIBROS)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS)" else "secondary"):
-            st.session_state.pagina_actual = "✨ CREACIÓN MASIVA (LIBROS)"
+        if st.button("✨ CREACIÓN MASIVA (LIBROS - VENTAS PASADAS)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS - VENTAS PASADAS)" else "secondary"):
+            st.session_state.pagina_actual = "✨ CREACIÓN MASIVA (LIBROS - VENTAS PASADAS)"
             st.rerun()
             
         if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
@@ -187,7 +187,7 @@ else:
         # --- NUEVAS RUTAS AÑADIDAS ---
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
-        elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS)":
+        elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA (LIBROS - VENTAS PASADAS)":
             mostrar_creacion_masiva_libros()
         elif st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA":
             mostrar_actualizacion_masiva()
