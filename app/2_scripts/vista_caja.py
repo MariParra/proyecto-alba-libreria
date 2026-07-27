@@ -75,15 +75,15 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         response = conn.table("libros").insert(datos).execute()
         cargar_libros_caja.clear()
         return response.data[0]['libro_id']
-
-def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario):
+    
+def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta):
     conn = get_db_connection()
     texto_libros = " | ".join([f"{item['cantidad']} x {item['titulo'].upper()}" for item in carrito])
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
     try:
         datos_venta = {
-            "cliente_id": cliente_id, "fecha_venta": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
             "libros_vendidos": texto_libros, "subtotal_libros": float(subtotal_libros),
             "valor_envio": float(valor_envio), "monto_final": float(monto_final),
             "metodo_envio": metodo_envio, "comentario": f"Pago: {metodo_pago}. {comentario}".strip()
@@ -150,7 +150,6 @@ def actualizar_historial_batch(df_editado):
 # --- INTERFAZ DE CAJA ---
 
 def mostrar_caja():
-    # ¡AQUÍ ESTÁ LA SOLUCIÓN DEL ERROR! El carrito se inicializa dentro de la función.
     if 'carrito_caja' not in st.session_state:
         st.session_state.carrito_caja = []
 
@@ -233,6 +232,7 @@ def mostrar_caja():
 
         st.markdown("---")
         st.markdown("### 3️⃣ Envío, Pago y Confirmación")
+        fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         col_e1, col_e2 = st.columns(2)
         modo_envio = col_e1.selectbox("Modo de Envío:", ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor"])
         valor_envio = col_e2.number_input("Costo de Envío ($):", min_value=0.0, step=500.0) if modo_envio != "Retiro en tienda" else 0.0
@@ -250,7 +250,7 @@ def mostrar_caja():
             else:
                 with st.spinner("Procesando Venta..."):
                     final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_id)
-                    exito, err = procesar_venta_carrito(st.session_state.carrito_caja, final_cliente_id, valor_envio, modo_envio, metodo_pago, comentario_venta)
+                    exito, err = procesar_venta_carrito(st.session_state.carrito_caja, final_cliente_id, valor_envio, modo_envio, metodo_pago, comentario_venta, fecha_venta_manual)
                     if exito: st.success("🎉 ¡Venta registrada!"), st.balloons(), st.rerun()
                     else: st.error(f"Error: {err}")
 

@@ -186,8 +186,41 @@ def mostrar_clientes():
                 if df_historial.empty:
                     st.info("El cliente aún no tiene libros asociados en su historial.")
                 else:
-                    st.success(f"La clienta tiene un total de **{len(df_historial)}** libros registrados en su ficha unificada.")
-                    st.dataframe(df_historial, use_container_width=True, hide_index=True)
+                    # 1. Crear una columna de 'Origen' simplificada para el filtro
+                    def categorizar_fuente(fuente_texto):
+                        if "suscripción" in fuente_texto.lower(): return "Suscripción"
+                        if "venta" in fuente_texto.lower(): return "Venta Directa"
+                        if "importación" in fuente_texto.lower(): return "Importación Histórica"
+                        return "Otro"
+                    
+                    df_historial['Origen'] = df_historial['Fuente'].apply(categorizar_fuente)
+                    
+                    # 2. Obtener orígenes únicos y crear el filtro multiselect
+                    origenes_unicos = sorted(df_historial['Origen'].unique())
+                    
+                    # Usamos st.expander para que el filtro no ocupe mucho espacio
+                    with st.expander("🔍 Filtrar historial por origen"):
+                        origenes_seleccionados = st.multiselect(
+                            "Selecciona uno o más orígenes:",
+                            options=origenes_unicos,
+                            default=origenes_unicos # Por defecto, mostramos todos
+                        )
+                    
+                    # 3. Filtrar el DataFrame según la selección
+                    if origenes_seleccionados:
+                        df_filtrado = df_historial[df_historial['Origen'].isin(origenes_seleccionados)]
+                    else:
+                        # Si no se selecciona nada, mostramos todo
+                        df_filtrado = df_historial
+                        
+                    st.success(f"Mostrando **{len(df_filtrado)}** de **{len(df_historial)}** libros registrados.")
+                    
+                    # 4. Mostrar la tabla filtrada (sin la columna auxiliar 'Origen')
+                    st.dataframe(
+                        df_filtrado[['Título', 'Autor', 'Fuente']], 
+                        use_container_width=True, 
+                        hide_index=True
+                    )
 
 
     # ---------------------------------------------------------
