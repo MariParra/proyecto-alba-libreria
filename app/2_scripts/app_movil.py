@@ -19,6 +19,11 @@ from vista_creacion_masiva import mostrar_creacion_masiva_libros
 from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
 
+import sys
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+    
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 load_dotenv()
 
