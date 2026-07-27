@@ -114,7 +114,6 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     if df_suscritos.empty:
         return False, "No hay clientes con estado 'ACTIVA' en tu base de datos."
 
-    # Filtramos para encontrar solo los clientes que FALTAN por crear
     if not df_mes_actual.empty:
         clientes_ya_creados = df_mes_actual['cliente_id'].unique()
         df_faltantes = df_suscritos[~df_suscritos['cliente_id'].isin(clientes_ya_creados)]
@@ -125,10 +124,9 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
         return True, "✅ ¡Todo al día! No se encontraron nuevos clientes activos para agregar al mes."
 
     conn = get_db_connection()
-    creados, errores = 0, 0
+    creados, errores = 0, [] # Cambiamos 'errores' a una lista para guardar los mensajes
     total_a_crear = len(df_faltantes)
     
-    # Usamos una barra de progreso para la UX
     barra_progreso = progress_placeholder.progress(0, text=f"Iniciando creación de {total_a_crear} cajas...")
 
     for i, (_, cliente) in enumerate(df_faltantes.iterrows()):
@@ -147,15 +145,28 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
             }
             conn.table("asignaciones").insert(datos).execute()
             creados += 1
-        except:
-            errores += 1
+        except Exception as e:
+            # --- 🛠️ ESTA ES LA MODIFICACIÓN CLAVE ---
+            # Guardamos el mensaje de error exacto en la lista
+            error_msg = f"Error con cliente '{cliente['nombre']}' (ID: {cliente['cliente_id']}): {str(e)}"
+            errores.append(error_msg)
+            # ----------------------------------------
             
     cargar_asignaciones_mes.clear()
     
+    # Si hubo errores, los mostramos todos
+    if errores:
+        st.error("Se encontraron errores durante la creación. Revisa los detalles a continuación:")
+        # Mostramos los errores en un expander para no saturar la pantalla
+        with st.expander("Ver detalle de los errores", expanded=True):
+            for err in errores:
+                st.write(err)
+        return False, f"Proceso finalizado con {len(errores)} errores de {total_a_crear} intentos."
+
     if creados > 0:
         return True, f"🎉 ¡Éxito! Se crearon {creados} nuevas cajas para el mes."
-    else:
-        return False, f"Ocurrieron {errores} errores durante el proceso."
+    
+    return False, "No se realizó ninguna acción."
 
 def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, ano, mes, titulo, autor):
     conn = get_db_connection()
