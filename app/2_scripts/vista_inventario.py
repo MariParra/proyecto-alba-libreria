@@ -220,7 +220,7 @@ def mostrar_inventario():
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
         modo_edicion = st.radio("Elige la vista de edición:", ["📱 Vista Móvil (Formulario)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
-        st.write("") # Espaciador
+        st.write("")
         
         if modo_edicion == "📱 Vista Móvil (Formulario)":
             titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
@@ -228,16 +228,38 @@ def mostrar_inventario():
             
             if titulo_a_editar:
                 libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
-                with st.form("form_editar"):
+                with st.form("form_editar_movil"): # Le damos una key única al formulario
                     st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
                     
+                    # 1. Obtenemos las listas de opciones únicas
+                    opciones_autor = obtener_unicos(df_inventario, 'autor')
+                    opciones_editorial = obtener_unicos(df_inventario, 'editorial')
+                    opciones_genero = obtener_unicos(df_inventario, 'genero')
+                    opciones_enc = obtener_unicos(df_inventario, 'encuadernacion')
+
+                    # 2. Creamos los selectbox, posicionándolos en el valor actual
                     col1, col2 = st.columns(2)
-                    nuevo_autor = col1.text_input("Autor:", value=libro['autor'])
-                    nueva_editorial = col2.text_input("Editorial:", value=libro['editorial'])
+                    
+                    # Para encontrar el índice del valor actual y pre-seleccionarlo
+                    try: idx_autor = opciones_autor.index(libro['autor'])
+                    except ValueError: idx_autor = 0
+                    nuevo_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
+
+                    try: idx_editorial = opciones_editorial.index(libro['editorial'])
+                    except ValueError: idx_editorial = 0
+                    nueva_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
                     
                     col3, col4 = st.columns(2)
-                    nuevo_genero = col3.text_input("Género:", value=libro['genero'])
-                    nueva_encuadernacion = col4.text_input("Encuadernación:", value=libro['encuadernacion'])
+
+                    try: idx_genero = opciones_genero.index(libro['genero'])
+                    except ValueError: idx_genero = 0
+                    nuevo_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
+
+                    try: idx_enc = opciones_enc.index(libro['encuadernacion'])
+                    except ValueError: idx_enc = 0
+                    nueva_encuadernacion = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
+                    
+                    # ---------------------------------------------------------
                     
                     col5, col6 = st.columns(2)
                     nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
@@ -245,10 +267,10 @@ def mostrar_inventario():
                     
                     if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
                         datos_actualizados = {
-                            "autor": limpiar_texto(nuevo_autor),
-                            "editorial": limpiar_texto(nueva_editorial),
-                            "genero": limpiar_texto(nuevo_genero),
-                            "encuadernacion": limpiar_texto(nueva_encuadernacion),
+                            "autor": nuevo_autor,
+                            "editorial": nueva_editorial,
+                            "genero": nuevo_genero,
+                            "encuadernacion": nueva_encuadernacion,
                             "stock": nuevo_stock,
                             "precio": nuevo_precio
                         }
