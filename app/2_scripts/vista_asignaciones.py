@@ -414,7 +414,7 @@ def mostrar_asignaciones():
         "📋 Gestión (Tabla Editable)", 
         "📖 Asignar Libro Principal", 
         "➕ Agregar Extras y Envío", 
-        "🚀 🚀 Generar / Actualizar Mes", 
+        "🚀 Generar / Actualizar Mes", 
         "🗑️ Eliminar/Quitar Libros", 
         "🔒 Cierre de Mes"
     ]
