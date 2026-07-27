@@ -126,20 +126,30 @@ def mostrar_inventario():
         encuadernaciones_seleccionadas = col_f4.multiselect("Encuadernación:", obtener_unicos(df_inventario, 'encuadernacion'))
 
         st.markdown("---")
+        # --- FILTROS NUMÉRICOS ---
         st.markdown("**Filtros Numéricos**")
         col_f5, col_f6 = st.columns(2)
         
-        if not df_inventario.empty:
-            min_p, max_p = float(df_inventario['precio'].min()), float(df_inventario['precio'].max())
-            if min_p == max_p: max_p += 1.0
-            rango_precio = col_f5.slider("Rango de Precio ($):", min_value=min_p, max_value=max_p, value=(min_p, max_p))
-            
-            min_s, max_s = int(df_inventario['stock'].min()), int(df_inventario['stock'].max())
-            if min_s == max_s: max_s += 1
-            rango_stock = col_f6.slider("Rango de Stock:", min_value=min_s, max_value=max_s, value=(min_s, max_s))
-        else:
-            rango_precio = (0.0, 100000.0)
-            rango_stock = (0, 1000)
+        # Slider de Precio (sin cambios)
+        min_p, max_p = float(df_inventario['precio'].min()), float(df_inventario['precio'].max())
+        if min_p >= max_p: max_p = min_p + 1.0
+        rango_precio = col_f5.slider("Rango de Precio ($):", min_value=min_p, max_value=max_p, value=(min_p, max_p))
+
+        min_s_db = int(df_inventario['stock'].min())
+        min_s_slider = max(0, min_s_db) # Si el mínimo es -1, usará 0
+        
+        max_s = int(df_inventario['stock'].max())
+        if min_s_slider >= max_s: max_s = min_s_slider + 1
+
+        # El valor por defecto del slider también debe respetar el mínimo de 0
+        valor_inicial_slider = (min_s_slider, max_s)
+
+        rango_stock = col_f6.slider(
+            "Rango de Stock:", 
+            min_value=min_s_slider, 
+            max_value=max_s, 
+            value=valor_inicial_slider
+        )
 
     # Aplicamos todos los filtros
     df_filtrado = df_inventario.copy()
