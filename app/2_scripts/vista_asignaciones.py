@@ -115,17 +115,24 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     if df_suscritos.empty:
         return False, "No hay clientes con estado 'ACTIVA' en tu base de datos."
 
+    # --- 🛠️ LA CORRECCIÓN DEFINITIVA ---
+    # Nos aseguramos de que ambas listas de IDs sean del mismo tipo (números) antes de comparar
+    df_suscritos['cliente_id'] = pd.to_numeric(df_suscritos['cliente_id'], errors='coerce')
+
     if not df_mes_actual.empty:
-        clientes_ya_creados = df_mes_actual['cliente_id'].unique()
+        # Forzamos que la columna de IDs en la tabla de asignaciones también sea numérica
+        df_mes_actual['cliente_id'] = pd.to_numeric(df_mes_actual['cliente_id'], errors='coerce')
+        clientes_ya_creados = df_mes_actual.dropna(subset=['cliente_id'])['cliente_id'].unique()
         df_faltantes = df_suscritos[~df_suscritos['cliente_id'].isin(clientes_ya_creados)]
     else:
         df_faltantes = df_suscritos
+    # ------------------------------------
 
     if df_faltantes.empty:
         return True, "✅ ¡Todo al día! No se encontraron nuevos clientes activos para agregar al mes."
 
     conn = get_db_connection()
-    creados, errores = 0, [] # Cambiamos 'errores' a una lista para guardar los mensajes
+    creados, errores = 0, []
     total_a_crear = len(df_faltantes)
     
     barra_progreso = progress_placeholder.progress(0, text=f"Iniciando creación de {total_a_crear} cajas...")
@@ -147,18 +154,13 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
             conn.table("asignaciones").insert(datos).execute()
             creados += 1
         except Exception as e:
-            # --- 🛠️ ESTA ES LA MODIFICACIÓN CLAVE ---
-            # Guardamos el mensaje de error exacto en la lista
             error_msg = f"Error con cliente '{cliente['nombre']}' (ID: {cliente['cliente_id']}): {str(e)}"
             errores.append(error_msg)
-            # ----------------------------------------
             
     cargar_asignaciones_mes.clear()
     
-    # Si hubo errores, los mostramos todos
     if errores:
         st.error("Se encontraron errores durante la creación. Revisa los detalles a continuación:")
-        # Mostramos los errores en un expander para no saturar la pantalla
         with st.expander("Ver detalle de los errores", expanded=True):
             for err in errores:
                 st.write(err)
@@ -703,6 +705,7 @@ def mostrar_asignaciones():
                         st.success(msg)
                         st.balloons()
                         time.sleep(15)
+                        st.cache_data.clear()
                         st.rerun()
                     else: 
                         st.warning(msg)
