@@ -1,4 +1,4 @@
-import streamlit as st
+8import streamlit as st
 import pandas as pd
 import io
 from utilidades import get_db_connection
@@ -26,12 +26,15 @@ def procesar_nuevos_libros(df):
     # 1. Reemplazar valores NaN de pandas por None nativo de Python
     df_clean = df.where(pd.notnull(df), None)
     
-    # 2. Traer catálogo actual para validar duplicados
+    # 2. Traer catálogo actual para validar duplicados (en mayúsculas para comparar homogéneamente)
     res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [
-        (str(l['titulo']).strip().lower(), str(l.get('autor', '') or '').strip().lower()) 
-        for l in res_libros.data
-    ] if res_libros.data else []
+    catalogo_actual = set()
+    if res_libros.data:
+        for l in res_libros.data:
+            t = str(l.get('titulo') or '').strip().upper()
+            a = str(l.get('autor') or '').strip().upper()
+            if t:
+                catalogo_actual.add((t, a))
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
     total_filas = len(df_clean)
@@ -39,22 +42,22 @@ def procesar_nuevos_libros(df):
     for indice, fila in df_clean.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        titulo_excel = str(fila.get('titulo', '') or '').strip()
-        autor_excel = str(fila.get('autor', '') or '').strip()
+        # Convertir título y autor a MAYÚSCULAS
+        titulo_excel = str(fila.get('titulo', '') or '').strip().upper()
+        autor_excel = str(fila.get('autor', '') or '').strip().upper()
         
         # Validación UX: Título es obligatorio
-        if not titulo_excel or titulo_excel.lower() in ['none', 'nan', '']:
+        if not titulo_excel or titulo_excel in ['NONE', 'NAN', '']:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
             continue
             
         # Validación UX: Evitar duplicados
-        if (titulo_excel.lower(), autor_excel.lower()) in catalogo_actual:
+        if (titulo_excel, autor_excel) in catalogo_actual:
             duplicados += 1
             errores.append(f"Fila {indice + 2}: El libro '{titulo_excel}' de '{autor_excel}' ya existe en la base de datos.")
             continue
             
         try:
-            # Construir diccionario convirtiendo tipos de NumPy/Pandas a Python puro
             nuevo_libro = {}
             for col in df_clean.columns:
                 val = fila[col]
@@ -63,20 +66,22 @@ def procesar_nuevos_libros(df):
                 elif hasattr(val, 'item'):  # Convierte int64, float64 de numpy a int/float
                     nuevo_libro[col] = val.item()
                 elif isinstance(val, str):
-                    nuevo_libro[col] = val.strip()
+                    # --- CONVERSIÓN A MAYÚSCULAS ---
+                    val_str = val.strip().upper()
+                    nuevo_libro[col] = val_str if val_str not in ['NONE', 'NAN', ''] else None
                 else:
                     nuevo_libro[col] = val
 
+            # Asegurar que título y autor estén limpios y en MAYÚSCULAS
             nuevo_libro['titulo'] = titulo_excel
             nuevo_libro['autor'] = autor_excel if autor_excel else None
 
             # Insertar en Supabase
             res = conn.table("libros").insert(nuevo_libro).execute()
             
-            # Comprobar si realmente guardó la fila
             if res.data and len(res.data) > 0:
                 exitos += 1
-                catalogo_actual.append((titulo_excel.lower(), autor_excel.lower()))
+                catalogo_actual.add((titulo_excel, autor_excel))
             else:
                 errores.append(
                     f"Fila {indice + 2} ('{titulo_excel}'): La BD no devolvió los datos insertados. "
@@ -140,4 +145,5 @@ def mostrar_creacion_masiva_libros():
 
 if __name__ == '__main__':
     mostrar_creacion_masiva_libros()
-                                
+
+
