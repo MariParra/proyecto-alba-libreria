@@ -8,10 +8,29 @@ def obtener_unicos(df, columna):
 
 @st.cache_data
 def cargar_datos_completos():
-    """Carga todos los datos de la tabla 'libros' desde Supabase."""
+    """
+    Carga todos los datos de la tabla 'libros' desde Supabase
+    y limpia de forma segura cualquier celda con valores nulos (NaN).
+    """
     conn = get_db_connection()
     response = conn.table("libros").select("*").execute()
-    return pd.DataFrame(response.data)
+    
+    if response.data:
+        df = pd.DataFrame(response.data)
+        columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+        for col in columnas_texto:
+            if col in df.columns:
+                df[col] = df[col].fillna("").astype(str).str.strip()
+                
+        # Aseguramos que precio y stock también tengan valores numéricos válidos por si acaso
+        if 'precio' in df.columns:
+            df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
+        if 'stock' in df.columns:
+            df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
+            
+        return df
+        
+    return pd.DataFrame()
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio):
     """Crea un nuevo libro en la tabla 'libros'."""
