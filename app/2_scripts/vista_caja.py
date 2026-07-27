@@ -208,9 +208,14 @@ def mostrar_caja():
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
             cantidad = col_c2.number_input("Cantidad:", min_value=1, max_value=max(1, l_stock_actual), step=1)
             
+            libro_sin_stock = l_stock_actual <= 0 and not es_nuevo
+            if libro_sin_stock:
+                st.warning("⚠️ Atención: Estás vendiendo un libro sin stock físico (venta por encargo).")
+            # ---------------------------------------------
+            
             if st.button("➕ AÑADIR AL CARRITO", use_container_width=True):
-                if not l_titulo: st.error("Debes seleccionar un libro.")
-                elif cantidad > l_stock_actual and not es_nuevo: st.error("No hay stock suficiente.")
+                if not l_titulo: 
+                    st.error("Debes seleccionar un libro.")
                 else:
                     st.session_state.carrito_caja.append({
                         'libro_id': l_id, 'titulo': l_titulo, 'autor': l_autor, 'precio_catalogo': l_precio_catalogo,
