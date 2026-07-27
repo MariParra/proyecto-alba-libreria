@@ -138,8 +138,9 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
     try:
         a_id, c_id, l_id_py = int(asignacion_id), int(cliente_id), int(libro_id)
         
-        conn.table("libros").update({"stock": int(stock_actual) - 1}).eq("libro_id", l_id_py).execute()
-        conn.table("asignaciones").update({"libro_suscripcion_id": l_id_py}).eq("asignacion_id", a_id).execute()
+        # Si el stock ya es 0 o menor, se queda en 0. Si es mayor, resta 1.
+        nuevo_stock = max(0, int(stock_actual) - 1)
+        conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id_py).execute()
         
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", l_id_py).execute()
         if not res_hist.data:
@@ -175,22 +176,31 @@ def asignar_al_azar_inteligente(df_pendientes, ano, mes):
     if exitos > 0: return True, f"Se asignaron {exitos} libros al azar."
     else: return False, "No se pudo asignar ningún libro."
 
+# En tu archivo vista_asignaciones.py
+
 def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_cat, texto_libre, valor_total_extras_a_sumar, nuevo_envio):
     conn = get_db_connection()
     try:
         a_id, c_id = int(asignacion_id), int(cliente_id)
         nombres_extras = []
         
+        # --- Parte 1: Libros Extras seleccionados del catálogo ---
         for titulo in libros_extras_cat:
             res_le = conn.table("libros").select("libro_id, stock, autor").eq("titulo", titulo).execute()
             if res_le.data:
                 le_id, le_stock, le_autor = res_le.data[0]['libro_id'], res_le.data[0]['stock'], res_le.data[0]['autor']
-                conn.table("libros").update({"stock": le_stock - 1}).eq("libro_id", le_id).execute()
+                
+                # --- 🛠️ CORRECCIÓN APLICADA AQUÍ ---
+                nuevo_stock_extra = max(0, int(le_stock) - 1)
+                conn.table("libros").update({"stock": nuevo_stock_extra}).eq("libro_id", le_id).execute()
+                # ------------------------------------
+                
                 res_hist_le = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", le_id).execute()
                 if not res_hist_le.data:
                     conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": le_id, "autor_historico": limpiar_texto(le_autor), "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"}).execute()
                 nombres_extras.append(titulo)
 
+        # --- Parte 2: Libros Extras escritos libremente ---
         if texto_libre.strip():
             items_libres = [x.strip() for x in texto_libre.split(",")]
             for item in items_libres:
@@ -199,8 +209,11 @@ def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_
                 res_exist = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_cl).execute()
                 if res_exist.data:
                     le_id, le_stock = res_exist.data[0]['libro_id'], res_exist.data[0]['stock']
-                    conn.table("libros").update({"stock": le_stock - 1}).eq("libro_id", le_id).execute()
+                    nuevo_stock_extra_libre = max(0, int(le_stock) - 1)
+                    conn.table("libros").update({"stock": nuevo_stock_extra_libre}).eq("libro_id", le_id).execute()
+                    # -----------------------------------------
                 else:
+                    # Si el libro no existe, lo crea con stock 0
                     res_new = conn.table("libros").insert({"titulo": titulo_cl, "autor": "EXTRA/NUEVO", "precio": 0, "stock": 0}).execute()
                     le_id = res_new.data[0]['libro_id']
                 
@@ -209,6 +222,7 @@ def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_
                     conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": le_id, "autor_historico": "EXTRA/NUEVO", "origen": f"ASIGNACIÓN EXTRA {mes}/{ano}"}).execute()
                 nombres_extras.append(titulo_cl)
 
+        # ... (El resto de la función para calcular montos no necesita cambios)
         res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", a_id).execute()
         extras_actual = str(res_asig.data[0].get('extras', ''))
         v_ext_actual = float(res_asig.data[0].get('valor_extras') or 0.0)
