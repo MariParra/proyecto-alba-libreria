@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 from utilidades import get_db_connection, limpiar_texto
+import time
 
 # ==========================================
 # --- FUNCIONES DE BASE DE DATOS ---
@@ -543,6 +544,7 @@ def mostrar_caja():
                 if st.button("💾 Guardar Cambios en Historial", type="primary"):
                     num = actualizar_historial_batch(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!")
+                    time.sleep(1.5) 
                     st.rerun()
 
     # --- PESTAÑA 3: CUENTAS POR COBRAR ---
