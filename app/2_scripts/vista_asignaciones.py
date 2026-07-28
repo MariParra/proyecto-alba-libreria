@@ -60,52 +60,40 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         return df_catalogo, []
 
 @st.cache_data(ttl=60)
+@st.cache_data(ttl=60)
 def cargar_asignaciones_mes(ano, mes):
-    """
-    Carga las asignaciones del mes, uniendo toda la información y
-    aplicando una limpieza exhaustiva para estandarizar los valores nulos.
-    """
     conn = get_db_connection()
     try:
         res_asig = conn.table("asignaciones").select("*").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         
         if not res_asig.data:
-            # Columnas esperadas para evitar errores en tablas vacías
-            columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
-            return pd.DataFrame(columns=columnas_esperadas)
+            columnas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
+            return pd.DataFrame(columns=columnas)
             
         df_asig = pd.DataFrame(res_asig.data)
         
-        # Obtenemos tablas maestras
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         
-        # Hacemos los merges
         if res_clientes.data:
             df_asig = pd.merge(df_asig, pd.DataFrame(res_clientes.data), on='cliente_id', how='left')
-        
         if res_libros.data:
             df_asig['libro_suscripcion_id'] = pd.to_numeric(df_asig['libro_suscripcion_id'], errors='coerce')
             df_asig = pd.merge(df_asig, pd.DataFrame(res_libros.data), left_on='libro_suscripcion_id', right_on='libro_id', how='left', suffixes=('', '_libro'))
-        
         if res_subs.data:
             df_asig = pd.merge(df_asig, pd.DataFrame(res_subs.data), on='cliente_id', how='left')
 
-        # 1. Rellenamos cualquier nulo de Pandas (NaN) o de Python (None)
         df_asig.rename(columns={'titulo': 'titulo_libro', 'nombre': 'nombre_cliente'}, inplace=True)
-        df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR", inplace=True)
         
-        # 2. Forzamos la conversión a texto y reemplazamos el TEXTO "None"
-        df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace('None', "⏳ PENDIENTE DE ASIGNAR", regex=False)
-        # -------------------------------------------------------------
+        # Limpieza absoluta de nulos
+        df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace(['None', 'nan', '<NA>'], "⏳ PENDIENTE DE ASIGNAR", regex=False)
+        df_asig.loc[df_asig['titulo_libro'].isnull(), 'titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
         
-        # Rellenamos nulos en otras columnas para evitar errores de visualización
         df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
         df_asig['valor_suscripcion'].fillna(0, inplace=True)
 
         return df_asig
-
     except Exception as e:
         st.error(f"Error crítico al cargar asignaciones: {e}")
         return pd.DataFrame()
@@ -201,17 +189,28 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
     try:
         a_id, c_id, l_id_py = int(asignacion_id), int(cliente_id), int(libro_id)
         
-        # Si el stock ya es 0 o menor, se queda en 0. Si es mayor, resta 1.
+        # 1. Descontar stock
         nuevo_stock = max(0, int(stock_actual) - 1)
         conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id_py).execute()
         
+        # --- ¡LA LÍNEA QUE FALTABA! ---
+        # 2. Actualizar la tabla de asignaciones con el libro
+        conn.table("asignaciones").update({"libro_suscripcion_id": l_id_py}).eq("asignacion_id", a_id).execute()
+        # --------------------------------
+        
+        # 3. Añadir al historial del cliente
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", l_id_py).execute()
         if not res_hist.data:
             conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": l_id_py, "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
-        cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
+        # 4. Limpiar cachés para refrescar la vista
+        cargar_asignaciones_mes.clear()
+        cargar_catalogo_completo_libros.clear()
+        cargar_libros_filtrados_para_cliente.clear()
+        
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e: 
+        return False, str(e)
 
 def asignar_al_azar_inteligente(df_pendientes, ano, mes):
     if df_pendientes.empty: return False, "No hay pendientes para asignar."
