@@ -37,7 +37,7 @@ def cargar_datos_completos():
         if 'costo' in df.columns:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
             
-        # 🔴 LÓGICA DE DESCUENTOS SEGURA
+        # LÓGICA DE DESCUENTOS SEGURA
         df['Dcto %'] = 0.0
         mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
         
@@ -86,7 +86,6 @@ def actualizar_un_libro(libro_id, datos):
     except Exception as e:
         return False, str(e)
 
-# 🔴 SOLUCIÓN DE EDICIÓN: Ahora comparamos directamente el df original filtrado contra el editado
 def actualizar_libros_batch(df_original, df_editado):
     if df_original.empty or df_editado.empty: return 0
     
@@ -306,7 +305,7 @@ def mostrar_inventario():
                         exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
                         if exito:
                             st.success("¡Libro actualizado correctamente!")
-                            st.snow() # ❄️ Nieve!
+                            st.snow()
                             time.sleep(2)
                             st.rerun()
                         else:
@@ -316,7 +315,7 @@ def mostrar_inventario():
             
             columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
             
-            # 🔴 SEGURIDAD: ID y Título siempre están presentes para evitar fallos
+            # Aseguramos que siempre estén las bases
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
             
@@ -336,21 +335,26 @@ def mostrar_inventario():
                 "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f")
             }
             
+            # 🔴 SEGURIDAD: Solo pasamos a "disabled" las columnas que realmente se están mostrando en pantalla
+            cols_a_bloquear = ["libro_id", "titulo", "precio_original"]
+            disabled_finales = [c for c in cols_a_bloquear if c in df_mostrar.columns]
+            
             df_editado = st.data_editor(
                 df_mostrar, use_container_width=True, hide_index=True,
-                disabled=["libro_id", "titulo"], key="editor_inventario",
+                disabled=disabled_finales, # Evita colapsos de Streamlit
                 column_config=config_columnas
             )
             
-            if not df_mostrar.equals(df_editado):
-                if st.button("💾 Guardar Cambios en Tabla", type="primary", use_container_width=True):
-                    with st.spinner("Actualizando datos..."):
-                        # Pasamos ambos df directamente, sin session_state
-                        num_actualizados = actualizar_libros_batch(df_mostrar, df_editado)
-                        st.success(f"¡Se actualizaron {num_actualizados} libros!")
-                        st.snow() # ❄️ Nieve!
-                        time.sleep(2)
-                        st.rerun()
+            # 🔴 UX PERFECTA: El botón siempre está ahí, solo se activa si escribes algo
+            hay_cambios = not df_mostrar.equals(df_editado)
+            
+            if st.button("💾 Guardar Cambios en Tabla", type="primary", use_container_width=True, disabled=not hay_cambios):
+                with st.spinner("Actualizando datos..."):
+                    num_actualizados = actualizar_libros_batch(df_mostrar, df_editado)
+                    st.success(f"¡Se actualizaron {num_actualizados} libros!")
+                    st.snow() 
+                    time.sleep(2)
+                    st.rerun()
 
     with tab_crear:
         st.markdown("#### ➕ Ingresar Nuevo Libro")
@@ -405,7 +409,7 @@ def mostrar_inventario():
                     
                     if success:
                         st.success("🎉 ¡Libro creado exitosamente!")
-                        st.snow() # ❄️ Nieve!
+                        st.snow()
                         for key in claves_formulario:
                             if key in st.session_state:
                                 del st.session_state[key]
@@ -431,7 +435,7 @@ def mostrar_inventario():
                     success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje)
                 if success:
                     st.success(mensaje)
-                    st.snow() # ❄️ Nieve!
+                    st.snow() 
                     time.sleep(2)
                     st.rerun()
                 else: 
