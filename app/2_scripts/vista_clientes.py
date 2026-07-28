@@ -3,12 +3,9 @@ import pandas as pd
 import json
 from utilidades import get_db_connection
 
-# En tu archivo vista_clientes.py
-
+# La función de obtención de datos no necesita cambios en su lógica principal.
 def obtener_historial_completo(cliente_id):
-    # --- 🛠️ CORRECCIÓN: Definimos las columnas esperadas al inicio ---
     columnas_finales = ['Título', 'Autor', 'Fuente']
-    
     conn = get_db_connection()
     historial = []
 
@@ -44,7 +41,6 @@ def obtener_historial_completo(cliente_id):
         if libros_venta:
             historial.append(pd.DataFrame(libros_venta))
 
-    # Si la lista está vacía, retornamos una tabla vacía PERO con las columnas correctas
     if not historial:
         return pd.DataFrame(columns=columnas_finales)
 
@@ -94,11 +90,9 @@ def cargar_todos_los_clientes():
 def mostrar_clientes():
     st.title("👥 Gestión de Clientes")
     
-    # Cargamos la base de datos de clientes una sola vez para usarla en las pestañas
     df_clientes = cargar_todos_los_clientes()
     lista_nombres = df_clientes['nombre'].tolist() if not df_clientes.empty else []
 
-    # UI/UX: MENÚ HORIZONTAL CON PESTAÑAS
     tab_ficha, tab_nuevo, tab_editar, tab_eliminar = st.tabs([
         "🔍 Ficha e Historial", 
         "➕ Nuevo Cliente", 
@@ -106,9 +100,6 @@ def mostrar_clientes():
         "🗑️ Eliminar"
     ])
 
-        # ---------------------------------------------------------
-    # PESTAÑA 1: FICHA E HISTORIAL (CON FIDELIDAD POR COMPRAS REALES)
-    # ---------------------------------------------------------
     with tab_ficha:
         st.markdown("### Consultar Información del Cliente")
         if df_clientes.empty:
@@ -120,11 +111,8 @@ def mostrar_clientes():
                 cliente_data = df_clientes[df_clientes['nombre'] == cliente_sel].iloc[0]
                 c_id = cliente_data['cliente_id']
                 
-                # 1. Cargamos el historial completo para mostrarlo en la tabla
                 df_historial = obtener_historial_completo(c_id)
                 
-                # 2. CALCULAR COMPRAS REALES (Excluyendo 'Librero Histórico')
-                # Filtramos las filas cuyo origen NO sea de importación histórica
                 if not df_historial.empty:
                     df_compras_reales = df_historial[
                         df_historial['Fuente'].str.contains("Suscripción", case=False, na=False) | 
@@ -134,7 +122,6 @@ def mostrar_clientes():
                 else:
                     cantidad_compras = 0
                 
-                # --- LÓGICA DE FIDELIZACIÓN UX (Basado solo en compras) ---
                 if cantidad_compras == 0:
                     nivel, color, icono = "Nuevo Lector", "gray", "🌱"
                 elif cantidad_compras <= 3:
@@ -146,7 +133,6 @@ def mostrar_clientes():
                 else:
                     nivel, color, icono = "Lector Diamante", "violet", "💎"
 
-                # Tarjeta de información de contacto y Fidelidad (Diseño UX)
                 with st.container(border=True):
                     col_a, col_b, col_c = st.columns(3)
                     
@@ -161,7 +147,6 @@ def mostrar_clientes():
                     color_estado = "green" if estado == "ACTIVA" else "red"
                     col_b.markdown(f"**Status:** :{color_estado}[{estado}]")
                     
-                    # Panel destacado de Fidelidad (Muestra compras y nivel)
                     col_c.markdown(f"""
                     <div style='text-align:center; padding:10px; background-color:#f8f9fa; border-radius:10px; border: 1px solid #e9ecef;'>
                         <h3 style='margin:0;'>{icono}</h3>
@@ -170,11 +155,11 @@ def mostrar_clientes():
                     </div>
                     """, unsafe_allow_html=True)
 
-                # Mostrar la tabla del historial completo (para que sigan viendo el librero histórico de consulta)
                 st.markdown("#### 📚 Historial de Lectura Unificado")
                 if df_historial.empty:
                     st.info("El cliente aún no tiene libros asociados en su historial.")
                 else:
+                    
                     # 1. Crear una columna de 'Origen' simplificada para el filtro
                     def categorizar_fuente(fuente_texto):
                         if "suscripción" in fuente_texto.lower(): return "Suscripción"
@@ -187,7 +172,7 @@ def mostrar_clientes():
                     # 2. Obtener orígenes únicos y crear el filtro multiselect
                     origenes_unicos = sorted(df_historial['Origen'].unique())
                     
-                    # Usamos st.expander para que el filtro no ocupe mucho espacio
+                    # Usamos st.expander para que el filtro no ocupe mucho espacio (ideal para móvil)
                     with st.expander("🔍 Filtrar historial por origen"):
                         origenes_seleccionados = st.multiselect(
                             "Selecciona uno o más orígenes:",
@@ -199,7 +184,7 @@ def mostrar_clientes():
                     if origenes_seleccionados:
                         df_filtrado = df_historial[df_historial['Origen'].isin(origenes_seleccionados)]
                     else:
-                        # Si no se selecciona nada, mostramos todo
+                        # Si no se selecciona nada, mostramos todo por defecto
                         df_filtrado = df_historial
                         
                     st.success(f"Mostrando **{len(df_filtrado)}** de **{len(df_historial)}** libros registrados.")
@@ -211,10 +196,6 @@ def mostrar_clientes():
                         hide_index=True
                     )
 
-
-    # ---------------------------------------------------------
-    # PESTAÑA 2: NUEVO CLIENTE
-    # ---------------------------------------------------------
     with tab_nuevo:
         st.markdown("### Registrar Nuevo Cliente")
         with st.form("form_nuevo_cliente", clear_on_submit=True):
@@ -241,19 +222,15 @@ def mostrar_clientes():
                             "rut": rut_n, "direccion": dir_n, "instagram": ig_n, "status": estado_n
                         }).execute()
                         st.success(f"¡Cliente {nombre_n} registrado exitosamente!")
-                        st.rerun() # Recarga la app para que aparezca en las listas
+                        st.rerun() 
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
 
-    # ---------------------------------------------------------
-    # PESTAÑA 3: EDITAR CLIENTE
-    # ---------------------------------------------------------
     with tab_editar:
         st.markdown("### Modificar Datos Existentes")
         cliente_editar = st.selectbox("Selecciona el cliente a editar:", [""] + lista_nombres, key="sel_editar")
         
         if cliente_editar:
-            # Rellenar el formulario con los datos actuales
             datos_e = df_clientes[df_clientes['nombre'] == cliente_editar].iloc[0]
             
             with st.form("form_editar_cliente"):
@@ -265,7 +242,6 @@ def mostrar_clientes():
                 dir_e = st.text_input("Dirección de Envío", value=datos_e.get('direccion', ''))
                 ig_e = col1.text_input("Instagram", value=datos_e.get('instagram', ''))
                 
-                # Preseleccionar el estado actual
                 idx_estado = 0 if datos_e.get('status') == "ACTIVA" else 1
                 estado_e = col2.selectbox("Estado", ["ACTIVA", "INACTIVO"], index=idx_estado)
                 
@@ -283,19 +259,15 @@ def mostrar_clientes():
                     except Exception as e:
                         st.error(f"Error al actualizar: {e}")
 
-    # ---------------------------------------------------------
-    # PESTAÑA 4: ELIMINAR CLIENTE
-    # ---------------------------------------------------------
     with tab_eliminar:
         st.markdown("### ⚠️ Zona de Peligro")
-        st.error("Borrar un cliente eliminará permanentemente su registro. Si tiene ventas o asignaciones previas, esta acción podría fallar por seguridad de la base de datos (dependiendo de tu configuración). Se recomienda editar y cambiar su estado a 'INACTIVO' en su lugar.")
+        st.error("Borrar un cliente eliminará permanentemente su registro. Si tiene ventas o asignaciones previas, esta acción podría fallar por seguridad de la base de datos. Se recomienda editar y cambiar su estado a 'INACTIVO' en su lugar.")
         
         cliente_eliminar = st.selectbox("Selecciona el cliente a eliminar:", [""] + lista_nombres, key="sel_eliminar")
         
         if cliente_eliminar:
             id_eliminar = int(df_clientes[df_clientes['nombre'] == cliente_eliminar].iloc[0]['cliente_id'])
             
-            # Checkbox de confirmación como medida extra de fricción UX
             confirmacion = st.checkbox(f"Estoy seguro de que quiero eliminar permanentemente a '{cliente_eliminar}'.")
             
             if st.button("🗑️ Eliminar Definitivamente", type="secondary", disabled=not confirmacion):
