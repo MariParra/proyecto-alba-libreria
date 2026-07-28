@@ -105,24 +105,30 @@ def actualizar_libros_batch(df_editado):
     
     for libro_id, row in filas_cambiadas.iterrows():
         try:
-            datos = {
-                "autor": limpiar_texto(row['autor']),
-                "editorial": limpiar_texto(row['editorial']),
-                "genero": limpiar_texto(row['genero']),
-                "encuadernacion": limpiar_texto(row['encuadernacion']),
-                "stock": int(row['stock']),
-                "precio": float(row['precio']),
-                "costo": float(row.get('costo', 0))
-            }
-            conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
-            updates_count += 1
-        except Exception:
+            # 🔴 SEGURIDAD: Solo guardamos lo que realmente existe y fue modificado en la tabla visual
+            datos = {}
+            if 'autor' in row: datos['autor'] = limpiar_texto(str(row['autor']))
+            if 'editorial' in row: datos['editorial'] = limpiar_texto(str(row['editorial']))
+            if 'genero' in row: datos['genero'] = limpiar_texto(str(row['genero']))
+            if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto(str(row['encuadernacion']))
+            if 'stock' in row: datos['stock'] = int(row['stock'])
+            if 'precio' in row: datos['precio'] = float(row['precio'])
+            if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
+            if 'precio_original' in row and pd.notna(row['precio_original']):
+                datos['precio_original'] = float(row['precio_original'])
+                
+            if datos:
+                conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
+                updates_count += 1
+        except Exception as e:
+            print(f"Error actualizando libro {libro_id}: {e}")
             continue
             
     if updates_count > 0:
         cargar_datos_completos.clear()
         
     return updates_count
+
 
 def eliminar_libro(libro_id):
     conn = get_db_connection()
@@ -200,9 +206,11 @@ def mostrar_inventario():
         valor_inicial_slider = (min_s_slider, max_s)
         rango_stock = col_f6.slider("Rango de Stock:", min_value=min_s_slider, max_value=max_s, value=valor_inicial_slider)
 
-        # 🔴 NUEVO FILTRO RÁPIDO PARA DESCUENTOS
+        # 🔴 FILTRO RÁPIDO PARA DESCUENTOS y stock
         st.markdown("---")
-        solo_descuentos = st.checkbox("🏷️ Mostrar solo libros con descuento activo", value=False)
+        col_chk1, col_chk2 = st.columns(2)
+        solo_descuentos = col_chk1.checkbox("🏷️ Mostrar solo libros con descuento activo", value=False)
+        solo_con_stock = col_chk2.checkbox("📦 Mostrar solo libros con stock (> 0)", value=False)
 
     df_filtrado = df_inventario.copy()
     if busqueda_titulo: df_filtrado = df_filtrado[df_filtrado['titulo'].str.contains(limpiar_texto(busqueda_titulo), case=False, na=False)]
@@ -215,9 +223,11 @@ def mostrar_inventario():
         df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
         df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
         
-    # Aplicación del filtro rápido de descuentos
+    # Aplicación de los filtros rápidos
     if solo_descuentos and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
+    if solo_con_stock and not df_filtrado.empty:
+        df_filtrado = df_filtrado[df_filtrado['stock'] > 0]
 
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
         "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
@@ -310,32 +320,37 @@ def mostrar_inventario():
                             st.rerun()
                         else:
                             st.error(f"Error: {error}")
-        else:
-            st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
+                else:
+            st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
-            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
+            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
+            columnas_existentes = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns]
             
-            # Asegurarse de que si 'precio_original' existe en df_filtrado se muestre
-            columnas_existentes = [c for c in columnas_tabla_pc if c in df_filtrado.columns]
-            df_mostrar = df_filtrado[columnas_existentes]
+            # 🔴 SELECTOR DE COLUMNAS PARA MOSTRAR/OCULTAR
+            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_existentes, default=columnas_existentes)
+            
+            df_mostrar = df_filtrado[columnas_a_mostrar].copy()
             
             if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
                 st.session_state.inventario_original = df_mostrar.copy()
                 
-            # 🔴 CONFIGURACIÓN VISUAL (Formatos $ sin decimales para la tabla editable)
             config_columnas = {
-                "autor": st.column_config.SelectboxColumn("Autor", options=obtener_unicos(df_inventario, 'autor'), required=True),
-                "editorial": st.column_config.SelectboxColumn("Editorial", options=obtener_unicos(df_inventario, 'editorial'), required=True),
-                "genero": st.column_config.SelectboxColumn("Género", options=obtener_unicos(df_inventario, 'genero')),
-                "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=obtener_unicos(df_inventario, 'encuadernacion')),
+                "autor": st.column_config.TextColumn("Autor", required=True),
+                "editorial": st.column_config.TextColumn("Editorial", required=True),
+                "genero": st.column_config.TextColumn("Género"),
+                "encuadernacion": st.column_config.TextColumn("Encuadernación"),
+                "stock": st.column_config.NumberColumn("Stock", step=1),
                 "costo": st.column_config.NumberColumn("Costo", format="$%.0f"),
                 "precio": st.column_config.NumberColumn("Precio", format="$%.0f"),
                 "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f")
             }
             
+            # Aseguramos que solo intente bloquear 'libro_id' y 'titulo' si están visibles
+            disabled_cols = [c for c in ["libro_id", "titulo"] if c in columnas_a_mostrar]
+            
             df_editado = st.data_editor(
                 df_mostrar, use_container_width=True, hide_index=True,
-                disabled=["libro_id", "titulo", "precio_original"], key="editor_inventario",
+                disabled=disabled_cols, key="editor_inventario",
                 column_config=config_columnas
             )
             
@@ -344,7 +359,7 @@ def mostrar_inventario():
                     with st.spinner("Actualizando datos..."):
                         num_actualizados = actualizar_libros_batch(df_editado)
                         st.success(f"¡Se actualizaron {num_actualizados} libros!")
-                        time.sleep(2)
+                        time.sleep(1.5)
                         st.rerun()
 
         with tab_crear:
