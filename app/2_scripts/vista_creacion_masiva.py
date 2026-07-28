@@ -2,13 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import json
-import unicodedata
-from utilidades import get_db_connection
-
-def normalizar_texto(texto):
-    if pd.isna(texto): return ""
-    s = ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn')
-    return ' '.join(s.strip().upper().split())
+from utilidades import get_db_connection, limpiar_texto
 
 # ====================================================
 # --- LÓGICA 1: CREACIÓN DE CLIENTES NUEVOS ---
@@ -29,7 +23,7 @@ def procesar_clientes_masivos(df):
     exitos, duplicados, errores = 0, 0, []
 
     res_clientes = conn.table("clientes").select("nombre").execute()
-    catalogo_actual = [normalizar_texto(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
+    catalogo_actual = [limpiar_texto(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de clientes...")
     total_filas = len(df)
@@ -39,7 +33,7 @@ def procesar_clientes_masivos(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando cliente {indice + 1}/{total_filas}...")
         
-        nombre_limpio = normalizar_texto(fila.get('nombre', ''))
+        nombre_limpio = limpiar_texto(fila.get('nombre', ''))
         
         if not nombre_limpio:
             errores.append(f"Fila {indice + 2}: Falta el 'nombre'. Es obligatorio.")
@@ -53,13 +47,16 @@ def procesar_clientes_masivos(df):
         try:
             nuevo_cliente = {"status": "CLIENTE REGULAR"}
             for col in df.columns:
-                if pd.isna(fila[col]):
-                    nuevo_cliente[col] = None
-                elif col in columnas_texto:
-                    nuevo_cliente[col] = normalizar_texto(str(fila[col]))
-                else:
-                    nuevo_cliente[col] = fila[col]
-                    
+                if pd.notna(fila[col]):
+                    if col in columnas_texto:
+                        nuevo_cliente[col] = limpiar_texto(str(fila[col]))
+                    else:
+                        nuevo_cliente[col] = fila[col]
+            
+            # Asegurarse de que el nombre principal esté limpio
+            if 'nombre' in nuevo_cliente:
+                nuevo_cliente['nombre'] = limpiar_texto(nuevo_cliente['nombre'])
+
             conn.table("clientes").insert(nuevo_cliente).execute()
             exitos += 1
             catalogo_actual.append(nombre_limpio)
@@ -88,7 +85,7 @@ def procesar_nuevos_libros(df):
     exitos, duplicados, errores = 0, 0, []
     
     res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(normalizar_texto(l['titulo']), normalizar_texto(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
+    catalogo_actual = [(limpiar_texto(l['titulo']), limpiar_texto(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
     total_filas = len(df)
@@ -98,8 +95,8 @@ def procesar_nuevos_libros(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        titulo_limpio = normalizar_texto(fila.get('titulo', ''))
-        autor_limpio = normalizar_texto(fila.get('autor', ''))
+        titulo_limpio = limpiar_texto(fila.get('titulo', ''))
+        autor_limpio = limpiar_texto(fila.get('autor', ''))
         
         if not titulo_limpio:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
@@ -113,12 +110,11 @@ def procesar_nuevos_libros(df):
         try:
             nuevo_libro = {}
             for col in df.columns:
-                if pd.isna(fila[col]):
-                    nuevo_libro[col] = None
-                elif col in columnas_texto:
-                    nuevo_libro[col] = normalizar_texto(fila[col])
-                else:
-                    nuevo_libro[col] = fila[col]
+                if pd.notna(fila[col]):
+                    if col in columnas_texto:
+                        nuevo_libro[col] = limpiar_texto(str(fila[col]))
+                    else:
+                        nuevo_libro[col] = fila[col]
                     
             conn.table("libros").insert(nuevo_libro).execute()
             exitos += 1
@@ -147,58 +143,46 @@ def procesar_ventas_masivas(df):
     conn = get_db_connection()
     exitos, errores = 0, []
 
-    # --- 🛠️ CORRECCIÓN DE FECHA ---
-    # Forzamos la conversión de la fecha; si es inválida, se convierte en NaT
     df['Fecha_Venta_YYYY_MM_DD'] = pd.to_datetime(df['Fecha_Venta_YYYY_MM_DD'], errors='coerce')
-    
     filas_con_fecha_invalida = df[df['Fecha_Venta_YYYY_MM_DD'].isna()]
     for i, fila in filas_con_fecha_invalida.iterrows():
         errores.append(f"Fila {i+2}: La fecha es inválida o está vacía y fue omitida.")
-    
-    # Descartamos las filas sin fecha válida
     df.dropna(subset=['Fecha_Venta_YYYY_MM_DD'], inplace=True)
-    # -----------------------------
 
     res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
     res_libros = conn.table("libros").select("libro_id, titulo, autor, costo").execute()
     
-    map_clientes = {normalizar_texto(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
-    map_libros = {normalizar_texto(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
+    map_clientes = {limpiar_texto(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
+    map_libros = {limpiar_texto(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
 
     df['Valor_Envio'] = pd.to_numeric(df['Valor_Envio'], errors='coerce').fillna(0)
     df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(1)
     df['Precio_Unitario'] = pd.to_numeric(df['Precio_Unitario'], errors='coerce').fillna(0)
     df['Abono'] = pd.to_numeric(df.get('Abono'), errors='coerce').fillna(0)
-    df['Estado'] = df.get('Estado').fillna('FINALIZADO').astype(str)
-
-    grupos = df.groupby(['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente'])
     
+    grupos = df.groupby(['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente'])
     barra_progreso = st.progress(0, text="Procesando ventas...")
-    total_grupos = len(grupos)
-    actual = 0
+    total_grupos, actual = len(grupos), 0
 
     for (fecha_dt, cliente_nombre), grupo in grupos:
         actual += 1
         barra_progreso.progress(actual / total_grupos, text=f"Procesando venta {actual} de {total_grupos}...")
         
         try:
-            cliente_norm = normalizar_texto(str(cliente_nombre))
+            cliente_norm = limpiar_texto(str(cliente_nombre))
             if cliente_norm not in map_clientes:
                 errores.append(f"Venta {fecha_dt.strftime('%Y-%m-%d')}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
                 continue
             cliente_id = map_clientes[cliente_norm]
 
-            libros_vendidos = []
-            subtotal = 0.0
-            costo_total_venta = 0.0
+            libros_vendidos, subtotal, costo_total_venta = [], 0.0, 0.0
 
             for _, fila in grupo.iterrows():
-                titulo = str(fila.get('Titulo_Libro', ''))
-                titulo_norm = normalizar_texto(titulo)
-                
+                titulo_norm = limpiar_texto(fila.get('Titulo_Libro', ''))
                 libro_info = map_libros.get(titulo_norm)
-                libro_id = int(libro_info['libro_id']) if libro_info else None
-                autor_libro = libro_info['autor'] if libro_info else "Desconocido"
+                
+                libro_id = int(libro_info['libro_id']) if libro_info and pd.notna(libro_info.get('libro_id')) else None
+                autor_libro = limpiar_texto(libro_info['autor']) if libro_info and pd.notna(libro_info.get('autor')) else "DESCONOCIDO"
 
                 if libro_info and pd.notna(libro_info.get('costo')):
                     costo_total_venta += float(libro_info['costo']) * int(fila['Cantidad'])
@@ -207,20 +191,17 @@ def procesar_ventas_masivas(df):
                 precio_u = float(fila['Precio_Unitario'])
                 
                 libros_vendidos.append({
-                    "libro_id": libro_id, "titulo": titulo, "autor": autor_libro,
+                    "libro_id": libro_id, "titulo": titulo_norm, "autor": autor_libro,
                     "cantidad": cant, "precio": precio_u
                 })
                 subtotal += (cant * precio_u)
 
             valor_envio = float(grupo['Valor_Envio'].iloc[0])
-            metodo_envio = str(grupo['Metodo_Envio'].iloc[0]) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "No especificado"
-            comentario = str(grupo['Comentario'].iloc[0]) if pd.notna(grupo['Comentario'].iloc[0]) else "Importación Masiva"
-            
-            # Pasamos la fecha ya validada a formato texto para Supabase
+            metodo_envio = limpiar_texto(str(grupo['Metodo_Envio'].iloc[0])) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "NO ESPECIFICADO"
+            comentario = limpiar_texto(str(grupo['Comentario'].iloc[0])) if pd.notna(grupo['Comentario'].iloc[0]) else "IMPORTACION MASIVA"
+            estado_venta = limpiar_texto(str(grupo['Estado'].iloc[0])) if pd.notna(grupo['Estado'].iloc[0]) else "FINALIZADO"
             fecha_str = fecha_dt.strftime('%Y-%m-%d')
-            estado_venta = str(grupo['Estado'].iloc[0])
             abono_total_venta = float(grupo['Abono'].sum())
-            
             monto_final = subtotal + valor_envio
 
             venta_data = {
@@ -228,10 +209,8 @@ def procesar_ventas_masivas(df):
                 "libros_vendidos": json.dumps(libros_vendidos, ensure_ascii=False),
                 "subtotal_libros": subtotal, "valor_envio": valor_envio,
                 "monto_final": monto_final, "metodo_envio": metodo_envio,
-                "comentario": comentario,
-                "estado": estado_venta,
-                "abono": abono_total_venta,
-                "costo_venta": costo_total_venta
+                "comentario": comentario, "estado": estado_venta,
+                "abono": abono_total_venta, "costo_venta": costo_total_venta
             }
 
             conn.table("registro_ventas").insert(venta_data).execute()
@@ -460,3 +439,6 @@ def mostrar_creacion_masiva():
                             if errores:
                                 with st.expander("Ver lista de conflictos"):
                                     for err in errores: st.write(err)
+
+if __name__ == "__main__":
+    mostrar_creacion_masiva()

@@ -26,7 +26,6 @@ def procesar_actualizacion_libros(df):
     conn = get_db_connection()
     updates, errores = 0, []
     
-    # Separamos en texto y números para limpiarlos correctamente
     columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
     columnas_num = ['stock', 'precio', 'costo']
 
@@ -35,15 +34,12 @@ def procesar_actualizacion_libros(df):
             libro_id = int(fila['libro_id'])
             datos_update = {}
             
-            # Limpiamos los textos (mayúsculas, sin tildes)
-            for col in columnas_texto:
-                if col in fila and pd.notna(fila[col]):
-                    datos_update[col] = limpiar_texto(str(fila[col]))
-                    
-            # Aseguramos que los números sean números
-            for col in columnas_num:
-                if col in fila and pd.notna(fila[col]):
-                    datos_update[col] = float(fila[col])
+            for col in df.columns:
+                if col in fila and pd.notna(fila[col]) and col != 'libro_id':
+                    if col in columnas_texto:
+                        datos_update[col] = limpiar_texto(str(fila[col]))
+                    elif col in columnas_num:
+                        datos_update[col] = float(fila[col])
 
             if datos_update:
                 conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
@@ -68,26 +64,28 @@ def generar_plantilla_actualizacion_ventas():
             for i, col in enumerate(df.columns):
                 worksheet.set_column(i, i, 20)
         return output.getvalue()
-    except:
+    except Exception as e:
+        st.error(f"Error generando plantilla de ventas: {e}")
         return None
 
 def procesar_actualizacion_ventas(df):
     conn = get_db_connection()
     updates, errores = 0, []
     
-    columnas_actualizables = ['estado', 'abono', 'costo_venta', 'metodo_envio', 'comentario']
+    columnas_texto = ['estado', 'metodo_envio', 'comentario']
+    columnas_num = ['abono', 'costo_venta', 'monto_final']
 
     for i, fila in df.iterrows():
         try:
             venta_id = int(fila['venta_id'])
             datos_update = {}
-            for col in columnas_actualizables:
-                if col in fila and pd.notna(fila[col]):
-                    if col in ['abono', 'costo_venta']:
-                        datos_update[col] = float(fila[col])
-                    else:
-                        datos_update[col] = str(fila[col])
-
+            for col in df.columns:
+                 if col in fila and pd.notna(fila[col]) and col != 'venta_id':
+                    if col in columnas_texto:
+                        datos_update[col] = limpiar_texto(str(fila[col]))
+                    elif col in columnas_num:
+                         datos_update[col] = float(fila[col])
+            
             if datos_update:
                 conn.table("registro_ventas").update(datos_update).eq("venta_id", venta_id).execute()
                 updates += 1
@@ -124,7 +122,6 @@ def mostrar_actualizacion_masiva():
                 with st.spinner("Actualizando libros..."):
                     updates, errores = procesar_actualizacion_libros(df_l)
                     
-                    # --- EL TRUCO ESTÁ AQUÍ: FORZAMOS LA LIMPIEZA DE CACHÉ AL TERMINAR ---
                     st.cache_data.clear()
                     
                     st.success(f"¡Se procesaron {updates} actualizaciones de libros!")
@@ -151,10 +148,12 @@ def mostrar_actualizacion_masiva():
                 with st.spinner("Actualizando ventas..."):
                     updates, errores = procesar_actualizacion_ventas(df_v)
                     
-                    # --- LIMPIEZA DE CACHÉ ---
                     st.cache_data.clear()
                     
                     st.success(f"¡Se procesaron {updates} actualizaciones de ventas!")
                     if errores:
                         with st.expander("Ver errores"):
                             for err in errores: st.write(err)
+
+if __name__ == "__main__":
+    mostrar_actualizacion_masiva()
