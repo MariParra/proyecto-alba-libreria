@@ -435,7 +435,7 @@ def mostrar_caja():
                     else: 
                         st.error(f"Error: {err}")
 
-        # --- PESTAÑA 2: HISTORIAL EDITABLE ---
+    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -508,16 +508,23 @@ def mostrar_caja():
             m4.metric("📈 Utilidad Estimada", f"${df_filtrado['utilidad'].sum():,.0f}")
             st.markdown("---")
             
+                        # 2. AHORA aplicamos el filtro de costo cero SOLO para la tabla visual inferior
+            df_mostrar = df_filtrado.copy()
+            if solo_costo_cero:
+                df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
+            
+            # Construcción de la tabla
             columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
             for col in columnas_hist: 
-                if col not in df_filtrado.columns: df_filtrado[col] = ""
+                if col not in df_mostrar.columns: df_mostrar[col] = ""
                 
-            df_mostrar = df_filtrado[columnas_hist].copy()
+            df_mostrar = df_mostrar[columnas_hist].copy()
             
             if 'historial_original' not in st.session_state or not st.session_state.historial_original.equals(df_mostrar):
                 st.session_state.historial_original = df_mostrar.copy()
                 
             st.caption("Doble clic en celdas para modificar. Los campos financieros (Costo Venta, Estado, Abono) pueden editarse directamente aquí.")
+
             
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
