@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from utilidades import get_db_connection
+from utilidades import get_db_connection, limpiar_texto
 
 # ==========================================================
 # --- LÓGICA 1: ACTUALIZACIÓN DE LIBROS ---
@@ -26,16 +26,25 @@ def procesar_actualizacion_libros(df):
     conn = get_db_connection()
     updates, errores = 0, []
     
-    columnas_actualizables = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion', 'stock', 'precio', 'costo']
+    # Separamos en texto y números para limpiarlos correctamente
+    columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+    columnas_num = ['stock', 'precio', 'costo']
 
     for i, fila in df.iterrows():
         try:
             libro_id = int(fila['libro_id'])
             datos_update = {}
-            for col in columnas_actualizables:
-                if col in fila and pd.notna(fila[col]):
-                    datos_update[col] = fila[col]
             
+            # Limpiamos los textos (mayúsculas, sin tildes)
+            for col in columnas_texto:
+                if col in fila and pd.notna(fila[col]):
+                    datos_update[col] = limpiar_texto(str(fila[col]))
+                    
+            # Aseguramos que los números sean números
+            for col in columnas_num:
+                if col in fila and pd.notna(fila[col]):
+                    datos_update[col] = float(fila[col])
+
             if datos_update:
                 conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
                 updates += 1
@@ -114,6 +123,10 @@ def mostrar_actualizacion_masiva():
                 df_l = pd.read_excel(archivo_libros)
                 with st.spinner("Actualizando libros..."):
                     updates, errores = procesar_actualizacion_libros(df_l)
+                    
+                    # --- EL TRUCO ESTÁ AQUÍ: FORZAMOS LA LIMPIEZA DE CACHÉ AL TERMINAR ---
+                    st.cache_data.clear()
+                    
                     st.success(f"¡Se procesaron {updates} actualizaciones de libros!")
                     if errores:
                         with st.expander("Ver errores"):
@@ -137,6 +150,10 @@ def mostrar_actualizacion_masiva():
                 df_v = pd.read_excel(archivo_ventas)
                 with st.spinner("Actualizando ventas..."):
                     updates, errores = procesar_actualizacion_ventas(df_v)
+                    
+                    # --- LIMPIEZA DE CACHÉ ---
+                    st.cache_data.clear()
+                    
                     st.success(f"¡Se procesaron {updates} actualizaciones de ventas!")
                     if errores:
                         with st.expander("Ver errores"):
