@@ -268,8 +268,8 @@ def actualizar_historial_batch(df_editado):
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
+            # 🔴 SOLUCIÓN: Solo enviamos los campos que realmente existen en la tabla editable
             datos = {
-                "valor_envio": float(row['valor_envio']), 
                 "monto_final": float(row['monto_final']), 
                 "metodo_envio": str(row['metodo_envio']), 
                 "comentario": str(row['comentario']),
@@ -279,7 +279,9 @@ def actualizar_historial_batch(df_editado):
             }
             conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
             updates += 1
-        except: 
+        except Exception as e: 
+            # Imprimimos el error en consola para que nunca más falle en silencio
+            print(f"Error actualizando venta {venta_id}: {e}")
             continue
             
     if updates > 0: 
