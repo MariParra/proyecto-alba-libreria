@@ -259,6 +259,12 @@ def actualizar_historial_batch(df_editado):
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
+# ==========================================
+# --- VISTA PRINCIPAL (CAJA) ---
+# ==========================================
+# ==========================================
+# --- VISTA PRINCIPAL (CAJA) ---
+# ==========================================
 def mostrar_caja():
     if 'carrito_caja' not in st.session_state:
         st.session_state.carrito_caja = []
@@ -270,6 +276,37 @@ def mostrar_caja():
     
     estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO", "PENDIENTE PAGO", "FINALIZADO"]
     
+    # 🔴 BLINDAJE: Cargamos el historial y creamos una copia profunda (.copy()) 
+    # para no mutar el objeto en caché y evitar CachedObjectMutationWarning
+    df_ventas_global_raw = cargar_historial_completo()
+    df_ventas_global = df_ventas_global_raw.copy() if not df_ventas_global_raw.empty else pd.DataFrame()
+    df_deudores_global = pd.DataFrame()
+    
+    if not df_ventas_global.empty:
+        # Calculamos la fecha limpia de forma segura sobre nuestra copia
+        df_ventas_global['fecha_limpia'] = unificar_formatos_fecha(df_ventas_global['fecha_venta'])
+        
+        # Extraemos las deudas y calculamos mora antes de dibujar las pestañas
+        df_deudores_global = df_ventas_global[df_ventas_global['deuda'] > 0].copy()
+        if not df_deudores_global.empty:
+            df_deudores_global = df_deudores_global.dropna(subset=['fecha_limpia'])
+            hoy_global = datetime.now().date()
+            df_deudores_global['dias_mora'] = df_deudores_global['fecha_limpia'].apply(lambda x: (hoy_global - x.date()).days if pd.notna(x) else 0)
+            
+            # ALERTAS GLOBALES: Aparecen apenas abres la app
+            deudas_criticas = df_deudores_global[df_deudores_global['dias_mora'] > 14]
+            if not deudas_criticas.empty:
+                # Panel Lateral (Siempre visible)
+                st.sidebar.markdown("---")
+                st.sidebar.markdown("### 🚨 ALERTAS DE COBRANZA")
+                st.sidebar.error(f"Tienes **{len(deudas_criticas)}** deudas con más de 2 semanas de antigüedad.")
+                for _, row in deudas_criticas.iterrows():
+                    st.sidebar.warning(f"👤 **{row['nombre_cliente']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días")
+                
+                # Alerta Principal (Arriba de las pestañas)
+                st.error(f"🚨 **¡ATENCIÓN!** Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora. Revisa el panel lateral o la pestaña de Cobranza.")
+    
+    # Dibujamos las pestañas
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
     
     with tab_venta:
@@ -377,12 +414,8 @@ def mostrar_caja():
         
         if modo_envio == "Añadir a compra anterior":
             if c_id is not None:
-                conn = get_db_connection()
-                res_pendientes = conn.table("registro_ventas").select("venta_id, fecha_venta, estado").eq("cliente_id", c_id).execute()
-                
-                ventas_abiertas = []
-                if res_pendientes.data:
-                    ventas_abiertas = [v for v in res_pendientes.data if v.get('estado', '') not in ["PAQUETE LISTO", "FINALIZADO"]]
+                # Usamos la copia desvinculada para buscar compras abiertas
+                ventas_abiertas = [v for v in df_ventas_global.to_dict('records') if v['cliente_id'] == c_id and v.get('estado', '') not in ["PAQUETE LISTO", "FINALIZADO"]]
                 
                 if ventas_abiertas:
                     opciones_ventas = [f"Venta #{v['venta_id']} ({v['fecha_venta']}) - {v.get('estado', 'Sin Estado')}" for v in ventas_abiertas]
@@ -392,7 +425,7 @@ def mostrar_caja():
                     metodo_envio_final = f"Añadido a Venta #{v_id_asociada}"
                     st.info(f"El envío será gratuito. Esta compra se anexará al paquete de la Venta #{v_id_asociada}.")
                 else:
-                    col_e2.warning("No hay compras anteriores abiertas para anexar (todas están Listas o Finalizadas).")
+                    col_e2.warning("No hay compras anteriores abiertas para anexar.")
                     bloquear_venta = True
             else:
                 col_e2.error("Crea o selecciona un cliente primero.")
@@ -408,7 +441,6 @@ def mostrar_caja():
         st.markdown("#### ⚙️ Estado y Abono (Opcional)")
         
         col_abono1, col_abono2 = st.columns(2)
-        # 🔴 CORRECCIÓN 1: Estado base cambiado a "NO COMENZADO" por defecto (índice 0)
         estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=0)
         abono_inicial = col_abono2.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
         
@@ -437,13 +469,11 @@ def mostrar_caja():
     # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
-        df_ventas = cargar_historial_completo()
+        df_ventas = df_ventas_global.copy()
         
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
-            df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
-            
             fechas_invalidas = df_ventas['fecha_limpia'].isna()
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas con formato ilegible"):
@@ -558,41 +588,17 @@ def mostrar_caja():
                     time.sleep(1.5) 
                     st.rerun()
 
+    # --- PESTAÑA 3: COBRANZA ---
     with tab_cobranza:
         st.markdown("### 💸 Cuentas por Cobrar")
         st.caption("Lista de todas las ventas con deuda pendiente (Deuda > 0).")
-        df_ventas_cobranza = cargar_historial_completo()
         
-        if not df_ventas_cobranza.empty:
-            df_deudores = df_ventas_cobranza[df_ventas_cobranza['deuda'] > 0].copy()
+        if not df_ventas_global.empty:
+            df_deudores = df_deudores_global.copy()
             if df_deudores.empty:
                 st.success("🎉 ¡Felicidades! No hay deudas pendientes.")
             else:
-                # 🔴 CORRECCIÓN CLAVE: unificar_formatos_fecha ya devuelve objetos datetime con el índice correcto. No requiere pd.to_datetime extra.
-                df_deudores['fecha_limpia'] = unificar_formatos_fecha(df_deudores['fecha_venta'])
-                
-                # Eliminamos filas que no tengan fecha válida para calcular la mora de forma segura
-                df_deudores = df_deudores.dropna(subset=['fecha_limpia'])
-                
-                hoy = datetime.now().date()
-                
-                # Calculamos días de mora de forma ultra segura usando lambdas para evitar IntCastingNaNError
-                df_deudores['dias_mora'] = df_deudores['fecha_limpia'].apply(lambda x: (hoy - x.date()).days if pd.notna(x) else 0)
-                
-                # Alertas Críticas (> 14 días)
-                deudas_criticas = df_deudores[df_deudores['dias_mora'] > 14]
-                if not deudas_criticas.empty:
-                    # Alerta Lateral (Sidebar)
-                    st.sidebar.markdown("---")
-                    st.sidebar.markdown("### 🚨 ALERTAS DE COBRANZA")
-                    st.sidebar.error(f"Tienes **{len(deudas_criticas)}** deudas con más de 2 semanas de antigüedad.")
-                    for _, row in deudas_criticas.iterrows():
-                        st.sidebar.warning(f"👤 **{row['nombre_cliente']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días mora")
-                    
-                    # Alerta en pantalla principal
-                    st.error(f"🚨 ¡ATENCIÓN! Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora. Revisa el panel lateral para el detalle.")
-                
-                # Filtros de Cobranza
+                # Los filtros se alimentan de nuestra copia desvinculada
                 with st.expander("🔍 Filtros de Cobranza", expanded=True):
                     col_c1, col_c2 = st.columns(2)
                     
@@ -610,15 +616,14 @@ def mostrar_caja():
                     clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
                     cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
 
-                                # Aplicamos los filtros
+                # Aplicamos los filtros
                 if len(rango_fechas_c) == 2:
                     df_deudores = df_deudores[
                         (df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & 
-                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1]) # 🔴 AQUÍ ESTÁ EL ARREGLO
+                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1])
                     ]
                 if cliente_filtro_c != "Todos":
                     df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
-
 
                 # Mostramos la tabla si hay resultados después de filtrar
                 if df_deudores.empty:
@@ -626,7 +631,6 @@ def mostrar_caja():
                 else:
                     st.markdown(f"#### 💰 Total por Cobrar (Filtrado): **${df_deudores['deuda'].sum():,.0f}**")
                     
-                    # Generamos la etiqueta de estado visual
                     df_deudores['Nivel Mora'] = df_deudores['dias_mora'].apply(lambda x: "🔴 Crítico (>14 días)" if x > 14 else ("🟡 Medio (7-14 días)" if x > 7 else "🟢 Normal"))
                     
                     columnas_mostrar_cob = ['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'Nivel Mora', 'estado']
@@ -644,7 +648,7 @@ def mostrar_caja():
 
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")
-        df_ventas_anular = cargar_historial_completo()
+        df_ventas_anular = df_ventas_global.copy()
         if not df_ventas_anular.empty:
             df_ventas_anular['etiqueta_anular'] = df_ventas_anular.apply(lambda row: f"ID: {row.get('venta_id','')} | {row.get('fecha_venta','')} | {row.get('libros_vendidos','')} | ${row.get('monto_final',0):,.0f}", axis=1)
             venta_sel = st.selectbox("Selecciona la venta:", [""] + df_ventas_anular.sort_values('venta_id', ascending=False)['etiqueta_anular'].tolist())
