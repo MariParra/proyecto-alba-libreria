@@ -371,7 +371,7 @@ def mostrar_caja():
         col_e1, col_e2 = st.columns(2)
         
         # 🔴 LÓGICA DE ENVÍO CON BÚSQUEDA DE COMPRAS ABIERTAS
-        opciones_envio = ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior"]
+        opciones_envio = ["Retiro en tienda", "Paket", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
         valor_envio = 0.0
@@ -402,8 +402,9 @@ def mostrar_caja():
                 col_e2.error("Crea o selecciona un cliente primero.")
                 bloquear_venta = True
                 
-        elif modo_envio != "Retiro en tienda":
+        elif modo_envio not in ("Retiro en tienda", "Añadir a compra anterior", "Acordar con vendedor"):
             valor_envio = col_e2.number_input("Costo de Envío ($):", min_value=0.0, step=500.0)
+
             
         metodo_pago = st.selectbox("Método de Pago:", ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito"])
         comentario_venta = st.text_area("Comentario (Opcional):", placeholder="Ej: Entregar por conserjería...")
