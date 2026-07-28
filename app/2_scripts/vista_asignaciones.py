@@ -60,18 +60,18 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         return df_catalogo, []
 
 @st.cache_data(ttl=60)
-@st.cache_data(ttl=60)
 def cargar_asignaciones_mes(ano, mes):
     conn = get_db_connection()
     try:
         res_asig = conn.table("asignaciones").select("*").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         
+        columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
         if not res_asig.data:
-            columnas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
-            return pd.DataFrame(columns=columnas)
+            return pd.DataFrame(columns=columnas_esperadas)
             
         df_asig = pd.DataFrame(res_asig.data)
         
+        # Unimos con otras tablas
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
@@ -86,14 +86,22 @@ def cargar_asignaciones_mes(ano, mes):
 
         df_asig.rename(columns={'titulo': 'titulo_libro', 'nombre': 'nombre_cliente'}, inplace=True)
         
-        # Limpieza absoluta de nulos
-        df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace(['None', 'nan', '<NA>'], "⏳ PENDIENTE DE ASIGNAR", regex=False)
-        df_asig.loc[df_asig['titulo_libro'].isnull(), 'titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
-        
-        df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
-        df_asig['valor_suscripcion'].fillna(0, inplace=True)
+        # --- LIMPIEZA ABSOLUTA ---
+        # Aseguramos que la columna exista antes de limpiarla
+        if 'titulo_libro' not in df_asig.columns:
+            df_asig['titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
+        else:
+            # Reemplaza cualquier variación de nulo por el texto estándar
+            df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR", inplace=True)
+            df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace(['None', 'nan', '<NA>'], "⏳ PENDIENTE DE ASIGNAR", regex=False)
 
-        return df_asig
+        # Rellenamos otros nulos para consistencia
+        if 'nombre_cliente' in df_asig.columns:
+            df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
+        if 'valor_suscripcion' in df_asig.columns:
+            df_asig['valor_suscripcion'].fillna(0, inplace=True)
+
+        return df_asig[columnas_esperadas] # Devolvemos solo las columnas esperadas y en orden
     except Exception as e:
         st.error(f"Error crítico al cargar asignaciones: {e}")
         return pd.DataFrame()
@@ -193,21 +201,16 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
         nuevo_stock = max(0, int(stock_actual) - 1)
         conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id_py).execute()
         
-        # --- ¡LA LÍNEA QUE FALTABA! ---
-        # 2. Actualizar la tabla de asignaciones con el libro
+        # 2. ¡Guardar el libro en la asignación!
         conn.table("asignaciones").update({"libro_suscripcion_id": l_id_py}).eq("asignacion_id", a_id).execute()
-        # --------------------------------
         
         # 3. Añadir al historial del cliente
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", l_id_py).execute()
         if not res_hist.data:
             conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": l_id_py, "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
-        # 4. Limpiar cachés para refrescar la vista
-        cargar_asignaciones_mes.clear()
-        cargar_catalogo_completo_libros.clear()
-        cargar_libros_filtrados_para_cliente.clear()
-        
+        # 4. Limpiar cachés
+        cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
         return True, ""
     except Exception as e: 
         return False, str(e)
