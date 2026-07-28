@@ -2,24 +2,19 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import json
-from utilidades import get_db_connection, limpiar_texto
 import time
+from utilidades import get_db_connection, limpiar_texto
 
 # ==========================================
 # --- FUNCIONES DE BASE DE DATOS ---
 # ==========================================
 
 def unificar_formatos_fecha(serie_fechas):
-    """
-    Analiza una serie de fechas en texto y las traduce a formato datetime 
-    intentando múltiples patrones. No elimina datos.
-    """
     def parsear_valor(val):
         if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() == 'nan':
             return pd.NaT
             
         val_str = str(val).strip()
-        
         formatos_a_probar = [
             "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f",
             "%d-%m-%Y", "%d-%m-%Y %H:%M:%S",
@@ -40,7 +35,7 @@ def unificar_formatos_fecha(serie_fechas):
             
     return serie_fechas.apply(parsear_valor)
 
-@st.cache_data(ttl=60)
+# 🔴 ELIMINAMOS EL CACHÉ AQUÍ: Ahora la caja siempre lee los costos 100% en vivo
 def cargar_libros_caja():
     conn = get_db_connection()
     try:
@@ -53,10 +48,10 @@ def cargar_libros_caja():
             df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
             
         return df
-    except: 
+    except Exception as e: 
+        print(f"Error cargando libros caja: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=60)
 def cargar_clientes_caja():
     conn = get_db_connection()
     try:
@@ -65,7 +60,6 @@ def cargar_clientes_caja():
     except: 
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status'])
 
-@st.cache_data(ttl=60)
 def cargar_historial_completo():
     conn = get_db_connection()
     try:
@@ -135,7 +129,6 @@ def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
         else:
             datos["status"] = "CLIENTE REGULAR"
             response = conn.table("clientes").insert(datos).execute()
-            cargar_clientes_caja.clear()
             return response.data[0]['cliente_id']
     except: 
         return None
@@ -154,10 +147,8 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         datos["stock"] = int(stock_a_sumar)
         datos["precio_original"] = float(precio_catalogo)
         response = conn.table("libros").insert(datos).execute()
-        cargar_libros_caja.clear()
         return response.data[0]['libro_id']
 
-# --- FUNCIÓN CORREGIDA Y BLINDADA ---
 def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, abono_venta):
     conn = get_db_connection()
     
@@ -173,7 +164,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "precio": item['precio_cobrado']
         })
         
-        # 🔴 BLINDAJE ANTI-NAN: Aseguramos que el costo sea un número antes de sumar
         costo_unitario = item.get('costo', 0.0)
         if pd.isna(costo_unitario) or costo_unitario is None:
             costo_unitario = 0.0
@@ -194,7 +184,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "comentario": f"Pago: {metodo_pago}. {comentario}".strip(),
             "estado": estado_venta,
             "abono": float(abono_venta),
-            "costo_venta": float(costo_total_venta) # Este valor ahora está 100% seguro
+            "costo_venta": float(costo_total_venta) 
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
         for item in carrito:
@@ -213,9 +203,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     conn.table("librero_historico").insert(datos_historico).execute()
         
         st.session_state.carrito_caja = []
-        cargar_libros_caja.clear()
-        cargar_clientes_caja.clear()
-        cargar_historial_completo.clear()
         return True, ""
     except Exception as e: 
         return False, str(e)
@@ -234,8 +221,6 @@ def anular_venta(venta_id, texto_libros_vendidos):
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
                     
         conn.table("registro_ventas").delete().eq("venta_id", venta_id).execute()
-        cargar_historial_completo.clear()
-        cargar_libros_caja.clear()
         return True, ""
     except Exception as e: 
         return False, str(e)
@@ -255,22 +240,22 @@ def actualizar_historial_batch(df_editado):
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            datos = {
-                "monto_final": float(row['monto_final']), 
-                "metodo_envio": str(row['metodo_envio']), 
-                "comentario": str(row['comentario']),
-                "estado": str(row.get('estado', 'FINALIZADO')),
-                "abono": float(row.get('abono', 0)),
-                "costo_venta": float(row.get('costo_venta', 0))
-            }
-            conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
-            updates += 1
+            # 🔴 SEGURIDAD: Solo guardamos lo que realmente existe y fue modificado en la tabla visual
+            datos = {}
+            if 'monto_final' in row: datos['monto_final'] = float(row['monto_final'])
+            if 'metodo_envio' in row: datos['metodo_envio'] = str(row['metodo_envio'])
+            if 'comentario' in row: datos['comentario'] = str(row['comentario'])
+            if 'estado' in row: datos['estado'] = str(row['estado'])
+            if 'abono' in row: datos['abono'] = float(row['abono'])
+            if 'costo_venta' in row: datos['costo_venta'] = float(row['costo_venta'])
+
+            if datos:
+                conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
+                updates += 1
         except Exception as e: 
             print(f"Error actualizando venta {venta_id}: {e}")
             continue
             
-    if updates > 0: 
-        cargar_historial_completo.clear()
     return updates
 
 # ==========================================
@@ -285,7 +270,7 @@ def mostrar_caja():
     df_libros = cargar_libros_caja()
     df_clientes = cargar_clientes_caja()
     
-    tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial Editable", "💸 Cuentas por Cobrar", "🚫 Anular Venta"])
+    tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
     
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
@@ -417,10 +402,12 @@ def mostrar_caja():
                     if exito: 
                         st.success("🎉 ¡Venta registrada!")
                         st.balloons()
+                        time.sleep(2)
                         st.rerun()
                     else: 
                         st.error(f"Error: {err}")
 
+    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -440,14 +427,24 @@ def mostrar_caja():
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
+                hoy = datetime.now().date()
+                primer_dia_mes = hoy.replace(day=1)
                 
                 if not df_fechas_validas.empty:
                     fecha_min = df_fechas_validas['fecha_limpia'].min().date()
                     fecha_max = df_fechas_validas['fecha_limpia'].max().date()
                     
+                    limite_min = min(fecha_min, hoy)
+                    limite_max = max(fecha_max, hoy)
+                    
+                    # 🔴 MES EN CURSO POR DEFECTO: Empieza el 1ero del mes hasta hoy
+                    default_start = max(primer_dia_mes, limite_min)
+                    default_end = limite_max
+                    
                     rango_fechas = col_f1.date_input(
-                        "Filtrar por Fecha:", value=(fecha_min, fecha_max), 
-                        min_value=fecha_min, max_value=fecha_max
+                        "Filtrar por Fecha:", 
+                        value=(default_start, default_end), 
+                        min_value=limite_min, max_value=limite_max
                     )
                 else:
                     rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
@@ -459,14 +456,20 @@ def mostrar_caja():
                 estado_filtro = col_f3.selectbox("Filtrar por Estado:", estados_hist)
                 
                 st.markdown("---")
+                
+                # 🔴 SELECTOR DE COLUMNAS PARA OCULTAR/MOSTRAR
+                columnas_hist_todas = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
+                columnas_por_defecto = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'utilidad', 'costo_venta', 'estado']
+                columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
+                
                 solo_costo_cero = st.checkbox("⚠️ Mostrar solo ventas pendientes de asignar Costo (Costo = $0)", value=False)
                 
             df_filtrado_general = df_ventas.copy()
             
             if len(rango_fechas) == 2:
                 df_filtrado_general = df_filtrado_general[
-                    (df_filtrado_general['fecha_limpia'] >= pd.to_datetime(rango_fechas[0])) & 
-                    (df_filtrado_general['fecha_limpia'] < pd.to_datetime(rango_fechas[1]) + timedelta(days=1))
+                    (df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & 
+                    (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])
                 ]
             if cliente_filtro != "Todos":
                 df_filtrado_general = df_filtrado_general[df_filtrado_general['nombre_cliente'] == cliente_filtro]
@@ -485,11 +488,11 @@ def mostrar_caja():
             if solo_costo_cero:
                 df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             
-            columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
-            df_mostrar = df_mostrar.reindex(columns=columnas_hist, fill_value='')
+            # Filtramos por las columnas que elegiste mostrar
+            df_mostrar = df_mostrar[columnas_a_mostrar].copy()
 
             st.session_state.historial_original = df_mostrar.copy()
-            st.caption("Doble clic en celdas para modificar.")
+            st.caption("Doble clic en celdas para modificar. Ocultar columnas no daña tus datos.")
 
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
@@ -500,13 +503,19 @@ def mostrar_caja():
                 "estado": st.column_config.SelectboxColumn("Estado", options=sorted(df_ventas['estado'].unique().tolist())),
             }
             
-            df_estilizado = df_mostrar.style.apply(
-                lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s],
-                subset=['costo_venta']
-            )
+            if 'costo_venta' in df_mostrar.columns:
+                df_estilizado = df_mostrar.style.apply(
+                    lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s],
+                    subset=['costo_venta']
+                )
+            else:
+                df_estilizado = df_mostrar
+                
+            disabled_cols = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad']
+            disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
             df_editado = st.data_editor(
-                df_estilizado, disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
+                df_estilizado, disabled=disabled_cols_active, 
                 use_container_width=True, hide_index=True, column_config=config_cols_hist
             )
             
@@ -551,6 +560,7 @@ def mostrar_caja():
                     exito, error = anular_venta(int(venta_a_anular['venta_id']), venta_a_anular['libros_vendidos'])
                     if exito: 
                         st.success("¡Venta anulada con éxito!")
+                        time.sleep(1.5)
                         st.rerun()
                     else: 
                         st.error(f"Error al anular: {error}")
