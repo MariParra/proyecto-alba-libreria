@@ -413,7 +413,7 @@ def mostrar_caja():
         st.markdown("#### ⚙️ Estado y Abono (Opcional)")
         
         col_abono1, col_abono2 = st.columns(2)
-        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=estados_posibles.index("FINALIZADO"))
+        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=estados_posibles.index("NO COMENZADO"))
         abono_inicial = col_abono2.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
         
         monto_final = subtotal_carrito + valor_envio
