@@ -320,7 +320,7 @@ def mostrar_inventario():
                             st.rerun()
                         else:
                             st.error(f"Error: {error}")
-                else:
+        else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
             columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
