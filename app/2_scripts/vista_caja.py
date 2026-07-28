@@ -43,9 +43,8 @@ def unificar_formatos_fecha(serie_fechas):
             return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
         except Exception:
             return pd.NaT
-
+            
     return serie_fechas.apply(parsear_valor)
-
 
 @st.cache_data(ttl=60)
 def cargar_libros_caja():
@@ -76,7 +75,6 @@ def cargar_historial_completo():
         res_ventas = conn.table("registro_ventas").select("*").order("venta_id", desc=True).execute()
         if not res_ventas.data: 
             return pd.DataFrame()
-
         df_ventas = pd.DataFrame(res_ventas.data)
         
         # Formatear la columna de libros para visualización
@@ -93,7 +91,7 @@ def cargar_historial_completo():
                 return libros_data
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
-
+        
         # Unir con nombres de clientes
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         if res_clientes.data:
@@ -108,7 +106,7 @@ def cargar_historial_completo():
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
-
+        
         # --- CÁLCULOS FINANCIEROS AL VUELO ---
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
         df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
@@ -183,10 +181,8 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         })
         # Sumamos el costo de cada libro (costo unitario * cantidad)
         costo_total_venta += item.get('costo', 0.0) * item['cantidad']
-
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
-
     try:
         datos_venta = {
             "cliente_id": cliente_id, 
@@ -202,7 +198,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "costo_venta": float(costo_total_venta)
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
-
         for item in carrito:
             l_id = item['libro_id'] # Se define l_id para la interacción
             if item['es_nuevo']: 
@@ -218,7 +213,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
-
+        
         # Limpiamos el carrito y las cachés
         st.session_state.carrito_caja = []
         cargar_libros_caja.clear()
@@ -281,11 +276,9 @@ def actualizar_historial_batch(df_editado):
         cargar_historial_completo.clear()
     return updates
 
-
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
-
 def mostrar_caja():
     if 'carrito_caja' not in st.session_state:
         st.session_state.carrito_caja = []
@@ -296,7 +289,7 @@ def mostrar_caja():
     df_clientes = cargar_clientes_caja()
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial Editable", "💸 Cuentas por Cobrar", "🚫 Anular Venta"])
-
+    
     # --- PESTAÑA 1: NUEVA VENTA ---
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
@@ -438,7 +431,7 @@ def mostrar_caja():
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
-            # 1. Creamos una columna sanitizada usando tu función unificadora
+            # 1. Creamos una columna sanitizada usando tu función unificadora de fechas
             df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
             
             # Alerta UX responsiva en caso de que existan fechas corruptas imposibles de parsear (no se eliminan)
@@ -451,7 +444,7 @@ def mostrar_caja():
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
-                # Usamos la columna ya parseada y sanitizada para extraer los límites
+                # Usamos la columna ya parseada y sanitizada para extraer los límites de fechas de forma segura
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
                 
                 if not df_fechas_validas.empty:
@@ -487,7 +480,40 @@ def mostrar_caja():
                 df_filtrado = df_filtrado[df_filtrado['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['estado'] == estado_filtro]
-
+            
+            columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
+            for col in columnas_hist: 
+                if col not in df_filtrado.columns: df_filtrado[col] = ""
+                
+            df_mostrar = df_filtrado[columnas_hist].copy()
+            
+            if 'historial_original' not in st.session_state or not st.session_state.historial_original.equals(df_mostrar):
+                st.session_state.historial_original = df_mostrar.copy()
+                
+            st.caption("Doble clic en celdas para modificar. Los campos financieros (Estado, Abono) pueden editarse directamente aquí.")
+            
+            config_cols_hist = {
+                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
+                "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
+                "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f"),
+                "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
+                "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
+                "estado": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "LISTO / PENDIENTE PAGO", "FINALIZADO"]),
+            }
+            
+            df_editado = st.data_editor(
+                df_mostrar, 
+                disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
+                use_container_width=True, 
+                hide_index=True,
+                column_config=config_cols_hist
+            )
+            
+            if not df_mostrar.equals(df_editado):
+                if st.button("💾 Guardar Cambios en Historial", type="primary"):
+                    num = actualizar_historial_batch(df_editado)
+                    st.success(f"¡Se actualizaron {num} registros!")
+                    st.rerun()
 
     # --- PESTAÑA 3: CUENTAS POR COBRAR ---
     with tab_cobranza:
@@ -533,3 +559,6 @@ def mostrar_caja():
                         st.rerun()
                     else: 
                         st.error(f"Error al anular: {error}")
+
+if __name__ == "__main__":
+    mostrar_caja()
