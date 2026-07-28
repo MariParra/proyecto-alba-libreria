@@ -35,7 +35,6 @@ def unificar_formatos_fecha(serie_fechas):
             
     return serie_fechas.apply(parsear_valor)
 
-# 🔴 ELIMINAMOS EL CACHÉ AQUÍ: Ahora la caja siempre lee los costos 100% en vivo
 def cargar_libros_caja():
     conn = get_db_connection()
     try:
@@ -240,7 +239,6 @@ def actualizar_historial_batch(df_editado):
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            # 🔴 SEGURIDAD: Solo guardamos lo que realmente existe y fue modificado en la tabla visual
             datos = {}
             if 'monto_final' in row: datos['monto_final'] = float(row['monto_final'])
             if 'metodo_envio' in row: datos['metodo_envio'] = str(row['metodo_envio'])
@@ -269,6 +267,9 @@ def mostrar_caja():
     
     df_libros = cargar_libros_caja()
     df_clientes = cargar_clientes_caja()
+    
+    # 🔴 LOS ESTADOS ACTUALIZADOS (Sin "PENDIENTE ENVIAR/RETIRAR")
+    estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO", "PENDIENTE PAGO", "FINALIZADO"]
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
     
@@ -368,8 +369,41 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        modo_envio = col_e1.selectbox("Modo de Envío:", ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor"])
-        valor_envio = col_e2.number_input("Costo de Envío ($):", min_value=0.0, step=500.0) if modo_envio != "Retiro en tienda" else 0.0
+        
+        # 🔴 LÓGICA DE ENVÍO CON BÚSQUEDA DE COMPRAS ABIERTAS
+        opciones_envio = ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior"]
+        modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
+        
+        valor_envio = 0.0
+        metodo_envio_final = modo_envio
+        bloquear_venta = False 
+        
+        if modo_envio == "Añadir a compra anterior":
+            if c_id is not None:
+                # 🔴 Buscamos todas las ventas y filtramos en Python para excluir las cerradas
+                conn = get_db_connection()
+                res_pendientes = conn.table("registro_ventas").select("venta_id, fecha_venta, estado").eq("cliente_id", c_id).execute()
+                
+                ventas_abiertas = []
+                if res_pendientes.data:
+                    ventas_abiertas = [v for v in res_pendientes.data if v.get('estado', '') not in ["PAQUETE LISTO", "FINALIZADO"]]
+                
+                if ventas_abiertas:
+                    opciones_ventas = [f"Venta #{v['venta_id']} ({v['fecha_venta']}) - {v.get('estado', 'Sin Estado')}" for v in ventas_abiertas]
+                    venta_asociada_str = col_e2.selectbox("Compra asociada (No Finalizadas):", opciones_ventas)
+                    
+                    v_id_asociada = venta_asociada_str.split("#")[1].split(" ")[0]
+                    metodo_envio_final = f"Añadido a Venta #{v_id_asociada}"
+                    st.info(f"El envío será gratuito. Esta compra se anexará al paquete de la Venta #{v_id_asociada}.")
+                else:
+                    col_e2.warning("No hay compras anteriores abiertas para anexar (todas están Listas o Finalizadas).")
+                    bloquear_venta = True
+            else:
+                col_e2.error("Crea o selecciona un cliente primero.")
+                bloquear_venta = True
+                
+        elif modo_envio != "Retiro en tienda":
+            valor_envio = col_e2.number_input("Costo de Envío ($):", min_value=0.0, step=500.0)
             
         metodo_pago = st.selectbox("Método de Pago:", ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito"])
         comentario_venta = st.text_area("Comentario (Opcional):", placeholder="Ej: Entregar por conserjería...")
@@ -378,36 +412,32 @@ def mostrar_caja():
         st.markdown("#### ⚙️ Estado y Abono (Opcional)")
         
         col_abono1, col_abono2 = st.columns(2)
-        estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO","PENDIENTE PAGO", "FINALIZADO"]
-        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=5)
+        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=estados_posibles.index("FINALIZADO"))
         abono_inicial = col_abono2.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
         
         monto_final = subtotal_carrito + valor_envio
         st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2></div>", unsafe_allow_html=True)
         st.write("")
         
-        if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True):
-            if not c_nombre: 
-                st.error("⚠️ Falta el cliente.")
-            elif len(st.session_state.carrito_caja) == 0: 
-                st.error("⚠️ El carrito está vacío.")
-            else:
-                with st.spinner("Procesando Venta..."):
-                    final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_id)
-                    exito, err = procesar_venta_carrito(
-                        st.session_state.carrito_caja, final_cliente_id, valor_envio, 
-                        modo_envio, metodo_pago, comentario_venta, fecha_venta_manual,
-                        estado_venta_sel, abono_inicial
-                    )
-                    if exito: 
-                        st.success("🎉 ¡Venta registrada!")
-                        st.balloons()
-                        time.sleep(2)
-                        st.rerun()
-                    else: 
-                        st.error(f"Error: {err}")
+        desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
+        
+        if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
+            with st.spinner("Procesando Venta..."):
+                final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_id)
+                exito, err = procesar_venta_carrito(
+                    st.session_state.carrito_caja, final_cliente_id, valor_envio, 
+                    metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
+                    estado_venta_sel, abono_inicial
+                )
+                if exito: 
+                    st.success("🎉 ¡Venta registrada!")
+                    st.balloons()
+                    time.sleep(2)
+                    st.rerun()
+                else: 
+                    st.error(f"Error: {err}")
 
-        # --- PESTAÑA 2: HISTORIAL EDITABLE ---
+    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -437,7 +467,6 @@ def mostrar_caja():
                     limite_min = min(fecha_min, hoy)
                     limite_max = max(fecha_max, hoy)
                     
-                    # 🔴 CORRECCIÓN: El calendario ahora muestra por defecto TODO el historial
                     rango_fechas = col_f1.date_input(
                         "Rango personalizado:", 
                         value=(limite_min, limite_max), 
@@ -454,7 +483,6 @@ def mostrar_caja():
                 
                 st.markdown("---")
                 
-                # 🔴 NUEVO: Filtros Rápidos en Checkboxes
                 col_chk1, col_chk2 = st.columns(2)
                 mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
@@ -467,15 +495,12 @@ def mostrar_caja():
                 
             df_filtrado_general = df_ventas.copy()
             
-            # 🔴 LÓGICA DE FILTRADO DE FECHAS
             if mes_en_curso:
-                # Si marca "Solo este mes", ignoramos el calendario y filtramos desde el día 1
                 df_filtrado_general = df_filtrado_general[
                     (df_filtrado_general['fecha_limpia'].dt.date >= primer_dia_mes) & 
                     (df_filtrado_general['fecha_limpia'].dt.date <= limite_max)
                 ]
             elif len(rango_fechas) == 2:
-                # Si no está marcado, obedecemos al calendario
                 df_filtrado_general = df_filtrado_general[
                     (df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & 
                     (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])
@@ -496,11 +521,9 @@ def mostrar_caja():
             
             df_mostrar = df_filtrado_general.copy()
             
-            # Aplicamos el filtro de costo cero solo a la vista de la tabla
             if solo_costo_cero:
                 df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             
-            # Filtramos por las columnas que elegiste mostrar
             df_mostrar = df_mostrar[columnas_a_mostrar].copy()
 
             st.session_state.historial_original = df_mostrar.copy()
@@ -512,7 +535,7 @@ def mostrar_caja():
                 "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f"),
                 "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
                 "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
-                "estado": st.column_config.SelectboxColumn("Estado", options=sorted(df_ventas['estado'].unique().tolist())),
+                "estado": st.column_config.SelectboxColumn("Estado", options=estados_posibles),
             }
             
             if 'costo_venta' in df_mostrar.columns:
