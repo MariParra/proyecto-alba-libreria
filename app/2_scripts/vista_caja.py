@@ -20,17 +20,11 @@ def unificar_formatos_fecha(serie_fechas):
             
         val_str = str(val).strip()
         
-        # Diccionario de formatos comunes esperados en importaciones (LATAM e ISO)
         formatos_a_probar = [
-            "%Y-%m-%d",           # Ej: 2026-08-25
-            "%Y-%m-%d %H:%M:%S",  # Ej: 2026-08-25 14:30:00
-            "%Y-%m-%d %H:%M:%S.%f",
-            "%d-%m-%Y",           # Ej: 25-08-2026
-            "%d-%m-%Y %H:%M:%S",
-            "%d/%m/%Y",           # Ej: 25/08/2026
-            "%d/%m/%Y %H:%M:%S",
-            "%Y/%m/%d",           # Ej: 2026/08/25
-            "%Y/%m/%d %H:%M:%S"
+            "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f",
+            "%d-%m-%Y", "%d-%m-%Y %H:%M:%S",
+            "%d/%m/%Y", "%d/%m/%Y %H:%M:%S",
+            "%Y/%m/%d", "%Y/%m/%d %H:%M:%S"
         ]
         
         for fmt in formatos_a_probar:
@@ -39,7 +33,6 @@ def unificar_formatos_fecha(serie_fechas):
             except ValueError:
                 continue
                 
-        # Si todos los explícitos fallan, intenta con el parseo nativo de pandas asumiendo día primero
         try:
             return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
         except Exception:
@@ -55,15 +48,13 @@ def cargar_libros_caja():
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
         if not df.empty:
-            # 🔴 EL SECRETO: Forzamos matemáticamente a que los nulos sean 0.0 y no NaN
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
             df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
-            df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0)
+            df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
             
         return df
     except: 
         return pd.DataFrame()
-
 
 @st.cache_data(ttl=60)
 def cargar_clientes_caja():
@@ -76,10 +67,6 @@ def cargar_clientes_caja():
 
 @st.cache_data(ttl=60)
 def cargar_historial_completo():
-    """
-    Carga el historial de ventas, procesa los libros vendidos (texto/JSON),
-    y calcula deuda y utilidad en tiempo real.
-    """
     conn = get_db_connection()
     try:
         res_ventas = conn.table("registro_ventas").select("*").order("venta_id", desc=True).execute()
@@ -87,7 +74,6 @@ def cargar_historial_completo():
             return pd.DataFrame()
         df_ventas = pd.DataFrame(res_ventas.data)
         
-        # Formatear la columna de libros para visualización
         def formatear_libros(libros_data):
             if not isinstance(libros_data, str) or not libros_data.strip(): 
                 return "Sin Detalle"
@@ -102,7 +88,6 @@ def cargar_historial_completo():
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
         
-        # Unir con nombres de clientes
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         if res_clientes.data:
             df_clientes = pd.DataFrame(res_clientes.data)
@@ -112,12 +97,10 @@ def cargar_historial_completo():
         else:
             df_ventas['nombre_cliente'] = 'Sin Cliente'
         
-        # Asegurar tipos numéricos para los cálculos
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
         
-        # --- CÁLCULOS FINANCIEROS AL VUELO ---
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
         df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
         
@@ -174,10 +157,10 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         cargar_libros_caja.clear()
         return response.data[0]['libro_id']
 
+# --- FUNCIÓN CORREGIDA Y BLINDADA ---
 def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, abono_venta):
     conn = get_db_connection()
     
-    # Preparamos los datos para guardar en JSON y el costo total
     libros_para_json = []
     costo_total_venta = 0.0
     
@@ -189,8 +172,14 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "cantidad": item['cantidad'], 
             "precio": item['precio_cobrado']
         })
-        # Sumamos el costo de cada libro (costo unitario * cantidad)
-        costo_total_venta += item.get('costo', 0.0) * item['cantidad']
+        
+        # 🔴 BLINDAJE ANTI-NAN: Aseguramos que el costo sea un número antes de sumar
+        costo_unitario = item.get('costo', 0.0)
+        if pd.isna(costo_unitario) or costo_unitario is None:
+            costo_unitario = 0.0
+            
+        costo_total_venta += float(costo_unitario) * int(item['cantidad'])
+
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
     try:
@@ -205,11 +194,11 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "comentario": f"Pago: {metodo_pago}. {comentario}".strip(),
             "estado": estado_venta,
             "abono": float(abono_venta),
-            "costo_venta": float(costo_total_venta)
+            "costo_venta": float(costo_total_venta) # Este valor ahora está 100% seguro
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
         for item in carrito:
-            l_id = item['libro_id'] # Se define l_id para la interacción
+            l_id = item['libro_id']
             if item['es_nuevo']: 
                 l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None)
             else:
@@ -217,14 +206,12 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 nuevo_stock = item['stock_actual'] - item['cantidad']
                 conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
             
-            # Registrar en el historial del cliente
             if cliente_id and l_id:
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", l_id).execute()
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
         
-        # Limpiamos el carrito y las cachés
         st.session_state.carrito_caja = []
         cargar_libros_caja.clear()
         cargar_clientes_caja.clear()
@@ -268,7 +255,6 @@ def actualizar_historial_batch(df_editado):
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            # 🔴 SOLUCIÓN: Solo enviamos los campos que realmente existen en la tabla editable
             datos = {
                 "monto_final": float(row['monto_final']), 
                 "metodo_envio": str(row['metodo_envio']), 
@@ -280,7 +266,6 @@ def actualizar_historial_batch(df_editado):
             conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
             updates += 1
         except Exception as e: 
-            # Imprimimos el error en consola para que nunca más falle en silencio
             print(f"Error actualizando venta {venta_id}: {e}")
             continue
             
@@ -302,7 +287,6 @@ def mostrar_caja():
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial Editable", "💸 Cuentas por Cobrar", "🚫 Anular Venta"])
     
-    # --- PESTAÑA 1: NUEVA VENTA ---
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
@@ -314,10 +298,13 @@ def mostrar_caja():
                 if sel_cliente:
                     datos_c = df_clientes[df_clientes['nombre'] == sel_cliente].iloc[0]
                     c_id = int(datos_c['cliente_id'])
-                    with st.expander(f"✏️ Ver datos (Status: {datos_c.get('status', 'REGULAR')})", expanded=False):
-                        c_nombre = st.text_input("Nombre:", value=datos_c['nombre'])
-                        c_correo = st.text_input("Correo:", value=datos_c.get('email', ''))
-                        c_telefono = st.text_input("Teléfono:", value=datos_c.get('telefono', ''))
+                    c_nombre = datos_c['nombre']
+                    c_correo = datos_c.get('email', '')
+                    c_telefono = datos_c.get('telefono', '')
+                    with st.expander(f"✏️ Ver/Editar datos (Status: {datos_c.get('status', 'REGULAR')})", expanded=False):
+                        c_nombre = st.text_input("Nombre:", value=c_nombre)
+                        c_correo = st.text_input("Correo:", value=c_correo)
+                        c_telefono = st.text_input("Teléfono:", value=c_telefono)
             else: 
                 st.warning("No hay clientes registrados.")
         else:
@@ -363,8 +350,7 @@ def mostrar_caja():
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
             cantidad = col_c2.number_input("Cantidad:", min_value=1, max_value=max(1, l_stock_actual), step=1)
             
-            libro_sin_stock = l_stock_actual <= 0 and not es_nuevo
-            if libro_sin_stock:
+            if l_stock_actual <= 0 and not es_nuevo:
                 st.warning("⚠️ Atención: Estás vendiendo un libro sin stock físico (venta por encargo).")
             
             if st.button("➕ AÑADIR AL CARRITO", use_container_width=True):
@@ -408,7 +394,7 @@ def mostrar_caja():
         
         col_abono1, col_abono2 = st.columns(2)
         estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO","PENDIENTE PAGO", "FINALIZADO"]
-        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=3) # Por defecto FINALIZADO
+        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=5)
         abono_inicial = col_abono2.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
         
         monto_final = subtotal_carrito + valor_envio
@@ -435,7 +421,6 @@ def mostrar_caja():
                     else: 
                         st.error(f"Error: {err}")
 
-    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -443,10 +428,8 @@ def mostrar_caja():
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
-            # 1. Creamos una columna sanitizada usando tu función unificadora de fechas
             df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
             
-            # Alerta UX responsiva en caso de que existan fechas corruptas
             fechas_invalidas = df_ventas['fecha_limpia'].isna()
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas con formato ilegible"):
@@ -456,7 +439,6 @@ def mostrar_caja():
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
-                # Usamos la columna ya parseada para extraer los límites de fechas
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
                 
                 if not df_fechas_validas.empty:
@@ -464,8 +446,7 @@ def mostrar_caja():
                     fecha_max = df_fechas_validas['fecha_limpia'].max().date()
                     
                     rango_fechas = col_f1.date_input(
-                        "Filtrar por Fecha:", 
-                        value=(fecha_min, fecha_max), 
+                        "Filtrar por Fecha:", value=(fecha_min, fecha_max), 
                         min_value=fecha_min, max_value=fecha_max
                     )
                 else:
@@ -477,76 +458,56 @@ def mostrar_caja():
                 estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
                 estado_filtro = col_f3.selectbox("Filtrar por Estado:", estados_hist)
                 
-                # 🔴 NUEVO FILTRO RÁPIDO PARA AUDITORÍA DE COSTOS
                 st.markdown("---")
                 solo_costo_cero = st.checkbox("⚠️ Mostrar solo ventas pendientes de asignar Costo (Costo = $0)", value=False)
                 
-            df_filtrado = df_ventas.copy()
+            df_filtrado_general = df_ventas.copy()
             
-            # Filtrado seguro
             if len(rango_fechas) == 2:
-                df_filtrado = df_filtrado[
-                    (df_filtrado['fecha_limpia'].dt.date >= rango_fechas[0]) & 
-                    (df_filtrado['fecha_limpia'].dt.date <= rango_fechas[1])
+                df_filtrado_general = df_filtrado_general[
+                    (df_filtrado_general['fecha_limpia'] >= pd.to_datetime(rango_fechas[0])) & 
+                    (df_filtrado_general['fecha_limpia'] < pd.to_datetime(rango_fechas[1]) + timedelta(days=1))
                 ]
-                
             if cliente_filtro != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['nombre_cliente'] == cliente_filtro]
+                df_filtrado_general = df_filtrado_general[df_filtrado_general['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['estado'] == estado_filtro]
+                df_filtrado_general = df_filtrado_general[df_filtrado_general['estado'] == estado_filtro]
                 
-            # Aplicar filtro de costo cero si la casilla está marcada
-            if solo_costo_cero:
-                df_filtrado = df_filtrado[df_filtrado['costo_venta'] == 0]
-            
-            # Panel de métricas para sumar costos y utilidades del período
             st.markdown("#### 📊 Resumen del período filtrado")
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("💰 Ventas Totales", f"${df_filtrado['monto_final'].sum():,.0f}")
-            m2.metric("💳 Total Abonado", f"${df_filtrado['abono'].sum():,.0f}")
-            m3.metric("📦 Costos Totales", f"${df_filtrado['costo_venta'].sum():,.0f}")
-            m4.metric("📈 Utilidad Estimada", f"${df_filtrado['utilidad'].sum():,.0f}")
+            m1.metric("💰 Ventas Totales", f"${df_filtrado_general['monto_final'].sum():,.0f}")
+            m2.metric("💳 Total Abonado", f"${df_filtrado_general['abono'].sum():,.0f}")
+            m3.metric("📦 Costos Totales", f"${df_filtrado_general['costo_venta'].sum():,.0f}")
+            m4.metric("📈 Utilidad Estimada", f"${df_filtrado_general['utilidad'].sum():,.0f}")
             st.markdown("---")
             
-                        # 2. AHORA aplicamos el filtro de costo cero SOLO para la tabla visual inferior
-            df_mostrar = df_filtrado.copy()
+            df_mostrar = df_filtrado_general.copy()
             if solo_costo_cero:
                 df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             
-            # Construcción de la tabla
             columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
-            for col in columnas_hist: 
-                if col not in df_mostrar.columns: df_mostrar[col] = ""
-                
-            df_mostrar = df_mostrar[columnas_hist].copy()
-            
-            if 'historial_original' not in st.session_state or not st.session_state.historial_original.equals(df_mostrar):
-                st.session_state.historial_original = df_mostrar.copy()
-                
-            st.caption("Doble clic en celdas para modificar. Los campos financieros (Costo Venta, Estado, Abono) pueden editarse directamente aquí.")
+            df_mostrar = df_mostrar.reindex(columns=columnas_hist, fill_value='')
 
-            
+            st.session_state.historial_original = df_mostrar.copy()
+            st.caption("Doble clic en celdas para modificar.")
+
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
                 "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f"),
                 "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
                 "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
-                "estado": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "LISTO / PENDIENTE PAGO", "FINALIZADO"]),
+                "estado": st.column_config.SelectboxColumn("Estado", options=sorted(df_ventas['estado'].unique().tolist())),
             }
             
-            # 🔴 NUEVA ALERTA VISUAL: Pinta de rojo si el costo es 0
             df_estilizado = df_mostrar.style.apply(
                 lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s],
                 subset=['costo_venta']
             )
             
             df_editado = st.data_editor(
-                df_estilizado, # Usamos el DataFrame estilizado
-                disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config=config_cols_hist
+                df_estilizado, disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
+                use_container_width=True, hide_index=True, column_config=config_cols_hist
             )
             
             if not df_mostrar.equals(df_editado):
@@ -556,34 +517,27 @@ def mostrar_caja():
                     time.sleep(1.5) 
                     st.rerun()
 
-    # --- PESTAÑA 3: CUENTAS POR COBRAR ---
     with tab_cobranza:
         st.markdown("### 💸 Cuentas por Cobrar")
         st.caption("Lista de todas las ventas con deuda pendiente (Deuda > 0).")
-        
         df_ventas_cobranza = cargar_historial_completo()
         if not df_ventas_cobranza.empty:
             df_deudores = df_ventas_cobranza[df_ventas_cobranza['deuda'] > 0].copy()
-            
             if df_deudores.empty:
                 st.success("🎉 ¡Felicidades! No hay deudas pendientes.")
             else:
-                config_deuda = {
-                    "monto_final": st.column_config.NumberColumn("Monto Venta", format="$%.0f"),
-                    "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
-                    "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f")
-                }
-                st.dataframe(
-                    df_deudores[['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'estado']],
-                    hide_index=True, use_container_width=True, column_config=config_deuda
+                st.dataframe(df_deudores[['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'estado']],
+                    hide_index=True, use_container_width=True, 
+                    column_config={
+                        "monto_final": st.column_config.NumberColumn("Monto Venta", format="$%.0f"),
+                        "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
+                        "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f")
+                    }
                 )
-                
-                total_por_cobrar = df_deudores['deuda'].sum()
-                st.markdown(f"#### 💰 Total por Cobrar: **${total_por_cobrar:,.0f}**")
+                st.markdown(f"#### 💰 Total por Cobrar: **${df_deudores['deuda'].sum():,.0f}**")
         else:
             st.info("No hay ventas registradas.")
 
-    # --- PESTAÑA 4: ANULAR VENTA ---
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")
         df_ventas_anular = cargar_historial_completo()

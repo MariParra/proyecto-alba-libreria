@@ -157,7 +157,6 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
     except Exception as e:
         return False, str(e)
 
-
 def mostrar_inventario():
     col_inv1, col_inv2 = st.columns([3, 1])
     with col_inv1:
@@ -348,6 +347,7 @@ def mostrar_inventario():
             opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
             st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="enc_existente")
             st.text_input("O escribe una nueva Encuadernación:", key="enc_nueva")
+            
             c1, c2, c3 = st.columns(3)
             c1.number_input("Stock:", min_value=0, step=1, key="nuevo_stock")
             c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="nuevo_costo")
