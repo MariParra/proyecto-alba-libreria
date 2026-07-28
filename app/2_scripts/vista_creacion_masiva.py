@@ -147,6 +147,18 @@ def procesar_ventas_masivas(df):
     conn = get_db_connection()
     exitos, errores = 0, []
 
+    # --- 🛠️ CORRECCIÓN DE FECHA ---
+    # Forzamos la conversión de la fecha; si es inválida, se convierte en NaT
+    df['Fecha_Venta_YYYY_MM_DD'] = pd.to_datetime(df['Fecha_Venta_YYYY_MM_DD'], errors='coerce')
+    
+    filas_con_fecha_invalida = df[df['Fecha_Venta_YYYY_MM_DD'].isna()]
+    for i, fila in filas_con_fecha_invalida.iterrows():
+        errores.append(f"Fila {i+2}: La fecha es inválida o está vacía y fue omitida.")
+    
+    # Descartamos las filas sin fecha válida
+    df.dropna(subset=['Fecha_Venta_YYYY_MM_DD'], inplace=True)
+    # -----------------------------
+
     res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
     res_libros = conn.table("libros").select("libro_id, titulo, autor, costo").execute()
     
@@ -165,14 +177,14 @@ def procesar_ventas_masivas(df):
     total_grupos = len(grupos)
     actual = 0
 
-    for (fecha_raw, cliente_nombre), grupo in grupos:
+    for (fecha_dt, cliente_nombre), grupo in grupos:
         actual += 1
         barra_progreso.progress(actual / total_grupos, text=f"Procesando venta {actual} de {total_grupos}...")
         
         try:
-            cliente_norm = normalizar_texto(cliente_nombre)
+            cliente_norm = normalizar_texto(str(cliente_nombre))
             if cliente_norm not in map_clientes:
-                errores.append(f"Venta {fecha_raw}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
+                errores.append(f"Venta {fecha_dt.strftime('%Y-%m-%d')}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
                 continue
             cliente_id = map_clientes[cliente_norm]
 
@@ -203,7 +215,9 @@ def procesar_ventas_masivas(df):
             valor_envio = float(grupo['Valor_Envio'].iloc[0])
             metodo_envio = str(grupo['Metodo_Envio'].iloc[0]) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "No especificado"
             comentario = str(grupo['Comentario'].iloc[0]) if pd.notna(grupo['Comentario'].iloc[0]) else "Importación Masiva"
-            fecha_str = str(fecha_raw).split()[0]
+            
+            # Pasamos la fecha ya validada a formato texto para Supabase
+            fecha_str = fecha_dt.strftime('%Y-%m-%d')
             estado_venta = str(grupo['Estado'].iloc[0])
             abono_total_venta = float(grupo['Abono'].sum())
             
@@ -224,7 +238,7 @@ def procesar_ventas_masivas(df):
             exitos += 1
 
         except Exception as e:
-            errores.append(f"Error en Venta de {cliente_nombre} ({fecha_raw}): {str(e)}")
+            errores.append(f"Error en Venta de {cliente_nombre} ({fecha_dt.strftime('%Y-%m-%d')}): {str(e)}")
 
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, errores
@@ -288,13 +302,18 @@ def procesar_suscripciones_masivas(df):
 # ==========================================
 def mostrar_creacion_masiva():
     st.title("✨ Importación Masiva")
-    st.markdown("Añade o actualiza decenas de registros a la vez usando nuestras plantillas de Excel.")
+    st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel. Sigue las instrucciones de cada pestaña para evitar errores.")
     
     tab_clientes, tab_libros, tab_ventas, tab_suscripciones = st.tabs(["👥 Nuevos Clientes", "📚 Nuevos Libros", "🛒 Ventas Pasadas", "💰 Suscripciones"])
 
     with tab_clientes:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Clientes")
+            st.info(
+                "ℹ️ **Formato Esperado en Excel:**\n"
+                "- **nombre:** (Obligatorio) No importa si usas mayúsculas o tildes, el sistema lo limpiará automáticamente. Se usa para evitar duplicados.\n"
+                "- **email, telefono, direccion, instagram:** (Opcionales) Se guardarán tal como los escribas."
+            )
             st.download_button(
                 label="📥 Descargar Plantilla Clientes (.xlsx)",
                 data=generar_plantilla_clientes(),
@@ -309,15 +328,15 @@ def mostrar_creacion_masiva():
             if archivo_clientes:
                 df_c = pd.read_excel(archivo_clientes, engine='openpyxl')
                 if 'nombre' not in df_c.columns:
-                    st.error("🛑 El archivo no es válido. Usa la plantilla de clientes.")
+                    st.error("🛑 El archivo no es válido. Usa la plantilla de clientes que descargaste en el Paso 1.")
                 else:
                     if st.button("🚀 Ingresar Nuevos Clientes", type="primary", use_container_width=True):
                         with st.spinner("Procesando y validando clientes..."):
                             exitos, duplicados, errores = procesar_clientes_masivos(df_c)
                             c1, c2, c3 = st.columns(3)
                             c1.metric("✅ Creados", exitos)
-                            c2.metric("⚠️ Duplicados", duplicados)
-                            c3.metric("❌ Errores", len(errores) - duplicados)
+                            c2.metric("⚠️ Duplicados Omitidos", duplicados)
+                            c3.metric("❌ Errores Críticos", len(errores) - duplicados)
                             if exitos > 0: 
                                 st.balloons()
                                 st.success("¡Nuevos clientes añadidos correctamente!")
@@ -328,6 +347,12 @@ def mostrar_creacion_masiva():
     with tab_libros:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Libros")
+            st.info(
+                "ℹ️ **Formato Esperado en Excel:**\n"
+                "- **titulo y autor:** (Obligatorios) El sistema los limpiará (mayúsculas, sin tilde) y los usará combinados para detectar si el libro ya existe.\n"
+                "- **genero, editorial, encuadernacion:** (Opcionales) Texto libre.\n"
+                "- **stock, precio, precio_original, costo:** (Obligatorios numéricos) Deben ser números puros. **NO escribas** el signo '$' ni letras. Ej: Escribe '15000', no '$15.000'."
+            )
             st.download_button(
                 label="📥 Descargar Plantilla Libros (.xlsx)",
                 data=generar_plantilla_libros(),
@@ -347,8 +372,8 @@ def mostrar_creacion_masiva():
                             exitos, duplicados, errores = procesar_nuevos_libros(df)
                             c1, c2, c3 = st.columns(3)
                             c1.metric("✅ Ingresados", exitos)
-                            c2.metric("⚠️ Duplicados", duplicados)
-                            c3.metric("❌ Errores", len(errores) - duplicados)
+                            c2.metric("⚠️ Duplicados Omitidos", duplicados)
+                            c3.metric("❌ Errores Críticos", len(errores) - duplicados)
                             if exitos > 0: st.success(f"¡{exitos} libros añadidos!")
                             if errores:
                                 with st.expander("Ver lista de conflictos"):
@@ -357,14 +382,18 @@ def mostrar_creacion_masiva():
     with tab_ventas:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Ventas")
-            
             st.warning(
-                "**¡Importante!** Antes de subir este archivo, asegúrate de que todos los **Clientes** "
-                "y **Libros** listados en tu Excel ya existan en el sistema. Puedes crearlos previamente "
-                "desde las pestañas 'Nuevos Clientes' y 'Nuevos Libros' de esta misma sección."
+                "**¡Condición Previa!** Antes de subir ventas, asegúrate de que los **Clientes** y **Libros** "
+                "que vas a reportar YA EXISTAN en tu base de datos. Si un cliente o libro no existe, la fila será rechazada."
             )
-            
-            st.info("💡 **Tip UX:** Si una clienta compró 3 libros en el mismo día, usa 3 filas en el Excel con la misma fecha y el mismo nombre. El sistema las agrupará en una sola Venta/Boleta automáticamente calculando los subtotales.")
+            st.info(
+                "ℹ️ **Formato Esperado en Excel:**\n"
+                "- **Fecha_Venta_YYYY_MM_DD:** El sistema soporta formatos normales (ej: 25/08/2026, 2026-08-25). Celdas vacías o texto inválido se omitirán.\n"
+                "- **Nombre_Cliente y Titulo_Libro:** Deben coincidir con los nombres en tu base de datos (no te preocupes por tildes o mayúsculas).\n"
+                "- **Cantidad, Precio_Unitario, Valor_Envio, Abono:** Deben ser **números puros**, sin símbolos.\n"
+                "- **Estado:** Escribe estados como 'FINALIZADO' o 'PENDIENTE PAGO' (por defecto será 'FINALIZADO').\n"
+                "💡 **Tip UX:** Si una clienta compró 3 libros el mismo día, usa 3 filas en el Excel con la misma fecha y cliente. El sistema las agrupará en una sola Venta automáticamente."
+            )
             st.download_button(
                 label="📥 Descargar Plantilla Ventas (.xlsx)",
                 data=generar_plantilla_ventas(),
@@ -384,18 +413,23 @@ def mostrar_creacion_masiva():
                             exitos_v, errores_v = procesar_ventas_masivas(df_v)
                             c1, c2 = st.columns(2)
                             c1.metric("✅ Boletas Exitosas", exitos_v)
-                            c2.metric("❌ Errores", len(errores_v))
+                            c2.metric("❌ Filas con Errores", len(errores_v))
                             if exitos_v > 0: 
                                 st.balloons()
                                 st.success("¡Ventas registradas correctamente en el historial!")
                             if errores_v:
-                                with st.expander("Ver lista de conflictos (Clientes no encontrados)"):
+                                with st.expander("Ver lista de conflictos (Revisa fechas o clientes no encontrados)"):
                                     for err in errores_v: st.write(err)
 
     with tab_suscripciones:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla Inteligente")
-            st.info("La plantilla se generará con los IDs y Nombres de todos tus clientes actuales.")
+            st.info(
+                "La plantilla se generará automáticamente con el ID y Nombre de todos tus clientes actuales.\n\n"
+                "ℹ️ **Formato Esperado en Excel:**\n"
+                "- **No modifiques** las columnas `cliente_id` ni `nombre`.\n"
+                "- **valor_suscripcion:** Escribe el precio como un número puro (ej: 15000), sin puntos, comas, ni signos de $. Deja en blanco los que no quieras actualizar."
+            )
             st.download_button(
                 label="📥 Descargar Plantilla Suscripciones (.xlsx)",
                 data=generar_plantilla_suscripciones(),
@@ -405,7 +439,7 @@ def mostrar_creacion_masiva():
         
         with st.container(border=True):
             st.markdown("### Paso 2: Sube el archivo con los valores")
-            st.warning("El sistema solo procesará las filas donde la columna `valor_suscripcion` tenga un número.")
+            st.warning("El sistema solo procesará las filas donde la columna `valor_suscripcion` tenga un número válido.")
             archivo_subs = st.file_uploader("Sube el archivo de suscripciones", type=["xlsx"], key="up_subs")
             
             if archivo_subs:
