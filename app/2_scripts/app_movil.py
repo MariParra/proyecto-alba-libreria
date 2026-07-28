@@ -84,7 +84,7 @@ def mostrar_login():
                     if email and email.lower() in [e.lower() for e in CORREOS_AUTORIZADOS]:
                         st.session_state["usuario_logeado"] = True
                         st.session_state["email_usuario"] = email
-                        time.sleep
+        
                         st.rerun()
                     else:
                         st.error(f"⛔ Acceso denegado: El correo {email} no tiene permisos.")
@@ -92,8 +92,9 @@ def mostrar_login():
                 # SI HAY UN ERROR DE URL VIEJA, LO ATRAPAMOS AQUÍ Y LIMPIAMOS
                 st.warning("🔄 Sesión caducada o enlace antiguo. Limpiando caché...")
                 st.query_params.clear()
-                import time; time.sleep(1)
-                time.sleep
+                import time
+                time.sleep(1)
+
                 st.rerun()
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
@@ -125,37 +126,30 @@ else:
             
         if st.button("📦 GESTIÓN DE INVENTARIO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO" else "secondary"):
             st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
-            time.sleep
             st.rerun()
             
         if st.button("🛒 CAJA / VENTAS RÁPIDAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS" else "secondary"):
             st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
-            time.sleep
             st.rerun()
             
         if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
             st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
-            time.sleep
             st.rerun()
         
         if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
             st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
-            time.sleep
             st.rerun()
             
         if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
             st.session_state.pagina_actual = "📊 DASHBOARD"
-            time.sleep
             st.rerun()
             
         if st.button("🛠️ HERRAMIENTAS Y SYNC", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
             st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
-            time.sleep
             st.rerun()
             
         if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
             st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
-            time.sleep
             st.rerun()
 
         st.markdown("---")
@@ -163,17 +157,14 @@ else:
         
         if st.button("📥 REPORTES Y DESCARGAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS" else "secondary"):
             st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
-            time.sleep
             st.rerun()
 
         if st.button("✨ CREACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA" else "secondary"):
             st.session_state.pagina_actual = "✨ CREACIÓN MASIVA"
-            time.sleep
             st.rerun()
             
         if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
             st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
-            time.sleep
             st.rerun()
 
         st.markdown("---")
@@ -189,14 +180,12 @@ else:
             time.sleep(1) 
             
             # 4. Recargamos la página
-            time.sleep
             st.rerun()
         
         st.markdown("---")
         
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.clear()
-            time.sleep
             st.rerun()
 
     # ================= ÁREA PRINCIPAL =================
