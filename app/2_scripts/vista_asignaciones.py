@@ -287,8 +287,8 @@ def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_
         datos_update = {"valor_envio": float(nuevo_envio), "valor_extras": nuevo_valor_extras, "monto_total": nuevo_monto_total}
         
         if nombres_extras:
-            if "EXTRAS:" in extras_actual: datos_update["extras"] = extras_actual + ", " + ", ".join(nombres_extras)
-            else: datos_update["extras"] = "EXTRAS: " + ", ".join(nombres_extras)
+           if "EXTRAS:" in extras_actual: datos_update["extras"] = extras_actual + " | " + " | ".join(nombres_extras)
+           else: datos_update["extras"] = "EXTRAS: " + " | ".join(nombres_extras)
                 
         conn.table("asignaciones").update(datos_update).eq("asignacion_id", a_id).execute()
         cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
