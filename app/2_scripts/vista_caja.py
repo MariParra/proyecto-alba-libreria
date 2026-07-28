@@ -568,12 +568,16 @@ def mostrar_caja():
             if df_deudores.empty:
                 st.success("🎉 ¡Felicidades! No hay deudas pendientes.")
             else:
-                # 🔴 CORRECCIÓN 2 y 3: Filtros de fecha, cliente y Alertas de Morosidad (>14 días)
+                # 🔴 CORRECCIÓN CLAVE: unificar_formatos_fecha ya devuelve objetos datetime con el índice correcto. No requiere pd.to_datetime extra.
                 df_deudores['fecha_limpia'] = unificar_formatos_fecha(df_deudores['fecha_venta'])
+                
+                # Eliminamos filas que no tengan fecha válida para calcular la mora de forma segura
+                df_deudores = df_deudores.dropna(subset=['fecha_limpia'])
+                
                 hoy = datetime.now().date()
                 
-                # Calculamos días de mora
-                df_deudores['dias_mora'] = (hoy - pd.to_datetime(df_deudores['fecha_limpia']).dt.date).dt.days
+                # Calculamos días de mora de forma ultra segura usando lambdas para evitar IntCastingNaNError
+                df_deudores['dias_mora'] = df_deudores['fecha_limpia'].apply(lambda x: (hoy - x.date()).days if pd.notna(x) else 0)
                 
                 # Alertas Críticas (> 14 días)
                 deudas_criticas = df_deudores[df_deudores['dias_mora'] > 14]
@@ -581,7 +585,7 @@ def mostrar_caja():
                     # Alerta Lateral (Sidebar)
                     st.sidebar.markdown("---")
                     st.sidebar.markdown("### 🚨 ALERTAS DE COBRANZA")
-                    st.sidebar.error(f"Tienes **{len(deudas_criticas)}** ventas impagas con más de 2 semanas de antigüedad.")
+                    st.sidebar.error(f"Tienes **{len(deudas_criticas)}** deudas con más de 2 semanas de antigüedad.")
                     for _, row in deudas_criticas.iterrows():
                         st.sidebar.warning(f"👤 **{row['nombre_cliente']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días mora")
                     
@@ -592,25 +596,29 @@ def mostrar_caja():
                 with st.expander("🔍 Filtros de Cobranza", expanded=True):
                     col_c1, col_c2 = st.columns(2)
                     
-                    df_fechas_validas_c = df_deudores.dropna(subset=['fecha_limpia'])
-                    if not df_fechas_validas_c.empty:
-                        fecha_min_c = df_fechas_validas_c['fecha_limpia'].min().date()
-                        fecha_max_c = df_fechas_validas_c['fecha_limpia'].max().date()
-                        rango_fechas_c = col_c1.date_input("Filtrar por Fecha de Venta:", value=(fecha_min_c, fecha_max_c), min_value=fecha_min_c, max_value=fecha_max_c, key="rango_cob")
-                    else:
-                        rango_fechas_c = col_c1.date_input("Filtrar por Fecha:", value=(), disabled=True, key="rango_cob_dis")
+                    fecha_min_c = df_deudores['fecha_limpia'].min().date()
+                    fecha_max_c = df_deudores['fecha_limpia'].max().date()
+                    
+                    rango_fechas_c = col_c1.date_input(
+                        "Filtrar por Fecha de Venta:", 
+                        value=(fecha_min_c, fecha_max_c), 
+                        min_value=fecha_min_c, 
+                        max_value=fecha_max_c, 
+                        key="rango_cob"
+                    )
                     
                     clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
                     cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
 
-                # Aplicamos los filtros
+                                # Aplicamos los filtros
                 if len(rango_fechas_c) == 2:
                     df_deudores = df_deudores[
                         (df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & 
-                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1])
+                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1]) # 🔴 AQUÍ ESTÁ EL ARREGLO
                     ]
                 if cliente_filtro_c != "Todos":
                     df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
+
 
                 # Mostramos la tabla si hay resultados después de filtrar
                 if df_deudores.empty:
@@ -618,7 +626,7 @@ def mostrar_caja():
                 else:
                     st.markdown(f"#### 💰 Total por Cobrar (Filtrado): **${df_deudores['deuda'].sum():,.0f}**")
                     
-                    # Generamos una etiqueta de estado visual para la tabla
+                    # Generamos la etiqueta de estado visual
                     df_deudores['Nivel Mora'] = df_deudores['dias_mora'].apply(lambda x: "🔴 Crítico (>14 días)" if x > 14 else ("🟡 Medio (7-14 días)" if x > 7 else "🟢 Normal"))
                     
                     columnas_mostrar_cob = ['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'Nivel Mora', 'estado']
@@ -632,7 +640,7 @@ def mostrar_caja():
                         }
                     )
         else:
-            st.info("No hay ventas registradas.")
+            st.info("No hay deudas registradas.")
 
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")

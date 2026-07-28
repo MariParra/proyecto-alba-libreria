@@ -371,6 +371,7 @@ def mostrar_creacion_masiva():
                 "- **Nombre_Cliente y Titulo_Libro:** Deben coincidir con los nombres en tu base de datos (no te preocupes por tildes o mayúsculas).\n"
                 "- **Cantidad, Precio_Unitario, Valor_Envio, Abono:** Deben ser **números puros**, sin símbolos.\n"
                 "- **Estado:** Escribe estados como 'FINALIZADO' o 'PENDIENTE PAGO' (por defecto será 'FINALIZADO').\n"
+                "- **Costos:** Sube las ventas con lso costos ya calculados, sino quedarán en cero\n"
                 "💡 **Tip UX:** Si una clienta compró 3 libros el mismo día, usa 3 filas en el Excel con la misma fecha y cliente. El sistema las agrupará en una sola Venta automáticamente."
             )
             st.download_button(
