@@ -15,7 +15,7 @@ from vista_herramientas import mostrar_herramientas
 from vista_libreros import mostrar_importacion_libreros
 
 # Nuevas importaciones añadidas
-from vista_creacion_masiva import mostrar_creacion_masiva_libros
+from vista_creacion_masiva import mostrar_creacion_masiva
 from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
 
@@ -149,7 +149,6 @@ else:
             st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
             st.rerun()
 
-        # --- NUEVA SECCIÓN DE ADMINISTRACIÓN AVANZADA ---
         st.markdown("---")
         st.markdown("### ⚙️ ADMIN AVANZADA")
         
@@ -208,6 +207,6 @@ else:
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
         elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA":
-            mostrar_creacion_masiva_libros()
+            mostrar_creacion_masiva()
         elif st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA":
             mostrar_actualizacion_masiva()
