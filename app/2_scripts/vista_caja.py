@@ -568,8 +568,8 @@ def mostrar_caja():
             if df_deudores.empty:
                 st.success("🎉 ¡Felicidades! No hay deudas pendientes.")
             else:
-                # 🔴 CORRECCIÓN CLAVE: Forzamos la conversión a datetime y manejamos errores con coerce antes de usar .dt
-                df_deudores['fecha_limpia'] = pd.to_datetime(unificar_formatos_fecha(df_deudores['fecha_venta']), errors='coerce')
+                # 🔴 CORRECCIÓN CLAVE: unificar_formatos_fecha ya devuelve objetos datetime con el índice correcto. No requiere pd.to_datetime extra.
+                df_deudores['fecha_limpia'] = unificar_formatos_fecha(df_deudores['fecha_venta'])
                 
                 # Eliminamos filas que no tengan fecha válida para calcular la mora de forma segura
                 df_deudores = df_deudores.dropna(subset=['fecha_limpia'])
@@ -610,14 +610,15 @@ def mostrar_caja():
                     clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
                     cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
 
-                # Aplicamos los filtros
+                                # Aplicamos los filtros
                 if len(rango_fechas_c) == 2:
                     df_deudores = df_deudores[
                         (df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & 
-                        (df_deudores['fecha_limpia'].dt.[...](asc_slot://start-slot-10)date <= rango_fechas_c)
+                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1]) # 🔴 AQUÍ ESTÁ EL ARREGLO
                     ]
                 if cliente_filtro_c != "Todos":
                     df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
+
 
                 # Mostramos la tabla si hay resultados después de filtrar
                 if df_deudores.empty:
