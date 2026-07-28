@@ -8,6 +8,45 @@ from utilidades import get_db_connection, limpiar_texto
 # --- FUNCIONES DE BASE DE DATOS ---
 # ==========================================
 
+def unificar_formatos_fecha(serie_fechas):
+    """
+    Analiza una serie de fechas en texto y las traduce a formato datetime 
+    intentando múltiples patrones. No elimina datos.
+    """
+    def parsear_valor(val):
+        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() == 'nan':
+            return pd.NaT
+            
+        val_str = str(val).strip()
+        
+        # Diccionario de formatos comunes esperados en importaciones (LATAM e ISO)
+        formatos_a_probar = [
+            "%Y-%m-%d",           # Ej: 2026-08-25
+            "%Y-%m-%d %H:%M:%S",  # Ej: 2026-08-25 14:30:00
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%d-%m-%Y",           # Ej: 25-08-2026
+            "%d-%m-%Y %H:%M:%S",
+            "%d/%m/%Y",           # Ej: 25/08/2026
+            "%d/%m/%Y %H:%M:%S",
+            "%Y/%m/%d",           # Ej: 2026/08/25
+            "%Y/%m/%d %H:%M:%S"
+        ]
+        
+        for fmt in formatos_a_probar:
+            try:
+                return datetime.strptime(val_str, fmt)
+            except ValueError:
+                continue
+                
+        # Si todos los explícitos fallan, intenta con el parseo nativo de pandas asumiendo día primero
+        try:
+            return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+        except Exception:
+            return pd.NaT
+
+    return serie_fechas.apply(parsear_valor)
+
+
 @st.cache_data(ttl=60)
 def cargar_libros_caja():
     conn = get_db_connection()
@@ -399,71 +438,56 @@ def mostrar_caja():
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
+            # 1. Creamos una columna sanitizada usando tu función unificadora
+            df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
+            
+            # Alerta UX responsiva en caso de que existan fechas corruptas imposibles de parsear (no se eliminan)
+            fechas_invalidas = df_ventas['fecha_limpia'].isna()
+            if fechas_invalidas.any():
+                with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas con formato ilegible"):
+                    st.warning("Estos registros siguen en el sistema pero no se pueden filtrar temporalmente. Revisa el formato original.")
+                    st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'nombre_cliente']], hide_index=True)
+
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
-                df_ventas['fecha_venta_dt'] = pd.to_datetime(df_ventas['fecha_venta'], errors='coerce')
-                df_fechas_validas = df_ventas.dropna(subset=['fecha_venta_dt'])
+                
+                # Usamos la columna ya parseada y sanitizada para extraer los límites
+                df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
+                
                 if not df_fechas_validas.empty:
-                    fecha_min = pd.to_datetime(df_ventas['fecha_venta']).min().date()
-                    fecha_max = pd.to_datetime(df_ventas['fecha_venta']).max().date()
+                    fecha_min = df_fechas_validas['fecha_limpia'].min().date()
+                    fecha_max = df_fechas_validas['fecha_limpia'].max().date()
+                    
                     rango_fechas = col_f1.date_input(
                         "Filtrar por Fecha:", 
                         value=(max(fecha_min, fecha_max - timedelta(days=30)), fecha_max), 
                         min_value=fecha_min, max_value=fecha_max
                     )
                 else:
-                    # Si no hay ninguna fecha válida, deshabilitamos el filtro
+                    # En caso extremo de no haber ninguna fecha interpretable, el sistema no se cae
                     rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
-
+                
                 clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar por Cliente:", clientes_hist)
                 
                 estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
                 estado_filtro = col_f3.selectbox("Filtrar por Estado:", estados_hist)
-
+                
             df_filtrado = df_ventas.copy()
             
+            # 2. Filtrado seguro utilizando la fecha limpia
             if len(rango_fechas) == 2:
-                df_filtrado['fecha_venta_dt'] = pd.to_datetime(df_filtrado['fecha_venta']).dt.date
-                df_filtrado = df_filtrado[(df_filtrado['fecha_venta_dt'] >= rango_fechas[0]) & (df_filtrado['fecha_venta_dt'] <= rango_fechas[1])]
+                # Comparamos objetos date de forma segura y limpia sin recargar pd.to_datetime
+                df_filtrado = df_filtrado[
+                    (df_filtrado['fecha_limpia'].dt.date >= rango_fechas[0]) & 
+                    (df_filtrado['fecha_limpia'].dt.date <= rango_fechas[1])
+                ]
+                
             if cliente_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['estado'] == estado_filtro]
-            
-            columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
-            for col in columnas_hist: 
-                if col not in df_filtrado.columns: df_filtrado[col] = ""
-                
-            df_mostrar = df_filtrado[columnas_hist].copy()
-            
-            if 'historial_original' not in st.session_state or not st.session_state.historial_original.equals(df_mostrar):
-                st.session_state.historial_original = df_mostrar.copy()
-                
-            st.caption("Doble clic en celdas para modificar. Los campos financieros (Estado, Abono) pueden editarse directamente aquí.")
-            
-            config_cols_hist = {
-                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
-                "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
-                "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f"),
-                "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
-                "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
-                "estado": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "LISTO / PENDIENTE PAGO", "FINALIZADO"]),
-            }
-            
-            df_editado = st.data_editor(
-                df_mostrar, 
-                disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config=config_cols_hist
-            )
-            
-            if not df_mostrar.equals(df_editado):
-                if st.button("💾 Guardar Cambios en Historial", type="primary"):
-                    num = actualizar_historial_batch(df_editado)
-                    st.success(f"¡Se actualizaron {num} registros!")
-                    st.rerun()
+
 
     # --- PESTAÑA 3: CUENTAS POR COBRAR ---
     with tab_cobranza:
