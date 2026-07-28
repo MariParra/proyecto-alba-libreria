@@ -1,127 +1,143 @@
 import streamlit as st
 import pandas as pd
+import io
 from utilidades import get_db_connection
 
-def procesar_actualizacion(tabla, pk_col, df):
-    """
-    Recorre el DataFrame y actualiza fila por fila en la base de datos.
-    pk_col es el nombre de la columna que sirve como Identificador Único (Primary Key).
-    """
+# ==========================================================
+# --- LÓGICA 1: ACTUALIZACIÓN DE LIBROS ---
+# ==========================================================
+def generar_plantilla_actualizacion_libros():
     conn = get_db_connection()
-    exitos = 0
-    errores = []
+    try:
+        res = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo").execute()
+        df = pd.DataFrame(res.data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Actualizar Libros')
+            worksheet = writer.sheets['Actualizar Libros']
+            for i, col in enumerate(df.columns):
+                worksheet.set_column(i, i, 20)
+        return output.getvalue()
+    except Exception as e:
+        st.error(f"Error generando plantilla: {e}")
+        return None
+
+def procesar_actualizacion_libros(df):
+    conn = get_db_connection()
+    updates, errores = 0, []
     
-    barra_progreso = st.progress(0, text="Iniciando actualización...")
-    total_filas = len(df)
-    
-    for indice, fila in df.iterrows():
-        # Actualizamos la barra de progreso
-        progreso_actual = (indice + 1) / total_filas
-        barra_progreso.progress(progreso_actual, text=f"Actualizando registro {indice + 1} de {total_filas}...")
-        
+    columnas_actualizables = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion', 'stock', 'precio', 'costo']
+
+    for i, fila in df.iterrows():
         try:
-            # Validar que el ID exista y sea válido
-            if pd.isna(fila[pk_col]):
-                errores.append(f"Fila Excel {indice + 2}: El campo '{pk_col}' está vacío. Se omitió.")
-                continue
-                
-            pk_val = int(fila[pk_col])
+            libro_id = int(fila['libro_id'])
+            datos_update = {}
+            for col in columnas_actualizables:
+                if col in fila and pd.notna(fila[col]):
+                    datos_update[col] = fila[col]
             
-            # Construir el diccionario de datos a actualizar
-            datos_actualizar = {}
-            for columna in df.columns:
-                if columna != pk_col:
-                    valor = fila[columna]
-                    # Convertir valores nulos de Pandas (NaN/NaT) a None (NULL en la base de datos)
-                    if pd.isna(valor):
-                        datos_actualizar[columna] = None
-                    else:
-                        datos_actualizar[columna] = valor
-            
-            # Ejecutar la actualización en Supabase
-            conn.table(tabla).update(datos_actualizar).eq(pk_col, pk_val).execute()
-            exitos += 1
-            
+            if datos_update:
+                conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
+                updates += 1
         except Exception as e:
-            errores.append(f"Fila Excel {indice + 2} (ID {fila.get(pk_col, 'N/A')}): Error en BD -> {str(e)}")
+            errores.append(f"Fila {i+2} (ID: {fila.get('libro_id', 'N/A')}): {str(e)}")
             
-    barra_progreso.progress(1.0, text="¡Proceso finalizado!")
-    return exitos, errores
+    return updates, errores
 
+# ==========================================================
+# --- LÓGICA 2: ACTUALIZACIÓN DE VENTAS ---
+# ==========================================================
+def generar_plantilla_actualizacion_ventas():
+    conn = get_db_connection()
+    try:
+        res = conn.table("registro_ventas").select("venta_id, fecha_venta, cliente_id, monto_final, estado, abono, costo_venta, metodo_envio, comentario").execute()
+        df = pd.DataFrame(res.data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Actualizar Ventas')
+            worksheet = writer.sheets['Actualizar Ventas']
+            for i, col in enumerate(df.columns):
+                worksheet.set_column(i, i, 20)
+        return output.getvalue()
+    except:
+        return None
+
+def procesar_actualizacion_ventas(df):
+    conn = get_db_connection()
+    updates, errores = 0, []
+    
+    columnas_actualizables = ['estado', 'abono', 'costo_venta', 'metodo_envio', 'comentario']
+
+    for i, fila in df.iterrows():
+        try:
+            venta_id = int(fila['venta_id'])
+            datos_update = {}
+            for col in columnas_actualizables:
+                if col in fila and pd.notna(fila[col]):
+                    if col in ['abono', 'costo_venta']:
+                        datos_update[col] = float(fila[col])
+                    else:
+                        datos_update[col] = str(fila[col])
+
+            if datos_update:
+                conn.table("registro_ventas").update(datos_update).eq("venta_id", venta_id).execute()
+                updates += 1
+        except Exception as e:
+            errores.append(f"Fila {i+2} (ID: {fila.get('venta_id', 'N/A')}): {str(e)}")
+
+    return updates, errores
+
+# ==========================================
+# --- VISTA PRINCIPAL ---
+# ==========================================
 def mostrar_actualizacion_masiva():
-    st.title("⚡ Actualización Masiva de Datos")
-    st.markdown("""
-    Utiliza esta herramienta para modificar múltiples registros a la vez usando Excel.
-    
-    **Instrucciones de uso seguro:**
-    1. Ve a la sección **Reportes y Descargas** y exporta la tabla que deseas modificar.
-    2. Abre el Excel descargado, modifica los datos que necesites y guarda los cambios. 
-    3. **IMPORTANTE:** Nunca modifiques ni elimines la columna de ID (`cliente_id` o `libro_id`). El sistema la necesita para saber qué registro actualizar.
-    """)
-    
-    st.markdown("---")
-    
-    # 1. Selección de Entidad
-    entidad_opciones = {
-        "👥 Clientes": {"tabla": "clientes", "id_columna": "cliente_id"},
-        "📚 Libros": {"tabla": "libros", "id_columna": "libro_id"}
-    }
-    
-    entidad_seleccionada = st.radio(
-        "¿Qué base de datos deseas actualizar?", 
-        list(entidad_opciones.keys()), 
-        horizontal=True
-    )
-    
-    config = entidad_opciones[entidad_seleccionada]
-    
-    with st.container(border=True):
-        st.markdown(f"#### Subir archivo de {entidad_seleccionada.split(' ')[1]}")
-        archivo_subido = st.file_uploader(
-            f"Sube tu archivo Excel (.xlsx) con la columna {config['id_columna']}", 
-            type=["xlsx"],
-            key=f"uploader_{config['tabla']}"
-        )
-        
-        if archivo_subido is not None:
-            try:
-                # Leer el Excel
-                df = pd.read_excel(archivo_subido, engine='openpyxl')
-                
-                # 2. Validación UX de seguridad
-                if config['id_columna'] not in df.columns:
-                    st.error(f"🛑 **Error crítico:** El archivo subido no contiene la columna obligatoria `{config['id_columna']}`.")
-                    st.stop()
-                
-                # 3. Vista previa para dar confianza al usuario
-                st.success("✅ Archivo leído correctamente. Revisa la vista previa antes de aplicar los cambios:")
-                with st.expander("👀 Ver vista previa de los datos a actualizar", expanded=True):
-                    st.dataframe(df.head(5), use_container_width=True)
-                    st.caption(f"Mostrando las primeras 5 filas de un total de {len(df)} registros encontrados.")
-                
-                st.warning("⚠️ **Atención:** Esta acción sobrescribirá los datos actuales en la base de datos con la información de este archivo. No se puede deshacer.")
-                
-                # 4. Ejecución
-                if st.button("🚀 Aplicar Cambios Masivamente", type="primary", use_container_width=True):
-                    with st.spinner("Conectando con la base de datos..."):
-                        exitos, errores = procesar_actualizacion(config['tabla'], config['id_columna'], df)
-                        
-                        st.markdown("### 📊 Resumen de la Operación")
-                        col1, col2 = st.columns(2)
-                        col1.metric("✅ Registros Actualizados", exitos)
-                        col2.metric("❌ Errores", len(errores))
-                        
-                        if errores:
-                            st.error("Se encontraron algunos problemas durante la actualización:")
-                            with st.expander("Ver detalle de errores"):
-                                for error in errores:
-                                    st.write(error)
-                        elif exitos > 0:
-                            st.balloons()
-                            st.success("¡Todos los registros se actualizaron correctamente sin errores!")
-                            
-            except Exception as e:
-                st.error(f"Ocurrió un error al leer el archivo Excel: {e}")
+    st.title("⚡ Actualización Masiva")
+    st.markdown("Modifica cientos de registros a la vez descargando, editando y volviendo a subir el catálogo.")
 
-if __name__ == '__main__':
-    mostrar_actualizacion_masiva()
+    tab_libros, tab_ventas = st.tabs(["📚 Libros", "🛒 Ventas"])
+
+    with tab_libros:
+        st.markdown("### 1. Descarga el Catálogo de Libros Actual")
+        st.download_button(
+            label="📥 Descargar Libros (.xlsx)",
+            data=generar_plantilla_actualizacion_libros(),
+            file_name="catalogo_libros_actual.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        st.markdown("### 2. Sube el archivo con tus modificaciones")
+        st.warning("El sistema usará la columna `libro_id` para encontrar y actualizar los registros. No modifiques esa columna.")
+        archivo_libros = st.file_uploader("Sube el archivo de libros modificados", type=["xlsx"], key="upd_libros")
+
+        if archivo_libros:
+            if st.button("🚀 Aplicar Cambios en Libros", type="primary"):
+                df_l = pd.read_excel(archivo_libros)
+                with st.spinner("Actualizando libros..."):
+                    updates, errores = procesar_actualizacion_libros(df_l)
+                    st.success(f"¡Se procesaron {updates} actualizaciones de libros!")
+                    if errores:
+                        with st.expander("Ver errores"):
+                            for err in errores: st.write(err)
+
+    with tab_ventas:
+        st.markdown("### 1. Descarga el Historial de Ventas Actual")
+        st.download_button(
+            label="📥 Descargar Ventas (.xlsx)",
+            data=generar_plantilla_actualizacion_ventas(),
+            file_name="historial_ventas_actual.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        st.markdown("### 2. Sube el archivo con tus modificaciones")
+        st.warning("El sistema usará la columna `venta_id` para encontrar y actualizar los registros. No modifiques esa columna.")
+        archivo_ventas = st.file_uploader("Sube el archivo de ventas modificado", type=["xlsx"], key="upd_ventas")
+
+        if archivo_ventas:
+            if st.button("🚀 Aplicar Cambios en Ventas", type="primary"):
+                df_v = pd.read_excel(archivo_ventas)
+                with st.spinner("Actualizando ventas..."):
+                    updates, errores = procesar_actualizacion_ventas(df_v)
+                    st.success(f"¡Se procesaron {updates} actualizaciones de ventas!")
+                    if errores:
+                        with st.expander("Ver errores"):
+                            for err in errores: st.write(err)
