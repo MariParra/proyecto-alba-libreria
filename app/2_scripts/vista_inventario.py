@@ -11,7 +11,7 @@ def obtener_unicos(df, columna):
 def cargar_datos_completos():
     """
     Carga todos los datos de la tabla 'libros' desde Supabase
-    y calcula dinámicamente si los libros tienen un descuento activo.
+    y calcula dinámicamente si los libros tienen un descuento activo de forma segura.
     """
     conn = get_db_connection()
     response = conn.table("libros").select("*").execute()
@@ -37,10 +37,18 @@ def cargar_datos_completos():
         if 'costo' in df.columns:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
             
-        # 🔴 LÓGICA DE DESCUENTOS: Calculamos el % de rebaja en tiempo real
-        df['Dcto %'] = 0
+        # 🔴 CORRECCIÓN CLAVE: Calculamos el descuento de forma segura sin romper tipos
+        df['Dcto %'] = 0.0
         mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
-        df.loc[mask_dcto, 'Dcto %'] = (((df['precio_original'] - df['precio']) / df['precio_original']) * 100).round(0).astype(int)
+        
+        # 1. Calculamos la división decimal para los que aplican
+        calculo_dcto = (((df.loc[mask_dcto, 'precio_original'] - df.loc[mask_dcto, 'precio']) / df.loc[mask_dcto, 'precio_original']) * 100)
+        
+        # 2. Asignamos los valores calculados
+        df.loc[mask_dcto, 'Dcto %'] = calculo_dcto
+        
+        # 3. Limpiamos cualquier nulo que haya quedado y pasamos de forma segura a entero
+        df['Dcto %'] = df['Dcto %'].fillna(0.0).round(0).astype(int)
         
         # Etiqueta visual para la tabla
         df['Oferta'] = df['Dcto %'].apply(lambda x: f"🔥 {x}% OFF" if x > 0 else "Estándar")
@@ -48,6 +56,7 @@ def cargar_datos_completos():
         return df
         
     return pd.DataFrame()
+
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
