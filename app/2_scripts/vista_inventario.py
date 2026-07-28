@@ -11,7 +11,7 @@ def obtener_unicos(df, columna):
 def cargar_datos_completos():
     """
     Carga todos los datos de la tabla 'libros' desde Supabase
-    y calcula dinámicamente si los libros tienen un descuento activo de forma segura.
+    y calcula dinámicamente si los libros tienen un descuento activo.
     """
     conn = get_db_connection()
     response = conn.table("libros").select("*").execute()
@@ -37,17 +37,12 @@ def cargar_datos_completos():
         if 'costo' in df.columns:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
             
-        # 🔴 CORRECCIÓN CLAVE: Calculamos el descuento de forma segura sin romper tipos
+        # 🔴 LÓGICA DE DESCUENTOS: Calculamos el % de rebaja en tiempo real de forma segura
         df['Dcto %'] = 0.0
         mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
         
-        # 1. Calculamos la división decimal para los que aplican
         calculo_dcto = (((df.loc[mask_dcto, 'precio_original'] - df.loc[mask_dcto, 'precio']) / df.loc[mask_dcto, 'precio_original']) * 100)
-        
-        # 2. Asignamos los valores calculados
         df.loc[mask_dcto, 'Dcto %'] = calculo_dcto
-        
-        # 3. Limpiamos cualquier nulo que haya quedado y pasamos de forma segura a entero
         df['Dcto %'] = df['Dcto %'].fillna(0.0).round(0).astype(int)
         
         # Etiqueta visual para la tabla
@@ -56,7 +51,6 @@ def cargar_datos_completos():
         return df
         
     return pd.DataFrame()
-
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
@@ -252,7 +246,14 @@ def mostrar_inventario():
         else:
             df_estilizado = df_mostrar_tabla
 
-        st.dataframe(df_estilizado, hide_index=True, use_container_width=True)
+        # 🔴 CONFIGURACIÓN VISUAL (Formatos $ sin decimales para lectura)
+        config_cols_catalogo = {
+            "precio": st.column_config.NumberColumn("Precio", format="$%.0f"),
+            "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f"),
+            "costo": st.column_config.NumberColumn("Costo", format="$%.0f")
+        }
+
+        st.dataframe(df_estilizado, hide_index=True, use_container_width=True, column_config=config_cols_catalogo)
 
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
@@ -294,7 +295,7 @@ def mostrar_inventario():
                     col5, col6, col7 = st.columns(3)
                     nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                     nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
-                    nuevo_precio = col7.number_input("Precio:", min_value=0.0, format="%.2f", value=float(libro['precio']))
+                    nuevo_precio = col7.number_input("Precio:", min_value=0.0, format="%.0f", value=float(libro['precio']))
                     
                     if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
                         datos_actualizados = {
@@ -312,23 +313,29 @@ def mostrar_inventario():
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
             
-            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio"]
-            df_mostrar = df_filtrado[columnas_tabla_pc]
+            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
+            
+            # Asegurarse de que si 'precio_original' existe en df_filtrado se muestre
+            columnas_existentes = [c for c in columnas_tabla_pc if c in df_filtrado.columns]
+            df_mostrar = df_filtrado[columnas_existentes]
             
             if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
                 st.session_state.inventario_original = df_mostrar.copy()
                 
+            # 🔴 CONFIGURACIÓN VISUAL (Formatos $ sin decimales para la tabla editable)
             config_columnas = {
                 "autor": st.column_config.SelectboxColumn("Autor", options=obtener_unicos(df_inventario, 'autor'), required=True),
                 "editorial": st.column_config.SelectboxColumn("Editorial", options=obtener_unicos(df_inventario, 'editorial'), required=True),
                 "genero": st.column_config.SelectboxColumn("Género", options=obtener_unicos(df_inventario, 'genero')),
                 "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=obtener_unicos(df_inventario, 'encuadernacion')),
-                "costo": st.column_config.NumberColumn("Costo ($)", format="$%.0f")
+                "costo": st.column_config.NumberColumn("Costo", format="$%.0f"),
+                "precio": st.column_config.NumberColumn("Precio", format="$%.0f"),
+                "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f")
             }
             
             df_editado = st.data_editor(
                 df_mostrar, use_container_width=True, hide_index=True,
-                disabled=["libro_id", "titulo"], key="editor_inventario",
+                disabled=["libro_id", "titulo", "precio_original"], key="editor_inventario",
                 column_config=config_columnas
             )
             
@@ -340,48 +347,74 @@ def mostrar_inventario():
                         time.sleep(2)
                         st.rerun()
 
-    with tab_crear:
-        st.markdown("#### ➕ Ingresar Nuevo Libro")
-        with st.form("form_nuevo_libro", clear_on_submit=True):
-            st.text_input("Título:", key="nuevo_titulo")
-            opciones_autor = [""] + obtener_unicos(df_inventario, 'autor')
-            st.selectbox("Autor (Existente):", options=opciones_autor, key="autor_existente")
-            st.text_input("O escribe un nuevo Autor:", key="autor_nuevo")
-            opciones_editorial = [""] + obtener_unicos(df_inventario, 'editorial')
-            st.selectbox("Editorial (Existente):", options=opciones_editorial, key="editorial_existente")
-            st.text_input("O escribe una nueva Editorial:", key="editorial_nueva")
-            opciones_genero = [""] + obtener_unicos(df_inventario, 'genero')
-            st.selectbox("Género (Existente):", options=opciones_genero, key="genero_existente")
-            st.text_input("O escribe un nuevo Género:", key="genero_nuevo")
-            opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
-            st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="enc_existente")
-            st.text_input("O escribe una nueva Encuadernación:", key="enc_nueva")
-            
-            c1, c2, c3 = st.columns(3)
-            c1.number_input("Stock:", min_value=0, step=1, key="nuevo_stock")
-            c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="nuevo_costo")
-            c3.number_input("Precio:", min_value=0.0, format="%.2f", key="nuevo_precio")
-            
-            if st.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True):
-                s = st.session_state
-                autor_final = s.autor_nuevo if s.autor_nuevo else s.autor_existente
-                editorial_final = s.editorial_nueva if s.editorial_nueva else s.editorial_existente
-                genero_final = s.genero_nuevo if s.genero_nuevo else s.genero_existente
-                enc_final = s.enc_nueva if s.enc_nueva else s.enc_existente
+        with tab_crear:
+            st.markdown("#### ➕ Ingresar Nuevo Libro")
+            with st.form("form_nuevo_libro", clear_on_submit=False):
+                val_titulo = st.text_input("Título:", key="n_tit")
                 
-                if s.nuevo_titulo and autor_final and editorial_final:
-                    success, error = crear_nuevo_libro(
-                        s.nuevo_titulo, autor_final, editorial_final, genero_final, 
-                        enc_final, s.nuevo_stock, s.nuevo_precio, s.nuevo_costo
-                    )
-                    if success:
-                        st.success("¡Libro creado exitosamente!")
-                        time.sleep(2)
-                        st.rerun()
+                opciones_autor = [""] + obtener_unicos(df_inventario, 'autor')
+                val_autor_ex = st.selectbox("Autor (Existente):", options=opciones_autor, key="n_aut_ex")
+                val_autor_nu = st.text_input("O escribe un nuevo Autor:", key="n_aut_nu")
+                
+                opciones_editorial = [""] + obtener_unicos(df_inventario, 'editorial')
+                val_edit_ex = st.selectbox("Editorial (Existente):", options=opciones_editorial, key="n_edi_ex")
+                val_edit_nu = st.text_input("O escribe una nueva Editorial:", key="n_edi_nu")
+                
+                opciones_genero = [""] + obtener_unicos(df_inventario, 'genero')
+                val_gen_ex = st.selectbox("Género (Existente):", options=opciones_genero, key="n_gen_ex")
+                val_gen_nu = st.text_input("O escribe un nuevo Género:", key="n_gen_nu")
+                
+                opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
+                val_enc_ex = st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="n_enc_ex")
+                val_enc_nu = st.text_input("O escribe una nueva Encuadernación:", key="n_enc_nu")
+                
+                c1, c2, c3 = st.columns(3)
+                val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
+                val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
+                val_precio = c3.number_input("Precio ($):", min_value=0.0, format="%.0f", key="n_pre")
+                
+                st.write("") # Pequeño espacio visual
+                
+                # 🔴 BOTONES DIVIDIDOS: Uno para guardar, otro para limpiar
+                col_btn1, col_btn2 = st.columns(2)
+                btn_guardar = col_btn1.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True)
+                btn_limpiar = col_btn2.form_submit_button("🧹 Limpiar Formulario", type="secondary", use_container_width=True)
+                
+                claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre"]
+                
+                # Acción si presiona LIMPIAR
+                if btn_limpiar:
+                    for key in claves_formulario:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.rerun()
+
+                # Acción si presiona AÑADIR (Guardar)
+                if btn_guardar:
+                    autor_final = val_autor_nu if val_autor_nu else val_autor_ex
+                    editorial_final = val_edit_nu if val_edit_nu else val_edit_ex
+                    genero_final = val_gen_nu if val_gen_nu else val_gen_ex
+                    enc_final = val_enc_nu if val_enc_nu else val_enc_ex
+                    
+                    if val_titulo and autor_final and editorial_final:
+                        success, error = crear_nuevo_libro(
+                            val_titulo, autor_final, editorial_final, genero_final, 
+                            enc_final, val_stock, val_precio, val_costo
+                        )
+                        
+                        if success:
+                            st.success("🎉 ¡Libro creado exitosamente!")
+                            # Vaciamos el formulario por éxito
+                            for key in claves_formulario:
+                                if key in st.session_state:
+                                    del st.session_state[key]
+                                    
+                            time.sleep(1.5)
+                            st.rerun()
+                        else: 
+                            st.error(f"❌ {error}")
                     else: 
-                        st.error(f"{error}")
-                else: 
-                    st.warning("Título, Autor y Editorial son obligatorios.")
+                        st.warning("⚠️ Título, Autor y Editorial son obligatorios.")
 
     with tab_desc:
         st.markdown("#### 📉 Aplicar Descuento Masivo")
