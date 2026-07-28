@@ -407,7 +407,7 @@ def mostrar_caja():
                     else: 
                         st.error(f"Error: {err}")
 
-    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
+        # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -437,17 +437,14 @@ def mostrar_caja():
                     limite_min = min(fecha_min, hoy)
                     limite_max = max(fecha_max, hoy)
                     
-                    # 🔴 MES EN CURSO POR DEFECTO: Empieza el 1ero del mes hasta hoy
-                    default_start = max(primer_dia_mes, limite_min)
-                    default_end = limite_max
-                    
+                    # 🔴 CORRECCIÓN: El calendario ahora muestra por defecto TODO el historial
                     rango_fechas = col_f1.date_input(
-                        "Filtrar por Fecha:", 
-                        value=(default_start, default_end), 
+                        "Rango personalizado:", 
+                        value=(limite_min, limite_max), 
                         min_value=limite_min, max_value=limite_max
                     )
                 else:
-                    rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
+                    rango_fechas = col_f1.date_input("Rango personalizado:", value=(), disabled=True)
                 
                 clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar por Cliente:", clientes_hist)
@@ -457,20 +454,33 @@ def mostrar_caja():
                 
                 st.markdown("---")
                 
-                # 🔴 SELECTOR DE COLUMNAS PARA OCULTAR/MOSTRAR
+                # 🔴 NUEVO: Filtros Rápidos en Checkboxes
+                col_chk1, col_chk2 = st.columns(2)
+                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
+                solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
+                
+                st.markdown("---")
+                
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
                 columnas_por_defecto = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'utilidad', 'costo_venta', 'estado']
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
-                solo_costo_cero = st.checkbox("⚠️ Mostrar solo ventas pendientes de asignar Costo (Costo = $0)", value=False)
-                
             df_filtrado_general = df_ventas.copy()
             
-            if len(rango_fechas) == 2:
+            # 🔴 LÓGICA DE FILTRADO DE FECHAS
+            if mes_en_curso:
+                # Si marca "Solo este mes", ignoramos el calendario y filtramos desde el día 1
+                df_filtrado_general = df_filtrado_general[
+                    (df_filtrado_general['fecha_limpia'].dt.date >= primer_dia_mes) & 
+                    (df_filtrado_general['fecha_limpia'].dt.date <= limite_max)
+                ]
+            elif len(rango_fechas) == 2:
+                # Si no está marcado, obedecemos al calendario
                 df_filtrado_general = df_filtrado_general[
                     (df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & 
                     (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])
                 ]
+                
             if cliente_filtro != "Todos":
                 df_filtrado_general = df_filtrado_general[df_filtrado_general['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
@@ -485,6 +495,8 @@ def mostrar_caja():
             st.markdown("---")
             
             df_mostrar = df_filtrado_general.copy()
+            
+            # Aplicamos el filtro de costo cero solo a la vista de la tabla
             if solo_costo_cero:
                 df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             
