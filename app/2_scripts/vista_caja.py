@@ -268,7 +268,6 @@ def mostrar_caja():
     df_libros = cargar_libros_caja()
     df_clientes = cargar_clientes_caja()
     
-    # 🔴 LOS ESTADOS ACTUALIZADOS (Sin "PENDIENTE ENVIAR/RETIRAR")
     estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO", "PENDIENTE PAGO", "FINALIZADO"]
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
@@ -369,9 +368,7 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        
-        # 🔴 LÓGICA DE ENVÍO CON BÚSQUEDA DE COMPRAS ABIERTAS
-        opciones_envio = ["Retiro en tienda", "Paket", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior"]
+        opciones_envio = ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
         valor_envio = 0.0
@@ -380,7 +377,6 @@ def mostrar_caja():
         
         if modo_envio == "Añadir a compra anterior":
             if c_id is not None:
-                # 🔴 Buscamos todas las ventas y filtramos en Python para excluir las cerradas
                 conn = get_db_connection()
                 res_pendientes = conn.table("registro_ventas").select("venta_id, fecha_venta, estado").eq("cliente_id", c_id).execute()
                 
@@ -402,9 +398,8 @@ def mostrar_caja():
                 col_e2.error("Crea o selecciona un cliente primero.")
                 bloquear_venta = True
                 
-        elif modo_envio not in ("Retiro en tienda", "Añadir a compra anterior", "Acordar con vendedor"):
+        elif modo_envio != "Retiro en tienda":
             valor_envio = col_e2.number_input("Costo de Envío ($):", min_value=0.0, step=500.0)
-
             
         metodo_pago = st.selectbox("Método de Pago:", ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito"])
         comentario_venta = st.text_area("Comentario (Opcional):", placeholder="Ej: Entregar por conserjería...")
@@ -413,7 +408,8 @@ def mostrar_caja():
         st.markdown("#### ⚙️ Estado y Abono (Opcional)")
         
         col_abono1, col_abono2 = st.columns(2)
-        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=estados_posibles.index("NO COMENZADO"))
+        # 🔴 CORRECCIÓN 1: Estado base cambiado a "NO COMENZADO" por defecto (índice 0)
+        estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=0)
         abono_inicial = col_abono2.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
         
         monto_final = subtotal_carrito + valor_envio
@@ -566,20 +562,75 @@ def mostrar_caja():
         st.markdown("### 💸 Cuentas por Cobrar")
         st.caption("Lista de todas las ventas con deuda pendiente (Deuda > 0).")
         df_ventas_cobranza = cargar_historial_completo()
+        
         if not df_ventas_cobranza.empty:
             df_deudores = df_ventas_cobranza[df_ventas_cobranza['deuda'] > 0].copy()
             if df_deudores.empty:
                 st.success("🎉 ¡Felicidades! No hay deudas pendientes.")
             else:
-                st.dataframe(df_deudores[['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'estado']],
-                    hide_index=True, use_container_width=True, 
-                    column_config={
-                        "monto_final": st.column_config.NumberColumn("Monto Venta", format="$%.0f"),
-                        "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
-                        "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f")
-                    }
-                )
-                st.markdown(f"#### 💰 Total por Cobrar: **${df_deudores['deuda'].sum():,.0f}**")
+                # 🔴 CORRECCIÓN 2 y 3: Filtros de fecha, cliente y Alertas de Morosidad (>14 días)
+                df_deudores['fecha_limpia'] = unificar_formatos_fecha(df_deudores['fecha_venta'])
+                hoy = datetime.now().date()
+                
+                # Calculamos días de mora
+                df_deudores['dias_mora'] = (hoy - pd.to_datetime(df_deudores['fecha_limpia']).dt.date).dt.days
+                
+                # Alertas Críticas (> 14 días)
+                deudas_criticas = df_deudores[df_deudores['dias_mora'] > 14]
+                if not deudas_criticas.empty:
+                    # Alerta Lateral (Sidebar)
+                    st.sidebar.markdown("---")
+                    st.sidebar.markdown("### 🚨 ALERTAS DE COBRANZA")
+                    st.sidebar.error(f"Tienes **{len(deudas_criticas)}** ventas impagas con más de 2 semanas de antigüedad.")
+                    for _, row in deudas_criticas.iterrows():
+                        st.sidebar.warning(f"👤 **{row['nombre_cliente']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días mora")
+                    
+                    # Alerta en pantalla principal
+                    st.error(f"🚨 ¡ATENCIÓN! Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora. Revisa el panel lateral para el detalle.")
+                
+                # Filtros de Cobranza
+                with st.expander("🔍 Filtros de Cobranza", expanded=True):
+                    col_c1, col_c2 = st.columns(2)
+                    
+                    df_fechas_validas_c = df_deudores.dropna(subset=['fecha_limpia'])
+                    if not df_fechas_validas_c.empty:
+                        fecha_min_c = df_fechas_validas_c['fecha_limpia'].min().date()
+                        fecha_max_c = df_fechas_validas_c['fecha_limpia'].max().date()
+                        rango_fechas_c = col_c1.date_input("Filtrar por Fecha de Venta:", value=(fecha_min_c, fecha_max_c), min_value=fecha_min_c, max_value=fecha_max_c, key="rango_cob")
+                    else:
+                        rango_fechas_c = col_c1.date_input("Filtrar por Fecha:", value=(), disabled=True, key="rango_cob_dis")
+                    
+                    clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
+                    cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
+
+                # Aplicamos los filtros
+                if len(rango_fechas_c) == 2:
+                    df_deudores = df_deudores[
+                        (df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & 
+                        (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1])
+                    ]
+                if cliente_filtro_c != "Todos":
+                    df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
+
+                # Mostramos la tabla si hay resultados después de filtrar
+                if df_deudores.empty:
+                    st.info("No hay deudas que coincidan con los filtros actuales.")
+                else:
+                    st.markdown(f"#### 💰 Total por Cobrar (Filtrado): **${df_deudores['deuda'].sum():,.0f}**")
+                    
+                    # Generamos una etiqueta de estado visual para la tabla
+                    df_deudores['Nivel Mora'] = df_deudores['dias_mora'].apply(lambda x: "🔴 Crítico (>14 días)" if x > 14 else ("🟡 Medio (7-14 días)" if x > 7 else "🟢 Normal"))
+                    
+                    columnas_mostrar_cob = ['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'Nivel Mora', 'estado']
+                    
+                    st.dataframe(df_deudores[columnas_mostrar_cob],
+                        hide_index=True, use_container_width=True, 
+                        column_config={
+                            "monto_final": st.column_config.NumberColumn("Monto Venta", format="$%.0f"),
+                            "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
+                            "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f")
+                        }
+                    )
         else:
             st.info("No hay ventas registradas.")
 
