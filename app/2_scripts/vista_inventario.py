@@ -27,23 +27,19 @@ def cargar_datos_completos():
             df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
         if 'stock' in df.columns:
             df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
-            
+        if 'costo' in df.columns:
+            df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
         return df
         
     return pd.DataFrame()
 
-def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio):
-    """Crea un nuevo libro en la tabla 'libros'."""
+def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
     datos = {
-        "titulo": limpiar_texto(titulo),
-        "autor": limpiar_texto(autor),
-        "editorial": limpiar_texto(editorial),
-        "genero": limpiar_texto(genero),
-        "encuadernacion": limpiar_texto(encuadernacion),
-        "stock": stock,
-        "precio": precio,
-        "precio_original": precio
+        "titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor),
+        "editorial": limpiar_texto(editorial), "genero": limpiar_texto(genero),
+        "encuadernacion": limpiar_texto(encuadernacion), "stock": stock,
+        "precio": precio, "precio_original": precio, "costo": costo # <-- AÑADIDO
     }
     try:
         conn.table("libros").insert(datos).execute()
@@ -53,7 +49,6 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         return False, str(e)
 
 def actualizar_un_libro(libro_id, datos):
-    """Actualiza un solo libro mediante un formulario (Optimizado para móvil)."""
     conn = get_db_connection()
     try:
         conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
@@ -85,7 +80,8 @@ def actualizar_libros_batch(df_editado):
                 "genero": limpiar_texto(row['genero']),
                 "encuadernacion": limpiar_texto(row['encuadernacion']),
                 "stock": int(row['stock']),
-                "precio": float(row['precio'])
+                "precio": float(row['precio']),
+                "costo": float(row.get('costo', 0))
             }
             conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
             updates_count += 1
@@ -271,9 +267,10 @@ def mostrar_inventario():
                     
                     # ---------------------------------------------------------
                     
-                    col5, col6 = st.columns(2)
+                    col5, col6, col7 = st.columns(3)
                     nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
-                    nuevo_precio = col6.number_input("Precio:", min_value=0.0, format="%.2f", value=float(libro['precio']))
+                    nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
+                    nuevo_precio = col7.number_input("Precio:", min_value=0.0, format="%.2f", value=float(libro['precio']))
                     
                     if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
                         datos_actualizados = {
@@ -282,6 +279,7 @@ def mostrar_inventario():
                             "genero": nuevo_genero,
                             "encuadernacion": nueva_encuadernacion,
                             "stock": nuevo_stock,
+                            "costo": nuevo_costo,
                             "precio": nuevo_precio
                         }
                         exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
@@ -294,7 +292,7 @@ def mostrar_inventario():
         else: # VISTA PC (Tabla Editable)
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
             
-            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "precio"]
+            columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio"]
             df_mostrar = df_filtrado[columnas_tabla_pc]
             
             if 'inventario_original' not in st.session_state or not st.session_state.inventario_original.equals(df_mostrar):
@@ -305,6 +303,7 @@ def mostrar_inventario():
                 "editorial": st.column_config.SelectboxColumn("Editorial", options=obtener_unicos(df_inventario, 'editorial'), required=True),
                 "genero": st.column_config.SelectboxColumn("Género", options=obtener_unicos(df_inventario, 'genero')),
                 "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=obtener_unicos(df_inventario, 'encuadernacion')),
+                "costo": st.column_config.NumberColumn("Costo ($)", format="$%.0f")
             }
             
             df_editado = st.data_editor(
@@ -337,9 +336,10 @@ def mostrar_inventario():
             opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
             st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="enc_existente")
             st.text_input("O escribe una nueva Encuadernación:", key="enc_nueva")
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             c1.number_input("Stock:", min_value=0, step=1, key="nuevo_stock")
-            c2.number_input("Precio:", min_value=0.0, format="%.2f", key="nuevo_precio")
+            c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="nuevo_costo")
+            c3.number_input("Precio:", min_value=0.0, format="%.2f", key="nuevo_precio")
             
             if st.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True):
                 s = st.session_state
@@ -349,7 +349,10 @@ def mostrar_inventario():
                 enc_final = s.enc_nueva if s.enc_nueva else s.enc_existente
                 
                 if s.nuevo_titulo and autor_final and editorial_final:
-                    success, error = crear_nuevo_libro(s.nuevo_titulo, autor_final, editorial_final, genero_final, enc_final, s.nuevo_stock, s.nuevo_precio)
+                    success, error = crear_nuevo_libro(
+                        s.nuevo_titulo, autor_final, editorial_final, genero_final, 
+                        enc_final, s.nuevo_stock, s.nuevo_precio, s.nuevo_costo
+                    )
                     if success:
                         st.success("¡Libro creado exitosamente!")
                         st.rerun()

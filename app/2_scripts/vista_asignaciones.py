@@ -76,35 +76,26 @@ def cargar_asignaciones_mes(ano, mes):
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         
-        if res_clientes.data:
-            df_asig = pd.merge(df_asig, pd.DataFrame(res_clientes.data), on='cliente_id', how='left')
+        if res_clientes.data: df_asig = pd.merge(df_asig, pd.DataFrame(res_clientes.data), on='cliente_id', how='left')
         if res_libros.data:
             df_asig['libro_suscripcion_id'] = pd.to_numeric(df_asig['libro_suscripcion_id'], errors='coerce')
             df_asig = pd.merge(df_asig, pd.DataFrame(res_libros.data), left_on='libro_suscripcion_id', right_on='libro_id', how='left', suffixes=('', '_libro'))
-        if res_subs.data:
-            df_asig = pd.merge(df_asig, pd.DataFrame(res_subs.data), on='cliente_id', how='left')
+        if res_subs.data: df_asig = pd.merge(df_asig, pd.DataFrame(res_subs.data), on='cliente_id', how='left')
 
         df_asig.rename(columns={'titulo': 'titulo_libro', 'nombre': 'nombre_cliente'}, inplace=True)
         
-        # --- LIMPIEZA ABSOLUTA ---
-        # Aseguramos que la columna exista antes de limpiarla
-        if 'titulo_libro' not in df_asig.columns:
-            df_asig['titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
-        else:
-            # Reemplaza cualquier variación de nulo por el texto estándar
-            df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR", inplace=True)
-            df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace(['None', 'nan', '<NA>'], "⏳ PENDIENTE DE ASIGNAR", regex=False)
+        # --- LIMPIEZA ABSOLUTA DE NULOS ---
+        for col in ['titulo_libro', 'nombre_cliente', 'valor_suscripcion', 'extras', 'comentario']:
+            if col not in df_asig.columns: df_asig[col] = ''
+        
+        df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR").astype(str).replace(['None', 'nan', '<NA>'], "⏳ PENDIENTE DE ASIGNAR", regex=False)
+        df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
+        df_asig['valor_suscripcion'].fillna(0, inplace=True)
 
-        # Rellenamos otros nulos para consistencia
-        if 'nombre_cliente' in df_asig.columns:
-            df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
-        if 'valor_suscripcion' in df_asig.columns:
-            df_asig['valor_suscripcion'].fillna(0, inplace=True)
-
-        return df_asig[columnas_esperadas] # Devolvemos solo las columnas esperadas y en orden
+        return df_asig[columnas_esperadas]
     except Exception as e:
         st.error(f"Error crítico al cargar asignaciones: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=columnas_esperadas)
 
 
 # --- CIERRE DE MES ---
@@ -195,25 +186,21 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
 def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, ano, mes, titulo, autor):
     conn = get_db_connection()
     try:
-        a_id, c_id, l_id_py = int(asignacion_id), int(cliente_id), int(libro_id)
-        
         # 1. Descontar stock
-        nuevo_stock = max(0, int(stock_actual) - 1)
-        conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id_py).execute()
+        conn.table("libros").update({"stock": max(0, int(stock_actual) - 1)}).eq("libro_id", int(libro_id)).execute()
         
         # 2. ¡Guardar el libro en la asignación!
-        conn.table("asignaciones").update({"libro_suscripcion_id": l_id_py}).eq("asignacion_id", a_id).execute()
+        conn.table("asignaciones").update({"libro_suscripcion_id": int(libro_id)}).eq("asignacion_id", int(asignacion_id)).execute()
         
-        # 3. Añadir al historial del cliente
-        res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", c_id).eq("libro_id", l_id_py).execute()
+        # 3. Añadir al historial
+        res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).execute()
         if not res_hist.data:
-            conn.table("librero_historico").insert({"cliente_id": c_id, "libro_id": l_id_py, "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
+            conn.table("librero_historico").insert({"cliente_id": int(cliente_id), "libro_id": int(libro_id), "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
-        # 4. Limpiar cachés
+        # 4. Limpiar cachés para refrescar
         cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
         return True, ""
-    except Exception as e: 
-        return False, str(e)
+    except Exception as e: return False, str(e)
 
 def asignar_al_azar_inteligente(df_pendientes, ano, mes):
     if df_pendientes.empty: return False, "No hay pendientes para asignar."
