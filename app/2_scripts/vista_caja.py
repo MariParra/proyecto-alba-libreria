@@ -8,6 +8,44 @@ from utilidades import get_db_connection, limpiar_texto
 # --- FUNCIONES DE BASE DE DATOS ---
 # ==========================================
 
+def unificar_formatos_fecha(serie_fechas):
+    """
+    Analiza una serie de fechas en texto y las traduce a formato datetime 
+    intentando múltiples patrones. No elimina datos.
+    """
+    def parsear_valor(val):
+        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() == 'nan':
+            return pd.NaT
+            
+        val_str = str(val).strip()
+        
+        # Diccionario de formatos comunes esperados en importaciones (LATAM e ISO)
+        formatos_a_probar = [
+            "%Y-%m-%d",           # Ej: 2026-08-25
+            "%Y-%m-%d %H:%M:%S",  # Ej: 2026-08-25 14:30:00
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%d-%m-%Y",           # Ej: 25-08-2026
+            "%d-%m-%Y %H:%M:%S",
+            "%d/%m/%Y",           # Ej: 25/08/2026
+            "%d/%m/%Y %H:%M:%S",
+            "%Y/%m/%d",           # Ej: 2026/08/25
+            "%Y/%m/%d %H:%M:%S"
+        ]
+        
+        for fmt in formatos_a_probar:
+            try:
+                return datetime.strptime(val_str, fmt)
+            except ValueError:
+                continue
+                
+        # Si todos los explícitos fallan, intenta con el parseo nativo de pandas asumiendo día primero
+        try:
+            return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
+        except Exception:
+            return pd.NaT
+            
+    return serie_fechas.apply(parsear_valor)
+
 @st.cache_data(ttl=60)
 def cargar_libros_caja():
     conn = get_db_connection()
@@ -37,7 +75,6 @@ def cargar_historial_completo():
         res_ventas = conn.table("registro_ventas").select("*").order("venta_id", desc=True).execute()
         if not res_ventas.data: 
             return pd.DataFrame()
-
         df_ventas = pd.DataFrame(res_ventas.data)
         
         # Formatear la columna de libros para visualización
@@ -54,7 +91,7 @@ def cargar_historial_completo():
                 return libros_data
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
-
+        
         # Unir con nombres de clientes
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         if res_clientes.data:
@@ -69,7 +106,7 @@ def cargar_historial_completo():
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
-
+        
         # --- CÁLCULOS FINANCIEROS AL VUELO ---
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
         df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
@@ -144,10 +181,8 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         })
         # Sumamos el costo de cada libro (costo unitario * cantidad)
         costo_total_venta += item.get('costo', 0.0) * item['cantidad']
-
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
-
     try:
         datos_venta = {
             "cliente_id": cliente_id, 
@@ -163,7 +198,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "costo_venta": float(costo_total_venta)
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
-
         for item in carrito:
             l_id = item['libro_id'] # Se define l_id para la interacción
             if item['es_nuevo']: 
@@ -179,7 +213,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
-
+        
         # Limpiamos el carrito y las cachés
         st.session_state.carrito_caja = []
         cargar_libros_caja.clear()
@@ -242,11 +276,9 @@ def actualizar_historial_batch(df_editado):
         cargar_historial_completo.clear()
     return updates
 
-
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
-
 def mostrar_caja():
     if 'carrito_caja' not in st.session_state:
         st.session_state.carrito_caja = []
@@ -257,7 +289,7 @@ def mostrar_caja():
     df_clientes = cargar_clientes_caja()
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial Editable", "💸 Cuentas por Cobrar", "🚫 Anular Venta"])
-
+    
     # --- PESTAÑA 1: NUEVA VENTA ---
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
@@ -399,33 +431,51 @@ def mostrar_caja():
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
+            # 1. Creamos una columna sanitizada usando tu función unificadora de fechas
+            df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
+            
+            # Alerta UX responsiva en caso de que existan fechas corruptas imposibles de parsear (no se eliminan)
+            fechas_invalidas = df_ventas['fecha_limpia'].isna()
+            if fechas_invalidas.any():
+                with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas con formato ilegible"):
+                    st.warning("Estos registros siguen en el sistema pero no se pueden filtrar temporalmente. Revisa el formato original.")
+                    st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'nombre_cliente']], hide_index=True)
+
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
-                df_ventas['fecha_venta_dt'] = pd.to_datetime(df_ventas['fecha_venta'], errors='coerce')
-                df_fechas_validas = df_ventas.dropna(subset=['fecha_venta_dt'])
+                
+                # Usamos la columna ya parseada y sanitizada para extraer los límites de fechas de forma segura
+                df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
+                
                 if not df_fechas_validas.empty:
-                    fecha_min = pd.to_datetime(df_ventas['fecha_venta']).min().date()
-                    fecha_max = pd.to_datetime(df_ventas['fecha_venta']).max().date()
+                    fecha_min = df_fechas_validas['fecha_limpia'].min().date()
+                    fecha_max = df_fechas_validas['fecha_limpia'].max().date()
+                    
                     rango_fechas = col_f1.date_input(
                         "Filtrar por Fecha:", 
                         value=(max(fecha_min, fecha_max - timedelta(days=30)), fecha_max), 
                         min_value=fecha_min, max_value=fecha_max
                     )
                 else:
-                    # Si no hay ninguna fecha válida, deshabilitamos el filtro
+                    # En caso extremo de no haber ninguna fecha interpretable, el sistema no se cae
                     rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
-
+                
                 clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar por Cliente:", clientes_hist)
                 
                 estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
                 estado_filtro = col_f3.selectbox("Filtrar por Estado:", estados_hist)
-
+                
             df_filtrado = df_ventas.copy()
             
+            # 2. Filtrado seguro utilizando la fecha limpia
             if len(rango_fechas) == 2:
-                df_filtrado['fecha_venta_dt'] = pd.to_datetime(df_filtrado['fecha_venta']).dt.date
-                df_filtrado = df_filtrado[(df_filtrado['fecha_venta_dt'] >= rango_fechas[0]) & (df_filtrado['fecha_venta_dt'] <= rango_fechas[1])]
+                # Comparamos objetos date de forma segura y limpia sin recargar pd.to_datetime
+                df_filtrado = df_filtrado[
+                    (df_filtrado['fecha_limpia'].dt.date >= rango_fechas[0]) & 
+                    (df_filtrado['fecha_limpia'].dt.date <= rango_fechas[1])
+                ]
+                
             if cliente_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
@@ -509,3 +559,6 @@ def mostrar_caja():
                         st.rerun()
                     else: 
                         st.error(f"Error al anular: {error}")
+
+if __name__ == "__main__":
+    mostrar_caja()
