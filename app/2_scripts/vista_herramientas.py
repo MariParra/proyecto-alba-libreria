@@ -142,65 +142,6 @@ def sync_google_sheets():
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 
-def mostrar_herramienta_limpieza():
-    """
-    Función interna de limpieza que busca y elimina por lotes 
-    los libros importados erróneamente sin entorpecer el catálogo.
-    Maneja filtros más amplios para el campo editorial (nulos, vacíos o "None").
-    """
-    conn = get_db_connection()
-    
-    try:
-        # 1. Buscamos TODOS los libros con stock 0 y precio 0 (sin filtrar editorial en la BD para evitar limitaciones de Supabase)
-        res = conn.table("libros").select("libro_id, titulo, autor, stock, precio, editorial").eq("stock", 0).eq("precio", 0).execute()
-        
-        if not res.data:
-            st.success("✅ No se detectaron libros con stock 0 y precio $0. Tu catálogo está limpio.")
-            return
-            
-        df_candidatos = pd.DataFrame(res.data)
-        
-        # 2. Filtramos localmente en Python (que es mucho más flexible y seguro que Supabase para manejar textos vacíos o nulos)
-        # Esto atrapará editoriales que sean None, NaN, vacías "", espacios " " o la palabra "None" / "null"
-        df_basura = df_candidatos[
-            df_candidatos['editorial'].isna() | 
-            (df_candidatos['editorial'].astype(str).str.strip() == "") | 
-            (df_candidatos['editorial'].astype(str).str.lower() == "none") | 
-            (df_candidatos['editorial'].astype(str).str.lower() == "null")
-        ]
-        
-        if df_basura.empty:
-            st.success("✅ No se encontraron libros fantasma (con editorial vacía). Tus libros en stock 0 están seguros.")
-            return
-            
-        st.warning(f"⚠️ Se han detectado **{len(df_basura)}** libros sospechosos que cumplen el patrón del error.")
-        
-        # 3. Vista previa por seguridad UX
-        with st.expander("👀 Revisar lista de libros que se van a eliminar", expanded=True):
-            st.dataframe(df_basura, hide_index=True, use_container_width=True)
-            
-        st.error("Al hacer clic en eliminar, estos libros desaparecerán del catálogo permanentemente.")
-        confirmacion = st.checkbox("Confirmo que revisé la tabla y deseo borrar estos libros.")
-        
-        # 4. Borrado por Lotes
-        if st.button("🗑️ Eliminar permanentemente", type="primary", disabled=not confirmacion):
-            with st.spinner("Eliminando libros... esto puede tomar unos segundos."):
-                ids_a_borrar = df_basura['libro_id'].tolist()
-                
-                # Borramos en grupos de 100 para evitar saturar la API de Supabase
-                lote_size = 100
-                for i in range(0, len(ids_a_borrar), lote_size):
-                    lote = ids_a_borrar[i : i + lote_size]
-                    conn.table("libros").delete().in_("libro_id", lote).execute()
-                    
-                st.success(f"¡Limpieza completada! Se eliminaron {len(ids_a_borrar)} libros fantasma de tu base de datos.")
-                st.cache_data.clear() # Limpiamos la caché del catálogo
-                st.rerun()
-                
-    except Exception as e:
-        st.error(f"Ocurrió un error al intentar limpiar la base de datos: {e}")
-
-
 def mostrar_herramientas():
     st.title("🛠️ Herramientas Administrativas")
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
@@ -225,24 +166,4 @@ def mostrar_herramientas():
                 st.rerun()
     
     st.markdown("---")
-    
-    # Encabezado visual, descriptivo e instructivo para UX robusta
-    st.markdown("### 🧹 Corrección de Catálogo (Eliminar libros fantasma)")
-    
-    st.info(
-        "💡 **¿Qué hace esta herramienta?**\n"
-        "Si durante una importación antigua de 'Historiales de Lectura' el sistema no reconoció "
-        "los títulos y creó **cientos de libros nuevos por error** en tu base de datos, esta sección "
-        "los detectará automáticamente."
-    )
-    
-    st.warning(
-        "⚠️ **Criterio de búsqueda:** El sistema solo buscará libros que tengan **Stock = 0**, "
-        "**Precio = $0** y que **no tengan editorial**. Revisa la lista de abajo para asegurar "
-        "que no haya libros reales antes de borrarlos."
-    )
-    
-    # Llamamos a la función interna sin títulos repetidos
-    mostrar_herramienta_limpieza()
-
                 

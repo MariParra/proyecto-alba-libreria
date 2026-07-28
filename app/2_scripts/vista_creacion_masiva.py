@@ -228,7 +228,7 @@ def procesar_suscripciones_masivas(df):
 # --- VISTA PRINCIPAL ---
 # ==========================================
 def mostrar_creacion_masiva_libros():
-    st.title("✨ Importación Masiva (Libros y Ventas)")
+    st.title("✨ Importación Masiva")
     st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel.")
     
     tab_libros, tab_ventas, tab_suscripciones = st.tabs(["📚 Nuevos Libros", "🛒 Ventas Pasadas", "🐧 Suscripciones"])
