@@ -51,9 +51,18 @@ def cargar_libros_caja():
     conn = get_db_connection()
     try:
         res = conn.table("libros").select("libro_id, titulo, autor, precio, costo, stock").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        
+        if not df.empty:
+            # 🔴 EL SECRETO: Forzamos matemáticamente a que los nulos sean 0.0 y no NaN
+            df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
+            df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
+            df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0)
+            
+        return df
     except: 
         return pd.DataFrame()
+
 
 @st.cache_data(ttl=60)
 def cargar_clientes_caja():
@@ -330,7 +339,7 @@ def mostrar_caja():
                         l_stock_actual = int(datos_l['stock'])
                         l_titulo = datos_l['titulo']
                         l_precio_catalogo = float(datos_l['precio'])
-                        l_costo = float(datos_l.get('costo', 0.0))
+                        l_costo = float(datos_l['costo']) 
                         l_autor = datos_l.get('autor', '')
                         
                         with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
@@ -423,7 +432,6 @@ def mostrar_caja():
                     else: 
                         st.error(f"Error: {err}")
 
-    # --- PESTAÑA 2: HISTORIAL EDITABLE ---
         # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
@@ -452,7 +460,6 @@ def mostrar_caja():
                     fecha_min = df_fechas_validas['fecha_limpia'].min().date()
                     fecha_max = df_fechas_validas['fecha_limpia'].max().date()
                     
-                    # 🔴 CORRECCIÓN 1: Se muestra TODO el rango histórico por defecto
                     rango_fechas = col_f1.date_input(
                         "Filtrar por Fecha:", 
                         value=(fecha_min, fecha_max), 
@@ -467,6 +474,10 @@ def mostrar_caja():
                 estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
                 estado_filtro = col_f3.selectbox("Filtrar por Estado:", estados_hist)
                 
+                # 🔴 NUEVO FILTRO RÁPIDO PARA AUDITORÍA DE COSTOS
+                st.markdown("---")
+                solo_costo_cero = st.checkbox("⚠️ Mostrar solo ventas pendientes de asignar Costo (Costo = $0)", value=False)
+                
             df_filtrado = df_ventas.copy()
             
             # Filtrado seguro
@@ -480,8 +491,12 @@ def mostrar_caja():
                 df_filtrado = df_filtrado[df_filtrado['nombre_cliente'] == cliente_filtro]
             if estado_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['estado'] == estado_filtro]
+                
+            # Aplicar filtro de costo cero si la casilla está marcada
+            if solo_costo_cero:
+                df_filtrado = df_filtrado[df_filtrado['costo_venta'] == 0]
             
-            # 🔴 CORRECCIÓN 2: Panel de métricas para sumar costos y utilidades del período
+            # Panel de métricas para sumar costos y utilidades del período
             st.markdown("#### 📊 Resumen del período filtrado")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("💰 Ventas Totales", f"${df_filtrado['monto_final'].sum():,.0f}")
@@ -510,8 +525,14 @@ def mostrar_caja():
                 "estado": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "LISTO / PENDIENTE PAGO", "FINALIZADO"]),
             }
             
+            # 🔴 NUEVA ALERTA VISUAL: Pinta de rojo si el costo es 0
+            df_estilizado = df_mostrar.style.apply(
+                lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s],
+                subset=['costo_venta']
+            )
+            
             df_editado = st.data_editor(
-                df_mostrar, 
+                df_estilizado, # Usamos el DataFrame estilizado
                 disabled=['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad'], 
                 use_container_width=True, 
                 hide_index=True,
