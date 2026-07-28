@@ -298,6 +298,7 @@ def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_
 def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, monto_descuento=0.0):
     conn = get_db_connection()
     try:
+        # 1. Devolver stock si el libro existe en el catálogo
         res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_quitar).execute()
         if res_l.data:
             l_id = res_l.data[0]['libro_id']
@@ -305,15 +306,23 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
             origen = f"ASIGNACIÓN {mes}/{ano}" if tipo == "PRINCIPAL" else f"ASIGNACIÓN EXTRA {mes}/{ano}"
             conn.table("librero_historico").delete().eq("cliente_id", cliente_id).eq("libro_id", l_id).eq("origen", origen).execute()
 
-        res_asig = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()[0]
+        # 2. Obtener la asignación actual (Acceso a .data corregido)
+        res_asig_exec = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()
+        if not res_asig_exec.data:
+            return False, "No se encontró la asignación."
+        
+        res_asig = res_asig_exec.data[0]
         
         if tipo == "PRINCIPAL":
             conn.table("asignaciones").update({"libro_suscripcion_id": None}).eq("asignacion_id", asignacion_id).execute()
         else:
             extras_str = str(res_asig.get('extras', ''))
             if "EXTRAS:" in extras_str:
-                lista_extras = extras_str.replace("EXTRAS:", "").split(",")
-                nueva_lista = [x.strip() for x in lista_extras if x.strip() != titulo_quitar]
+                # Si los extras están separados por coma pero el título tenía coma, los unimos adecuadamente
+                lista_extras = [x.strip() for x in extras_str.replace("EXTRAS:", "").split(",") if x.strip()]
+                
+                # Si el título a quitar exactamente coincide o no coincide, filtramos
+                nueva_lista = [x for x in lista_extras if x.upper() != titulo_quitar.upper()]
                 nuevo_texto = "EXTRAS: " + ", ".join(nueva_lista) if nueva_lista else ""
                 
                 v_extras_actual = float(res_asig.get('valor_extras') or 0.0)
@@ -327,7 +336,8 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
                 
         cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e: 
+        return False, str(e)
 
 def desasignar_libros(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
