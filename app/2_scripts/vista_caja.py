@@ -424,6 +424,7 @@ def mostrar_caja():
                         st.error(f"Error: {err}")
 
     # --- PESTAÑA 2: HISTORIAL EDITABLE ---
+        # --- PESTAÑA 2: HISTORIAL EDITABLE ---
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = cargar_historial_completo()
@@ -434,7 +435,7 @@ def mostrar_caja():
             # 1. Creamos una columna sanitizada usando tu función unificadora de fechas
             df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
             
-            # Alerta UX responsiva en caso de que existan fechas corruptas imposibles de parsear (no se eliminan)
+            # Alerta UX responsiva en caso de que existan fechas corruptas
             fechas_invalidas = df_ventas['fecha_limpia'].isna()
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas con formato ilegible"):
@@ -444,20 +445,20 @@ def mostrar_caja():
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
-                # Usamos la columna ya parseada y sanitizada para extraer los límites de fechas de forma segura
+                # Usamos la columna ya parseada para extraer los límites de fechas
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
                 
                 if not df_fechas_validas.empty:
                     fecha_min = df_fechas_validas['fecha_limpia'].min().date()
                     fecha_max = df_fechas_validas['fecha_limpia'].max().date()
                     
+                    # 🔴 CORRECCIÓN 1: Se muestra TODO el rango histórico por defecto
                     rango_fechas = col_f1.date_input(
                         "Filtrar por Fecha:", 
-                        value=(max(fecha_min, fecha_max - timedelta(days=30)), fecha_max), 
+                        value=(fecha_min, fecha_max), 
                         min_value=fecha_min, max_value=fecha_max
                     )
                 else:
-                    # En caso extremo de no haber ninguna fecha interpretable, el sistema no se cae
                     rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
                 
                 clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
@@ -468,9 +469,8 @@ def mostrar_caja():
                 
             df_filtrado = df_ventas.copy()
             
-            # 2. Filtrado seguro utilizando la fecha limpia
+            # Filtrado seguro
             if len(rango_fechas) == 2:
-                # Comparamos objetos date de forma segura y limpia sin recargar pd.to_datetime
                 df_filtrado = df_filtrado[
                     (df_filtrado['fecha_limpia'].dt.date >= rango_fechas[0]) & 
                     (df_filtrado['fecha_limpia'].dt.date <= rango_fechas[1])
@@ -481,6 +481,15 @@ def mostrar_caja():
             if estado_filtro != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['estado'] == estado_filtro]
             
+            # 🔴 CORRECCIÓN 2: Panel de métricas para sumar costos y utilidades del período
+            st.markdown("#### 📊 Resumen del período filtrado")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("💰 Ventas Totales", f"${df_filtrado['monto_final'].sum():,.0f}")
+            m2.metric("💳 Total Abonado", f"${df_filtrado['abono'].sum():,.0f}")
+            m3.metric("📦 Costos Totales", f"${df_filtrado['costo_venta'].sum():,.0f}")
+            m4.metric("📈 Utilidad Estimada", f"${df_filtrado['utilidad'].sum():,.0f}")
+            st.markdown("---")
+            
             columnas_hist = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'metodo_envio', 'comentario']
             for col in columnas_hist: 
                 if col not in df_filtrado.columns: df_filtrado[col] = ""
@@ -490,7 +499,7 @@ def mostrar_caja():
             if 'historial_original' not in st.session_state or not st.session_state.historial_original.equals(df_mostrar):
                 st.session_state.historial_original = df_mostrar.copy()
                 
-            st.caption("Doble clic en celdas para modificar. Los campos financieros (Estado, Abono) pueden editarse directamente aquí.")
+            st.caption("Doble clic en celdas para modificar. Los campos financieros (Costo Venta, Estado, Abono) pueden editarse directamente aquí.")
             
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
