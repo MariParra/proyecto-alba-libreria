@@ -1,6 +1,7 @@
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
+import unicodedata
 
 def get_db_connection() -> Client:
     """
@@ -15,7 +16,22 @@ def get_db_connection() -> Client:
     return supabase
 
 def limpiar_texto(texto):
-    """Función de utilidad para limpiar texto para búsquedas."""
+    """
+    Normaliza un texto de forma exhaustiva:
+    1. Convierte a string.
+    2. Elimina tildes y acentos (diacríticos).
+    3. Pasa todo a MAYÚSCULAS.
+    4. Elimina espacios al inicio y al final.
+    5. Reduce múltiples espacios internos a uno solo.
+    """
     if texto is None:
         return ""
-    return str(texto).strip().upper()
+    
+    # Convierte a string por seguridad
+    texto_str = str(texto)
+    
+    # Elimina tildes y acentos de forma robusta
+    s = ''.join(c for c in unicodedata.normalize('NFD', texto_str) if unicodedata.category(c) != 'Mn')
+    
+    # Pasa a mayúsculas, elimina espacios extra y retorna
+    return ' '.join(s.strip().upper().split())
