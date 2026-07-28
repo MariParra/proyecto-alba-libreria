@@ -224,14 +224,73 @@ def procesar_suscripciones_masivas(df):
 
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return actualizados, creados, errores
+
+# ==========================================
+# --- LÓGICA 4: CREACIÓN DE CLIENTES NUEVOS ---
+# ==========================================
+def generar_plantilla_clientes():
+    columnas = ['nombre', 'email', 'telefono', 'direccion', 'instagram']
+    df_vacio = pd.DataFrame(columns=columnas)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_vacio.to_excel(writer, index=False, sheet_name='Nuevos Clientes')
+        worksheet = writer.sheets['Nuevos Clientes']
+        for i, col in enumerate(columnas):
+            worksheet.set_column(i, i, 25)
+    return output.getvalue()
+
+def procesar_clientes_masivos(df):
+    conn = get_db_connection()
+    exitos, duplicados, errores = 0, 0, []
+
+    res_clientes = conn.table("clientes").select("nombre").execute()
+    catalogo_actual = [normalizar_texto(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
+    
+    barra_progreso = st.progress(0, text="Iniciando carga de clientes...")
+    total_filas = len(df)
+    
+    columnas_texto = ['nombre', 'email', 'telefono', 'direccion', 'instagram']
+
+    for indice, fila in df.iterrows():
+        barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando cliente {indice + 1}/{total_filas}...")
+        
+        nombre_limpio = normalizar_texto(fila.get('nombre', ''))
+        
+        if not nombre_limpio:
+            errores.append(f"Fila {indice + 2}: Falta el 'nombre'. Es obligatorio.")
+            continue
+            
+        if nombre_limpio in catalogo_actual:
+            duplicados += 1
+            errores.append(f"Fila {indice + 2}: El cliente '{nombre_limpio}' ya existe.")
+            continue
+            
+        try:
+            nuevo_cliente = {"status": "CLIENTE REGULAR"}
+            for col in df.columns:
+                if pd.isna(fila[col]):
+                    nuevo_cliente[col] = None
+                elif col in columnas_texto:
+                    nuevo_cliente[col] = normalizar_texto(str(fila[col]))
+                else:
+                    nuevo_cliente[col] = fila[col]
+                    
+            conn.table("clientes").insert(nuevo_cliente).execute()
+            exitos += 1
+            catalogo_actual.append(nombre_limpio)
+        except Exception as e:
+            errores.append(f"Fila {indice + 2} ('{nombre_limpio}'): Error -> {str(e)}")
+            
+    barra_progreso.progress(1.0, text="¡Carga finalizada!")
+    return exitos, duplicados, errores
 # ==========================================
 # --- VISTA PRINCIPAL ---
 # ==========================================
-def mostrar_creacion_masiva_libros():
+def mostrar_creacion_masiva():
     st.title("✨ Importación Masiva")
     st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel.")
     
-    tab_libros, tab_ventas, tab_suscripciones = st.tabs(["📚 Nuevos Libros", "🛒 Ventas Pasadas", "🐧 Suscripciones"])
+    tab_clientes, tab_libros, tab_ventas, tab_suscripciones = st.tabs(["👥 Nuevos Clientes", "📚 Nuevos Libros", "🛒 Ventas Pasadas", "🐧 Suscripciones"])
     
     with tab_libros:
         with st.container(border=True):
@@ -288,6 +347,38 @@ def mostrar_creacion_masiva_libros():
                             if errores_v:
                                 with st.expander("Ver lista de conflictos (Clientes no encontrados)"):
                                     for err in errores_v: st.write(err)
+    with tab_clientes:
+        with st.container(border=True):
+            st.markdown("### Paso 1: Descarga la Plantilla de Clientes")
+            st.download_button(
+                label="📥 Descargar Plantilla Clientes (.xlsx)",
+                data=generar_plantilla_clientes(),
+                file_name="plantilla_nuevos_clientes.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with st.container(border=True):
+            st.markdown("### Paso 2: Sube el archivo con los datos")
+            archivo_clientes = st.file_uploader("Sube el archivo de clientes", type=["xlsx"], key="up_clientes")
+            
+            if archivo_clientes:
+                df_c = pd.read_excel(archivo_clientes, engine='openpyxl')
+                if 'nombre' not in df_c.columns:
+                    st.error("🛑 El archivo no es válido. Usa la plantilla de clientes.")
+                else:
+                    if st.button("🚀 Ingresar Nuevos Clientes", type="primary", use_container_width=True):
+                        with st.spinner("Procesando y validando clientes..."):
+                            exitos, duplicados, errores = procesar_clientes_masivos(df_c)
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("✅ Creados", exitos)
+                            c2.metric("⚠️ Duplicados", duplicados)
+                            c3.metric("❌ Errores", len(errores) - duplicados)
+                            if exitos > 0: 
+                                st.balloons()
+                                st.success("¡Nuevos clientes añadidos correctamente!")
+                            if errores:
+                                with st.expander("Ver lista de conflictos"):
+                                    for err in errores: st.write(err)
     with tab_suscripciones:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla Inteligente")

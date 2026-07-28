@@ -62,52 +62,48 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
 @st.cache_data(ttl=60)
 def cargar_asignaciones_mes(ano, mes):
     """
-    Carga las asignaciones del mes, uniendo clientes, libros y el valor de la suscripción.
-    Es robusta contra nulos y problemas de caché.
+    Carga las asignaciones del mes, uniendo toda la información y
+    aplicando una limpieza exhaustiva para estandarizar los valores nulos.
     """
     conn = get_db_connection()
     try:
-        # 1. Obtenemos las asignaciones del mes
         res_asig = conn.table("asignaciones").select("*").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         
         if not res_asig.data:
-            # Definimos todas las columnas esperadas, incluyendo la nueva
-            columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 
-                                'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 
-                                'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
+            # Columnas esperadas para evitar errores en tablas vacías
+            columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
             return pd.DataFrame(columns=columnas_esperadas)
             
         df_asig = pd.DataFrame(res_asig.data)
         
-        # 2. Obtenemos tablas maestras para el cruce
+        # Obtenemos tablas maestras
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
-        # --- NUEVO: Traemos los valores de suscripción ---
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         
-        # 3. Hacemos los merges de forma segura
-        # Merge con Clientes
+        # Hacemos los merges
         if res_clientes.data:
             df_asig = pd.merge(df_asig, pd.DataFrame(res_clientes.data), on='cliente_id', how='left')
-            df_asig.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
         
-        # Merge con Libros
         if res_libros.data:
             df_asig['libro_suscripcion_id'] = pd.to_numeric(df_asig['libro_suscripcion_id'], errors='coerce')
             df_asig = pd.merge(df_asig, pd.DataFrame(res_libros.data), left_on='libro_suscripcion_id', right_on='libro_id', how='left', suffixes=('', '_libro'))
-            df_asig.rename(columns={'titulo': 'titulo_libro'}, inplace=True)
-            
-        # --- NUEVO: Merge con Suscripciones ---
+        
         if res_subs.data:
-            df_subs = pd.DataFrame(res_subs.data)
-            df_asig = pd.merge(df_asig, df_subs, on='cliente_id', how='left')
-            df_asig['valor_suscripcion'].fillna(0, inplace=True) # Si no tiene sub, el valor es 0
-        else:
-            df_asig['valor_suscripcion'] = 0
-            
-        df_asig['titulo_libro'] = df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR")
-        df_asig.loc[df_asig['titulo_libro'].isnull(), 'titulo_libro'] = "⏳ PENDIENTE DE ASIGNAR"
-            
+            df_asig = pd.merge(df_asig, pd.DataFrame(res_subs.data), on='cliente_id', how='left')
+
+        # 1. Rellenamos cualquier nulo de Pandas (NaN) o de Python (None)
+        df_asig.rename(columns={'titulo': 'titulo_libro', 'nombre': 'nombre_cliente'}, inplace=True)
+        df_asig['titulo_libro'].fillna("⏳ PENDIENTE DE ASIGNAR", inplace=True)
+        
+        # 2. Forzamos la conversión a texto y reemplazamos el TEXTO "None"
+        df_asig['titulo_libro'] = df_asig['titulo_libro'].astype(str).replace('None', "⏳ PENDIENTE DE ASIGNAR", regex=False)
+        # -------------------------------------------------------------
+        
+        # Rellenamos nulos en otras columnas para evitar errores de visualización
+        df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
+        df_asig['valor_suscripcion'].fillna(0, inplace=True)
+
         return df_asig
 
     except Exception as e:
@@ -145,7 +141,6 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     if df_suscritos.empty:
         return False, "No hay clientes con estado 'ACTIVA' en tu base de datos."
 
-    # --- 🛠️ LA CORRECCIÓN DEFINITIVA ---
     # Nos aseguramos de que ambas listas de IDs sean del mismo tipo (números) antes de comparar
     df_suscritos['cliente_id'] = pd.to_numeric(df_suscritos['cliente_id'], errors='coerce')
 
@@ -258,7 +253,6 @@ def gestionar_extras_y_envio(asignacion_id, cliente_id, ano, mes, libros_extras_
             if res_le.data:
                 le_id, le_stock, le_autor = res_le.data[0]['libro_id'], res_le.data[0]['stock'], res_le.data[0]['autor']
                 
-                # --- 🛠️ CORRECCIÓN APLICADA AQUÍ ---
                 nuevo_stock_extra = max(0, int(le_stock) - 1)
                 conn.table("libros").update({"stock": nuevo_stock_extra}).eq("libro_id", le_id).execute()
                 # ------------------------------------
