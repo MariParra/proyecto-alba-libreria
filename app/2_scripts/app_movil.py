@@ -1,18 +1,11 @@
 import streamlit as st
 from streamlit_oauth import OAuth2Component
 import os
-import sys
 import base64
 import json
 from dotenv import load_dotenv
-import time
 
-# --- ARQUITECTURA DE IMPORTACIÓN (Correcto) ---
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir not in sys.path:
-    sys.path.append(script_dir)
-
-# --- IMPORTACIÓN DE VISTAS (Correcto) ---
+# --- IMPORTACIÓN DE VISTAS ---
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
 from vista_clientes import mostrar_clientes
@@ -20,15 +13,90 @@ from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
 from vista_libreros import mostrar_importacion_libreros
+
+# Nuevas importaciones añadidas
 from vista_creacion_masiva import mostrar_creacion_masiva
 from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
 
-# --- CONFIGURACIÓN Y AUTENTICACIÓN (Sin cambios) ---
+import sys
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+    
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 load_dotenv()
 
-# ... (Todo tu código de configuración de OAuth2, CORREOS_AUTORIZADOS, etc. va aquí sin cambios) ...
+CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+
+# Lee la lista de correos desde los secretos de Streamlit
+CORREOS_AUTORIZADOS = st.secrets.get("authorization", {}).get("authorized_emails", [])
+
+if not CORREOS_AUTORIZADOS:
+    st.error("Error de configuración: No se encontró la lista de correos autorizados en los secretos de la plataforma.")
+    st.stop()
+    
+if CLIENT_ID and CLIENT_SECRET:
+    oauth2 = OAuth2Component(
+        client_id=CLIENT_ID, client_secret=CLIENT_SECRET,
+        authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+        token_endpoint="https://oauth2.googleapis.com/token",
+        refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    )
+else:
+    oauth2 = None
+
+def decodificar_token(token):
+    partes = token.split(".")
+    if len(partes) != 3: return None
+    payload = partes[1]; payload += "=" * ((4 - len(payload) % 4) % 4)
+    return json.loads(base64.b64decode(payload).decode("utf-8")).get("email")
+
+def mostrar_login():
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("<h1 style='text-align: center; color: #4A4D7E; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #666; margin-top: 0;'>Portal Administrativo</h4>", unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("<p style='text-align: center; font-size: 1.1em;'>Bienvenida al sistema integral de gestión de inventario, ventas y suscripciones.</p>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            if not oauth2:
+                st.error("⚠️ Faltan las credenciales de Google en los secretos.")
+                return
+                
+            try:
+                result = oauth2.authorize_button(
+                    name="Continuar con Google", 
+                    icon="https://www.google.com/favicon.ico",
+                    redirect_uri=REDIRECT_URI, 
+                    scope="openid email profile", 
+                    key="google_login", 
+                    use_container_width=True
+                )
+                
+                if result and "token" in result:
+                    email = decodificar_token(result["token"].get("id_token"))
+                    if email and email.lower() in [e.lower() for e in CORREOS_AUTORIZADOS]:
+                        st.session_state["usuario_logeado"] = True
+                        st.session_state["email_usuario"] = email
+                        time.sleep
+                        st.rerun()
+                    else:
+                        st.error(f"⛔ Acceso denegado: El correo {email} no tiene permisos.")
+            except Exception as e:
+                # SI HAY UN ERROR DE URL VIEJA, LO ATRAPAMOS AQUÍ Y LIMPIAMOS
+                st.warning("🔄 Sesión caducada o enlace antiguo. Limpiando caché...")
+                st.query_params.clear()
+                import time; time.sleep(1)
+                time.sleep
+                st.rerun()
+        
+        st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
 
 # --- LÓGICA PRINCIPAL ---
 if "usuario_logeado" not in st.session_state:
@@ -37,71 +105,122 @@ if "usuario_logeado" not in st.session_state:
 if not st.session_state["usuario_logeado"]:
     mostrar_login()
 else:
-    # --- 🛠️ MENÚ LATERAL OPTIMIZADO ---
+    # ================= MENÚ LATERAL MEJORADO =================
     with st.sidebar:
         email_usuario = st.session_state.get('email_usuario', 'Usuario')
-        st.markdown(f"""... Mensaje de bienvenida ...""", unsafe_allow_html=True)
+        
+        mensaje_bienvenida_html = f"""
+        <div style="background-color: #F3E6F3; border: 1px solid #C994C0; color: #4A4D7E; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; text-align: center;">
+            <span style="font-weight: bold; font-size: 1.1em;">¡Bienvenida!</span><br>
+            {email_usuario}
+        </div>
+        """
+        st.markdown(mensaje_bienvenida_html, unsafe_allow_html=True)
         
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
-
-        # Diccionario que mapea nombres de página a sus funciones
-        paginas = {
-            "📦 GESTIÓN DE INVENTARIO": mostrar_inventario,
-            "🛒 CAJA / VENTAS RÁPIDAS": mostrar_caja,
-            "👥 CLIENTES Y LIBRERO": mostrar_clientes,
-            "📦 ASIGNACIONES SUSCRIPCIÓN": mostrar_asignaciones,
-            "📊 DASHBOARD": mostrar_dashboard,
-            "🛠️ HERRAMIENTAS Y SYNC": mostrar_herramientas,
-            "📔 IMPORTAR LIBREROS": mostrar_importacion_libreros
-        }
         
-        # Inicializar la página actual
         if "pagina_actual" not in st.session_state:
             st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
-
-        # Crear botones de navegación con un bucle
-        for nombre_pagina in paginas.keys():
-            if st.button(nombre_pagina, use_container_width=True, type="primary" if st.session_state.pagina_actual == nombre_pagina else "secondary"):
-                st.session_state.pagina_actual = nombre_pagina
-                st.rerun() # No se necesita sleep aquí
+            
+        if st.button("📦 GESTIÓN DE INVENTARIO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO" else "secondary"):
+            st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
+            time.sleep
+            st.rerun()
+            
+        if st.button("🛒 CAJA / VENTAS RÁPIDAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS" else "secondary"):
+            st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
+            time.sleep
+            st.rerun()
+            
+        if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
+            st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
+            time.sleep
+            st.rerun()
+        
+        if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
+            st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
+            time.sleep
+            st.rerun()
+            
+        if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
+            st.session_state.pagina_actual = "📊 DASHBOARD"
+            time.sleep
+            st.rerun()
+            
+        if st.button("🛠️ HERRAMIENTAS Y SYNC", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
+            st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
+            time.sleep
+            st.rerun()
+            
+        if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
+            st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
+            time.sleep
+            st.rerun()
 
         st.markdown("---")
         st.markdown("### ⚙️ ADMIN AVANZADA")
+        
+        if st.button("📥 REPORTES Y DESCARGAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS" else "secondary"):
+            st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
+            time.sleep
+            st.rerun()
 
-        paginas_admin = {
-            "📥 REPORTES Y DESCARGAS": mostrar_reportes,
-            "✨ CREACIÓN MASIVA": mostrar_creacion_masiva,
-            "⚡ ACTUALIZACIÓN MASIVA": mostrar_actualizacion_masiva
-        }
+        if st.button("✨ CREACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA" else "secondary"):
+            st.session_state.pagina_actual = "✨ CREACIÓN MASIVA"
+            time.sleep
+            st.rerun()
+            
+        if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
+            st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
+            time.sleep
+            st.rerun()
 
-        for nombre_pagina in paginas_admin.keys():
-             if st.button(nombre_pagina, use_container_width=True, type="primary" if st.session_state.pagina_actual == nombre_pagina else "secondary"):
-                st.session_state.pagina_actual = nombre_pagina
-                st.rerun() # No se necesita sleep aquí
-
-        # --- Botones de acción ---
         st.markdown("---")
         if st.button("🔄 Refrescar Toda la App", type="secondary", use_container_width=True):
+            # 1. Limpiamos la caché de datos
             st.cache_data.clear()
-            st.toast("✅ ¡Datos actualizados!", icon="🔄")
-            time.sleep(1) # Sleep corto y justificado
+            
+            # 2. Mostramos el mensaje de confirmación
+            st.toast("✅ ¡Datos actualizados! La aplicación ha sido refrescada.", icon="🔄")
+            
+            # 3. Esperamos un instante para que el mensaje sea visible antes de recargar
+            import time
+            time.sleep(1) 
+            
+            # 4. Recargamos la página
+            time.sleep
             st.rerun()
         
         st.markdown("---")
+        
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.clear()
-            st.rerun() # No se necesita sleep aquí
+            time.sleep
+            st.rerun()
 
-    # --- ÁREA PRINCIPAL PARA MOSTRAR LA PÁGINA ---
-    # Unificamos todas las páginas en un solo diccionario para más limpieza
-    todas_las_paginas = {**paginas, **paginas_admin}
-
+    # ================= ÁREA PRINCIPAL =================
     col_izq, col_central, col_der = st.columns([1, 8, 1])
     with col_central:
-        # Ejecutamos la función de la página guardada en el estado
-        if st.session_state.pagina_actual in todas_las_paginas:
-            todas_las_paginas[st.session_state.pagina_actual]()
-        else:
-            # Fallback seguro si el estado se pierde
-            mostrar_inventario()
+        if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO":
+            mostrar_inventario() 
+        elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
+            mostrar_caja()
+        elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
+            mostrar_clientes()
+        elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
+            mostrar_asignaciones()
+        elif st.session_state.pagina_actual == "📊 DASHBOARD":
+            mostrar_dashboard()
+        elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
+            mostrar_herramientas()
+        elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
+            mostrar_importacion_libreros()
+            
+        # --- NUEVAS RUTAS AÑADIDAS ---
+        elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
+            mostrar_reportes()
+        elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA":
+            mostrar_creacion_masiva()
+        elif st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA":
+            mostrar_actualizacion_masiva()
