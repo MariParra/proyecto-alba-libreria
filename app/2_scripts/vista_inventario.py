@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utilidades import get_db_connection, limpiar_texto
+import time
 
 def obtener_unicos(df, columna):
     """Devuelve una lista ordenada de valores únicos de una columna del DataFrame."""
@@ -10,7 +11,7 @@ def obtener_unicos(df, columna):
 def cargar_datos_completos():
     """
     Carga todos los datos de la tabla 'libros' desde Supabase
-    y limpia de forma segura cualquier celda con valores nulos (NaN).
+    y calcula dinámicamente si los libros tienen un descuento activo.
     """
     conn = get_db_connection()
     response = conn.table("libros").select("*").execute()
@@ -22,11 +23,9 @@ def cargar_datos_completos():
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str).str.strip()
                 
-        # Aseguramos que precio y stock también tengan valores numéricos válidos por si acaso
         if 'precio' in df.columns:
             df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
         
-        # ✅ Aseguramos que precio_original siempre tenga valor (si es nulo, usa el precio)
         if 'precio_original' in df.columns:
             df['precio_original'] = pd.to_numeric(df['precio_original'], errors='coerce')
             df['precio_original'] = df['precio_original'].fillna(df['precio'])
@@ -37,24 +36,46 @@ def cargar_datos_completos():
             df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
         if 'costo' in df.columns:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
+            
+        # 🔴 LÓGICA DE DESCUENTOS: Calculamos el % de rebaja en tiempo real
+        df['Dcto %'] = 0
+        mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
+        df.loc[mask_dcto, 'Dcto %'] = (((df['precio_original'] - df['precio']) / df['precio_original']) * 100).round(0).astype(int)
+        
+        # Etiqueta visual para la tabla
+        df['Oferta'] = df['Dcto %'].apply(lambda x: f"🔥 {x}% OFF" if x > 0 else "Estándar")
+        
         return df
         
     return pd.DataFrame()
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
+    
+    titulo_limpio = limpiar_texto(titulo)
+    autor_limpio = limpiar_texto(autor)
+
+    # Verificación de seguridad: ¿Ya existe este libro?
+    try:
+        res = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
+        if res.data:
+            return False, f"El libro '{titulo_limpio}' del autor '{autor_limpio}' ya existe en el catálogo."
+    except Exception as e:
+        return False, f"Error al verificar duplicados: {str(e)}"
+
+    # Si no existe, procedemos a crearlo
     datos = {
-        "titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor),
+        "titulo": titulo_limpio, "autor": autor_limpio,
         "editorial": limpiar_texto(editorial), "genero": limpiar_texto(genero),
         "encuadernacion": limpiar_texto(encuadernacion), "stock": stock,
         "precio": precio, "precio_original": precio, "costo": costo
     }
     try:
         conn.table("libros").insert(datos).execute()
-        cargar_datos_completos.clear()
+        cargar_datos_completos.clear()  # Limpiamos caché para refrescar
         return True, ""
     except Exception as e:
-        return False, str(e)
+        return False, f"Error al insertar en la base de datos: {str(e)}"
 
 def actualizar_un_libro(libro_id, datos):
     conn = get_db_connection()
@@ -66,7 +87,6 @@ def actualizar_un_libro(libro_id, datos):
         return False, str(e)
 
 def actualizar_libros_batch(df_editado):
-    """Actualiza múltiples libros a la vez detectando los cambios (Optimizado para PC)."""
     df_original = st.session_state.get('inventario_original')
     if df_original is None: return 0
     
@@ -102,7 +122,6 @@ def actualizar_libros_batch(df_editado):
     return updates_count
 
 def eliminar_libro(libro_id):
-    """Elimina un libro permanentemente de la tabla 'libros'."""
     conn = get_db_connection()
     try:
         conn.table("libros").delete().eq("libro_id", libro_id).execute()
@@ -112,7 +131,6 @@ def eliminar_libro(libro_id):
         return False, str(e)
 
 def aplicar_descuento_masivo(lista_ids, porcentaje):
-    """Aplica un descuento masivo calculando sobre el precio original."""
     if not lista_ids: return False, "No hay libros seleccionados para aplicar descuento."
     conn = get_db_connection()
     factor = 1.0 - (porcentaje / 100.0)
@@ -124,10 +142,8 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
         actualizados = 0
         for row in response.data:
             precio_base = row.get("precio_original")
-            # Si precio_original es None o 0, usamos el precio actual como base
             if precio_base is None or float(precio_base) == 0:
                 precio_base = row.get("precio", 0.0)
-                # Resguardamos el precio original en la BD
                 conn.table("libros").update({"precio_original": precio_base}).eq("libro_id", row["libro_id"]).execute()
 
             precio_base = float(precio_base)
@@ -150,13 +166,11 @@ def mostrar_inventario():
         if st.button("🔄 Refrescar Datos", type="secondary", use_container_width=True):
             st.cache_data.clear()
             st.toast("✅ ¡Datos actualizados! La aplicación ha sido refrescada.", icon="🔄")
-            import time
-            time.sleep(1) 
+            time.sleep(2) 
             st.rerun()
             
     df_inventario = cargar_datos_completos()
     
-    # --- FILTROS GLOBALES ---
     with st.expander("🔍 Buscador y Filtros", expanded=False):
         busqueda_titulo = st.text_input("Buscar por Título:", placeholder="Ej: El Señor de los Anillos")
         
@@ -181,17 +195,13 @@ def mostrar_inventario():
         
         max_s = int(df_inventario['stock'].max()) if not df_inventario.empty else 1
         if min_s_slider >= max_s: max_s = min_s_slider + 1
-
         valor_inicial_slider = (min_s_slider, max_s)
+        rango_stock = col_f6.slider("Rango de Stock:", min_value=min_s_slider, max_value=max_s, value=valor_inicial_slider)
 
-        rango_stock = col_f6.slider(
-            "Rango de Stock:", 
-            min_value=min_s_slider, 
-            max_value=max_s, 
-            value=valor_inicial_slider
-        )
+        # 🔴 NUEVO FILTRO RÁPIDO PARA DESCUENTOS
+        st.markdown("---")
+        solo_descuentos = st.checkbox("🏷️ Mostrar solo libros con descuento activo", value=False)
 
-    # Aplicamos todos los filtros
     df_filtrado = df_inventario.copy()
     if busqueda_titulo: df_filtrado = df_filtrado[df_filtrado['titulo'].str.contains(limpiar_texto(busqueda_titulo), case=False, na=False)]
     if autores_seleccionados: df_filtrado = df_filtrado[df_filtrado['autor'].isin(autores_seleccionados)]
@@ -202,39 +212,40 @@ def mostrar_inventario():
     if not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
         df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
+        
+    # Aplicación del filtro rápido de descuentos
+    if solo_descuentos and not df_filtrado.empty:
+        df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
 
-    # =========================================================
-    # --- PESTAÑAS ---
-    # =========================================================
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
         "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
 
-    # 0. PESTAÑA DE CATÁLOGO
     with tab_catalogo:
         st.markdown(f"### 📋 Catálogo ({len(df_filtrado)} libros)")
         st.caption("💡 Tip: Toca el título de cualquier columna para ordenar los datos ↕️")
         
         columnas_fijas = ['libro_id', 'titulo', 'stock']
-        columnas_opcionales_disponibles = [
-            col for col in df_inventario.columns if col not in columnas_fijas + ['created_at']
-        ]
+        columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
-        columnas_extra_seleccionadas = st.multiselect(
-            "Añadir/Quitar columnas de la tabla:",
-            options=columnas_opcionales_disponibles,
-            default=['autor', 'precio', 'editorial']
-        )
-
+        # Seteamos 'Oferta' (descuento) y 'precio_original' visibles por defecto si existen
+        columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
+        columnas_extra_seleccionadas = st.multiselect("Añadir/Quitar columnas de la tabla:", options=columnas_opcionales_disponibles, default=[c for col in columnas_por_defecto for c in [col] if col in columnas_opcionales_disponibles])
         columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
         
-        st.dataframe(
-            df_filtrado[columnas_a_mostrar],
-            hide_index=True, 
-            use_container_width=True
-        )
+        # 🔴 ESTILO VISUAL: Pinta de verde claro las filas que tienen oferta activa
+        def estilizar_ofertas(row):
+            return ['background-color: #e8f5e9; font-weight: bold;' if row['Oferta'] != 'Estándar' else '' for _ in row]
+            
+        df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
+        
+        if 'Oferta' in df_mostrar_tabla.columns:
+            df_estilizado = df_filtrado[columnas_a_mostrar].style.apply(estilizar_ofertas, axis=1)
+        else:
+            df_estilizado = df_mostrar_tabla
 
-    # 1. PESTAÑA DE EDICIÓN
+        st.dataframe(df_estilizado, hide_index=True, use_container_width=True)
+
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
         modo_edicion = st.radio("Elige la vista de edición:", ["📱 Vista Móvil (Formulario)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
@@ -279,22 +290,18 @@ def mostrar_inventario():
                     
                     if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
                         datos_actualizados = {
-                            "autor": nuevo_autor,
-                            "editorial": nueva_editorial,
-                            "genero": nuevo_genero,
-                            "encuadernacion": nueva_encuadernacion,
-                            "stock": nuevo_stock,
-                            "costo": nuevo_costo,
-                            "precio": nuevo_precio
+                            "autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero,
+                            "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock,
+                            "costo": nuevo_costo, "precio": nuevo_precio
                         }
                         exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
                         if exito:
                             st.success("¡Libro actualizado correctamente!")
+                            time.sleep(2)
                             st.rerun()
                         else:
                             st.error(f"Error: {error}")
-
-        else: # VISTA PC
+        else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar.")
             
             columnas_tabla_pc = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio"]
@@ -322,9 +329,9 @@ def mostrar_inventario():
                     with st.spinner("Actualizando datos..."):
                         num_actualizados = actualizar_libros_batch(df_editado)
                         st.success(f"¡Se actualizaron {num_actualizados} libros!")
+                        time.sleep(2)
                         st.rerun()
 
-    # 2. PESTAÑA DE CREACIÓN
     with tab_crear:
         st.markdown("#### ➕ Ingresar Nuevo Libro")
         with st.form("form_nuevo_libro", clear_on_submit=True):
@@ -360,13 +367,13 @@ def mostrar_inventario():
                     )
                     if success:
                         st.success("¡Libro creado exitosamente!")
+                        time.sleep(2)
                         st.rerun()
                     else: 
-                        st.error(f"Error: {error}")
+                        st.error(f"{error}")
                 else: 
                     st.warning("Título, Autor y Editorial son obligatorios.")
 
-    # 3. PESTAÑA DE DESCUENTOS (Corregida)
     with tab_desc:
         st.markdown("#### 📉 Aplicar Descuento Masivo")
         st.info(f"Vas a modificar el precio de **{len(df_filtrado)}** libros listados en tu búsqueda actual.")
@@ -382,13 +389,11 @@ def mostrar_inventario():
                     success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje)
                 if success:
                     st.success(mensaje)
-                    import time
-                    time.sleep(1)
+                    time.sleep(2)
                     st.rerun()
                 else: 
                     st.error(f"Error al aplicar descuento: {mensaje}")
 
-    # 4. PESTAÑA DE ELIMINACIÓN
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
         st.warning("⚠️ Atención: Esta acción no se puede deshacer.")
@@ -402,6 +407,10 @@ def mostrar_inventario():
                 success, error = eliminar_libro(libro_id)
                 if success: 
                     st.success("El libro fue eliminado de la base de datos.")
+                    time.sleep(1.5)
                     st.rerun()
                 else: 
                     st.error(f"Error: {error}")
+
+if __name__ == "__main__":
+    mostrar_inventario()
