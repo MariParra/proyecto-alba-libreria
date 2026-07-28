@@ -401,10 +401,19 @@ def mostrar_caja():
         else:
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
-                
-                fecha_min = pd.to_datetime(df_ventas['fecha_venta']).min().date()
-                fecha_max = pd.to_datetime(df_ventas['fecha_venta']).max().date()
-                rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(max(fecha_min, fecha_max - timedelta(days=30)), fecha_max), min_value=fecha_min, max_value=fecha_max)
+                df_ventas['fecha_venta_dt'] = pd.to_datetime(df_ventas['fecha_venta'], errors='coerce')
+                df_fechas_validas = df_ventas.dropna(subset=['fecha_venta_dt'])
+                if not df_fechas_validas.empty:
+                    fecha_min = pd.to_datetime(df_ventas['fecha_venta']).min().date()
+                    fecha_max = pd.to_datetime(df_ventas['fecha_venta']).max().date()
+                    rango_fechas = col_f1.date_input(
+                        "Filtrar por Fecha:", 
+                        value=(max(fecha_min, fecha_max - timedelta(days=30)), fecha_max), 
+                        min_value=fecha_min, max_value=fecha_max
+                    )
+                else:
+                    # Si no hay ninguna fecha válida, deshabilitamos el filtro
+                    rango_fechas = col_f1.date_input("Filtrar por Fecha:", value=(), disabled=True)
 
                 clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar por Cliente:", clientes_hist)
