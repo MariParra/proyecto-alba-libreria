@@ -306,7 +306,7 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
             origen = f"ASIGNACIÓN {mes}/{ano}" if tipo == "PRINCIPAL" else f"ASIGNACIÓN EXTRA {mes}/{ano}"
             conn.table("librero_historico").delete().eq("cliente_id", cliente_id).eq("libro_id", l_id).eq("origen", origen).execute()
 
-        # 2. Obtener la asignación actual (Acceso a .data corregido)
+        # 2. Obtención segura del registro (solución al error APIResponse)
         res_asig_exec = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()
         if not res_asig_exec.data:
             return False, "No se encontró la asignación."
@@ -318,12 +318,14 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
         else:
             extras_str = str(res_asig.get('extras', ''))
             if "EXTRAS:" in extras_str:
-                # Si los extras están separados por coma pero el título tenía coma, los unimos adecuadamente
-                lista_extras = [x.strip() for x in extras_str.replace("EXTRAS:", "").split(",") if x.strip()]
+                limpio = extras_str.replace("EXTRAS:", "").strip()
+                # Soporta tanto separador '|' como ',' (para registros antiguos)
+                delimitador = "|" if "|" in limpio else ","
+                lista_extras = [x.strip() for x in limpio.split(delimitador) if x.strip()]
                 
-                # Si el título a quitar exactamente coincide o no coincide, filtramos
+                # Filtramos el libro seleccionado (ignorando mayúsculas/minúsculas)
                 nueva_lista = [x for x in lista_extras if x.upper() != titulo_quitar.upper()]
-                nuevo_texto = "EXTRAS: " + ", ".join(nueva_lista) if nueva_lista else ""
+                nuevo_texto = "EXTRAS: " + " | ".join(nueva_lista) if nueva_lista else ""
                 
                 v_extras_actual = float(res_asig.get('valor_extras') or 0.0)
                 nuevo_v_extras = max(0.0, v_extras_actual - float(monto_descuento))
