@@ -68,30 +68,40 @@ def generar_plantilla_actualizacion_ventas():
         st.error(f"Error generando plantilla de ventas: {e}")
         return None
 
-def procesar_actualizacion_ventas(df):
+def procesar_actualizacion_libros(df):
     conn = get_db_connection()
     updates, errores = 0, []
     
-    columnas_texto = ['estado', 'metodo_envio', 'comentario']
-    columnas_num = ['abono', 'costo_venta', 'monto_final']
+    columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+    columnas_float = ['precio', 'costo']
 
     for i, fila in df.iterrows():
         try:
-            venta_id = int(fila['venta_id'])
+            # Aseguramos que el libro_id sea un entero
+            libro_id = int(fila['libro_id'])
             datos_update = {}
+            
             for col in df.columns:
-                 if col in fila and pd.notna(fila[col]) and col != 'venta_id':
+                # Solo procesamos la columna si existe en la fila y no es un valor vacío
+                if col in fila and pd.notna(fila[col]) and col != 'libro_id':
                     if col in columnas_texto:
                         datos_update[col] = limpiar_texto(str(fila[col]))
-                    elif col in columnas_num:
-                         datos_update[col] = float(fila[col])
-            
+                    
+                    # --- CORRECCIÓN CLAVE ---
+                    # Tratamos la columna 'stock' de forma especial como un ENTERO
+                    elif col == 'stock':
+                        datos_update[col] = int(float(fila[col])) # Convierte a float y luego a int para manejar "0.0"
+                    
+                    elif col in columnas_float:
+                        datos_update[col] = float(fila[col])
+
             if datos_update:
-                conn.table("registro_ventas").update(datos_update).eq("venta_id", venta_id).execute()
+                conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
                 updates += 1
         except Exception as e:
-            errores.append(f"Fila {i+2} (ID: {fila.get('venta_id', 'N/A')}): {str(e)}")
-
+            # El mensaje de error ahora será más claro
+            errores.append(f"Fila {i+2} (ID: {fila.get('libro_id', 'N/A')}): {str(e)}")
+            
     return updates, errores
 
 # ==========================================
