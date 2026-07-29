@@ -120,6 +120,9 @@ else:
         
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
+        st.sidebar.image("logo.png", use_container_width=True)
+        st.sidebar.title("📚 Panel de Control")
+        st.sidebar.info("Selecciona un módulo para gestionar tu negocio.")
         
         if "pagina_actual" not in st.session_state:
             st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
