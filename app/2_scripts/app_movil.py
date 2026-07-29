@@ -109,43 +109,41 @@ def mostrar_login():
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
     with col3:
-        # 1. Construimos la ruta segura
-        ruta_gif = os.path.join(script_dir, "pricono.gif")
-        # 2. Convertimos el GIF a Base64 usando el caché en memoria
-        gif_base64 = get_image_as_base64(ruta_gif)
+        # En lugar de Base64, llamamos directamente la URL estática del GIF.
+        # Puedes subir el pricono.gif a un hosting de imágenes gratuito (ej. Postimages, ImgBB, Github Pages, etc.)
+        # y pegar aquí el enlace directo (que termine en .gif)
+        enlace_directo_gif = "https://raw.githubusercontent.com/MariParra/proyecto-alba-libreria/refs/heads/main/app/2_scripts/pricono.gif"
         
-        # 3. Si se pudo convertir, aplicamos un diseño inteligente para PC y Móvil
-        if gif_base64:
-            st.markdown(
-                f'''
-                <style>
-                    /* DISEÑO POR DEFECTO: Pantallas Grandes (PC y Tablets grandes) */
-                    .gif-bienvenida {{
-                        position: fixed;
-                        bottom: 30px;
-                        right: 40px;
-                        width: 250px; /* Tamaño elegante para PC */
-                        z-index: 999;
-                    }}
+        st.markdown(
+            f'''
+            <style>
+                /* DISEÑO POR DEFECTO: PC */
+                .gif-bienvenida {{
+                    position: fixed;
+                    bottom: 30px;
+                    right: 40px;
+                    width: 250px;
+                    z-index: 999;
+                }}
 
-                    /* DISEÑO EN MÓVILES: Pantallas de hasta 768px (Celulares) */
-                    @media (max-width: 768px) {{
-                        .gif-bienvenida {{
-                            position: relative; /* Deja de flotar para no tapar el login */
-                            display: block;
-                            margin: 20px auto 0 auto; /* Se centra automáticamente abajo del login */
-                            bottom: auto;
-                            right: auto;
-                            width: 150px; /* Tamaño compacto para celulares */
-                        }}
+                /* DISEÑO EN MÓVILES */
+                @media (max-width: 768px) {{
+                    .gif-bienvenida {{
+                        position: relative;
+                        display: block;
+                        margin: 20px auto 0 auto;
+                        bottom: auto;
+                        right: auto;
+                        width: 150px;
                     }}
-                </style>
-                <div class="gif-bienvenida">
-                    <img src="{gif_base64}" alt="animacion" style="width: 100%;">
-                </div>
-                ''',
-                unsafe_allow_html=True,
-            )
+                }}
+            </style>
+            <div class="gif-bienvenida">
+                <img src="{enlace_directo_gif}" alt="animacion" style="width: 100%;">
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
 
 # --- LÓGICA PRINCIPAL ---
 if "usuario_logeado" not in st.session_state:
