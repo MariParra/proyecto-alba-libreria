@@ -528,16 +528,20 @@ def mostrar_asignaciones():
                         num = actualizar_asignaciones_batch(df_editado, df_mes)
                         st.success(f"¡Se actualizaron {num} registros!"), st.rerun()
 
+                            
     # ==========================================================
     # 2. ASIGNAR SOLO LIBRO PRINCIPAL
     # ==========================================================
     elif opcion_menu == "📖 Asignar Libro Principal":
-        if mes_esta_cerrado: st.warning("Mes cerrado.")
+        if mes_esta_cerrado: 
+            st.warning("Mes cerrado.")
         else:
-            if df_mes.empty: st.info("No hay suscripciones en el mes.")
+            if df_mes.empty: 
+                st.info("No hay suscripciones en el mes.")
             else:
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
                 
+                # --- ASIGNACIÓN MASIVA Y AUTOMÁTICA ---
                 with st.container(border=True):
                     st.markdown("### 🎲 Asignación al Azar (Masiva y Segura)")
                     st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
@@ -551,7 +555,7 @@ def mostrar_asignaciones():
                                 st.session_state.sin_asignar_azar = sin_asig
                         else: st.warning("No hay clientes pendientes.")
                         
-                    # 🔴 POP-UP / VISTA PREVIA
+                    # POP-UP / VISTA PREVIA
                     if 'propuesta_azar' in st.session_state:
                         prop = st.session_state.propuesta_azar
                         sin_asig = st.session_state.sin_asignar_azar
@@ -585,62 +589,68 @@ def mostrar_asignaciones():
                             del st.session_state.propuesta_azar
                             del st.session_state.sin_asignar_azar
                             st.rerun()
-                        
-                with st.container(border=True):
-                    st.markdown("### ✏️ Asignación Manual")
-                    st.info("La lista se filtra por historial y se ordena según los gustos de la clienta.")
-                    mostrar_sin_stock = st.checkbox("📦 Mostrar libros sin stock (Permite encargar y dejar stock negativo)", value=False)
-                    
-                    if not df_pendientes.empty:
-                        lista_clientes = [""] + df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}", axis=1).tolist()
-                        asig_manual_sel = st.selectbox("1. Seleccionar Cliente Sin Libro:", lista_clientes)
-                        
-                        opciones_libros_sugeridos = []
-                        opciones_libros_otros = []
-                        df_libros_seguros = pd.DataFrame()
-                        
-                        if asig_manual_sel:
-                            id_cliente_sel = int(df_pendientes[df_pendientes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre_cliente']}" == asig_manual_sel, axis=1)].iloc[0]['cliente_id'])
-                            df_libros_seguros, generos_pref = cargar_libros_filtrados_para_cliente(id_cliente_sel, mostrar_sin_stock)
-                            
-                            if not df_libros_seguros.empty:
-                                df_libros_seguros['titulo_visual'] = df_libros_seguros.apply(lambda r: f"{r['titulo']} (Stock: {r['stock']})", axis=1)
-                                
-                                if generos_pref:
-                                    st.success(f"Gustos de la clienta: **{', '.join(generos_pref)}**")
-                                    patron = '|'.join(generos_pref)
-                                    sugeridos_df = df_libros_seguros[df_libros_seguros['genero'].str.contains(patron, case=False, na=False) | df_libros_seguros['titulo'].str.contains(patron, case=False, na=False)]
-                                    otros_df = df_libros_seguros[~(df_libros_seguros['genero'].str.contains(patron, case=False, na=False) | df_libros_seguros['titulo'].str.contains(patron, case=False, na=False))]
-                                    opciones_libros_sugeridos = sugeridos_df['titulo_visual'].tolist()
-                                    opciones_libros_otros = otros_df['titulo_visual'].tolist()
-                                else:
-                                    opciones_libros_otros = df_libros_seguros['titulo_visual'].tolist()
-                                    
-                            todas_las_opciones = []
-                            if opciones_libros_sugeridos:
-                                todas_las_opciones.append("--- SUGERIDOS ---")
-                                todas_las_opciones.extend(opciones_libros_sugeridos)
-                            if opciones_libros_otros:
-                                todas_las_opciones.append("--- OTROS DISPONIBLES ---")
-                                todas_las_opciones.extend(opciones_libros_otros)
-                            
-                            libro_manual_sel = st.selectbox("2. Seleccionar Libro Principal:", todas_las_opciones)
-                            
-                            if st.button("✅ Confirmar Asignación de Libro", type="primary"):
-                                if asig_manual_sel and libro_manual_sel and "---" not in libro_manual_sel:
-                                    id_asig = int(asig_manual_sel.split(" - ")[0].replace("ID:", ""))
-                                    id_cliente = int(df_pendientes[df_pendientes['asignacion_id'] == id_asig].iloc[0]['cliente_id'])
-                                    l_data = df_libros_seguros[df_libros_seguros['titulo_visual'] == libro_manual_sel].iloc[0]
-                                    
-                                    ex, err = asignar_libro_principal(
-                                        id_asig, id_cliente, l_data['libro_id'], l_data['stock'], 
-                                        ano_sel, mes_num, l_data['titulo'], l_data.get('autor', '')
-                                    )
-                                    if ex: st.success("¡Libro asignado con éxito!"), st.rerun()
-                                    else: st.error(err)
-                                else: st.error("Debes seleccionar un cliente y un libro válido.")
-                    else: st.success("¡Todos los clientes ya tienen su libro principal!")
 
+                # --- ASIGNACIÓN INDIVIDUAL / MANUAL ---
+                with st.container(border=True):
+                    st.markdown("### 👤 Asignación Manual Individual")
+                    
+                    if df_pendientes.empty:
+                        st.success("¡Todos los clientes ya tienen libro asignado para este mes!")
+                    else:
+                        # Selección de cliente
+                        dict_clientes = dict(zip(df_pendientes['nombre_cliente'], df_pendientes['cliente_id']))
+                        cliente_nom = st.selectbox("Seleccionar Cliente Pendiente:", options=list(dict_clientes.keys()))
+                        cliente_id = dict_clientes[cliente_nom]
+                        asig_row = df_pendientes[df_pendientes['cliente_id'] == cliente_id].iloc[0]
+                        
+                        # Opción para ver o no sin stock
+                        ver_sin_stock = st.checkbox("Mostrar también libros sin stock disponible", value=True)
+                        
+                        # Carga de catálogo filtrado por gustos y excluyendo poseídos
+                        df_libros_sugeridos, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=ver_sin_stock)
+                        
+                        if gustos_cliente:
+                            st.info(f"❤️ **Géneros preferidos del cliente:** {', '.join(gustos_cliente)}")
+                        else:
+                            st.caption("ℹ️ El cliente no registra géneros de preferencia especificos.")
+                            
+                        if df_libros_sugeridos.empty:
+                            st.warning("No hay libros disponibles que coincidan con las preferencias o que el cliente no posea ya.")
+                        else:
+                            # Preparamos las opciones para el selectbox
+                            df_libros_sugeridos['label_opcion'] = df_libros_sugeridos.apply(
+                                lambda row: f"{row['titulo']} — {row['autor']} (Género: {row['genero']} | Stock: {row['stock']})", axis=1
+                            )
+                            
+                            dict_libros = dict(zip(df_libros_sugeridos['label_opcion'], df_libros_sugeridos['libro_id']))
+                            libro_sel_label = st.selectbox("Seleccionar Libro para Asignar:", options=list(dict_libros.keys()))
+                            
+                            if libro_sel_label:
+                                libro_id_sel = dict_libros[libro_sel_label]
+                                libro_info = df_libros_sugeridos[df_libros_sugeridos['libro_id'] == libro_id_sel].iloc[0]
+                                
+                                # Advertencia si el libro elegido no tiene stock
+                                if libro_info['stock'] <= 0:
+                                    st.warning("⚠️ **Atención:** El libro seleccionado tiene **0 stock**. Si lo asignas, el stock pasará a ser negativo o 0.")
+                                
+                                if st.button("📌 Asignar Libro Seleccionado", type="primary"):
+                                    ok, err = asignar_libro_principal(
+                                        asignacion_id=asig_row['asignacion_id'],
+                                        cliente_id=cliente_id,
+                                        libro_id=libro_id_sel,
+                                        stock_actual=libro_info['stock'],
+                                        ano=ano_sel,
+                                        mes=mes_num,
+                                        titulo=libro_info['titulo'],
+                                        autor=libro_info.get('autor', '')
+                                    )
+                                    if ok:
+                                        st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Error al asignar: {err}")
+  
     # ==========================================================
     # 3. GESTIONAR ENVÍO Y AJUSTE MANUAL
     # ==========================================================
