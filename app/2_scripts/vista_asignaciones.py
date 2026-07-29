@@ -324,6 +324,8 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             "Cliente": nombre_cliente,
             "libro_id": l_id,
             "Libro Asignado": libro_elegido['titulo'],
+            "Género del Libro": str(libro_elegido.get('genero', '')),
+            "Preferencias": ", ".join(generos_pref) if generos_pref else "Sin preferencias específicas",
             "Autor": libro_elegido.get('autor', ''),
         })
         
@@ -625,7 +627,27 @@ def mostrar_asignaciones():
                         
                         if prop:
                             st.success(f"✅ Se encontraron libros perfectos para **{len(prop)}** clientas.")
-                            st.dataframe(pd.DataFrame(prop)[['Cliente', 'Libro Asignado', 'Autor']], hide_index=True, use_container_width=True)
+                            st.info("💡 **Tip UX:** Si no te convence alguna sugerencia, **desmarca la casilla 'Aprobar'** de esa fila. Ese libro no se asignará y la clienta quedará pendiente.")
+                            
+                            # Convertimos a DataFrame y añadimos la columna 'Aprobar' al inicio
+                            df_prop = pd.DataFrame(prop)
+                            if 'Aprobar' not in df_prop.columns:
+                                df_prop.insert(0, 'Aprobar', True)
+                            
+                            # Usamos data_editor para hacer la tabla interactiva
+                            df_editado = st.data_editor(
+                                df_prop,
+                                column_config={
+                                    "Aprobar": st.column_config.CheckboxColumn("✅ Aprobar", default=True),
+                                    "asignacion_id": None, # Ocultamos IDs internos para que se vea limpio
+                                    "cliente_id": None,
+                                    "libro_id": None
+                                },
+                                disabled=['Cliente', 'Preferencias', 'Libro Asignado', 'Género del Libro', 'Autor'], # Bloqueamos todo menos el checkbox
+                                hide_index=True,
+                                use_container_width=True,
+                                key="editor_azar"
+                            )
                         else:
                             st.warning("El sistema no pudo encontrar ningún libro adecuado para las clientas pendientes.")
                             
@@ -635,17 +657,24 @@ def mostrar_asignaciones():
                             
                         col_conf1, col_conf2 = st.columns(2)
                         
-                        if prop and col_conf1.button("✅ Confirmar y Guardar Asignaciones", type="primary", use_container_width=True):
+                        if prop and col_conf1.button("✅ Confirmar Asignaciones Seleccionadas", type="primary", use_container_width=True):
                             with st.spinner("Guardando y descontando stock..."):
-                                exitos, errs = confirmar_propuesta_azar(prop, ano_sel, mes_num)
+                                # Filtramos para guardar SOLO las que dejaron marcadas con 'Aprobar' = True
+                                prop_aprobada = df_editado[df_editado['Aprobar'] == True].to_dict('records')
+                                
+                                if prop_aprobada:
+                                    exitos, errs = confirmar_propuesta_azar(prop_aprobada, ano_sel, mes_num)
+                                    st.success(f"¡Se guardaron {exitos} asignaciones exitosamente!")
+                                    st.balloons()
+                                else:
+                                    st.warning("Se descartaron todas las sugerencias. No se guardó nada.")
+                                
                                 del st.session_state.propuesta_azar
                                 del st.session_state.sin_asignar_azar
-                                st.success(f"¡Se guardaron {exitos} asignaciones exitosamente!")
-                                st.balloons()
                                 time.sleep(2)
                                 st.rerun()
                                 
-                        if col_conf2.button("❌ Cancelar", use_container_width=True):
+                        if col_conf2.button("❌ Cancelar Todo", use_container_width=True):
                             del st.session_state.propuesta_azar
                             del st.session_state.sin_asignar_azar
                             st.rerun()
