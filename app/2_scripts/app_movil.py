@@ -118,7 +118,7 @@ def mostrar_login():
             st.markdown(
                 f'''
                 <div style="position: fixed; bottom: 30px; right: 40px; z-index: 999;">
-                    <img src="{gif_base64}" alt="animacion" width="400">
+                    <img src="{gif_base64}" alt="animacion" width="300">
                 </div>
                 ''',
                 unsafe_allow_html=True,
