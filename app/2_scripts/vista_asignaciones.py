@@ -4,6 +4,7 @@ import random
 import time
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
+import json
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -45,47 +46,73 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=True):
+def obtener_ids_libros_poseidos_por_cliente(cliente_id):
     """
-    Retorna los libros filtrados para un cliente específico:
-    - Excluye libros que el cliente YA TIENE en librero_historico.
-    - Filtra los libros que COINCIDEN con sus géneros de preferencia.
-    - Muestra con o sin stock según el parámetro 'incluir_sin_stock'.
+    Obtiene un conjunto de todos los IDs de libros que un cliente posee,
+    consultando: librero_historico, registro_ventas Y la tabla asignaciones.
     """
-    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock)
+    if not cliente_id:
+        return set()
+
+    conn = get_db_connection()
+    ids_poseidos = set()
+
+    try:
+        # 1. Obtener libros del librero histórico
+        res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
+        if res_historial.data:
+            ids_poseidos.update(item['libro_id'] for item in res_historial.data if item.get('libro_id'))
+
+        # 2. Obtener libros de asignaciones anteriores (estén o no en el histórico)
+        res_asignaciones = conn.table("asignaciones").select("libro_suscripcion_id").eq("cliente_id", cliente_id).execute()
+        if res_asignaciones.data:
+            ids_poseidos.update(item['libro_suscripcion_id'] for item in res_asignaciones.data if item.get('libro_suscripcion_id'))
+
+        # 3. Obtener libros del registro de ventas
+        res_ventas = conn.table("registro_ventas").select("libros_vendidos").eq("cliente_id", cliente_id).execute()
+        if res_ventas.data:
+            for venta in res_ventas.data:
+                if venta.get('libros_vendidos'):
+                    try:
+                        libros_json = json.loads(venta['libros_vendidos'])
+                        for libro in libros_json:
+                            if libro.get('libro_id'):
+                                ids_poseidos.add(libro['libro_id'])
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                        
+        return ids_poseidos
+    except Exception as e:
+        st.error(f"Error al obtener libros poseídos por el cliente {cliente_id}: {e}")
+        return ids_poseidos
+@st.cache_data(ttl=60)
+def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
+    """
+    Filtra el catálogo quitando TODOS los libros que el cliente ya tiene (historial, ventas y asignaciones previas).
+    Devuelve también sus gustos.
+    """
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock)
     if df_catalogo.empty or not cliente_id:
         return df_catalogo, []
     
     conn = get_db_connection()
     try:
-        # 1. Obtener historial del cliente y EXCLUIR los que ya posee
-        res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
-        if res_historial.data:
-            ids_poseidos = {item['libro_id'] for item in res_historial.data if item['libro_id']}
+        # Aquí se usa el "filtro triple" que creamos
+        ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
+        
+        if ids_poseidos:
             df_catalogo = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)]
             
-        # 2. Obtener géneros de preferencia del cliente
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',') if g.strip()]
-        
-        # 3. Filtrar libros que coincidan con sus géneros preferidos
-        if generos_pref and not df_catalogo.empty:
-            patron = '|'.join([rf"\b{g}\b" for g in generos_pref]) # Expresión regular por palabra clave
-            mask_gustos = df_catalogo['genero'].astype(str).str.upper().str.contains(patron, case=False, na=False) | \
-                          df_catalogo['titulo'].astype(str).str.upper().str.contains(patron, case=False, na=False)
-            
-            df_filtrado_gustos = df_catalogo[mask_gustos]
-            
-            # Si hay coincidencias con sus géneros, devolvemos solo esos libros
-            if not df_filtrado_gustos.empty:
-                return df_filtrado_gustos, generos_pref
+            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
         
         return df_catalogo, generos_pref
     except Exception as e:
-        print(f"Error al filtrar libros para cliente: {e}")
-        return df_catalogo, []
+        st.error(f"Error en cargar_libros_filtrados_para_cliente: {e}")
+        return cargar_catalogo_completo_libros(incluir_sin_stock), []
+
 
 @st.cache_data(ttl=60)
 def cargar_asignaciones_mes(ano, mes):
@@ -222,11 +249,9 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
     except Exception as e: return False, str(e)
 
 
-# 🔴 NUEVA LÓGICA DE ASIGNACIÓN INTELIGENTE CON VISTA PREVIA
 def generar_propuesta_azar(df_pendientes):
     conn = get_db_connection()
     
-    # 1. Cargamos catálogo global y registramos el stock en una memoria temporal (para descontar en vivo)
     df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=False)
     stock_local = df_catalogo.set_index('libro_id')['stock'].to_dict() if not df_catalogo.empty else {}
     
@@ -240,43 +265,34 @@ def generar_propuesta_azar(df_pendientes):
         if df_catalogo.empty:
             sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Catálogo vacío o sin stock."})
             continue
-            
-        # Revisamos historial de la clienta
-        res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
-        ids_poseidos = {item['libro_id'] for item in res_historial.data if item['libro_id']} if res_historial.data else set()
+        ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
-        # Revisamos gustos
+        # El resto de la lógica de la función permanece exactamente igual.
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
             generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
             
-        # Filtramos libros que NO tenga y que AÚN tengan stock en nuestra simulación mental
         mask_disponibles = (~df_catalogo['libro_id'].isin(ids_poseidos)) & (df_catalogo['libro_id'].map(lambda x: stock_local.get(x, 0) > 0))
         libros_disponibles = df_catalogo[mask_disponibles]
         
         if libros_disponibles.empty:
-            sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Ya tiene todos los libros o no queda stock de libros nuevos."})
+            sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Ya tiene todos los libros del catálogo o no queda stock."})
             continue
             
-        # Evaluamos gustos
         if generos_pref:
             patron = '|'.join(generos_pref)
-            # Buscamos coincidencias en género o título
             mask_gustos = libros_disponibles['genero'].str.contains(patron, case=False, na=False) | libros_disponibles['titulo'].str.contains(patron, case=False, na=False)
             df_sugeridos = libros_disponibles[mask_gustos]
             
             if df_sugeridos.empty:
-                # 🔴 REGLA APLICADA: Si no hay match con gustos, no le asigna basura. Queda libre.
-                sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock físico para los géneros: {', '.join(generos_pref)}"})
+                sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock disponible para sus géneros preferidos: {', '.join(generos_pref)}"})
                 continue
             else:
                 libro_elegido = df_sugeridos.sample(1).iloc[0]
         else:
-            # Si la clienta no puso gustos, se le puede dar cualquiera
             libro_elegido = libros_disponibles.sample(1).iloc[0]
             
-        # Descontamos el stock de nuestra simulación para que no se lo dé a otra clienta por error
         l_id = int(libro_elegido['libro_id'])
         stock_local[l_id] -= 1
         
@@ -317,7 +333,10 @@ def confirmar_propuesta_azar(propuesta, ano, mes):
         except Exception as e:
             errores.append(str(e))
             
-    cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
+    cargar_asignaciones_mes.clear()
+    cargar_catalogo_completo_libros.clear()
+    cargar_libros_filtrados_para_cliente.clear()
+
     return exitos, errores
 
 
