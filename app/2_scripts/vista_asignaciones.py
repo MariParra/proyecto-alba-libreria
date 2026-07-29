@@ -44,28 +44,47 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
         print(f"Error cargando catálogo asignaciones: {e}")
         return pd.DataFrame()
 
-
 @st.cache_data(ttl=60)
-def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
-    """Filtra el catálogo quitando los libros que el cliente ya tiene. Devuelve también sus gustos."""
-    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock)
+def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=True):
+    """
+    Retorna los libros filtrados para un cliente específico:
+    - Excluye libros que el cliente YA TIENE en librero_historico.
+    - Filtra los libros que COINCIDEN con sus géneros de preferencia.
+    - Muestra con o sin stock según el parámetro 'incluir_sin_stock'.
+    """
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock)
     if df_catalogo.empty or not cliente_id:
         return df_catalogo, []
     
     conn = get_db_connection()
     try:
+        # 1. Obtener historial del cliente y EXCLUIR los que ya posee
         res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
         if res_historial.data:
             ids_poseidos = {item['libro_id'] for item in res_historial.data if item['libro_id']}
             df_catalogo = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)]
             
+        # 2. Obtener géneros de preferencia del cliente
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
+            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',') if g.strip()]
+        
+        # 3. Filtrar libros que coincidan con sus géneros preferidos
+        if generos_pref and not df_catalogo.empty:
+            patron = '|'.join([rf"\b{g}\b" for g in generos_pref]) # Expresión regular por palabra clave
+            mask_gustos = df_catalogo['genero'].astype(str).str.upper().str.contains(patron, case=False, na=False) | \
+                          df_catalogo['titulo'].astype(str).str.upper().str.contains(patron, case=False, na=False)
+            
+            df_filtrado_gustos = df_catalogo[mask_gustos]
+            
+            # Si hay coincidencias con sus géneros, devolvemos solo esos libros
+            if not df_filtrado_gustos.empty:
+                return df_filtrado_gustos, generos_pref
         
         return df_catalogo, generos_pref
-    except:
+    except Exception as e:
+        print(f"Error al filtrar libros para cliente: {e}")
         return df_catalogo, []
 
 @st.cache_data(ttl=60)
