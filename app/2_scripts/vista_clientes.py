@@ -124,11 +124,11 @@ def mostrar_clientes():
                 
                 if cantidad_compras == 0:
                     nivel, color, icono = "Nuevo Lector", "gray", "🌱"
-                elif cantidad_compras <= 3:
-                    nivel, color, icono = "Lector Bronce", "orange", "🥉"
                 elif cantidad_compras <= 10:
+                    nivel, color, icono = "Lector Bronce", "orange", "🥉"
+                elif cantidad_compras <= 30:
                     nivel, color, icono = "Lector Plata", "blue", "🥈"
-                elif cantidad_compras <= 20:
+                elif cantidad_compras <= 50:
                     nivel, color, icono = "Lector Oro", "green", "🥇"
                 else:
                     nivel, color, icono = "Lector Diamante", "violet", "💎"
