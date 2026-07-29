@@ -458,7 +458,8 @@ def mostrar_caja():
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
-                final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_id)
+                # 🔴 Agregamos c_rut y c_direccion al llamado
+                final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
                 exito, err = procesar_venta_carrito(
                     st.session_state.carrito_caja, final_cliente_id, valor_envio, 
                     metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
@@ -469,7 +470,8 @@ def mostrar_caja():
                     st.balloons()
                     time.sleep(2)
                     st.rerun()
-                else: st.error(f"Error: {err}")
+                else: 
+                    st.error(f"Error: {err}")
 
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
