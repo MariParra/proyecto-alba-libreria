@@ -98,6 +98,19 @@ def mostrar_login():
                 st.rerun()
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
+    with col3:
+        # 5 Saltos de línea para bajar el GIF y centrarlo visualmente con el recuadro gris
+        st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
+        
+        # Obtenemos la ruta absoluta de forma segura para evitar fallos en la nube
+        ruta_gif = os.path.join(script_dir, "pricono.gif")
+        
+        try:
+            # st.image renderiza el gif animado de forma nativa
+            st.image(ruta_gif, width=180) 
+        except Exception:
+            # Evitamos que se rompa la app si el archivo no se ha cargado en Github
+            pass
 
 # --- LÓGICA PRINCIPAL ---
 if "usuario_logeado" not in st.session_state:
