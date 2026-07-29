@@ -213,17 +213,19 @@ def mostrar_inventario():
         st.markdown("**Filtros Numéricos**")
         col_f5, col_f6 = st.columns(2)
         
-        min_p, max_p = float(df_inventario['precio'].min()) if not df_inventario.empty else 0.0, float(df_inventario['precio'].max()) if not df_inventario.empty else 1.0
-        if min_p >= max_p: max_p = min_p + 1.0
+        min_p = float(df_inventario['precio'].min()) if not df_inventario.empty else 0.0
+        max_p = float(df_inventario['precio'].max()) if not df_inventario.empty else 1.0
+        if min_p >= max_p: 
+            max_p = min_p + 1.0
         rango_precio = col_f5.slider("Rango de Precio ($):", min_value=min_p, max_value=max_p, value=(min_p, max_p))
 
         min_s_db = int(df_inventario['stock'].min()) if not df_inventario.empty else 0
         min_s_slider = max(0, min_s_db)
         
         max_s = int(df_inventario['stock'].max()) if not df_inventario.empty else 1
-        if min_s_slider >= max_s: max_s = min_s_slider + 1
-        valor_inicial_slider = (min_s_slider, max_s)
-        rango_stock = col_f6.slider("Rango de Stock:", min_value=min_s_slider, max_value=max_s, value=valor_inicial_slider)
+        if min_s_slider >= max_s: 
+            max_s = min_s_slider + 1
+        rango_stock = col_f6.slider("Rango de Stock:", min_value=min_s_slider, max_value=max_s, value=(min_s_slider, max_s))
 
         st.markdown("---")
         col_chk1, col_chk2 = st.columns(2)
@@ -231,25 +233,38 @@ def mostrar_inventario():
         solo_con_stock = col_chk2.checkbox("📦 Mostrar solo libros con stock (> 0)", value=False)
 
     df_filtrado = df_inventario.copy()
-    if busqueda_titulo: df_filtrado = df_filtrado[df_filtrado['titulo'].str.contains(limpiar_texto(busqueda_titulo), case=False, na=False)]
-    if autores_seleccionados: df_filtrado = df_filtrado[df_filtrado['autor'].isin(autores_seleccionados)]
-    if editoriales_seleccionadas: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(editoriales_seleccionadas)]
-    if generos_seleccionados: df_filtrado = df_filtrado[df_filtrado['genero'].isin(generos_seleccionados)]
-    if encuadernaciones_seleccionadas: df_filtrado = df_filtrado[df_filtrado['encuadernacion'].isin(encuadernaciones_seleccionadas)]
-    
-    if not df_filtrado.empty:
-        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio)]
-        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock)]
 
+    # Búsqueda por título con normalización
+    if busqueda_titulo: 
+        busqueda_limpia = limpiar_texto(busqueda_titulo)
+        df_filtrado = df_filtrado[
+            df_filtrado['titulo'].apply(limpiar_texto).str.contains(busqueda_limpia, case=False, na=False)
+        ]
+
+    if autores_seleccionados: 
+        df_filtrado = df_filtrado[df_filtrado['autor'].isin(autores_seleccionados)]
+    if editoriales_seleccionadas: 
+        df_filtrado = df_filtrado[df_filtrado['editorial'].isin(editoriales_seleccionadas)]
+    if generos_seleccionados: 
+        df_filtrado = df_filtrado[df_filtrado['genero'].isin(generos_seleccionados)]
+    if encuadernaciones_seleccionadas: 
+        df_filtrado = df_filtrado[df_filtrado['encuadernacion'].isin(encuadernaciones_seleccionadas)]
+    
+    # Aplicación de rangos con índices explícitos [0] y [1]
+    if not df_filtrado.empty:
+        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
+        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
         
     if solo_descuentos and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
     if solo_con_stock and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['stock'] > 0]
 
+    # Tabs de navegación
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
         "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
+
 
     with tab_catalogo:
         st.markdown(f"### 📋 Catálogo ({len(df_filtrado)} libros)")
