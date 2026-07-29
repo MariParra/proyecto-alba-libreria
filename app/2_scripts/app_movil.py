@@ -120,7 +120,11 @@ else:
         
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
-        st.sidebar.image("logo.png", use_container_width=True)
+        ruta_logo = os.path.join(script_dir, "logo.png")
+        try:
+            st.sidebar.image(ruta_logo, use_container_width=True)
+        except Exception:
+            st.sidebar.warning("Logo no encontrado")
         st.sidebar.title("📚 Panel de Control")
         st.sidebar.info("Selecciona un módulo para gestionar tu negocio.")
         
