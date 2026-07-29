@@ -47,7 +47,16 @@ if CLIENT_ID and CLIENT_SECRET:
     )
 else:
     oauth2 = None
-
+    
+def get_image_as_base64(path):
+    """Convierte una imagen local a una cadena de texto Base64."""
+    try:
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode("utf-8")
+        return f"data:image/gif;base64,{data}"
+    except IOError:
+        return None # Devuelve None si no encuentra el archivo
+    
 def decodificar_token(token):
     partes = token.split(".")
     if len(partes) != 3: return None
@@ -102,15 +111,17 @@ def mostrar_login():
         # 5 Saltos de línea para bajar el GIF y centrarlo visualmente con el recuadro gris
         st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
         
-        # Obtenemos la ruta absoluta de forma segura para evitar fallos en la nube
+        # 1. Construimos la ruta segura
         ruta_gif = os.path.join(script_dir, "pricono.gif")
+        # 2. Convertimos el GIF a Base64
+        gif_base64 = get_image_as_base64(ruta_gif)
         
-        try:
-            # st.image renderiza el gif animado de forma nativa
-            st.image(ruta_gif, width=180) 
-        except Exception:
-            # Evitamos que se rompa la app si el archivo no se ha cargado en Github
-            pass
+        # 3. Si se pudo convertir, lo mostramos con HTML
+        if gif_base64:
+            st.markdown(
+                f'<img src="{gif_base64}" alt="animacion" width="180">',
+                unsafe_allow_html=True,
+            )
 
 # --- LÓGICA PRINCIPAL ---
 if "usuario_logeado" not in st.session_state:
