@@ -108,18 +108,19 @@ def mostrar_login():
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
     with col3:
-        # 5 Saltos de línea para bajar el GIF y centrarlo visualmente con el recuadro gris
-        st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
-        
         # 1. Construimos la ruta segura
         ruta_gif = os.path.join(script_dir, "pricono.gif")
         # 2. Convertimos el GIF a Base64
         gif_base64 = get_image_as_base64(ruta_gif)
         
-        # 3. Si se pudo convertir, lo mostramos con HTML
+        # 3. Si se pudo convertir, lo fijamos en la esquina con CSS
         if gif_base64:
             st.markdown(
-                f'<img src="{gif_base64}" alt="animacion" width="180">',
+                f'''
+                <div style="position: fixed; bottom: 30px; right: 40px; z-index: 999;">
+                    <img src="{gif_base64}" alt="animacion" width="250">
+                </div>
+                ''',
                 unsafe_allow_html=True,
             )
 
