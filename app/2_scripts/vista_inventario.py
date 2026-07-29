@@ -290,7 +290,6 @@ def mostrar_inventario():
             en_oferta = df_filtrado.loc[data.index, 'Oferta'] != 'Estándar'
             for col in data.columns:
                 estilos.loc[en_oferta, col] = 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
-                estilos.loc[sin_stock, col] = 'background-color: #ffebee; color: #c62828; font-style: italic;'
             return estilos
             
         df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
