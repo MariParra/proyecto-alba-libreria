@@ -122,7 +122,7 @@ def mostrar_login():
                     position: fixed;
                     bottom: 30px;
                     right: 40px;
-                    width: 250px;
+                    width: 300px;
                     z-index: 999;
                 }}
 
@@ -134,7 +134,7 @@ def mostrar_login():
                         margin: 20px auto 0 auto;
                         bottom: auto;
                         right: auto;
-                        width: 150px;
+                        width: 200px;
                     }}
                 }}
             </style>
