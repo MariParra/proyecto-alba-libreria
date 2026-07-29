@@ -89,9 +89,14 @@ def actualizar_un_libro(libro_id, datos):
 def actualizar_libros_batch(df_original, df_editado):
     if df_original.empty or df_editado.empty: return 0
     
+    if 'libro_id' not in df_original.columns or 'libro_id' not in df_editado.columns:
+        return 0
+        
     df_original_comp = df_original.set_index('libro_id')
     df_editado_comp = df_editado.set_index('libro_id')
-    diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
+    
+    cols_comunes = df_original_comp.columns.intersection(df_editado_comp.columns)
+    diff_mask = df_original_comp[cols_comunes].ne(df_editado_comp[cols_comunes]).any(axis=1)
     filas_cambiadas = df_editado_comp[diff_mask]
     
     if filas_cambiadas.empty: return 0
@@ -107,10 +112,30 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'genero' in row: datos['genero'] = limpiar_texto(str(row['genero']))
             if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto(str(row['encuadernacion']))
             if 'stock' in row: datos['stock'] = int(row['stock'])
-            if 'precio' in row: datos['precio'] = float(row['precio'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
+            
+            # 🔴 LÓGICA DE RECALCULO DE PRECIOS AUTOMÁTICA
+            # Si cambiaron el precio_original, recalculamos el precio de oferta (si lo tenía)
             if 'precio_original' in row and pd.notna(row['precio_original']):
-                datos['precio_original'] = float(row['precio_original'])
+                nuevo_precio_orig = float(row['precio_original'])
+                datos['precio_original'] = nuevo_precio_orig
+                
+                # Rescatamos el porcentaje de descuento actual desde el df original
+                porcentaje_dcto_actual = float(df_original_comp.loc[libro_id].get('Dcto %', 0))
+                
+                if porcentaje_dcto_actual > 0:
+                    # Aplica el mismo % de descuento sobre el nuevo precio original
+                    factor = 1.0 - (porcentaje_dcto_actual / 100.0)
+                    datos['precio'] = round(nuevo_precio_orig * factor, 0)
+                else:
+                    # Si no tenía descuento, igualamos ambos
+                    datos['precio'] = nuevo_precio_orig
+            
+            # Si el usuario modificó manualmente la columna "precio" en lugar de "precio_original"
+            # (sobreescribe la regla anterior para darte libertad absoluta)
+            if 'precio' in row and pd.notna(row['precio']):
+                if 'precio' not in datos or datos['precio'] != float(row['precio']):
+                    datos['precio'] = float(row['precio'])
                 
             if datos:
                 conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
@@ -213,8 +238,9 @@ def mostrar_inventario():
     if encuadernaciones_seleccionadas: df_filtrado = df_filtrado[df_filtrado['encuadernacion'].isin(encuadernaciones_seleccionadas)]
     
     if not df_filtrado.empty:
-        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
-        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
+        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio)]
+        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock)]
+
         
     if solo_descuentos and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
@@ -233,16 +259,29 @@ def mostrar_inventario():
         columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
         columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
-        columnas_extra_seleccionadas = st.multiselect("Añadir/Quitar columnas de la tabla:", options=columnas_opcionales_disponibles, default=[c for col in columnas_por_defecto for c in [col] if col in columnas_opcionales_disponibles])
+        favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles] # <-- FILTRO DE SEGURIDAD
+        
+        columnas_extra_seleccionadas = st.multiselect(
+            "Añadir/Quitar columnas de la tabla:", 
+            options=columnas_opcionales_disponibles, 
+            default=favoritos_disponibles # <-- Ahora este parámetro es 100% inmune
+        )
+        
         columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
         
-        def estilizar_ofertas(row):
-            return ['background-color: #e8f5e9; font-weight: bold;' if row['Oferta'] != 'Estándar' else '' for _ in row]
+        def estilizar_catalogo(data):
+            estilos = pd.DataFrame('', index=data.index, columns=data.columns)
+            sin_stock = df_filtrado.loc[data.index, 'stock'] <= 0
+            en_oferta = df_filtrado.loc[data.index, 'Oferta'] != 'Estándar'
+            for col in data.columns:
+                estilos.loc[en_oferta, col] = 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
+                estilos.loc[sin_stock, col] = 'background-color: #ffebee; color: #c62828; font-style: italic;'
+            return estilos
             
         df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
         
         if 'Oferta' in df_mostrar_tabla.columns:
-            df_estilizado = df_filtrado[columnas_a_mostrar].style.apply(estilizar_ofertas, axis=1)
+            df_estilizado = df_mostrar_tabla.style.apply(estilizar_catalogo, axis=None)
         else:
             df_estilizado = df_mostrar_tabla
 
@@ -251,7 +290,6 @@ def mostrar_inventario():
             "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f"),
             "costo": st.column_config.NumberColumn("Costo", format="$%.0f")
         }
-
         st.dataframe(df_estilizado, hide_index=True, use_container_width=True, column_config=config_cols_catalogo)
 
     with tab_editar:
@@ -267,41 +305,42 @@ def mostrar_inventario():
                 libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
                 with st.form("form_editar_movil"):
                     st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
-                    
                     opciones_autor = obtener_unicos(df_inventario, 'autor')
                     opciones_editorial = obtener_unicos(df_inventario, 'editorial')
                     opciones_genero = obtener_unicos(df_inventario, 'genero')
                     opciones_enc = obtener_unicos(df_inventario, 'encuadernacion')
-
                     col1, col2 = st.columns(2)
                     try: idx_autor = opciones_autor.index(libro['autor'])
                     except ValueError: idx_autor = 0
                     nuevo_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
-
                     try: idx_editorial = opciones_editorial.index(libro['editorial'])
                     except ValueError: idx_editorial = 0
                     nueva_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
-                    
                     col3, col4 = st.columns(2)
                     try: idx_genero = opciones_genero.index(libro['genero'])
                     except ValueError: idx_genero = 0
                     nuevo_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
-
                     try: idx_enc = opciones_enc.index(libro['encuadernacion'])
                     except ValueError: idx_enc = 0
                     nueva_encuadernacion = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
-                    
                     col5, col6, col7 = st.columns(3)
                     nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                     nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
-                    nuevo_precio = col7.number_input("Precio:", min_value=0.0, format="%.0f", value=float(libro['precio']))
+                    
+                    # 🔴 En el modo móvil también mostramos el precio original
+                    nuevo_precio_original = col7.number_input("Precio Original ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                     
                     if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                        datos_actualizados = {
-                            "autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero,
-                            "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock,
-                            "costo": nuevo_costo, "precio": nuevo_precio
-                        }
+                        # 🔴 Mandamos a guardar el precio_original y dejamos que el procesador batch haga la matemática
+                        datos_actualizados = {"autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero, "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock, "costo": nuevo_costo, "precio_original": nuevo_precio_original}
+                        
+                        # Rescatamos el porcentaje de descuento para calcular en móvil
+                        pct_dcto = float(libro.get('Dcto %', 0))
+                        if pct_dcto > 0:
+                            datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
+                        else:
+                            datos_actualizados['precio'] = nuevo_precio_original
+                            
                         exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
                         if exito:
                             st.success("¡Libro actualizado correctamente!")
@@ -314,15 +353,15 @@ def mostrar_inventario():
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
             columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
-            
-            # Aseguramos que siempre estén las bases
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
-            
             columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original"])
             
             columnas_finales = columnas_base + columnas_a_mostrar
-            df_mostrar = df_filtrado[columnas_finales].copy()
+            
+            df_mostrar = df_filtrado[columnas_finales].copy().reset_index(drop=True)
+            
+            st.session_state.df_original_para_editar = df_mostrar
             
             config_columnas = {
                 "autor": st.column_config.TextColumn("Autor", required=True),
@@ -330,134 +369,102 @@ def mostrar_inventario():
                 "genero": st.column_config.TextColumn("Género"),
                 "encuadernacion": st.column_config.TextColumn("Encuadernación"),
                 "stock": st.column_config.NumberColumn("Stock", step=1),
-                "costo": st.column_config.NumberColumn("Costo", format="$%.0f"),
-                "precio": st.column_config.NumberColumn("Precio", format="$%.0f"),
-                "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f")
+                "costo": st.column_config.NumberColumn("Costo ($)", format="%.0f"),
+                "precio": st.column_config.NumberColumn("Precio ($)", format="%.0f"),
+                "precio_original": st.column_config.NumberColumn("Precio Original ($)", format="%.0f")
             }
             
-            # 🔴 SEGURIDAD: Solo pasamos a "disabled" las columnas que realmente se están mostrando en pantalla
-            cols_a_bloquear = ["libro_id", "titulo", "precio_original"]
-            disabled_finales = [c for c in cols_a_bloquear if c in df_mostrar.columns]
+            disabled_finales = [c for c in ["libro_id", "titulo"] if c in df_mostrar.columns]
             
             df_editado = st.data_editor(
-                df_mostrar, use_container_width=True, hide_index=True,
-                disabled=disabled_finales, # Evita colapsos de Streamlit
-                column_config=config_columnas
+                df_mostrar, use_container_width=True, hide_index=True, 
+                disabled=disabled_finales, column_config=config_columnas
             )
             
-            # 🔴 UX PERFECTA: El botón siempre está ahí, solo se activa si escribes algo
             hay_cambios = not df_mostrar.equals(df_editado)
             
             if st.button("💾 Guardar Cambios en Tabla", type="primary", use_container_width=True, disabled=not hay_cambios):
                 with st.spinner("Actualizando datos..."):
-                    num_actualizados = actualizar_libros_batch(df_mostrar, df_editado)
+                    # Mandamos al procesador tanto df_filtrado original (para que lea el Dcto %) como el editado
+                    num_actualizados = actualizar_libros_batch(df_filtrado, df_editado)
                     st.success(f"¡Se actualizaron {num_actualizados} libros!")
-                    st.snow() 
-                    time.sleep(2)
+                    st.snow()
+                    time.sleep(1.5)
                     st.rerun()
 
     with tab_crear:
-        st.markdown("#### ➕ Ingresar Nuevo Libro")
         with st.form("form_nuevo_libro", clear_on_submit=False):
             val_titulo = st.text_input("Título:", key="n_tit")
-            
             opciones_autor = [""] + obtener_unicos(df_inventario, 'autor')
             val_autor_ex = st.selectbox("Autor (Existente):", options=opciones_autor, key="n_aut_ex")
             val_autor_nu = st.text_input("O escribe un nuevo Autor:", key="n_aut_nu")
-            
             opciones_editorial = [""] + obtener_unicos(df_inventario, 'editorial')
             val_edit_ex = st.selectbox("Editorial (Existente):", options=opciones_editorial, key="n_edi_ex")
             val_edit_nu = st.text_input("O escribe una nueva Editorial:", key="n_edi_nu")
-            
             opciones_genero = [""] + obtener_unicos(df_inventario, 'genero')
             val_gen_ex = st.selectbox("Género (Existente):", options=opciones_genero, key="n_gen_ex")
             val_gen_nu = st.text_input("O escribe un nuevo Género:", key="n_gen_nu")
-            
             opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
             val_enc_ex = st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="n_enc_ex")
             val_enc_nu = st.text_input("O escribe una nueva Encuadernación:", key="n_enc_nu")
-            
             c1, c2, c3 = st.columns(3)
             val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
             val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
             val_precio = c3.number_input("Precio ($):", min_value=0.0, format="%.0f", key="n_pre")
-            
             st.write("")
             col_btn1, col_btn2 = st.columns(2)
             btn_guardar = col_btn1.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True)
             btn_limpiar = col_btn2.form_submit_button("🧹 Limpiar Formulario", type="secondary", use_container_width=True)
-            
             claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre"]
-            
             if btn_limpiar:
                 for key in claves_formulario:
-                    if key in st.session_state:
-                        del st.session_state[key]
+                    if key in st.session_state: del st.session_state[key]
                 st.rerun()
-
             if btn_guardar:
                 autor_final = val_autor_nu if val_autor_nu else val_autor_ex
                 editorial_final = val_edit_nu if val_edit_nu else val_edit_ex
                 genero_final = val_gen_nu if val_gen_nu else val_gen_ex
                 enc_final = val_enc_nu if val_enc_nu else val_enc_ex
-                
                 if val_titulo and autor_final and editorial_final:
-                    success, error = crear_nuevo_libro(
-                        val_titulo, autor_final, editorial_final, genero_final, 
-                        enc_final, val_stock, val_precio, val_costo
-                    )
-                    
+                    success, error = crear_nuevo_libro(val_titulo, autor_final, editorial_final, genero_final, enc_final, val_stock, val_precio, val_costo)
                     if success:
-                        st.success("🎉 ¡Libro creado exitosamente!")
-                        st.snow()
+                        st.success("🎉 ¡Libro creado exitosamente!"); st.snow()
                         for key in claves_formulario:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                        time.sleep(1.5)
-                        st.rerun()
-                    else: 
-                        st.error(f"❌ {error}")
-                else: 
-                    st.warning("⚠️ Título, Autor y Editorial son obligatorios.")
+                            if key in st.session_state: del st.session_state[key]
+                        time.sleep(1.5); st.rerun()
+                    else: st.error(f"❌ {error}")
+                else: st.warning("⚠️ Título, Autor y Editorial son obligatorios.")
 
     with tab_desc:
         st.markdown("#### 📉 Aplicar Descuento Masivo")
         st.info(f"Vas a modificar el precio de **{len(df_filtrado)}** libros listados en tu búsqueda actual.")
         porcentaje = st.slider("Porcentaje de descuento (%):", 0, 100, 10, key="slider_descuento")
         st.caption("Nota: Aplicar un 0% restaura los libros a su Precio Original.")
-        
         if st.button("🚀 Confirmar y Aplicar Descuento", type="primary", use_container_width=True):
             if df_filtrado.empty:
                 st.warning("No hay libros visibles o filtrados para aplicar el descuento.")
             else:
                 lista_ids = df_filtrado['libro_id'].tolist()
-                with st.spinner("Aplicando descuento en la base de datos..."):
+                with st.spinner("Aplicando descuento..."):
                     success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje)
                 if success:
-                    st.success(mensaje)
-                    st.snow() 
-                    time.sleep(2)
-                    st.rerun()
-                else: 
-                    st.error(f"Error al aplicar descuento: {mensaje}")
+                    st.success(mensaje); st.snow()
+                    time.sleep(2); st.rerun()
+                else: st.error(f"Error al aplicar descuento: {mensaje}")
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
         st.warning("⚠️ Atención: Esta acción no se puede deshacer.")
-        
         titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
         titulo_a_eliminar = st.selectbox("Selecciona un libro de la lista filtrada:", titulos_filtrados)
-        
         if titulo_a_eliminar:
             libro_id = int(df_filtrado[df_filtrado['titulo'] == titulo_a_eliminar].iloc[0]['libro_id'])
             if st.button(f"Eliminar '{titulo_a_eliminar}' permanentemente", type="primary", use_container_width=True):
                 success, error = eliminar_libro(libro_id)
                 if success: 
                     st.success("El libro fue eliminado de la base de datos.")
-                    time.sleep(1.5)
-                    st.rerun()
-                else: 
-                    st.error(f"Error: {error}")
+                    time.sleep(1.5); st.rerun()
+                else: st.error(f"Error: {error}")
 
 if __name__ == "__main__":
     mostrar_inventario()
