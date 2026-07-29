@@ -50,7 +50,8 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
 def obtener_ids_libros_poseidos_por_cliente(cliente_id):
     """
     Obtiene un conjunto de todos los IDs de libros que un cliente posee,
-    consultando: librero_historico, registro_ventas Y la tabla asignaciones.
+    consultando: librero_historico, registro_ventas Y asignaciones,
+    IGNORANDO CUIDADOSAMENTE los valores nulos.
     """
     if not cliente_id:
         return set()
@@ -62,12 +63,14 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
         # 1. Obtener libros del librero histórico
         res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
         if res_historial.data:
-            ids_poseidos.update(item['libro_id'] for item in res_historial.data if item.get('libro_id'))
+            # Filtra explícitamente los None antes de añadirlos
+            ids_poseidos.update(item['libro_id'] for item in res_historial.data if item.get('libro_id') is not None)
 
-        # 2. Obtener libros de asignaciones anteriores (estén o no en el histórico)
+        # 2. Obtener libros de asignaciones anteriores
         res_asignaciones = conn.table("asignaciones").select("libro_suscripcion_id").eq("cliente_id", cliente_id).execute()
         if res_asignaciones.data:
-            ids_poseidos.update(item['libro_suscripcion_id'] for item in res_asignaciones.data if item.get('libro_suscripcion_id'))
+            # Filtra explícitamente los None para no corromper el conjunto de IDs
+            ids_poseidos.update(item['libro_suscripcion_id'] for item in res_asignaciones.data if item.get('libro_suscripcion_id') is not None)
 
         # 3. Obtener libros del registro de ventas
         res_ventas = conn.table("registro_ventas").select("libros_vendidos").eq("cliente_id", cliente_id).execute()
@@ -77,15 +80,16 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
                     try:
                         libros_json = json.loads(venta['libros_vendidos'])
                         for libro in libros_json:
-                            if libro.get('libro_id'):
+                            # Aseguramos que el libro_id no sea None
+                            if libro.get('libro_id') is not None:
                                 ids_poseidos.add(libro['libro_id'])
                     except (json.JSONDecodeError, TypeError):
                         continue
                         
         return ids_poseidos
     except Exception as e:
-        st.error(f"Error al obtener libros poseídos por el cliente {cliente_id}: {e}")
-        return ids_poseidos
+        st.error(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
+        return set()
     
 def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
     """
