@@ -658,10 +658,12 @@ def mostrar_asignaciones():
                             cliente_id = dict_clientes[cliente_nom]
                             asig_row = df_pendientes[df_pendientes['cliente_id'] == cliente_id].iloc[0]
                             
-                            # Opción para ver o no sin stock
-                            ver_sin_stock = st.checkbox("Mostrar también libros sin stock disponible", value=True)
+                            # --- NUEVOS CONTROLES DE INTERFAZ (CHECKBOXES) ---
+                            col_chk1, col_chk2 = st.columns(2)
+                            ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock disponible", value=True)
+                            ver_todos_generos = col_chk2.checkbox("📚 Mostrar todos los géneros (Ignorar preferencias)", value=False)
                             
-                            # Carga de catálogo filtrado (excluyendo poseídos) y gustos normalizados
+                            # Carga de catálogo filtrado (excluyendo poseídos SIEMPRE)
                             df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=ver_sin_stock)
                             
                             if gustos_cliente:
@@ -670,59 +672,67 @@ def mostrar_asignaciones():
                                 st.caption("ℹ️ El cliente no registra géneros de preferencia específicos.")
                                 
                             if df_libros_disponibles.empty:
-                                st.warning("No hay libros disponibles que el cliente no posea ya.")
+                                st.warning("No hay libros disponibles en el catálogo que el cliente no posea ya.")
                             else:
                                 df_libros_a_mostrar = df_libros_disponibles.copy()
                                 
-                                # --- LÓGICA DE ORDENAMIENTO Y SUGERENCIA CORREGIDA ---
                                 if gustos_cliente:
-                                    # 1. Normaliza los géneros del catálogo de libros para una comparación segura
+                                    # Normaliza los géneros
                                     df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto(str(x)).upper())
                                     
-                                    # 2. Crea una función para marcar si un libro es sugerido
+                                    # Función para marcar coincidencias
                                     def es_sugerido(row):
-                                        # isdisjoint comprueba si no hay elementos en común (es muy eficiente)
                                         return not set(gustos_cliente).isdisjoint(set(row['genero_limpio'].split()))
 
                                     df_libros_a_mostrar['es_sugerido'] = df_libros_a_mostrar.apply(es_sugerido, axis=1)
                                     
-                                    # 3. Ordena: los sugeridos van primero, luego por título
+                                    if not ver_todos_generos:
+                                        # Si NO está marcado, filtramos estricto por gustos
+                                        df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido'] == True]
+                                        
+                                        if df_libros_a_mostrar.empty:
+                                            st.warning("⚠️ No hay libros que coincidan con sus gustos. Marca 'Mostrar todos los géneros' para ver el resto del catálogo.")
+                                            
+                                    # Ordenamos: sugeridos (⭐) primero, luego alfabético
                                     df_libros_a_mostrar.sort_values(by=['es_sugerido', 'titulo'], ascending=[False, True], inplace=True)
+                                else:
+                                    df_libros_a_mostrar['es_sugerido'] = False
+                                    df_libros_a_mostrar.sort_values(by='titulo', inplace=True)
 
-                                # Preparamos las etiquetas para el selectbox
-                                df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
-                                    lambda row: f"⭐ {row['titulo']} (Stock: {row['stock']})" if 'es_sugerido' in row and row['es_sugerido'] else f"  {row['titulo']} (Stock: {row['stock']})",
-                                    axis=1
-                                )
-                                
-                                dict_libros = dict(zip(df_libros_a_mostrar['label_opcion'], df_libros_a_mostrar['libro_id']))
-                                libro_sel_label = st.selectbox("Seleccionar Libro para Asignar:", options=list(dict_libros.keys()))
-                                
-                                if libro_sel_label:
-                                    libro_id_sel = dict_libros[libro_sel_label]
-                                    libro_info = df_libros_a_mostrar[df_libros_a_mostrar['libro_id'] == libro_id_sel].iloc[0]
+                                if not df_libros_a_mostrar.empty:
+                                    # Preparamos las etiquetas
+                                    df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
+                                        lambda row: f"⭐ {row['titulo']} (Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Stock: {row['stock']})",
+                                        axis=1
+                                    )
                                     
-                                    if libro_info['stock'] <= 0:
-                                        st.warning("⚠️ **Atención:** El libro seleccionado tiene **0 o menos stock**.")
+                                    dict_libros = dict(zip(df_libros_a_mostrar['label_opcion'], df_libros_a_mostrar['libro_id']))
+                                    libro_sel_label = st.selectbox("Seleccionar Libro para Asignar:", options=list(dict_libros.keys()))
                                     
-                                    if st.button("📌 Asignar Libro Seleccionado", type="primary", use_container_width=True):
-                                        ok, err = asignar_libro_principal(
-                                            asignacion_id=asig_row['asignacion_id'],
-                                            cliente_id=cliente_id,
-                                            libro_id=libro_id_sel,
-                                            stock_actual=libro_info['stock'],
-                                            ano=ano_sel,
-                                            mes=mes_num,
-                                            titulo=libro_info['titulo'],
-                                            autor=libro_info.get('autor', '')
-                                        )
-                                        if ok:
-                                            st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
-                                            st.balloons()
-                                            time.sleep(1.5)
-                                            st.rerun()
-                                        else:
-                                            st.error(f"Error al asignar: {err}")
+                                    if libro_sel_label:
+                                        libro_id_sel = dict_libros[libro_sel_label]
+                                        libro_info = df_libros_a_mostrar[df_libros_a_mostrar['libro_id'] == libro_id_sel].iloc[0]
+                                        
+                                        if libro_info['stock'] <= 0:
+                                            st.warning("⚠️ **Atención:** El libro seleccionado tiene **0 o menos stock**.")
+                                        
+                                        if st.button("📌 Asignar Libro Seleccionado", type="primary", use_container_width=True):
+                                            ok, err = asignar_libro_principal(
+                                                asignacion_id=asig_row['asignacion_id'],
+                                                cliente_id=cliente_id,
+                                                libro_id=libro_id_sel,
+                                                stock_actual=libro_info['stock'],
+                                                ano=ano_sel,
+                                                mes=mes_num,
+                                                titulo=libro_info['titulo'],
+                                                autor=libro_info.get('autor', '')
+                                            )
+                                            if ok:
+                                                st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
+                                                time.sleep(1.5)
+                                                st.rerun()
+                                            else:
+                                                st.error(f"Error al asignar: {err}")
 
 
     # ==========================================================
