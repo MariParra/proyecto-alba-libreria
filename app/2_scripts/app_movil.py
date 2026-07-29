@@ -48,14 +48,15 @@ if CLIENT_ID and CLIENT_SECRET:
 else:
     oauth2 = None
     
+@st.cache_data
 def get_image_as_base64(path):
-    """Convierte una imagen local a una cadena de texto Base64."""
+    """Convierte una imagen local a una cadena de texto Base64 de forma instantánea."""
     try:
         with open(path, "rb") as f:
             data = base64.b64encode(f.read()).decode("utf-8")
         return f"data:image/gif;base64,{data}"
     except IOError:
-        return None # Devuelve None si no encuentra el archivo
+        return None
     
 def decodificar_token(token):
     partes = token.split(".")
@@ -110,15 +111,37 @@ def mostrar_login():
     with col3:
         # 1. Construimos la ruta segura
         ruta_gif = os.path.join(script_dir, "pricono.gif")
-        # 2. Convertimos el GIF a Base64
+        # 2. Convertimos el GIF a Base64 usando el caché en memoria
         gif_base64 = get_image_as_base64(ruta_gif)
         
-        # 3. Si se pudo convertir, lo fijamos en la esquina con CSS
+        # 3. Si se pudo convertir, aplicamos un diseño inteligente para PC y Móvil
         if gif_base64:
             st.markdown(
                 f'''
-                <div style="position: fixed; bottom: 30px; right: 40px; z-index: 999;">
-                    <img src="{gif_base64}" alt="animacion" width="300">
+                <style>
+                    /* DISEÑO POR DEFECTO: Pantallas Grandes (PC y Tablets grandes) */
+                    .gif-bienvenida {{
+                        position: fixed;
+                        bottom: 30px;
+                        right: 40px;
+                        width: 250px; /* Tamaño elegante para PC */
+                        z-index: 999;
+                    }}
+
+                    /* DISEÑO EN MÓVILES: Pantallas de hasta 768px (Celulares) */
+                    @media (max-width: 768px) {{
+                        .gif-bienvenida {{
+                            position: relative; /* Deja de flotar para no tapar el login */
+                            display: block;
+                            margin: 20px auto 0 auto; /* Se centra automáticamente abajo del login */
+                            bottom: auto;
+                            right: auto;
+                            width: 150px; /* Tamaño compacto para celulares */
+                        }}
+                    }}
+                </style>
+                <div class="gif-bienvenida">
+                    <img src="{gif_base64}" alt="animacion" style="width: 100%;">
                 </div>
                 ''',
                 unsafe_allow_html=True,
