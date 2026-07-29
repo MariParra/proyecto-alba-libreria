@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 import json
+import re
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -85,11 +86,11 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
     except Exception as e:
         st.error(f"Error al obtener libros poseídos por el cliente {cliente_id}: {e}")
         return ids_poseidos
-@st.cache_data(ttl=60)
+    
 def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
     """
-    Filtra el catálogo quitando TODOS los libros que el cliente ya tiene (historial, ventas y asignaciones previas).
-    Devuelve también sus gustos.
+    Filtra el catálogo quitando TODOS los libros que el cliente ya tiene.
+    Devuelve el catálogo de opciones y la lista de gustos normalizados.
     """
     df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock)
     if df_catalogo.empty or not cliente_id:
@@ -97,7 +98,7 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
     
     conn = get_db_connection()
     try:
-        # Aquí se usa el "filtro triple" que creamos
+        # Usa el "filtro triple" que ya validamos
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
         if ids_poseidos:
@@ -106,7 +107,10 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
+            # --- NORMALIZACIÓN APLICADA ---
+            # Limpia, quita tildes y pasa a mayúsculas los géneros preferidos de la clienta.
+            generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+            generos_pref = [limpiar_texto(g.strip()).upper() for g in generos_brutos if g.strip()]
         
         return df_catalogo, generos_pref
     except Exception as e:
@@ -249,10 +253,10 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
     except Exception as e: return False, str(e)
 
 
-def generar_propuesta_azar(df_pendientes):
+def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
     conn = get_db_connection()
     
-    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=False)
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock)
     stock_local = df_catalogo.set_index('libro_id')['stock'].to_dict() if not df_catalogo.empty else {}
     
     propuesta = []
@@ -265,28 +269,39 @@ def generar_propuesta_azar(df_pendientes):
         if df_catalogo.empty:
             sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Catálogo vacío o sin stock."})
             continue
+            
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
-        # El resto de la lógica de la función permanece exactamente igual.
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
-            
-        mask_disponibles = (~df_catalogo['libro_id'].isin(ids_poseidos)) & (df_catalogo['libro_id'].map(lambda x: stock_local.get(x, 0) > 0))
-        libros_disponibles = df_catalogo[mask_disponibles]
+            # --- NORMALIZACIÓN APLICADA ---
+            generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+            generos_pref = [limpiar_texto(g.strip()).upper() for g in generos_brutos if g.strip()]
+
+        # Usamos .copy() para evitar SettingWithCopyWarning
+        libros_disponibles = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)].copy()
         
+        # Filtramos por stock si es necesario
+        if not incluir_sin_stock:
+            libros_disponibles = libros_disponibles[libros_disponibles['libro_id'].map(lambda x: stock_local.get(x, 0) > 0)]
+
         if libros_disponibles.empty:
             sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Ya tiene todos los libros del catálogo o no queda stock."})
             continue
             
         if generos_pref:
-            patron = '|'.join(generos_pref)
-            mask_gustos = libros_disponibles['genero'].str.contains(patron, case=False, na=False) | libros_disponibles['titulo'].str.contains(patron, case=False, na=False)
+            # --- NORMALIZACIÓN DEL CATÁLOGO PARA COMPARAR ---
+            libros_disponibles['genero_limpio'] = libros_disponibles['genero'].apply(lambda x: limpiar_texto(str(x)).upper())
+            
+            # Escapamos caracteres especiales para el regex (ej: LGTBQ+)
+            patron = '|'.join([re.escape(g) for g in generos_pref])
+            
+            mask_gustos = libros_disponibles['genero_limpio'].str.contains(patron, na=False)
             df_sugeridos = libros_disponibles[mask_gustos]
             
             if df_sugeridos.empty:
-                sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock disponible para sus géneros preferidos: {', '.join(generos_pref)}"})
+                sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock disponible para sus géneros preferidos."})
                 continue
             else:
                 libro_elegido = df_sugeridos.sample(1).iloc[0]
