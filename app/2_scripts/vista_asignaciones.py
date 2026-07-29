@@ -247,15 +247,18 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
     conn = get_db_connection()
     try:
         conn.table("libros").update({"stock": max(0, int(stock_actual) - 1)}).eq("libro_id", int(libro_id)).execute()
-        conn.table("asignaciones").update({"libro_suscripcion_id": int(libro_id), "estado": "LIBRO ASIGNADO"}).eq("asignacion_id", int(asignacion_id)).execute()
+        conn.table("asignaciones").update({
+            "libro_suscripcion_id": int(libro_id), 
+            "estado_envio": "LIBRO ASIGNADO"
+        }).eq("asignacion_id", int(asignacion_id)).execute()
         
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).execute()
         if not res_hist.data:
             conn.table("librero_historico").insert({"cliente_id": int(cliente_id), "libro_id": int(libro_id), "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
         return True, ""
-    except Exception as e: return False, str(e)
-
+    except Exception as e: 
+        return False, str(e)
 
 def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
     conn = get_db_connection()
