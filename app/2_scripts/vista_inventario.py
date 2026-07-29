@@ -238,8 +238,9 @@ def mostrar_inventario():
     if encuadernaciones_seleccionadas: df_filtrado = df_filtrado[df_filtrado['encuadernacion'].isin(encuadernaciones_seleccionadas)]
     
     if not df_filtrado.empty:
-        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
-        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
+        df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio)]
+        df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock)]
+
         
     if solo_descuentos and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
@@ -258,7 +259,14 @@ def mostrar_inventario():
         columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
         columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
-        columnas_extra_seleccionadas = st.multiselect("Añadir/Quitar columnas de la tabla:", options=columnas_opcionales_disponibles, default=[c for col in columnas_por_defecto if c in columnas_opcionales_disponibles])
+        favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles] # <-- FILTRO DE SEGURIDAD
+        
+        columnas_extra_seleccionadas = st.multiselect(
+            "Añadir/Quitar columnas de la tabla:", 
+            options=columnas_opcionales_disponibles, 
+            default=favoritos_disponibles # <-- Ahora este parámetro es 100% inmune
+        )
+        
         columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
         
         def estilizar_catalogo(data):
