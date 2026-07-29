@@ -39,9 +39,39 @@ def cargar_libros_caja():
 def cargar_clientes_caja():
     conn = get_db_connection()
     try:
-        res = conn.table("clientes").select("cliente_id, nombre, email, telefono, status").execute()
+        # 🔴 Añadimos rut y direccion a la descarga
+        res = conn.table("clientes").select("cliente_id, nombre, email, telefono, status, rut, direccion").execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except: return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status'])
+    except: 
+        return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
+
+
+def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_existente=None):
+    if not nombre: return None
+    conn = get_db_connection()
+
+    datos = {
+        "nombre": limpiar_texto(nombre), 
+        "email": limpiar_texto(correo), 
+        "telefono": limpiar_texto(telefono),
+        "rut": limpiar_texto(rut),
+        "direccion": limpiar_texto(direccion)
+    }
+    
+    try:
+        if cliente_id_existente:
+            # Si el cliente ya existe, actualizamos todo el contacto y NO tocamos su 'status'
+            conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
+            return cliente_id_existente
+        else:
+            # Si el cliente es nuevo, lo creamos con el estado base
+            datos["status"] = "CLIENTE REGULAR"
+            response = conn.table("clientes").insert(datos).execute()
+            return response.data[0]['cliente_id']
+    except Exception as e: 
+        print(f"Error gestionando cliente: {e}")
+        return None
+
 
 def cargar_historial_completo():
     conn = get_db_connection()
@@ -80,28 +110,31 @@ def cargar_historial_completo():
         st.error(f"Error cargando historial: {e}")
         return pd.DataFrame()
 
-def verificar_estado_cliente(cliente_id):
-    conn = get_db_connection()
-    try:
-        res = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", cliente_id).execute()
-        if res.data and len(res.data) > 0: return "SUSCRITO"
-        return "CLIENTE REGULAR"
-    except: return "CLIENTE REGULAR"
-
 def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
     if not nombre: return None
     conn = get_db_connection()
-    datos = {"nombre": limpiar_texto(nombre), "email": limpiar_texto(correo), "telefono": limpiar_texto(telefono)}
+    
+    # Preparamos solo los datos de contacto
+    datos = {
+        "nombre": limpiar_texto(nombre), 
+        "email": limpiar_texto(correo), 
+        "telefono": limpiar_texto(telefono)
+    }
+    
     try:
         if cliente_id_existente:
-            datos["status"] = verificar_estado_cliente(cliente_id_existente)
+            # Si el cliente ya existe, actualizamos contacto y NO tocamos su 'status'
             conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
             return cliente_id_existente
         else:
+            # Si el cliente es nuevo, lo creamos con el estado base
             datos["status"] = "CLIENTE REGULAR"
             response = conn.table("clientes").insert(datos).execute()
             return response.data[0]['cliente_id']
-    except: return None
+    except Exception as e: 
+        print(f"Error gestionando cliente: {e}")
+        return None
+
 
 def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
     conn = get_db_connection()
@@ -262,7 +295,9 @@ def mostrar_caja():
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
-        c_id, c_nombre, c_correo, c_telefono = None, "", "", ""
+        
+        # 🔴 Añadimos las variables de RUT y Dirección
+        c_id, c_nombre, c_correo, c_telefono, c_rut, c_direccion = None, "", "", "", "", ""
         
         if modo_cliente == "👤 Buscar Existente":
             if not df_clientes.empty:
@@ -273,16 +308,29 @@ def mostrar_caja():
                     c_nombre = datos_c['nombre']
                     c_correo = datos_c.get('email', '')
                     c_telefono = datos_c.get('telefono', '')
+                    c_rut = datos_c.get('rut', '')
+                    c_direccion = datos_c.get('direccion', '')
+                    
                     with st.expander(f"✏️ Ver/Editar datos (Status: {datos_c.get('status', 'REGULAR')})", expanded=False):
-                        c_nombre = st.text_input("Nombre:", value=c_nombre)
-                        c_correo = st.text_input("Correo:", value=c_correo)
-                        c_telefono = st.text_input("Teléfono:", value=c_telefono)
-            else: st.warning("No hay clientes registrados.")
+                        # 🔴 Organizamos en columnas para que no ocupe tanto espacio hacia abajo
+                        col_cd1, col_cd2 = st.columns(2)
+                        c_nombre = col_cd1.text_input("Nombre:", value=c_nombre)
+                        c_rut = col_cd2.text_input("RUT:", value=c_rut)
+                        c_correo = col_cd1.text_input("Correo:", value=c_correo)
+                        c_telefono = col_cd2.text_input("Teléfono:", value=c_telefono)
+                        c_direccion = st.text_input("Dirección de Despacho:", value=c_direccion)
+            else: 
+                st.warning("No hay clientes registrados.")
         else:
             with st.container(border=True):
-                c_nombre = st.text_input("Nombre del nuevo cliente:")
-                c_correo = st.text_input("Correo (Opcional):")
-                c_telefono = st.text_input("Teléfono (Opcional):")
+                col_cn1, col_cn2 = st.columns(2)
+                c_nombre = col_cn1.text_input("Nombre del nuevo cliente:")
+                c_rut = col_cn2.text_input("RUT (Opcional):")
+                c_correo = col_cn1.text_input("Correo (Opcional):")
+                c_telefono = col_cn2.text_input("Teléfono (Opcional):")
+                c_direccion = st.text_input("Dirección de Despacho (Opcional):")
+                
+        st.markdown("---")
                 
         st.markdown("---")
         st.markdown("### 2️⃣ Añadir Libros al Carrito")
