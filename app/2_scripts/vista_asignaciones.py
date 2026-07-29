@@ -692,7 +692,7 @@ def mostrar_asignaciones():
                                     
                                     if not ver_todos_generos:
                                         # Si NO está marcado, filtramos estricto por gustos
-                                        df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido'] == True]
+                                        df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido']]
                                         
                                         if df_libros_a_mostrar.empty:
                                             st.warning("⚠️ No hay libros que coincidan con sus gustos. Marca 'Mostrar todos los géneros' para ver el resto del catálogo.")
@@ -704,11 +704,11 @@ def mostrar_asignaciones():
                                     df_libros_a_mostrar.sort_values(by='titulo', inplace=True)
 
                                 if not df_libros_a_mostrar.empty:
-                                    # Preparamos las etiquetas
                                     df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
-                                        lambda row: f"⭐ {row['titulo']} (Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Stock: {row['stock']})",
+                                        lambda row: f"⭐ {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})",
                                         axis=1
                                     )
+
                                     
                                     dict_libros = dict(zip(df_libros_a_mostrar['label_opcion'], df_libros_a_mostrar['libro_id']))
                                     libro_sel_label = st.selectbox("Seleccionar Libro para Asignar:", options=list(dict_libros.keys()))
