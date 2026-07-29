@@ -28,12 +28,22 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
     """Carga los libros. Permite incluir los que no tienen stock si se solicita."""
     conn = get_db_connection()
     try:
-        query = conn.table("libros").select("libro_id, titulo, autor, precio, stock")
+        query = conn.table("libros").select("libro_id, titulo, autor, genero, precio, stock")
+        
         if not incluir_sin_stock:
             query = query.gt("stock", 0)
+            
         res = query.execute()
-        return pd.DataFrame(res.data)
-    except: return pd.DataFrame()
+        df = pd.DataFrame(res.data)
+        
+        if not df.empty:
+            df['genero'] = df['genero'].fillna("").astype(str)
+            
+        return df
+    except Exception as e: 
+        print(f"Error cargando catálogo asignaciones: {e}")
+        return pd.DataFrame()
+
 
 @st.cache_data(ttl=60)
 def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
@@ -44,13 +54,11 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
     
     conn = get_db_connection()
     try:
-        # 1. Quitar libros que ya tiene
         res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
         if res_historial.data:
             ids_poseidos = {item['libro_id'] for item in res_historial.data if item['libro_id']}
             df_catalogo = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)]
             
-        # 2. Obtener géneros de preferencia de la clienta
         res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
@@ -66,7 +74,6 @@ def cargar_asignaciones_mes(ano, mes):
     try:
         res_asig = conn.table("asignaciones").select("*").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         
-        # 🔴 AÑADIDO: costo_caja y utilidad
         columnas_esperadas = ['asignacion_id', 'cliente_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'estado_envio', 'pagado', 'envio_pagado', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'costo_caja', 'utilidad']
         
         if not res_asig.data:
@@ -74,7 +81,6 @@ def cargar_asignaciones_mes(ano, mes):
             
         df_asig = pd.DataFrame(res_asig.data)
         
-        # Unimos con otras tablas
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
@@ -86,7 +92,6 @@ def cargar_asignaciones_mes(ano, mes):
         if res_subs.data: df_asig = pd.merge(df_asig, pd.DataFrame(res_subs.data), on='cliente_id', how='left')
         df_asig.rename(columns={'titulo': 'titulo_libro', 'nombre': 'nombre_cliente'}, inplace=True)
         
-        # --- LIMPIEZA ABSOLUTA DE NULOS ---
         for col in ['titulo_libro', 'nombre_cliente', 'valor_suscripcion', 'extras', 'comentario']:
             if col not in df_asig.columns: df_asig[col] = ''
         
@@ -94,7 +99,6 @@ def cargar_asignaciones_mes(ano, mes):
         df_asig['nombre_cliente'].fillna('Cliente Eliminado', inplace=True)
         df_asig['valor_suscripcion'] = pd.to_numeric(df_asig['valor_suscripcion'], errors='coerce').fillna(0)
         
-        # 🔴 AÑADIDO: Cálculo de costo_caja y utilidad
         df_asig['costo_caja'] = pd.to_numeric(df_asig.get('costo_caja', 10000), errors='coerce').fillna(10000)
         df_asig['utilidad'] = df_asig['valor_suscripcion'] - df_asig['costo_caja']
         
@@ -135,7 +139,6 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     if df_suscritos.empty:
         return False, "No hay clientes con estado 'ACTIVA' en tu base de datos."
     
-    # Nos aseguramos de que ambas listas de IDs sean del mismo tipo (números) antes de comparar
     df_suscritos['cliente_id'] = pd.to_numeric(df_suscritos['cliente_id'], errors='coerce')
     if not df_mes_actual.empty:
         df_mes_actual['cliente_id'] = pd.to_numeric(df_mes_actual['cliente_id'], errors='coerce')
@@ -160,7 +163,6 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
             if not df_valores.empty and c_id in df_valores['cliente_id'].values:
                 val_sub = float(df_valores[df_valores['cliente_id'] == c_id]['valor_suscripcion'].iloc[0])
             
-            # 🔴 AÑADIDO: Insertamos la caja con costo_caja fijo = 10000
             datos = {
                 "cliente_id": c_id, "ano": int(ano), "mes": int(mes),
                 "estado_envio": "PENDIENTE PREPARACION", "pagado": "NO", "envio_pagado": "NO",
@@ -190,48 +192,116 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
 def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, ano, mes, titulo, autor):
     conn = get_db_connection()
     try:
-        # 1. Descontar stock
         conn.table("libros").update({"stock": max(0, int(stock_actual) - 1)}).eq("libro_id", int(libro_id)).execute()
+        conn.table("asignaciones").update({"libro_suscripcion_id": int(libro_id), "estado": "LIBRO ASIGNADO"}).eq("asignacion_id", int(asignacion_id)).execute()
         
-        # 2. ¡Guardar el libro en la asignación!
-        conn.table("asignaciones").update({"libro_suscripcion_id": int(libro_id)}).eq("asignacion_id", int(asignacion_id)).execute()
-        
-        # 3. Añadir al historial
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).execute()
         if not res_hist.data:
             conn.table("librero_historico").insert({"cliente_id": int(cliente_id), "libro_id": int(libro_id), "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
-        # 4. Limpiar cachés para refrescar
-        cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
         return True, ""
     except Exception as e: return False, str(e)
 
-def asignar_al_azar_inteligente(df_pendientes, ano, mes):
-    if df_pendientes.empty: return False, "No hay pendientes para asignar."
-    exitos = 0
+
+# 🔴 NUEVA LÓGICA DE ASIGNACIÓN INTELIGENTE CON VISTA PREVIA
+def generar_propuesta_azar(df_pendientes):
+    conn = get_db_connection()
+    
+    # 1. Cargamos catálogo global y registramos el stock en una memoria temporal (para descontar en vivo)
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=False)
+    stock_local = df_catalogo.set_index('libro_id')['stock'].to_dict() if not df_catalogo.empty else {}
+    
+    propuesta = []
+    sin_asignar = []
+    
     for _, asig in df_pendientes.iterrows():
         cliente_id = int(asig['cliente_id'])
-        df_libros_seguros, generos_pref = cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False)
-        if df_libros_seguros.empty: continue
+        nombre_cliente = asig['nombre_cliente']
         
-        df_sugeridos = pd.DataFrame()
+        if df_catalogo.empty:
+            sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Catálogo vacío o sin stock."})
+            continue
+            
+        # Revisamos historial de la clienta
+        res_historial = conn.table("librero_historico").select("libro_id").eq("cliente_id", cliente_id).execute()
+        ids_poseidos = {item['libro_id'] for item in res_historial.data if item['libro_id']} if res_historial.data else set()
+        
+        # Revisamos gustos
+        res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+        generos_pref = []
+        if res_susc.data and res_susc.data[0].get('generos_preferencia'):
+            generos_pref = [g.strip().upper() for g in res_susc.data[0]['generos_preferencia'].split(',')]
+            
+        # Filtramos libros que NO tenga y que AÚN tengan stock en nuestra simulación mental
+        mask_disponibles = (~df_catalogo['libro_id'].isin(ids_poseidos)) & (df_catalogo['libro_id'].map(lambda x: stock_local.get(x, 0) > 0))
+        libros_disponibles = df_catalogo[mask_disponibles]
+        
+        if libros_disponibles.empty:
+            sin_asignar.append({"Cliente": nombre_cliente, "Motivo": "Ya tiene todos los libros o no queda stock de libros nuevos."})
+            continue
+            
+        # Evaluamos gustos
         if generos_pref:
             patron = '|'.join(generos_pref)
-            df_sugeridos = df_libros_seguros[df_libros_seguros['titulo'].str.contains(patron, case=False, na=False)]
+            # Buscamos coincidencias en género o título
+            mask_gustos = libros_disponibles['genero'].str.contains(patron, case=False, na=False) | libros_disponibles['titulo'].str.contains(patron, case=False, na=False)
+            df_sugeridos = libros_disponibles[mask_gustos]
             
-        if not df_sugeridos.empty: libro_elegido = df_sugeridos.sample(1).iloc[0]
-        else: libro_elegido = df_libros_seguros.sample(1).iloc[0]
+            if df_sugeridos.empty:
+                # 🔴 REGLA APLICADA: Si no hay match con gustos, no le asigna basura. Queda libre.
+                sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock físico para los géneros: {', '.join(generos_pref)}"})
+                continue
+            else:
+                libro_elegido = df_sugeridos.sample(1).iloc[0]
+        else:
+            # Si la clienta no puso gustos, se le puede dar cualquiera
+            libro_elegido = libros_disponibles.sample(1).iloc[0]
+            
+        # Descontamos el stock de nuestra simulación para que no se lo dé a otra clienta por error
+        l_id = int(libro_elegido['libro_id'])
+        stock_local[l_id] -= 1
         
-        success, _ = asignar_libro_principal(
-            int(asig['asignacion_id']), cliente_id, int(libro_elegido['libro_id']),
-            int(libro_elegido['stock']), ano, mes, libro_elegido['titulo'], libro_elegido.get('autor', '')
-        )
-        if success: exitos += 1
-    
-    if exitos > 0: return True, f"Se asignaron {exitos} libros al azar."
-    else: return False, "No se pudo asignar ningún libro."
+        propuesta.append({
+            "asignacion_id": int(asig['asignacion_id']),
+            "cliente_id": cliente_id,
+            "Cliente": nombre_cliente,
+            "libro_id": l_id,
+            "Libro Asignado": libro_elegido['titulo'],
+            "Autor": libro_elegido.get('autor', ''),
+        })
+        
+    return propuesta, sin_asignar
 
-# 🔴 NUEVA FUNCIÓN OPTIMIZADA: Solo guarda envíos y ajustes manuales de escape hatch
+def confirmar_propuesta_azar(propuesta, ano, mes):
+    conn = get_db_connection()
+    exitos = 0
+    errores = []
+    
+    for prop in propuesta:
+        try:
+            # En vivo justo antes de guardar, chequeamos el stock real para evitar cruces
+            res_l = conn.table("libros").select("stock").eq("libro_id", prop['libro_id']).execute()
+            stock_real = res_l.data[0]['stock'] if res_l.data else 0
+            
+            conn.table("libros").update({"stock": max(0, int(stock_real) - 1)}).eq("libro_id", prop['libro_id']).execute()
+            conn.table("asignaciones").update({"libro_suscripcion_id": prop['libro_id'], "estado": "LIBRO ASIGNADO"}).eq("asignacion_id", prop['asignacion_id']).execute()
+            
+            res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", prop['cliente_id']).eq("libro_id", prop['libro_id']).execute()
+            if not res_hist.data:
+                conn.table("librero_historico").insert({
+                    "cliente_id": prop['cliente_id'], 
+                    "libro_id": prop['libro_id'], 
+                    "autor_historico": limpiar_texto(prop['Autor']), 
+                    "origen": f"ASIGNACIÓN {mes}/{ano}"
+                }).execute()
+            exitos += 1
+        except Exception as e:
+            errores.append(str(e))
+            
+    cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
+    return exitos, errores
+
+
 def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extras_manual, valor_extras_manual):
     conn = get_db_connection()
     try:
@@ -256,7 +326,6 @@ def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extr
 def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, monto_descuento=0.0):
     conn = get_db_connection()
     try:
-        # 1. Devolver stock si el libro existe en el catálogo
         res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_quitar).execute()
         if res_l.data:
             l_id = res_l.data[0]['libro_id']
@@ -264,23 +333,18 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
             origen = f"ASIGNACIÓN {mes}/{ano}" if tipo == "PRINCIPAL" else f"ASIGNACIÓN EXTRA {mes}/{ano}"
             conn.table("librero_historico").delete().eq("cliente_id", cliente_id).eq("libro_id", l_id).eq("origen", origen).execute()
             
-        # 2. Obtención segura del registro
         res_asig_exec = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()
-        if not res_asig_exec.data:
-            return False, "No se encontró la asignación."
-        
+        if not res_asig_exec.data: return False, "No se encontró la asignación."
         res_asig = res_asig_exec.data[0]
         
         if tipo == "PRINCIPAL":
-            conn.table("asignaciones").update({"libro_suscripcion_id": None}).eq("asignacion_id", asignacion_id).execute()
+            conn.table("asignaciones").update({"libro_suscripcion_id": None, "estado": "PENDIENTE PREPARACION"}).eq("asignacion_id", asignacion_id).execute()
         else:
             extras_str = str(res_asig.get('extras', ''))
             if "EXTRAS:" in extras_str:
                 limpio = extras_str.replace("EXTRAS:", "").strip()
                 delimitador = "|" if "|" in limpio else ","
                 lista_extras = [x.strip() for x in limpio.split(delimitador) if x.strip()]
-                
-                # Filtramos el libro seleccionado
                 nueva_lista = [x for x in lista_extras if x.upper() != titulo_quitar.upper()]
                 nuevo_texto = "EXTRAS: " + " | ".join(nueva_lista) if nueva_lista else ""
                 
@@ -295,16 +359,14 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
                 
         cargar_asignaciones_mes.clear(); cargar_catalogo_completo_libros.clear(); cargar_libros_filtrados_para_cliente.clear()
         return True, ""
-    except Exception as e: 
-        return False, str(e)
+    except Exception as e: return False, str(e)
 
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
     try:
         if pd.notna(libro_id) and libro_id:
             res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
-            if res_l.data:
-                conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
+            if res_l.data: conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
             conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
             
         if texto_extras and "EXTRAS:" in str(texto_extras):
@@ -339,7 +401,7 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             
             v_envio = float(row.get('valor_envio', 0.0) or 0.0)
             v_extras = float(row.get('valor_extras', 0.0) or 0.0)
-            costo_c = float(row.get('costo_caja', 10000.0) or 10000.0) # 🔴 AÑADIDO COSTO CAJA
+            costo_c = float(row.get('costo_caja', 10000.0) or 10000.0) 
             m_total = val_sub + v_envio + v_extras 
             
             datos = {
@@ -402,7 +464,6 @@ def mostrar_asignaciones():
         
     if mes_esta_cerrado: st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado.", icon="🔒")
     
-    # 🔴 RENOMBRADA LA OPCIÓN DEL MENÚ
     opciones_menu = [
         "📋 Gestión (Tabla Editable)", 
         "📖 Asignar Libro Principal", 
@@ -435,7 +496,6 @@ def mostrar_asignaciones():
             
             st.caption("Doble clic en las celdas para modificar. Los totales se recalcularán automáticamente.")
             
-            # 🔴 AÑADIDAS LAS NUEVAS COLUMNAS FINANCIERAS A LA TABLA
             columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_suscripcion', 'costo_caja', 'utilidad', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
             df_mostrar = df_filtrado[columnas_mostrar].copy()
             
@@ -443,7 +503,7 @@ def mostrar_asignaciones():
                 st.session_state.asignaciones_original = df_mostrar.copy()
                 
             config_cols = {
-                "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO"], required=True),
+                "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO", "EXTRAS AÑADIDOS"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
                 "valor_suscripcion": st.column_config.NumberColumn("Valor Suscripción ($)", format="$%.0f"),
@@ -455,7 +515,6 @@ def mostrar_asignaciones():
                 "comentario": st.column_config.TextColumn("Comentario", max_chars=300)
             }
                 
-            # 'utilidad' está bloqueada ya que es cálculo automático
             disabled_cols = columnas_mostrar if mes_esta_cerrado else ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'valor_suscripcion', 'utilidad', 'monto_total']
             
             df_editado = st.data_editor(
@@ -480,15 +539,52 @@ def mostrar_asignaciones():
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
                 
                 with st.container(border=True):
-                    st.markdown("### 🎲 Asignación al Azar (Masiva)")
-                    st.caption("Reparte libros disponibles a los clientes pendientes, respetando su historial.")
+                    st.markdown("### 🎲 Asignación al Azar (Masiva y Segura)")
+                    st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
                     st.metric("Cajas Pendientes", len(df_pendientes))
-                    if st.button("Aplicar al Azar a los Pendientes", type="primary", use_container_width=True):
+                    
+                    if st.button("🔍 Generar Propuesta (Previsualización)", type="primary", use_container_width=True):
                         if not df_pendientes.empty:
-                            ex, msg = asignar_al_azar_inteligente(df_pendientes, ano_sel, mes_num)
-                            if ex: st.success(msg), st.balloons(), st.rerun()
-                            else: st.error(msg)
+                            with st.spinner("Analizando inventario y gustos..."):
+                                prop, sin_asig = generar_propuesta_azar(df_pendientes)
+                                st.session_state.propuesta_azar = prop
+                                st.session_state.sin_asignar_azar = sin_asig
                         else: st.warning("No hay clientes pendientes.")
+                        
+                    # 🔴 POP-UP / VISTA PREVIA
+                    if 'propuesta_azar' in st.session_state:
+                        prop = st.session_state.propuesta_azar
+                        sin_asig = st.session_state.sin_asignar_azar
+                        
+                        st.markdown("---")
+                        st.markdown("#### 📝 Vista Previa de la Asignación")
+                        
+                        if prop:
+                            st.success(f"✅ Se encontraron libros perfectos para **{len(prop)}** clientas.")
+                            st.dataframe(pd.DataFrame(prop)[['Cliente', 'Libro Asignado', 'Autor']], hide_index=True, use_container_width=True)
+                        else:
+                            st.warning("El sistema no pudo encontrar ningún libro adecuado para las clientas pendientes.")
+                            
+                        if sin_asig:
+                            st.error(f"⚠️ **{len(sin_asig)} clientas no recibirán libro en este proceso automático.**")
+                            st.dataframe(pd.DataFrame(sin_asig), hide_index=True, use_container_width=True)
+                            
+                        col_conf1, col_conf2 = st.columns(2)
+                        
+                        if prop and col_conf1.button("✅ Confirmar y Guardar Asignaciones", type="primary", use_container_width=True):
+                            with st.spinner("Guardando y descontando stock..."):
+                                exitos, errs = confirmar_propuesta_azar(prop, ano_sel, mes_num)
+                                del st.session_state.propuesta_azar
+                                del st.session_state.sin_asignar_azar
+                                st.success(f"¡Se guardaron {exitos} asignaciones exitosamente!")
+                                st.balloons()
+                                time.sleep(2)
+                                st.rerun()
+                                
+                        if col_conf2.button("❌ Cancelar", use_container_width=True):
+                            del st.session_state.propuesta_azar
+                            del st.session_state.sin_asignar_azar
+                            st.rerun()
                         
                 with st.container(border=True):
                     st.markdown("### ✏️ Asignación Manual")
@@ -513,8 +609,8 @@ def mostrar_asignaciones():
                                 if generos_pref:
                                     st.success(f"Gustos de la clienta: **{', '.join(generos_pref)}**")
                                     patron = '|'.join(generos_pref)
-                                    sugeridos_df = df_libros_seguros[df_libros_seguros['titulo'].str.contains(patron, case=False, na=False)]
-                                    otros_df = df_libros_seguros[~df_libros_seguros['titulo'].str.contains(patron, case=False, na=False)]
+                                    sugeridos_df = df_libros_seguros[df_libros_seguros['genero'].str.contains(patron, case=False, na=False) | df_libros_seguros['titulo'].str.contains(patron, case=False, na=False)]
+                                    otros_df = df_libros_seguros[~(df_libros_seguros['genero'].str.contains(patron, case=False, na=False) | df_libros_seguros['titulo'].str.contains(patron, case=False, na=False))]
                                     opciones_libros_sugeridos = sugeridos_df['titulo_visual'].tolist()
                                     opciones_libros_otros = otros_df['titulo_visual'].tolist()
                                 else:
@@ -546,7 +642,7 @@ def mostrar_asignaciones():
                     else: st.success("¡Todos los clientes ya tienen su libro principal!")
 
     # ==========================================================
-    # 3. GESTIONAR ENVÍO Y AJUSTE MANUAL (NUEVO DISEÑO)
+    # 3. GESTIONAR ENVÍO Y AJUSTE MANUAL
     # ==========================================================
     elif opcion_menu == "🚚 Gestionar Envío y Ajuste Manual":
         if mes_esta_cerrado: st.warning("Mes cerrado.")
