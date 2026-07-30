@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import re
 from datetime import datetime
 from utilidades import get_db_connection, normalizar_texto, limpiar_texto
 
@@ -8,7 +9,7 @@ def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
     
-    # 1. Obtener clientes (AÑADIMOS EL RUT AQUÍ)
+    # 1. Obtener clientes
     res_clientes = conn.table("clientes").select("cliente_id, nombre, rut").execute()
     clientes_db = res_clientes.data if res_clientes.data else []
 
@@ -17,23 +18,33 @@ def procesar_archivos_masivos(archivos):
     inventario_titulos = {normalizar_texto(l['titulo']): l['libro_id'] for l in res_libros.data} if res_libros.data else {}
 
     for archivo in archivos:
-        # Extraemos el nombre original (ej: "19375695-6.xlsx") y la versión limpia para el nombre
+        # Extraemos el nombre original (ej: "Librero_19.375.695-6_Mariana.xlsx")
         nombre_archivo_original = os.path.splitext(archivo.name)[0]
-        nombre_archivo_limpio = limpiar_texto(nombre_archivo_original)
+        
+        # Preparamos dos versiones del nombre del archivo para los dos intentos
+        nombre_archivo_solo_letras = limpiar_texto(nombre_archivo_original)
+        # Extrae SOLO números y la letra K del nombre del archivo
+        nombre_archivo_solo_rut = re.sub(r'[^0-9kK]', '', nombre_archivo_original).upper()
+        
         cliente_encontrado = None
         
-        # --- INTENTO 1: BUSCAR POR RUT (Prioridad Alta) ---
+        # --- INTENTO 1: BUSCAR POR RUT (Infalible y Normalizado) ---
         for cliente in clientes_db:
-            rut_cliente = str(cliente.get('rut', '')).strip()
-            # Si el cliente tiene RUT registrado y ese RUT está literalmente en el nombre del archivo
-            if rut_cliente and rut_cliente.lower() in nombre_archivo_original.lower():
-                cliente_encontrado = cliente
-                break
+            rut_cliente_bruto = str(cliente.get('rut', ''))
+            # Limpiamos el RUT de la Base de Datos (quita puntos y guiones)
+            rut_db_limpio = re.sub(r'[^0-9kK]', '', rut_cliente_bruto).upper()
+            
+            # Verificamos que el RUT exista y tenga largo de RUT chileno (mínimo 7-8 caracteres)
+            if rut_db_limpio and len(rut_db_limpio) >= 7:
+                # Si el RUT crudo está dentro del nombre del archivo crudo = MATCH PERFECTO
+                if rut_db_limpio in nombre_archivo_solo_rut:
+                    cliente_encontrado = cliente
+                    break
 
         # --- INTENTO 2: BUSCAR POR NOMBRE (Plan B) ---
         if not cliente_encontrado:
             for cliente in clientes_db:
-                if limpiar_texto(cliente['nombre']) in nombre_archivo_limpio:
+                if limpiar_texto(cliente['nombre']) in nombre_archivo_solo_letras:
                     cliente_encontrado = cliente
                     break
 
@@ -92,7 +103,7 @@ def procesar_archivos_masivos(archivos):
         except Exception as e:
             log_resultados.append(f"❌ Error al registrar la fecha para {cliente_encontrado['nombre']}: {e}")
             
-    # Limpiamos caché para que las demás vistas (como Asignaciones) lean los datos frescos
+    # Limpiamos caché para que las demás vistas lean los datos frescos
     st.cache_data.clear()
 
     return log_resultados
@@ -101,7 +112,7 @@ def mostrar_importacion_libreros():
     st.markdown("<h2 style='color: #4A4D7E;'>📔 Importación Masiva de Libreros</h2>", unsafe_allow_html=True)
     st.markdown("""
     Sube los archivos Excel o CSV con los libreros de las clientas. 
-    * **Tip UX:** Nombra el archivo con el **RUT** de la clienta (ej: `19375695-6.xlsx`) o con su **Nombre** (ej: `Mariana Parra.xlsx`). El sistema enlazará los libros automáticamente y actualizará su fecha de última subida.
+    * **Tip UX:** Nombra el archivo con el **RUT** de la clienta (con o sin puntos/guiones, el sistema lo detectará igual). Si no usas el RUT, nómbralo con su **Nombre**. El sistema enlazará los libros y actualizará su fecha de última subida.
     """)
     
     with st.container(border=True):
@@ -115,7 +126,7 @@ def mostrar_importacion_libreros():
             st.info(f"Se han cargado {len(archivos_subidos)} archivo(s) listos para procesar.")
             
             if st.button("🚀 Iniciar Procesamiento Masivo", type="primary", use_container_width=True):
-                with st.spinner("Procesando archivos, buscando coincidencias y actualizando fechas..."):
+                with st.spinner("Procesando archivos, limpiando RUTs y actualizando fechas..."):
                     resultados = procesar_archivos_masivos(archivos_subidos)
                     
                     st.markdown("### 📊 Resultados del Proceso")
