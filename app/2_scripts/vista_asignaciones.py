@@ -597,13 +597,13 @@ def mostrar_asignaciones():
                     
                     df_filtrado_final = df_pendientes.copy()
                     
-                    if not df_filtrado_final.empty:
-                        df_filtrado_final['pagado'] = df_filtrado_final['pagado'].fillna("NO").astype(str).str.upper().str.strip()
-                        df_filtrado_final = df_filtrado_final[df_filtrado_final['pagado'].isin(["SI", "SÍ"])]
+                    # if not df_filtrado_final.empty:
+                    #     df_filtrado_final['pagado'] = df_filtrado_final['pagado'].fillna("NO").astype(str).str.upper().str.strip()
+                    #     df_filtrado_final = df_filtrado_final[df_filtrado_final['pagado'].isin(["SI", "SÍ"])]
                         
-                        impagas = len(df_pendientes) - len(df_filtrado_final)
-                        if impagas > 0:
-                            st.warning(f"⚠️ Se omitieron **{impagas}** clientas de la asignación por tener su suscripción IMPAGA este mes.")
+                    #     impagas = len(df_pendientes) - len(df_filtrado_final)
+                    #     if impagas > 0:
+                    #         st.warning(f"⚠️ Se omitieron **{impagas}** clientas de la asignación por tener su suscripción IMPAGA este mes.")
                     
                     descartar_antiguos = st.checkbox("🛡️ Solo incluir clientas que hayan actualizado su librero en los últimos 7 días")
                     if descartar_antiguos and not df_filtrado_final.empty:
