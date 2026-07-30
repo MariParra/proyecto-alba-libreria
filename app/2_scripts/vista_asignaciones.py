@@ -135,7 +135,7 @@ def cargar_asignaciones_mes(ano, mes):
             
         df_asig = pd.DataFrame(res_asig.data)
         
-        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+        res_clientes = conn.table("clientes").select("cliente_id, nombre, generos_preferencia, fecha_actualizacion_librero").execute()
         res_libros = conn.table("libros").select("libro_id, titulo").execute()
         res_subs = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         
@@ -607,17 +607,58 @@ def mostrar_asignaciones():
                 with st.container(border=True):
                     st.markdown("### 🎲 Asignación al Azar (Masiva y Segura)")
                     st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
-                    st.metric("Cajas Pendientes", len(df_pendientes))
                     
+                    # 1. 🛡️ FILTRO OBLIGATORIO: Solo clientas con la suscripción PAGADA
+                    # Normalizamos el texto de la columna 'pagado' a mayúsculas para evitar fallos por "SÍ", "Si", "si" o "sí"
+                    df_filtrado_final = df_pendientes.copy()
+                    
+                    if not df_filtrado_final.empty:
+                        # Aseguramos que la columna 'pagado' exista y no tenga nulos
+                        df_filtrado_final['pagado'] = df_filtrado_final['pagado'].fillna("NO").astype(str).str.upper().str.strip()
+                        
+                        # Filtramos dejando SOLO los registros que digan "SI" o "SÍ"
+                        df_filtrado_final = df_filtrado_final[df_filtrado_final['pagado'].isin(["SI", "SÍ"])]
+                        
+                        # Calculamos cuántas clientas quedaron fuera por no haber pagado aún
+                        impagas = len(df_pendientes) - len(df_filtrado_final)
+                        if impagas > 0:
+                            st.warning(f"⚠️ Se omitieron **{impagas}** clientas de la asignación por tener su suscripción IMPAGA este mes.")
+                    
+                    # --- ⏱️ FILTRO OPCIONAL: LIBRERO ACTUALIZADO (ÚLTIMOS 7 DÍAS) ---
+                    descartar_antiguos = st.checkbox("🛡️ Solo incluir clientas que hayan actualizado su librero en los últimos 7 días")
+
+                    if descartar_antiguos and not df_filtrado_final.empty:
+                        # Convertimos la columna a formato fecha universal (UTC) de forma segura
+                        df_filtrado_final['fecha_actualizacion_librero'] = pd.to_datetime(
+                            df_filtrado_final['fecha_actualizacion_librero'], 
+                            errors='coerce', 
+                            utc=True
+                        )
+                        
+                        # Calculamos exactamente hace 7 días (UTC)
+                        fecha_limite = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=7)
+                        
+                        # Filtramos dejando solo a las que tienen fecha de actualización posterior al límite
+                        antes_de_fecha = len(df_filtrado_final)
+                        df_filtrado_final = df_filtrado_final[df_filtrado_final['fecha_actualizacion_librero'] > fecha_limite]
+                        
+                        excluidas_fecha = antes_de_fecha - len(df_filtrado_final)
+                        if excluidas_fecha > 0:
+                            st.info(f"💡 Filtro activo: Se omitieron otras {excluidas_fecha} clientas por no actualizar su librero a tiempo.")
+                        
+                    st.metric("Cajas Pendientes y Pagadas", len(df_filtrado_final))
+                    
+                    # --- GENERAR PROPUESTA (Usa el DataFrame doblemente filtrado) ---
                     if st.button("🔍 Generar Propuesta (Previsualización)", type="primary", use_container_width=True):
-                        if not df_pendientes.empty:
+                        if not df_filtrado_final.empty:
                             with st.spinner("Analizando inventario y gustos..."):
-                                prop, sin_asig = generar_propuesta_azar(df_pendientes)
+                                prop, sin_asig = generar_propuesta_azar(df_filtrado_final)
                                 st.session_state.propuesta_azar = prop
                                 st.session_state.sin_asignar_azar = sin_asig
-                        else: st.warning("No hay clientes pendientes.")
-                        
-                    # POP-UP / VISTA PREVIA
+                        else: 
+                            st.warning("No hay clientes pendientes que estén pagados (y que cumplan las condiciones de fecha si están activas).")
+                            
+                    # --- POP-UP / VISTA PREVIA ---
                     if 'propuesta_azar' in st.session_state:
                         prop = st.session_state.propuesta_azar
                         sin_asig = st.session_state.sin_asignar_azar
@@ -629,7 +670,7 @@ def mostrar_asignaciones():
                             st.success(f"✅ Se encontraron libros perfectos para **{len(prop)}** clientas.")
                             st.info("💡 **Tip UX:** Si no te convence alguna sugerencia, **desmarca la casilla 'Aprobar'** de esa fila. Ese libro no se asignará y la clienta quedará pendiente.")
                             
-                            # Convertimos a DataFrame y añadimos la columna 'Aprobar' al inicio
+                            # Convertimos a DataFrame y añadimos la columna 'Aprobar' al inicio si no está
                             df_prop = pd.DataFrame(prop)
                             if 'Aprobar' not in df_prop.columns:
                                 df_prop.insert(0, 'Aprobar', True)
