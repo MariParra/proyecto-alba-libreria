@@ -618,7 +618,7 @@ def mostrar_asignaciones():
                         if excluidas_fecha > 0:
                             st.info(f"💡 Filtro activo: Se omitieron otras {excluidas_fecha} clientas por no actualizar su librero a tiempo.")
                         
-                    st.metric("Cajas Pendientes y Pagadas", len(df_filtrado_final))
+                    st.metric("Cajas Pendientes", len(df_filtrado_final))
                     
                     if st.button("🔍 Generar Propuesta (Previsualización)", type="primary", use_container_width=True):
                         if not df_filtrado_final.empty:
