@@ -511,7 +511,7 @@ def mostrar_asignaciones():
         "🚚 Gestionar Envío y Ajuste Manual", 
         "🚀 Generar / Actualizar Mes", 
         "🗑️ Eliminar/Quitar Libros", 
-        "🧹 Limpiar Asignaciones del Mes",
+        "🧹 Desasignar Libros del Mes",
         "🔒 Cierre de Mes"
     ]
     opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", opciones_menu)
@@ -912,49 +912,56 @@ def mostrar_asignaciones():
                             else: st.error(err)
             else: st.info("No hay registros.")
             
+        # ==========================================================
+    # 6. DESASIGNAR LIBROS DEL MES (SOLO LIBRO PRINCIPAL)
     # ==========================================================
-    # 6. LIMPIAR ASIGNACIONES DEL MES
-    # ==========================================================
-    elif opcion_menu == "🧹 Limpiar Asignaciones del Mes":
+    elif opcion_menu == "🧹 Desasignar Libros del Mes":
         if mes_esta_cerrado: 
-            st.warning("Mes cerrado. No se pueden eliminar registros.")
+            st.warning("Mes cerrado. No se pueden modificar los registros.")
         else:
             with st.container(border=True):
-                st.markdown("### 🧹 Limpiar Todas las Asignaciones del Mes")
-                st.error("⚠️ **¡ADVERTENCIA CRÍTICA!** Esta acción eliminará **TODAS** las cajas de este mes. Se devolverá el stock de los libros asignados y se limpiará el historial de lecturas de este mes. **ESTA ACCIÓN NO SE PUEDE DESHACER.**")
+                st.markdown("### 🧹 Desasignar Libros Principales del Mes")
+                st.warning("⚠️ **ATENCIÓN:** Esta acción quitará el libro asignado de **TODAS** las cajas de este mes, devolviendo el stock al catálogo y limpiando el historial de lectura del cliente. **Las cajas y su información de pago se mantendrán intactas.**")
                 
-                if df_mes.empty:
-                    st.success("El mes ya está completamente limpio. No hay asignaciones.")
+                # Filtramos para ver cuántas cajas tienen un libro asignado actualmente
+                df_con_libro = df_mes[df_mes['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
+                
+                if df_con_libro.empty:
+                    st.success("🎉 Todas las cajas de este mes ya se encuentran en estado 'PENDIENTE DE ASIGNAR'.")
                 else:
-                    st.metric("Cajas (Filas) a Eliminar", len(df_mes))
+                    st.metric("Libros a Desasignar y Liberar", len(df_con_libro))
                     
-                    st.markdown("Para confirmar, escribe la palabra **ELIMINAR** en la casilla de abajo:")
-                    confirmacion = st.text_input("Escribe ELIMINAR:")
+                    st.markdown("Para confirmar esta acción, escribe la palabra **DESASIGNAR** en la casilla de abajo:")
+                    confirmacion = st.text_input("Escribe DESASIGNAR:")
                     
-                    if confirmacion == "ELIMINAR":
-                        if st.button("🚨 ELIMINAR TODO EL MES DEFINITIVAMENTE", type="primary", use_container_width=True):
-                            with st.spinner("Eliminando cajas y devolviendo stock al catálogo..."):
+                    if confirmacion == "DESASIGNAR":
+                        if st.button("🚨 QUITAR TODOS LOS LIBROS DEL MES", type="primary", use_container_width=True):
+                            with st.spinner("Liberando libros y actualizando stock..."):
                                 exitos = 0
                                 errores = []
                                 
-                                # Recorremos todas las filas del mes y aplicamos la eliminación segura
-                                for _, row in df_mes.iterrows():
-                                    ex, err = eliminar_asignacion(
+                                # Recorremos solo las cajas que tienen libros asignados
+                                for _, row in df_con_libro.iterrows():
+                                    # Usamos la función interna de desasignación principal
+                                    ex, err = quitar_un_libro(
                                         row['asignacion_id'], 
-                                        row.get('libro_suscripcion_id'), 
                                         row['cliente_id'], 
                                         ano_sel, 
                                         mes_num, 
-                                        row.get('extras', '')
+                                        "PRINCIPAL", 
+                                        row['titulo_libro'], 
+                                        0 # No aplicamos descuentos porque las cajas no se borran
                                     )
                                     if ex: 
                                         exitos += 1
                                     else: 
                                         errores.append(err)
                                 
-                                cargar_asignaciones_mes.clear()
+                                # Limpiamos cachés para ver el impacto inmediato en el stock y las tablas
+                                cargar_catalogo_completo_libros.clear()
+                                
                                 if exitos > 0:
-                                    st.success(f"¡Se eliminaron {exitos} registros de cajas correctamente!")
+                                    st.success(f"✅ ¡Se liberaron {exitos} libros con éxito! El stock ha sido devuelto al inventario.")
                                     st.balloons()
                                 if errores:
                                     st.error(f"Hubo {len(errores)} errores:")
