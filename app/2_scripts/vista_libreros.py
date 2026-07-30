@@ -1,21 +1,15 @@
 import streamlit as st
 import pandas as pd
 import os
-import unicodedata
-from utilidades import get_db_connection, limpiar_texto
-
-def normalizar_texto(texto):
-    """Normaliza el texto para búsquedas exactas (sin acentos, en mayúsculas)."""
-    if not isinstance(texto, str): return ""
-    s = ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn')
-    return ' '.join(s.strip().upper().split())
+from datetime import datetime
+from utilidades import get_db_connection, normalizar_texto, limpiar_texto
 
 def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
     
-    # 1. Obtener clientes
-    res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
+    # 1. Obtener clientes (AÑADIMOS EL RUT AQUÍ)
+    res_clientes = conn.table("clientes").select("cliente_id, nombre, rut").execute()
     clientes_db = res_clientes.data if res_clientes.data else []
 
     # 2. Precargar catálogo de libros para no consultar la BD por cada fila
@@ -23,17 +17,29 @@ def procesar_archivos_masivos(archivos):
     inventario_titulos = {normalizar_texto(l['titulo']): l['libro_id'] for l in res_libros.data} if res_libros.data else {}
 
     for archivo in archivos:
-        nombre_archivo_limpio = limpiar_texto(os.path.splitext(archivo.name)[0])
+        # Extraemos el nombre original (ej: "19375695-6.xlsx") y la versión limpia para el nombre
+        nombre_archivo_original = os.path.splitext(archivo.name)[0]
+        nombre_archivo_limpio = limpiar_texto(nombre_archivo_original)
         cliente_encontrado = None
         
-        # Buscar cliente por nombre en el archivo
+        # --- INTENTO 1: BUSCAR POR RUT (Prioridad Alta) ---
         for cliente in clientes_db:
-            if limpiar_texto(cliente['nombre']) in nombre_archivo_limpio:
+            rut_cliente = str(cliente.get('rut', '')).strip()
+            # Si el cliente tiene RUT registrado y ese RUT está literalmente en el nombre del archivo
+            if rut_cliente and rut_cliente.lower() in nombre_archivo_original.lower():
                 cliente_encontrado = cliente
                 break
 
+        # --- INTENTO 2: BUSCAR POR NOMBRE (Plan B) ---
         if not cliente_encontrado:
-            log_resultados.append(f"⚠️ {archivo.name}: No se encontró un cliente coincidente.")
+            for cliente in clientes_db:
+                if limpiar_texto(cliente['nombre']) in nombre_archivo_limpio:
+                    cliente_encontrado = cliente
+                    break
+
+        # Si fallan ambos intentos, saltamos este archivo
+        if not cliente_encontrado:
+            log_resultados.append(f"⚠️ {archivo.name}: No se encontró un cliente coincidente por RUT ni por nombre.")
             continue
             
         cliente_id = cliente_encontrado['cliente_id']
@@ -42,12 +48,12 @@ def procesar_archivos_masivos(archivos):
             if archivo.name.lower().endswith('.csv'):
                 df = pd.read_csv(archivo)
             else:
-                df = pd.read_excel(archivo, engine='openpyxl') # Asegúrate de tener openpyxl instalado
+                df = pd.read_excel(archivo, engine='openpyxl')
         except Exception as e:
             log_resultados.append(f"❌ {archivo.name}: Error al leer el archivo. {e}")
             continue
 
-        # Buscar columnas clave
+        # Búsqueda de las columnas clave (Título y Autor)
         col_titulo = next((c for c in df.columns if str(c).lower().strip() in ['titulo', 'título', 'libro']), None)
         col_autor = next((c for c in df.columns if str(c).lower().strip() in ['autor', 'escritor']), None)
 
@@ -64,7 +70,7 @@ def procesar_archivos_masivos(archivos):
             libro_id = inventario_titulos.get(titulo_norm)
 
             if libro_id:
-                # Verificar si ya lo tiene para no duplicar
+                # Verificamos si la clienta ya tiene este libro en su histórico
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", libro_id).execute()
                 if not res_hist.data:
                     autor_raw = str(row.get(col_autor, "")) if col_autor else "Desconocido"
@@ -75,19 +81,50 @@ def procesar_archivos_masivos(archivos):
                         "origen": "IMPORTACIÓN MASIVA"
                     }).execute()
                     libros_asignados += 1
-
-        log_resultados.append(f"✅ {archivo.name}: {libros_asignados} libros enlazados al historial de {cliente_encontrado['nombre']}.")
+        
+        # --- REGISTRO DE TIMESTAMP AL FINALIZAR ---
+        try:
+            conn.table("clientes").update({
+                "fecha_actualizacion_librero": datetime.now().isoformat()
+            }).eq("cliente_id", cliente_id).execute()
+            
+            log_resultados.append(f"✅ {archivo.name}: {libros_asignados} libros nuevos enlazados. Fecha actualizada para {cliente_encontrado['nombre']}.")
+        except Exception as e:
+            log_resultados.append(f"❌ Error al registrar la fecha para {cliente_encontrado['nombre']}: {e}")
+            
+    # Limpiamos caché para que las demás vistas (como Asignaciones) lean los datos frescos
+    st.cache_data.clear()
 
     return log_resultados
 
 def mostrar_importacion_libreros():
-    st.title("📚 Importar Historial de Lectura")
-    st.info("💡 Sube los archivos. El sistema buscará a la clienta según el nombre del archivo y solo enlazará los libros que ya existan en tu catálogo.")
+    st.markdown("<h2 style='color: #4A4D7E;'>📔 Importación Masiva de Libreros</h2>", unsafe_allow_html=True)
+    st.markdown("""
+    Sube los archivos Excel o CSV con los libreros de las clientas. 
+    * **Tip UX:** Nombra el archivo con el **RUT** de la clienta (ej: `19375695-6.xlsx`) o con su **Nombre** (ej: `Mariana Parra.xlsx`). El sistema enlazará los libros automáticamente y actualizará su fecha de última subida.
+    """)
     
-    archivos = st.file_uploader("Selecciona archivos Excel/CSV", type=["xlsx", "csv"], accept_multiple_files=True)
-    
-    if archivos and st.button("Iniciar Importación", type="primary"):
-        with st.spinner("Procesando..."):
-            logs = procesar_archivos_masivos(archivos)
-            for log in logs:
-                st.write(log)
+    with st.container(border=True):
+        archivos_subidos = st.file_uploader(
+            "Arrastra aquí todos los archivos (Excel o CSV)", 
+            type=['xlsx', 'csv'], 
+            accept_multiple_files=True
+        )
+        
+        if archivos_subidos:
+            st.info(f"Se han cargado {len(archivos_subidos)} archivo(s) listos para procesar.")
+            
+            if st.button("🚀 Iniciar Procesamiento Masivo", type="primary", use_container_width=True):
+                with st.spinner("Procesando archivos, buscando coincidencias y actualizando fechas..."):
+                    resultados = procesar_archivos_masivos(archivos_subidos)
+                    
+                    st.markdown("### 📊 Resultados del Proceso")
+                    for msj in resultados:
+                        if "✅" in msj:
+                            st.success(msj)
+                        elif "⚠️" in msj:
+                            st.warning(msj)
+                        else:
+                            st.error(msj)
+                    
+                    st.balloons()
