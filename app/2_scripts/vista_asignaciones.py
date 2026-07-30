@@ -576,8 +576,22 @@ def mostrar_asignaciones():
             
             st.caption("Doble clic en las celdas para modificar. Los totales se recalcularán automáticamente.")
             
-            columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_suscripcion', 'costo_caja', 'utilidad', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
-            # 1. Filtramos para usar SOLO las columnas que sí existen realmente en el DataFrame
+            # --- LISTADO DE COLUMNAS DEFINITIVO Y CORRECTO ---
+            columnas_mostrar = [
+                'asignacion_id', 
+                'nombre',              
+                'titulo_libro', 
+                'estado_envio', 
+                'pagado', 
+                'envio_pagado', 
+                'costo_caja', 
+                'valor_envio', 
+                'valor_extras', 
+                'monto_total',          
+                'extras', 
+                'comentario'
+            ]
+            
             columnas_seguras = [col for col in columnas_mostrar if col in df_filtrado.columns]
             
             # 2. Mostramos un aviso temporal solo si falta alguna columna para saber cuál es el error
