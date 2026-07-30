@@ -26,6 +26,10 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, f_ini, f_fin, dep_id):
     
     conn = get_db_connection()
     try:
+        # --- CORRECCIÓN DE TIPO DE DATO ---
+        # Solo convertimos a entero si el valor es numérico y no None
+        id_dependencia = int(dep_id) if dep_id is not None else None
+
         nueva_tarea = {
             "titulo": titulo,
             "descripcion": descripcion,
@@ -34,7 +38,7 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, f_ini, f_fin, dep_id):
             "estado": "POR HACER",
             "fecha_inicio": f_ini.isoformat() if f_ini else None,
             "fecha_fin": f_fin.isoformat() if f_fin else None,
-            "depende_de_id": int(dep_id) if dep_id else None,
+            "depende_de_id": id_dependencia,
             "fecha_creacion": datetime.now().isoformat()
         }
         conn.table("tareas_internas").insert(nueva_tarea).execute()
@@ -152,6 +156,7 @@ def mostrar_kanban():
             # Construir opciones de dependencia
             opciones_dep = {"Ninguna": None}
             if not df_tareas.empty:
+                # Solo dependemos de tareas que no estén completadas
                 for _, row in df_tareas[df_tareas['estado'] != 'COMPLETADO'].iterrows():
                     opciones_dep[f"ID:{row['id']} - {row['titulo']}"] = row['id']
             
