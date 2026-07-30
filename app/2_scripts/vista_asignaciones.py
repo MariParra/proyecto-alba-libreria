@@ -346,7 +346,6 @@ def confirmar_propuesta_azar(propuesta, ano, mes):
             errores.append(str(e))
             
     cargar_catalogo_completo_libros.clear()
-    cargar_libros_filtrados_para_cliente.clear()
     return exitos, errores
 
 def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extras_manual, valor_extras_manual):
