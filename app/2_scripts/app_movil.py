@@ -18,6 +18,7 @@ from vista_libreros import mostrar_importacion_libreros
 from vista_creacion_masiva import mostrar_creacion_masiva
 from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
+from vista_kanban import mostrar_kanban
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -219,6 +220,10 @@ else:
         if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
             st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
             st.rerun()
+            
+        if st.button("📋 TABLERO KANBAN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📋 TABLERO KANBAN" else "secondary"):
+            st.session_state.pagina_actual = "📋 TABLERO KANBAN"
+            st.rerun()
 
         st.markdown("---")
         if st.button("🔄 Refrescar Toda la App", type="secondary", use_container_width=True):
@@ -266,3 +271,5 @@ else:
             mostrar_creacion_masiva()
         elif st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA":
             mostrar_actualizacion_masiva()
+        elif st.session_state.pagina_actual == "📋 TABLERO KANBAN":
+            mostrar_kanban()

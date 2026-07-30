@@ -511,6 +511,7 @@ def mostrar_asignaciones():
         "🚚 Gestionar Envío y Ajuste Manual", 
         "🚀 Generar / Actualizar Mes", 
         "🗑️ Eliminar/Quitar Libros", 
+        "🧹 Limpiar Asignaciones del Mes",
         "🔒 Cierre de Mes"
     ]
     opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", opciones_menu)
@@ -911,6 +912,57 @@ def mostrar_asignaciones():
                             else: st.error(err)
             else: st.info("No hay registros.")
             
+    # ==========================================================
+    # 6. LIMPIAR ASIGNACIONES DEL MES
+    # ==========================================================
+    elif opcion_menu == "🧹 Limpiar Asignaciones del Mes":
+        if mes_esta_cerrado: 
+            st.warning("Mes cerrado. No se pueden eliminar registros.")
+        else:
+            with st.container(border=True):
+                st.markdown("### 🧹 Limpiar Todas las Asignaciones del Mes")
+                st.error("⚠️ **¡ADVERTENCIA CRÍTICA!** Esta acción eliminará **TODAS** las cajas de este mes. Se devolverá el stock de los libros asignados y se limpiará el historial de lecturas de este mes. **ESTA ACCIÓN NO SE PUEDE DESHACER.**")
+                
+                if df_mes.empty:
+                    st.success("El mes ya está completamente limpio. No hay asignaciones.")
+                else:
+                    st.metric("Cajas (Filas) a Eliminar", len(df_mes))
+                    
+                    st.markdown("Para confirmar, escribe la palabra **ELIMINAR** en la casilla de abajo:")
+                    confirmacion = st.text_input("Escribe ELIMINAR:")
+                    
+                    if confirmacion == "ELIMINAR":
+                        if st.button("🚨 ELIMINAR TODO EL MES DEFINITIVAMENTE", type="primary", use_container_width=True):
+                            with st.spinner("Eliminando cajas y devolviendo stock al catálogo..."):
+                                exitos = 0
+                                errores = []
+                                
+                                # Recorremos todas las filas del mes y aplicamos la eliminación segura
+                                for _, row in df_mes.iterrows():
+                                    ex, err = eliminar_asignacion(
+                                        row['asignacion_id'], 
+                                        row.get('libro_suscripcion_id'), 
+                                        row['cliente_id'], 
+                                        ano_sel, 
+                                        mes_num, 
+                                        row.get('extras', '')
+                                    )
+                                    if ex: 
+                                        exitos += 1
+                                    else: 
+                                        errores.append(err)
+                                
+                                cargar_asignaciones_mes.clear()
+                                if exitos > 0:
+                                    st.success(f"¡Se eliminaron {exitos} registros de cajas correctamente!")
+                                    st.balloons()
+                                if errores:
+                                    st.error(f"Hubo {len(errores)} errores:")
+                                    for e in errores: st.write(e)
+                                    
+                                time.sleep(2)
+                                st.rerun()
+
     elif opcion_menu == "🔒 Cierre de Mes":
         if mes_esta_cerrado:
             st.success(f"El mes {mes_sel} {ano_sel} está **CERRADO**.")
