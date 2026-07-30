@@ -66,7 +66,6 @@ def verificar_alertas_vencimiento(df_tareas):
 
 # --- FUNCIONES DE BASE DE DATOS KANBAN ---
 def parsear_fecha(fecha_str):
-    """Convierte un string de Supabase a un objeto date para Streamlit"""
     if pd.isna(fecha_str) or not fecha_str: return None
     try: return pd.to_datetime(fecha_str).date()
     except: return None
@@ -85,7 +84,7 @@ def eliminar_tarea(tarea_id):
         st.rerun()
     except Exception as e: st.error(f"Error al eliminar tarea: {e}")
 
-def crear_tarea(titulo, descripcion, tipo, prioridad, f_ini, f_fin, dep_id):
+def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, dep_id):
     if not titulo:
         st.warning("⚠️ El título es obligatorio.")
         return
@@ -93,7 +92,8 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, f_ini, f_fin, dep_id):
     try:
         id_dependencia = int(dep_id) if dep_id is not None else None
         nueva_tarea = {
-            "titulo": titulo, "descripcion": descripcion, "tipo": tipo, "prioridad": prioridad,
+            "titulo": titulo, "descripcion": descripcion, "tipo": tipo, 
+            "prioridad": prioridad, "dificultad": dificultad,
             "estado": "POR HACER", "alerta_enviada": False,
             "fecha_inicio": f_ini.isoformat() if f_ini else None,
             "fecha_fin": f_fin.isoformat() if f_fin else None,
@@ -106,16 +106,13 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, f_ini, f_fin, dep_id):
         st.rerun()
     except Exception as e: st.error(f"Error al crear tarea: {e}")
 
-# --- ✏️ NUEVA FUNCIÓN PARA EDITAR TAREAS ---
-def editar_tarea(tarea_id, titulo, tipo, prioridad, estado, f_ini, f_fin):
+def editar_tarea(tarea_id, titulo, tipo, prioridad, dificultad, estado, f_ini, f_fin):
     if not titulo: return
     conn = get_db_connection()
     try:
         datos_update = {
-            "titulo": titulo,
-            "tipo": tipo,
-            "prioridad": prioridad,
-            "estado": estado,
+            "titulo": titulo, "tipo": tipo, "prioridad": prioridad,
+            "dificultad": dificultad, "estado": estado,
             "fecha_inicio": f_ini.isoformat() if f_ini else None,
             "fecha_fin": f_fin.isoformat() if f_fin else None
         }
@@ -125,9 +122,14 @@ def editar_tarea(tarea_id, titulo, tipo, prioridad, estado, f_ini, f_fin):
     except Exception as e: st.error(f"Error al editar: {e}")
 
 def obtener_color_prioridad(prioridad):
-    if prioridad == "Alta 🔴": return "#ffebee", "#c62828"
-    if prioridad == "Media 🟡": return "#fff8e1", "#f57f17"
+    if "Alta" in str(prioridad): return "#ffebee", "#c62828"
+    if "Media" in str(prioridad): return "#fff8e1", "#f57f17"
     return "#e8f5e9", "#2e7d32"
+
+def obtener_color_dificultad(dificultad):
+    if "Alta" in str(dificultad): return "#f3e5f5", "#7b1fa2" 
+    if "Media" in str(dificultad): return "#e3f2fd", "#1976d2" 
+    return "#e0f2f1", "#00796b"
 
 def obtener_color_tipo(tipo):
     colores = {"Administración 📋": ("#e3f2fd", "#1565c0"), "Desarrollo 💻": ("#f3e5f5", "#6a1b9a"), "Logística 📦": ("#e0f7fa", "#00838f"), "Marketing 📱": ("#fce4ec", "#ad1457")}
@@ -136,6 +138,7 @@ def obtener_color_tipo(tipo):
 def dibujar_tarjeta(tarea, df_todas):
     bg_prio, txt_prio = obtener_color_prioridad(tarea.get('prioridad', 'Baja 🟢'))
     bg_tipo, txt_tipo = obtener_color_tipo(tarea.get('tipo', 'Administración 📋'))
+    bg_dif, txt_dif = obtener_color_dificultad(tarea.get('dificultad', 'Media 🔸'))
     
     bloqueada, mensaje_bloqueo = False, ""
     if pd.notna(tarea.get('depende_de_id')):
@@ -144,7 +147,14 @@ def dibujar_tarjeta(tarea, df_todas):
             bloqueada, mensaje_bloqueo = True, f"🔒 Bloqueada por: {tarea_padre.iloc[0]['titulo']}"
     
     with st.container(border=True):
-        st.markdown(f"<div style='display: flex; gap: 5px; margin-bottom: 8px;'><span style='background-color: {bg_prio}; color: {txt_prio}; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;'>{tarea.get('prioridad', '')}</span><span style='background-color: {bg_tipo}; color: {txt_tipo}; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;'>{tarea.get('tipo', '')}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px;'>
+            <span style='background-color: {bg_prio}; color: {txt_prio}; padding: 2px 8px; border-radius: 10px; font-size: 0.70em; font-weight: bold;'>Prio: {tarea.get('prioridad', '')}</span>
+            <span style='background-color: {bg_dif}; color: {txt_dif}; padding: 2px 8px; border-radius: 10px; font-size: 0.70em; font-weight: bold;'>Dif: {tarea.get('dificultad', 'Media 🔸')}</span>
+            <span style='background-color: {bg_tipo}; color: {txt_tipo}; padding: 2px 8px; border-radius: 10px; font-size: 0.70em; font-weight: bold;'>{tarea.get('tipo', '')}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
         st.markdown(f"**{tarea['titulo']}**")
         
         fechas_str = []
@@ -156,7 +166,6 @@ def dibujar_tarjeta(tarea, df_todas):
         if bloqueada: st.error(mensaje_bloqueo, icon="⏳")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Botones Rápidos
         if tarea['estado'] == 'POR HACER':
             if st.button("➡️ Iniciar", key=f"ini_{tarea['id']}", use_container_width=True, disabled=bloqueada): mover_tarea(tarea['id'], "EN PROGRESO")
         elif tarea['estado'] == 'EN PROGRESO':
@@ -166,35 +175,41 @@ def dibujar_tarjeta(tarea, df_todas):
         elif tarea['estado'] == 'COMPLETADO':
             if st.button("🗑️ Eliminar", key=f"del_{tarea['id']}", type="secondary", use_container_width=True): eliminar_tarea(tarea['id'])
             
-        # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
         with st.expander("✏️ Editar Tarea", expanded=False):
             with st.form(f"form_edit_{tarea['id']}"):
                 e_tit = st.text_input("Título", value=tarea['titulo'])
+                c_edit1, c_edit2 = st.columns(2)
                 ops_tipo = ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"]
                 idx_t = ops_tipo.index(tarea['tipo']) if tarea['tipo'] in ops_tipo else 0
-                e_tipo = st.selectbox("Cambiar Tipo", ops_tipo, index=idx_t)
+                e_tipo = c_edit1.selectbox("Cambiar Tipo", ops_tipo, index=idx_t)
                 
                 ops_est = ["POR HACER", "EN PROGRESO", "COMPLETADO"]
                 idx_est = ops_est.index(tarea['estado']) if tarea['estado'] in ops_est else 0
-                e_estado = st.selectbox("Cambiar Estado", ops_est, index=idx_est)
+                e_estado = c_edit2.selectbox("Cambiar Estado", ops_est, index=idx_est)
                 
+                c_edit3, c_edit4 = st.columns(2)
                 ops_prio = ["Alta 🔴", "Media 🟡", "Baja 🟢"]
                 idx_p = ops_prio.index(tarea['prioridad']) if tarea.get('prioridad') in ops_prio else 1
-                e_prio = st.selectbox("Prioridad", ops_prio, index=idx_p)
+                e_prio = c_edit3.selectbox("Prioridad", ops_prio, index=idx_p)
+                
+                ops_dif = ["Alta 🔺", "Media 🔸", "Baja 🔹"]
+                dificultad_actual = tarea.get('dificultad', 'Media 🔸')
+                idx_d = ops_dif.index(dificultad_actual) if dificultad_actual in ops_dif else 1
+                e_dif = c_edit4.selectbox("Dificultad", ops_dif, index=idx_d)
                 
                 c_ini, c_fin = st.columns(2)
                 e_ini = c_ini.date_input("Nueva Fecha Inicio", value=parsear_fecha(tarea.get('fecha_inicio')))
                 e_fin = c_fin.date_input("Nuevo Due Date", value=parsear_fecha(tarea.get('fecha_fin')))
                 
                 if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
-                    editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_estado, e_ini, e_fin)
+                    editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_dif, e_estado, e_ini, e_fin)
 
 def mostrar_kanban():
     st.markdown("<h2 style='color: #4A4D7E;'>📋 Tablero de Proyectos y Tareas</h2>", unsafe_allow_html=True)
     conn = get_db_connection()
     try:
         res = conn.table("tareas_internas").select("*").execute()
-        df_tareas = pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['id', 'titulo', 'descripcion', 'tipo', 'prioridad', 'estado', 'fecha_inicio', 'fecha_fin', 'depende_de_id', 'alerta_enviada'])
+        df_tareas = pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['id', 'titulo', 'descripcion', 'tipo', 'prioridad', 'dificultad', 'estado', 'fecha_inicio', 'fecha_fin', 'depende_de_id', 'alerta_enviada', 'fecha_creacion'])
     except Exception as e:
         st.error("Error al cargar la base de datos."); return
 
@@ -213,9 +228,11 @@ def mostrar_kanban():
             st.markdown("##### Detalles Básicos")
             t_tit = st.text_input("Título de la Tarea*")
             t_desc = st.text_area("Descripción detallada (opcional)")
-            c1, c2 = st.columns(2)
-            t_tipo = c1.selectbox("Tipo de Tarea (Define a quién notifica)", ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"])
+            c1, c2, c3 = st.columns(3)
+            t_tipo = c1.selectbox("Tipo de Tarea", ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"])
             t_prio = c2.selectbox("Prioridad", ["Alta 🔴", "Media 🟡", "Baja 🟢"], index=1)
+            t_dif = c3.selectbox("Dificultad", ["Alta 🔺", "Media 🔸", "Baja 🔹"], index=1)
+            
             st.markdown("##### Planificación y Dependencias")
             cf1, cf2, cf3 = st.columns(3)
             t_ini = cf1.date_input("Fecha Inicio", value=None)
@@ -228,40 +245,65 @@ def mostrar_kanban():
             t_dep_id = opciones_dep[t_dep_label]
             
             if st.form_submit_button("Añadir al Tablero y Notificar", type="primary", use_container_width=True):
-                crear_tarea(t_tit, t_desc, t_tipo, t_prio, t_ini, t_fin, t_dep_id)
-
-    # --- 🔍 FILTROS INTELIGENTES (AHORA SÍ ESTÁN INCLUIDOS) ---
-    df_filtrado = df_tareas.copy()
-
-    if not df_tareas.empty:
-        with st.expander("🔍 Filtrar Tareas (Buscar, Tipo, Fechas)", expanded=False):
-            col_f1, col_f2 = st.columns(2)
-            f_texto = col_f1.text_input("🔍 Buscar por título de tarea:")
-            f_fechas = col_f2.date_input("📅 Rango de Fechas (Aplica a Inicio y Fin)", value=[])
-            
-            col_f3, col_f4 = st.columns(2)
-            f_tipo = col_f3.multiselect("🏷️ Filtrar por Área / Tipo:", options=df_tareas['tipo'].unique().tolist())
-            f_prio = col_f4.multiselect("🚨 Filtrar por Prioridad:", options=df_tareas['prioridad'].unique().tolist())
-
-            # Aplicar filtros progresivamente
-            if f_texto:
-                df_filtrado = df_filtrado[df_filtrado['titulo'].str.contains(f_texto, case=False, na=False)]
-            if f_tipo:
-                df_filtrado = df_filtrado[df_filtrado['tipo'].isin(f_tipo)]
-            if f_prio:
-                df_filtrado = df_filtrado[df_filtrado['prioridad'].isin(f_prio)]
-                
-            if len(f_fechas) == 2:
-                fecha_start, fecha_end = f_fechas
-                df_filtrado['f_ini_dt'] = pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date
-                df_filtrado['f_fin_dt'] = pd.to_datetime(df_filtrado['fecha_fin'], errors='coerce').dt.date
-                mask_ini = df_filtrado['f_ini_dt'].between(fecha_start, fecha_end)
-                mask_fin = df_filtrado['f_fin_dt'].between(fecha_start, fecha_end)
-                df_filtrado = df_filtrado[mask_ini | mask_fin]
+                crear_tarea(t_tit, t_desc, t_tipo, t_prio, t_dif, t_ini, t_fin, t_dep_id)
 
     st.markdown("---")
     
+    # --- 🌟 VISTAS RÁPIDAS (ESTA SEMANA / BACKLOG / TODO) ---
+    vista_actual = st.radio(
+        "👁️ Selecciona tu Vista de Trabajo:", 
+        ["🎯 Esta Semana", "📥 Backlog (Sin planificar)", "🌍 Ver Todo"], 
+        horizontal=True,
+        index=0
+    )
+    
+    df_filtrado = df_tareas.copy()
+    
+    if not df_filtrado.empty:
+        # Cálculos de fechas para la semana actual
+        hoy = date.today()
+        inicio_semana = hoy - timedelta(days=hoy.weekday()) # Lunes
+        fin_semana = inicio_semana + timedelta(days=6)      # Domingo
+        
+        # Parseamos todas las fechas de la BD a formato date seguro
+        df_filtrado['f_ini_dt'] = pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date
+        df_filtrado['f_fin_dt'] = pd.to_datetime(df_filtrado['fecha_fin'], errors='coerce').dt.date
+        df_filtrado['f_crea_dt'] = pd.to_datetime(df_filtrado['fecha_creacion'], errors='coerce').dt.date
+        
+        # --- LÓGICA DE VISTAS INTELIGENTES ---
+        if vista_actual == "🎯 Esta Semana":
+            # 1. En Progreso siempre se muestra
+            mask_prog = df_filtrado['estado'] == 'EN PROGRESO'
+            # 2. Por Hacer: que tengan alguna fecha y que toque esta semana o esté atrasada
+            mask_por_hacer = (df_filtrado['estado'] == 'POR HACER') & ((df_filtrado['f_ini_dt'] <= fin_semana) | (df_filtrado['f_fin_dt'] <= fin_semana))
+            # 3. Completado: solo las que se terminaron recientemente o se crearon esta misma semana
+            mask_completadas = (df_filtrado['estado'] == 'COMPLETADO') & ((df_filtrado['f_fin_dt'] >= inicio_semana) | (df_filtrado['f_ini_dt'] >= inicio_semana) | (df_filtrado['f_crea_dt'] >= inicio_semana))
+            
+            df_filtrado = df_filtrado[mask_prog | mask_por_hacer | mask_completadas]
+            
+        elif vista_actual == "📥 Backlog (Sin planificar)":
+            # Backlog son solo las tareas Por Hacer que NO tienen fecha o son para el futuro
+            mask_sin_fecha = df_filtrado['f_ini_dt'].isna() & df_filtrado['f_fin_dt'].isna()
+            mask_futuras = (df_filtrado['f_ini_dt'] > fin_semana) | (df_filtrado['f_fin_dt'] > fin_semana)
+            df_filtrado = df_filtrado[(df_filtrado['estado'] == 'POR HACER') & (mask_sin_fecha | mask_futuras)]
+
+        # --- 🔍 FILTROS MANUALES ADICIONALES ---
+        with st.expander("🔍 Añadir Filtros Específicos (Buscar, Tipo, Prioridad, Dificultad)", expanded=False):
+            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+            f_texto = col_f1.text_input("🔍 Título:")
+            f_tipo = col_f2.multiselect("🏷️ Área / Tipo:", options=df_tareas['tipo'].unique().tolist())
+            f_prio = col_f3.multiselect("🚨 Prioridad:", options=df_tareas['prioridad'].unique().tolist())
+            f_dif = col_f4.multiselect("⚙️ Dificultad:", options=df_tareas['dificultad'].dropna().unique().tolist())
+
+            if f_texto: df_filtrado = df_filtrado[df_filtrado['titulo'].str.contains(f_texto, case=False, na=False)]
+            if f_tipo: df_filtrado = df_filtrado[df_filtrado['tipo'].isin(f_tipo)]
+            if f_prio: df_filtrado = df_filtrado[df_filtrado['prioridad'].isin(f_prio)]
+            if f_dif: df_filtrado = df_filtrado[df_filtrado['dificultad'].isin(f_dif)]
+
+    # --- DIBUJAR TABLERO KANBAN CON RESULTADOS FINALES ---
+    st.markdown("<br>", unsafe_allow_html=True)
     col_todo, col_progreso, col_done = st.columns(3)
+    
     with col_todo:
         st.markdown(f"### 📌 Por Hacer ({len(df_filtrado[df_filtrado['estado'] == 'POR HACER'])})")
         st.markdown("<div style='height: 4px; background-color: #ffb74d; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
