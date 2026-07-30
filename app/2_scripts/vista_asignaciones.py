@@ -555,7 +555,7 @@ def mostrar_asignaciones():
                 st.session_state.asignaciones_original = df_mostrar.copy()
                 
             config_cols = {
-                "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO", "EXTRAS AÑADIDOS"], required=True),
+                "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
                 "costo_caja": st.column_config.NumberColumn("Costo Caja Fijo ($)", format="$%.0f"),

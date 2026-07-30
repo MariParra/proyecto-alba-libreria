@@ -156,11 +156,9 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
-        
-        # 🔴 INYECCIÓN AUTOMÁTICA DE EXTRAS EN ASIGNACIONES (CORREGIDO)
+
         if asignacion_id:
             try:
-                # Corregimos 'id' a 'asignacion_id'
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
                 if res_asig.data:
                     asig_actual = res_asig.data[0]
@@ -170,12 +168,9 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     nuevos_extras_str = " | ".join([f"{item['cantidad']} x {item['titulo']}" for item in carrito])
                     extras_final = f"{extras_previos} | {nuevos_extras_str}".strip(" |")
                     valor_final = valor_previo + subtotal_libros
-                    
-                    # Corregimos 'estado' a 'estado_envio' y 'id' a 'asignacion_id'
                     conn.table("asignaciones").update({
                         "extras": extras_final,
-                        "valor_extras": valor_final,
-                        "estado_envio": "EXTRAS AÑADIDOS"
+                        "valor_extras": valor_final
                     }).eq("asignacion_id", asignacion_id).execute()
             except Exception as ex:
                 print(f"Error inyectando extras en asignacion: {ex}")
