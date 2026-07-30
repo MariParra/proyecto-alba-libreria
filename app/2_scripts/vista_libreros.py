@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import re
 from datetime import datetime
-from utilidades import get_db_connection, limpiar_texto, normalizar_texto
+from utilidades import get_db_connection, limpiar_texto
 
 # --- VERSIÓN DEFINITIVA DE LA FUNCIÓN DE PROCESAMIENTO ---
 def procesar_archivos_masivos(archivos):
@@ -16,7 +16,7 @@ def procesar_archivos_masivos(archivos):
 
     # 2. Precargar catálogo de libros
     res_libros = conn.table("libros").select("libro_id, titulo").execute()
-    inventario_titulos = {normalizar_texto(l['titulo']): l['libro_id'] for l in res_libros.data} if res_libros.data else {}
+    inventario_titulos = {limpiar_texto(l['titulo']): l['libro_id'] for l in res_libros.data} if res_libros.data else {}
 
     for archivo in archivos:
         nombre_archivo_original = os.path.splitext(archivo.name)[0]
@@ -68,7 +68,7 @@ def procesar_archivos_masivos(archivos):
             titulo_raw = row.get(col_titulo)
             if pd.isna(titulo_raw) or not str(titulo_raw).strip(): continue
             
-            titulo_norm = normalizar_texto(str(titulo_raw))
+            titulo_norm = limpiar_texto(str(titulo_raw))
             libro_id = inventario_titulos.get(titulo_norm)
 
             if libro_id:
