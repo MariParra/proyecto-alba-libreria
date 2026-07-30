@@ -894,7 +894,7 @@ def mostrar_asignaciones():
                                         
                                         if st.button("🗑️ Quitar Libro Extra", type="primary"):
                                             ex, err = quitar_un_libro(id_asig, row['cliente_id'], ano_sel, mes_num, "EXTRA", titulo_ext, descuento)
-                                            if ex: st.success("Libro extra quitado."), st.rerun()
+                                            if ex: st.success("Libro extra quitado."), st.balloons(), st.rerun()
                                             else: st.error(err)
                         else: st.info("No hay cajas con libros para quitar.")
                 
@@ -907,7 +907,7 @@ def mostrar_asignaciones():
                             id_asig = int(asig_eliminar.split(" | ")[0].replace("ID:", ""))
                             row = df_mes[df_mes['asignacion_id'] == id_asig].iloc[0]
                             ex, err = eliminar_asignacion(id_asig, row.get('libro_suscripcion_id'), row['cliente_id'], ano_sel, mes_num, row.get('extras', ''))
-                            if ex: st.success("Registro eliminado."), st.rerun()
+                            if ex: st.success("Registro eliminado."), st.balloons(), st.rerun()
                             else: st.error(err)
             else: st.info("No hay registros.")
             
