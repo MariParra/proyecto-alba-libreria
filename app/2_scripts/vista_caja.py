@@ -39,17 +39,14 @@ def cargar_libros_caja():
 def cargar_clientes_caja():
     conn = get_db_connection()
     try:
-        # 🔴 Añadimos rut y direccion a la descarga
         res = conn.table("clientes").select("cliente_id, nombre, email, telefono, status, rut, direccion").execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except: 
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
-
 def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_existente=None):
     if not nombre: return None
     conn = get_db_connection()
-
     datos = {
         "nombre": limpiar_texto(nombre), 
         "email": limpiar_texto(correo), 
@@ -60,18 +57,15 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
     
     try:
         if cliente_id_existente:
-            # Si el cliente ya existe, actualizamos todo el contacto y NO tocamos su 'status'
             conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
             return cliente_id_existente
         else:
-            # Si el cliente es nuevo, lo creamos con el estado base
             datos["status"] = "CLIENTE REGULAR"
             response = conn.table("clientes").insert(datos).execute()
             return response.data[0]['cliente_id']
     except Exception as e: 
         print(f"Error gestionando cliente: {e}")
         return None
-
 
 def cargar_historial_completo():
     conn = get_db_connection()
@@ -110,32 +104,6 @@ def cargar_historial_completo():
         st.error(f"Error cargando historial: {e}")
         return pd.DataFrame()
 
-def gestionar_cliente(nombre, correo, telefono, cliente_id_existente=None):
-    if not nombre: return None
-    conn = get_db_connection()
-    
-    # Preparamos solo los datos de contacto
-    datos = {
-        "nombre": limpiar_texto(nombre), 
-        "email": limpiar_texto(correo), 
-        "telefono": limpiar_texto(telefono)
-    }
-    
-    try:
-        if cliente_id_existente:
-            # Si el cliente ya existe, actualizamos contacto y NO tocamos su 'status'
-            conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
-            return cliente_id_existente
-        else:
-            # Si el cliente es nuevo, lo creamos con el estado base
-            datos["status"] = "CLIENTE REGULAR"
-            response = conn.table("clientes").insert(datos).execute()
-            return response.data[0]['cliente_id']
-    except Exception as e: 
-        print(f"Error gestionando cliente: {e}")
-        return None
-
-
 def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
     conn = get_db_connection()
     datos = {"titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor), "precio": float(precio_catalogo)}
@@ -148,7 +116,6 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         response = conn.table("libros").insert(datos).execute()
         return response.data[0]['libro_id']
 
-# 🔴 SE AGREGÓ EL PARÁMETRO asignacion_id PARA INYECTAR EXTRAS
 def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, abono_venta, asignacion_id=None):
     conn = get_db_connection()
     libros_para_json = []
@@ -162,9 +129,9 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         costo_unitario = item.get('costo', 0.0)
         if pd.isna(costo_unitario) or costo_unitario is None: costo_unitario = 0.0
         costo_total_venta += float(costo_unitario) * int(item['cantidad'])
-
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
+    
     try:
         datos_venta = {
             "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
@@ -190,10 +157,11 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
         
-        # 🔴 INYECCIÓN AUTOMÁTICA DE EXTRAS EN ASIGNACIONES
+        # 🔴 INYECCIÓN AUTOMÁTICA DE EXTRAS EN ASIGNACIONES (CORREGIDO)
         if asignacion_id:
             try:
-                res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("id", asignacion_id).execute()
+                # Corregimos 'id' a 'asignacion_id'
+                res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
                 if res_asig.data:
                     asig_actual = res_asig.data[0]
                     extras_previos = asig_actual.get('extras') or ""
@@ -203,14 +171,15 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     extras_final = f"{extras_previos} | {nuevos_extras_str}".strip(" |")
                     valor_final = valor_previo + subtotal_libros
                     
+                    # Corregimos 'estado' a 'estado_envio' y 'id' a 'asignacion_id'
                     conn.table("asignaciones").update({
                         "extras": extras_final,
                         "valor_extras": valor_final,
-                        "estado": "EXTRAS AÑADIDOS"
-                    }).eq("id", asignacion_id).execute()
+                        "estado_envio": "EXTRAS AÑADIDOS"
+                    }).eq("asignacion_id", asignacion_id).execute()
             except Exception as ex:
                 print(f"Error inyectando extras en asignacion: {ex}")
-
+                
         st.session_state.carrito_caja = []
         return True, ""
     except Exception as e: return False, str(e)
@@ -296,7 +265,6 @@ def mostrar_caja():
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
         
-        # 🔴 Añadimos las variables de RUT y Dirección
         c_id, c_nombre, c_correo, c_telefono, c_rut, c_direccion = None, "", "", "", "", ""
         
         if modo_cliente == "👤 Buscar Existente":
@@ -312,7 +280,6 @@ def mostrar_caja():
                     c_direccion = datos_c.get('direccion', '')
                     
                     with st.expander(f"✏️ Ver/Editar datos (Status: {datos_c.get('status', 'REGULAR')})", expanded=False):
-                        # 🔴 Organizamos en columnas para que no ocupe tanto espacio hacia abajo
                         col_cd1, col_cd2 = st.columns(2)
                         c_nombre = col_cd1.text_input("Nombre:", value=c_nombre)
                         c_rut = col_cd2.text_input("RUT:", value=c_rut)
@@ -329,8 +296,6 @@ def mostrar_caja():
                 c_correo = col_cn1.text_input("Correo (Opcional):")
                 c_telefono = col_cn2.text_input("Teléfono (Opcional):")
                 c_direccion = st.text_input("Dirección de Despacho (Opcional):")
-                
-        st.markdown("---")
                 
         st.markdown("---")
         st.markdown("### 2️⃣ Añadir Libros al Carrito")
@@ -395,7 +360,6 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        # 🔴 NUEVO MODO DE ENVÍO INTEGRADO CON ASIGNACIONES
         opciones_envio = ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior", "Añadir a caja de suscripción"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
@@ -407,10 +371,11 @@ def mostrar_caja():
         if modo_envio == "Añadir a caja de suscripción":
             if c_id is not None:
                 conn = get_db_connection()
-                res_cajas = conn.table("asignaciones").select("id, mes, estado").eq("cliente_id", c_id).execute()
-                cajas_abiertas = [c for c in res_cajas.data if c.get('estado', '') not in ["ENVIADO", "ENTREGADO/RETIRADO"]]
+                # 🔴 CORRECCIÓN: Buscamos 'asignacion_id' y 'estado_envio'
+                res_cajas = conn.table("asignaciones").select("asignacion_id, mes, estado_envio").eq("cliente_id", c_id).execute()
+                cajas_abiertas = [c for c in res_cajas.data if c.get('estado_envio', '') not in ["ENVIADO", "ENTREGADO/RETIRADO", "RETIRADO"]]
                 if cajas_abiertas:
-                    opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado','')} (ID: {c['id']})" for c in cajas_abiertas]
+                    opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado_envio','')} (ID: {c['asignacion_id']})" for c in cajas_abiertas]
                     caja_sel = col_e2.selectbox("Caja de Suscripción abierta:", opciones_cajas)
                     asignacion_id_target = int(caja_sel.split("(ID: ")[1].strip(")"))
                     metodo_envio_final = f"Inyectado a {caja_sel.split(' -')[0]}"
@@ -458,7 +423,6 @@ def mostrar_caja():
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
-                # 🔴 Agregamos c_rut y c_direccion al llamado
                 final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
                 exito, err = procesar_venta_carrito(
                     st.session_state.carrito_caja, final_cliente_id, valor_envio, 
@@ -472,7 +436,7 @@ def mostrar_caja():
                     st.rerun()
                 else: 
                     st.error(f"Error: {err}")
-
+                    
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = df_ventas_global.copy()
@@ -483,7 +447,6 @@ def mostrar_caja():
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas ilegibles"):
                     st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'nombre_cliente']], hide_index=True)
-
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3 = st.columns(3)
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
@@ -531,9 +494,7 @@ def mostrar_caja():
             df_mostrar = df_filtrado_general.copy()
             if solo_costo_cero: df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             df_mostrar = df_mostrar[columnas_a_mostrar].copy()
-
             st.session_state.historial_original = df_mostrar.copy()
-
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
@@ -557,7 +518,7 @@ def mostrar_caja():
                     num = actualizar_historial_batch(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
-
+                    
     with tab_cobranza:
         st.markdown("### 💸 Cuentas por Cobrar")
         if not df_ventas_global.empty:
@@ -571,12 +532,10 @@ def mostrar_caja():
                     rango_fechas_c = col_c1.date_input("Filtrar por Fecha de Venta:", value=(fecha_min_c, fecha_max_c), min_value=fecha_min_c, max_value=fecha_max_c, key="rango_cob")
                     clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
                     cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
-
                 if len(rango_fechas_c) == 2:
                     df_deudores = df_deudores[(df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1])]
                 if cliente_filtro_c != "Todos":
                     df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
-
                 if df_deudores.empty: st.info("No hay deudas que coincidan con los filtros actuales.")
                 else:
                     st.markdown(f"#### 💰 Total por Cobrar (Filtrado): **${df_deudores['deuda'].sum():,.0f}**")
@@ -590,7 +549,7 @@ def mostrar_caja():
                         }
                     )
         else: st.info("No hay deudas registradas.")
-
+        
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")
         df_ventas_anular = df_ventas_global.copy()
