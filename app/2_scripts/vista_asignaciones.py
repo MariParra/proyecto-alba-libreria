@@ -129,44 +129,54 @@ def cargar_asignaciones_mes(ano, mes):
     try:
         # 1. Obtener las asignaciones del mes
         res_asig = conn.table("asignaciones").select("*").eq("ano", ano).eq("mes", mes).execute()
-        df_asig = pd.DataFrame(res_asig.data) if res_asig.data else pd.DataFrame()
-
-        if df_asig.empty:
+        if not res_asig.data:
             return pd.DataFrame()
+        df_asig = pd.DataFrame(res_asig.data)
 
-        # 2. Obtener los datos de los clientes (incluida la nueva fecha del librero)
+        # 2. Obtener los datos de los clientes
         res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, fecha_actualizacion_librero").execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
-        
-        # --- CORRECCIÓN CLAVE ---
-        # 3. Obtener los datos de las suscripciones (aquí están los géneros)
+
+        # 3. Obtener los datos de las suscripciones
         res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia").execute()
         df_suscripciones = pd.DataFrame(res_suscripciones.data) if res_suscripciones.data else pd.DataFrame()
+        
+        # --- ¡CORRECCIÓN CLAVE! ---
+        # 4. Obtener los títulos de los libros
+        res_libros = conn.table("libros").select("libro_id, titulo").execute()
+        df_libros = pd.DataFrame(res_libros.data) if res_libros.data else pd.DataFrame()
 
-        # 4. Unir (merge) los DataFrames
+        # 5. Unir (merge) los 4 DataFrames
         df_merged = pd.merge(df_asig, df_clientes, on="cliente_id", how="left")
         
-        # Unimos ahora las suscripciones
         if not df_suscripciones.empty:
             df_merged = pd.merge(df_merged, df_suscripciones, on="cliente_id", how="left")
-        else:
-            df_merged['generos_preferencia'] = "Sin datos"
         
-        # Asegurarnos de que las columnas esperadas existan para evitar errores futuros
-        columnas_esperadas = ['asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'ano', 'mes', 'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'nombre', 'rut', 'fecha_actualizacion_librero', 'generos_preferencia']
+        if not df_libros.empty:
+            # Renombramos la columna 'libro_id' de la tabla libros para evitar conflictos con el 'libro_suscripcion_id'
+            df_libros = df_libros.rename(columns={'libro_id': 'libro_suscripcion_id', 'titulo': 'titulo_libro'})
+            df_merged = pd.merge(df_merged, df_libros, on="libro_suscripcion_id", how="left")
+
+        # Asegurarnos de que las columnas esperadas existan
+        columnas_esperadas = [
+            'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
+            'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 
+            'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'rut', 
+            'fecha_actualizacion_librero', 'generos_preferencia'
+        ]
         for col in columnas_esperadas:
             if col not in df_merged.columns:
-                df_merged[col] = None # O un valor por defecto apropiado
+                df_merged[col] = None
 
-        # Rellenar nulos para evitar errores en la interfaz
+        # Rellenar nulos para una interfaz limpia
         df_merged['nombre'] = df_merged['nombre'].fillna('Cliente no encontrado')
+        df_merged['titulo_libro'] = df_merged['titulo_libro'].fillna('Libro no asignado')
         df_merged['generos_preferencia'] = df_merged['generos_preferencia'].fillna('Sin preferencias')
         
         return df_merged
 
     except Exception as e:
-        # Mostramos un error claro si la consulta falla
-        st.error(f"Error crítico al cargar asignaciones: {e}")
+        st.error(f"Error crítico al cargar datos de asignaciones: {e}")
         return pd.DataFrame()
 
 # --- CIERRE DE MES ---
