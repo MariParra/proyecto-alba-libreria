@@ -577,7 +577,16 @@ def mostrar_asignaciones():
             st.caption("Doble clic en las celdas para modificar. Los totales se recalcularán automáticamente.")
             
             columnas_mostrar = ['asignacion_id', 'nombre_cliente', 'titulo_libro', 'estado_envio', 'pagado', 'envio_pagado', 'valor_suscripcion', 'costo_caja', 'utilidad', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario']
-            df_mostrar = df_filtrado[columnas_mostrar].copy()
+            # 1. Filtramos para usar SOLO las columnas que sí existen realmente en el DataFrame
+            columnas_seguras = [col for col in columnas_mostrar if col in df_filtrado.columns]
+            
+            # 2. Mostramos un aviso temporal solo si falta alguna columna para saber cuál es el error
+            if len(columnas_seguras) < len(columnas_mostrar):
+                faltantes = set(columnas_mostrar) - set(columnas_seguras)
+                st.warning(f"⚠️ Debug: La app buscó estas columnas pero no existen: {faltantes}. Mostrando el resto...")
+                
+            # 3. Creamos la tabla de forma segura
+            df_mostrar = df_filtrado[columnas_seguras].copy()
             
             if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                 st.session_state.asignaciones_original = df_mostrar.copy()
