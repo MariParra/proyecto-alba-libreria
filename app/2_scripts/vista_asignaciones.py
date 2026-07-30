@@ -15,7 +15,8 @@ def cargar_clientes_suscritos():
     try:
         res = conn.table("clientes").select("cliente_id, nombre, status").eq("status", "ACTIVA").execute()
         return pd.DataFrame(res.data)
-    except: return pd.DataFrame()
+    except: 
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def cargar_valores_suscripcion():
@@ -23,7 +24,8 @@ def cargar_valores_suscripcion():
     try:
         res = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         return pd.DataFrame(res.data)
-    except: return pd.DataFrame()
+    except: 
+        return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def cargar_catalogo_completo_libros(incluir_sin_stock=False):
@@ -99,39 +101,33 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         st.error(f"Error en cargar_libros_filtrados_para_cliente: {e}")
         return cargar_catalogo_completo_libros(incluir_sin_stock), []
 
-# --- 🚀 CORRECCIÓN DE VELOCIDAD: CARGA OPTIMIZADA SIN CACHÉ ---
+# --- 🚀 CARGA DE ASIGNACIONES OPTIMIZADA EN SEGUNDOS (FILTRADO EN BD) ---
 def cargar_asignaciones_mes(ano, mes):
     conn = get_db_connection()
     try:
-        # 1. Obtener ÚNICAMENTE las asignaciones del mes (Ultra ligero)
         res_asig = conn.table("asignaciones").select("*").eq("ano", ano).eq("mes", mes).execute()
         if not res_asig.data:
             return pd.DataFrame()
         df_asig = pd.DataFrame(res_asig.data)
 
-        # Extraemos la lista única de cliente_ids y libro_ids asignados este mes
         ids_clientes_mes = df_asig['cliente_id'].dropna().unique().tolist()
         ids_libros_mes = df_asig['libro_suscripcion_id'].dropna().unique().tolist()
 
         if not ids_clientes_mes:
             return df_asig
 
-        # 2. Obtener los datos SOLAMENTE de los clientes activos del mes
         res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, fecha_actualizacion_librero").in_("cliente_id", ids_clientes_mes).execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
 
-        # 3. Obtener los datos de suscripciones SOLAMENTE de los clientes activos
         res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia").in_("cliente_id", ids_clientes_mes).execute()
         df_suscripciones = pd.DataFrame(res_suscripciones.data) if res_suscripciones.data else pd.DataFrame()
         
-        # 4. Obtener los títulos ÚNICAMENTE de los libros asignados este mes
         df_libros = pd.DataFrame()
         if ids_libros_mes:
             ids_libros_int = [int(x) for x in ids_libros_mes]
             res_libros = conn.table("libros").select("libro_id, titulo").in_("libro_id", ids_libros_int).execute()
             df_libros = pd.DataFrame(res_libros.data) if res_libros.data else pd.DataFrame()
 
-        # 5. Unir (merge) los DataFrames
         df_merged = pd.merge(df_asig, df_clientes, on="cliente_id", how="left")
         if not df_suscripciones.empty:
             df_merged = pd.merge(df_merged, df_suscripciones, on="cliente_id", how="left")
@@ -139,7 +135,6 @@ def cargar_asignaciones_mes(ano, mes):
             df_libros = df_libros.rename(columns={'libro_id': 'libro_suscripcion_id', 'titulo': 'titulo_libro'})
             df_merged = pd.merge(df_merged, df_libros, on="libro_suscripcion_id", how="left")
 
-        # Columnas de seguridad UI
         columnas_esperadas = [
             'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
             'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 
@@ -167,7 +162,8 @@ def verificar_mes_cerrado(ano, mes):
     try:
         res = conn.table("meses_cerrados").select("id").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         return len(res.data) > 0
-    except: return False
+    except: 
+        return False
 
 def cambiar_estado_mes(ano, mes, cerrar=True):
     conn = get_db_connection()
@@ -180,7 +176,8 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
             conn.table("meses_cerrados").delete().eq("ano", int(ano)).eq("mes", int(mes)).execute()
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido REABIERTO."
-    except Exception as e: return False, str(e)
+    except Exception as e: 
+        return False, str(e)
 
 # --- ACCIONES ---
 
@@ -320,6 +317,7 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
         
     return propuesta, sin_asignar
 
+# --- CORRECCIÓN EN CONFIRMACIÓN: REMOCIÓN DE .CLEAR() INEXISTENTE ---
 def confirmar_propuesta_azar(propuesta, ano, mes):
     conn = get_db_connection()
     exitos = 0
@@ -345,6 +343,7 @@ def confirmar_propuesta_azar(propuesta, ano, mes):
         except Exception as e:
             errores.append(str(e))
             
+    # Limpieza de caché que SÍ tiene decoradores de forma segura
     cargar_catalogo_completo_libros.clear()
     return exitos, errores
 
@@ -367,35 +366,24 @@ def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extr
         return True, ""
     except Exception as e: return False, str(e)
 
-# --- REEMPLAZA LA FUNCIÓN COMPLETA EN vista_asignaciones.py ---
 def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, monto_descuento=0.0):
     conn = get_db_connection()
     try:
-        # Busca el libro que se va a quitar para devolverle el stock
         res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_quitar).execute()
         if res_l.data:
             l_id = res_l.data[0]['libro_id']
-            # Devuelve 1 unidad al stock del libro
             conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", l_id).execute()
-            
-            # Define el origen para buscarlo y borrarlo del historial del cliente
             origen = f"ASIGNACIÓN {mes}/{ano}" if tipo == "PRINCIPAL" else f"ASIGNACIÓN EXTRA {mes}/{ano}"
             conn.table("librero_historico").delete().eq("cliente_id", cliente_id).eq("libro_id", l_id).eq("origen", origen).execute()
-
+            
+        res_asig_exec = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()
+        if not res_asig_exec.data: return False, "No se encontró la asignación."
+        res_asig = res_asig_exec.data[0]
+        
         if tipo == "PRINCIPAL":
-            # Si es el libro principal, se limpia la asignación y se vuelve a PENDIENTE
-            conn.table("asignaciones").update({
-                "libro_suscripcion_id": None, 
-                "estado_envio": "PENDIENTE PREPARACION"
-            }).eq("asignacion_id", asignacion_id).execute()
-        else: # Si es un libro EXTRA
-            res_asig_exec = conn.table("asignaciones").select("*").eq("asignacion_id", asignacion_id).execute()
-            if not res_asig_exec.data: return False, "No se encontró la asignación."
-            res_asig = res_asig_exec.data[0]
-            
+            conn.table("asignaciones").update({"libro_suscripcion_id": None, "estado_envio": "PENDIENTE PREPARACION"}).eq("asignacion_id", asignacion_id).execute()
+        else:
             extras_str = str(res_asig.get('extras', ''))
-            
-            # Reconstruye la lista de extras sin el libro eliminado
             if "EXTRAS:" in extras_str:
                 limpio = extras_str.replace("EXTRAS:", "").strip()
                 delimitador = "|" if "|" in limpio else ","
@@ -403,7 +391,6 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
                 nueva_lista = [x for x in lista_extras if x.upper() != titulo_quitar.upper()]
                 nuevo_texto = "EXTRAS: " + " | ".join(nueva_lista) if nueva_lista else ""
                 
-                # Recalcula los montos
                 v_extras_actual = float(res_asig.get('valor_extras') or 0.0)
                 nuevo_v_extras = max(0.0, v_extras_actual - float(monto_descuento))
                 
@@ -411,19 +398,11 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
                 val_sub = float(res_sub.data[0]['valor_suscripcion']) if res_sub.data else 0.0
                 nuevo_total = val_sub + float(res_asig.get('valor_envio', 0.0) or 0.0) + nuevo_v_extras
                 
-                # Actualiza la asignación con los nuevos valores
-                conn.table("asignaciones").update({
-                    "extras": nuevo_texto, 
-                    "valor_extras": nuevo_v_extras, 
-                    "monto_total": nuevo_total
-                }).eq("asignacion_id", asignacion_id).execute()
-
-        cargar_asignaciones_mes.clear()
+                conn.table("asignaciones").update({"extras": nuevo_texto, "valor_extras": nuevo_v_extras, "monto_total": nuevo_total}).eq("asignacion_id", asignacion_id).execute()
+                
         cargar_catalogo_completo_libros.clear()
-        
         return True, ""
-    except Exception as e: 
-        return False, str(e)
+    except Exception as e: return False, str(e)
 
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
