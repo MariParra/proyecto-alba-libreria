@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from utilidades import get_db_connection
 import smtplib
 from email.mime.text import MIMEText
@@ -170,7 +170,6 @@ def dibujar_tarjeta(tarea, df_todas):
         with st.expander("✏️ Editar Tarea", expanded=False):
             with st.form(f"form_edit_{tarea['id']}"):
                 e_tit = st.text_input("Título", value=tarea['titulo'])
-                
                 ops_tipo = ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"]
                 idx_t = ops_tipo.index(tarea['tipo']) if tarea['tipo'] in ops_tipo else 0
                 e_tipo = st.selectbox("Cambiar Tipo", ops_tipo, index=idx_t)
@@ -231,7 +230,7 @@ def mostrar_kanban():
             if st.form_submit_button("Añadir al Tablero y Notificar", type="primary", use_container_width=True):
                 crear_tarea(t_tit, t_desc, t_tipo, t_prio, t_ini, t_fin, t_dep_id)
 
-    # --- 🔍 FILTROS INTELIGENTES (AHORA TOTALMENTE OPERATIVOS) ---
+    # --- 🔍 FILTROS INTELIGENTES (AHORA SÍ ESTÁN INCLUIDOS) ---
     df_filtrado = df_tareas.copy()
 
     if not df_tareas.empty:
