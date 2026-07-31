@@ -162,11 +162,12 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
                 if res_asig.data:
                     asig_actual = res_asig.data[0]
-                    extras_previos = asig_actual.get('extras') or ""
+                    extras_previos_raw = asig_actual.get('extras') or ""
+                    extras_previos = str(extras_previos_raw).strip().upper()
                     valor_previo = float(asig_actual.get('valor_extras') or 0.0)
                     
-                    nuevos_extras_str = " | ".join([f"{item['cantidad']} x {item['titulo']}" for item in carrito])
-                    extras_final = f"{extras_previos} | {nuevos_extras_str}".strip(" |")
+                    nuevos_extras_str = " | ".join([f"{item['cantidad']} x {item['titulo']}" for item in carrito]).upper()
+                    extras_final = f"{extras_previos} | {nuevos_extras_str}".strip(" |").upper()
                     valor_final = valor_previo + subtotal_libros
                     conn.table("asignaciones").update({
                         "extras": extras_final,

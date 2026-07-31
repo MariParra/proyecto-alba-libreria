@@ -6,7 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- 📧 1. MOTOR INTELIGENTE DE CORREOS (RUTEO POR TIPO) ---
+# --- 📧 1. MOTOR INTELIGENTE DE CORREOS ---
 def obtener_correo_destinatario(tipo):
     if "email" not in st.secrets: return None
     if "Logística" in tipo: return st.secrets["email"].get("dest_logistica")
@@ -121,6 +121,27 @@ def editar_tarea(tarea_id, titulo, tipo, prioridad, dificultad, estado, f_ini, f
         st.rerun()
     except Exception as e: st.error(f"Error al editar: {e}")
 
+# --- 💬 FUNCIONES DE COMENTARIOS ---
+def agregar_comentario(tarea_id, autor, tipo, texto):
+    if not texto or not autor:
+        st.warning("⚠️ El autor y el comentario son obligatorios.")
+        return
+    conn = get_db_connection()
+    try:
+        datos = {
+            "tarea_id": int(tarea_id),
+            "autor": autor,
+            "tipo": tipo,
+            "comentario": texto,
+            "fecha": datetime.now().isoformat()
+        }
+        conn.table("tareas_comentarios").insert(datos).execute()
+        st.toast("💬 Comentario guardado con éxito")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al guardar comentario: {e}")
+
+# --- UTILIDADES VISUALES ---
 def obtener_color_prioridad(prioridad):
     if "Alta" in str(prioridad): return "#ffebee", "#c62828"
     if "Media" in str(prioridad): return "#fff8e1", "#f57f17"
@@ -135,7 +156,7 @@ def obtener_color_tipo(tipo):
     colores = {"Administración 📋": ("#e3f2fd", "#1565c0"), "Desarrollo 💻": ("#f3e5f5", "#6a1b9a"), "Logística 📦": ("#e0f7fa", "#00838f"), "Marketing 📱": ("#fce4ec", "#ad1457")}
     return colores.get(tipo, ("#f5f5f5", "#424242"))
 
-def dibujar_tarjeta(tarea, df_todas):
+def dibujar_tarjeta(tarea, df_todas, df_comentarios):
     bg_prio, txt_prio = obtener_color_prioridad(tarea.get('prioridad', 'Baja 🟢'))
     bg_tipo, txt_tipo = obtener_color_tipo(tarea.get('tipo', 'Administración 📋'))
     bg_dif, txt_dif = obtener_color_dificultad(tarea.get('dificultad', 'Media 🔸'))
@@ -166,6 +187,7 @@ def dibujar_tarjeta(tarea, df_todas):
         if bloqueada: st.error(mensaje_bloqueo, icon="⏳")
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # Botones Rápidos de Estado
         if tarea['estado'] == 'POR HACER':
             if st.button("➡️ Iniciar", key=f"ini_{tarea['id']}", use_container_width=True, disabled=bloqueada): mover_tarea(tarea['id'], "EN PROGRESO")
         elif tarea['estado'] == 'EN PROGRESO':
@@ -175,7 +197,38 @@ def dibujar_tarjeta(tarea, df_todas):
         elif tarea['estado'] == 'COMPLETADO':
             if st.button("🗑️ Eliminar", key=f"del_{tarea['id']}", type="secondary", use_container_width=True): eliminar_tarea(tarea['id'])
             
-        with st.expander("✏️ Editar Tarea", expanded=False):
+        # --- 💬 SECCIÓN DE COMENTARIOS (JIRA STYLE) ---
+        comentarios_tarea = df_comentarios[df_comentarios['tarea_id'] == tarea['id']].sort_values('fecha', ascending=False)
+        num_coms = len(comentarios_tarea)
+        
+        with st.expander(f"💬 Comentarios y Actividad ({num_coms})", expanded=False):
+            # Historial de Comentarios
+            if not comentarios_tarea.empty:
+                for _, com in comentarios_tarea.iterrows():
+                    fecha_com = pd.to_datetime(com['fecha']).strftime("%d/%m/%Y %H:%M")
+                    color_borde = "#1976d2" if "Nota" in com['tipo'] else ("#c62828" if "Error" in com['tipo'] or "Bloqueo" in com['tipo'] else "#388e3c")
+                    
+                    st.markdown(f"""
+                    <div style='background-color: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid {color_borde};'>
+                        <small style='color: #555;'><b>👤 {com['autor']}</b> • 🕒 {fecha_com} • <i>{com['tipo']}</i></small><br>
+                        <span style='font-size: 0.9em; color: #333;'>{com['comentario']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.caption("Aún no hay comentarios en esta tarea.")
+            
+            st.markdown("---")
+            # Formulario Nuevo Comentario
+            with st.form(f"form_com_{tarea['id']}"):
+                c_c1, c_c2 = st.columns(2)
+                autor_com = c_c1.text_input("Tu Nombre", placeholder="Ej: Mariana P.")
+                tipo_com = c_c2.selectbox("Tipo de Nota", ["Nota Informativa 📝", "Resolución de Error 🐛", "Avance 🚀", "Duda / Consulta ❓", "Bloqueo 🛑"])
+                texto_com = st.text_area("Comentario", placeholder="Escribe tu actualización aquí...")
+                if st.form_submit_button("Publicar Comentario", use_container_width=True):
+                    agregar_comentario(tarea['id'], autor_com, tipo_com, texto_com)
+
+        # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
+        with st.expander("✏️ Editar Detalles", expanded=False):
             with st.form(f"form_edit_{tarea['id']}"):
                 e_tit = st.text_input("Título", value=tarea['titulo'])
                 c_edit1, c_edit2 = st.columns(2)
@@ -210,6 +263,10 @@ def mostrar_kanban():
     try:
         res = conn.table("tareas_internas").select("*").execute()
         df_tareas = pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['id', 'titulo', 'descripcion', 'tipo', 'prioridad', 'dificultad', 'estado', 'fecha_inicio', 'fecha_fin', 'depende_de_id', 'alerta_enviada', 'fecha_creacion'])
+        
+        # Cargamos todos los comentarios en masa para mayor velocidad
+        res_com = conn.table("tareas_comentarios").select("*").execute()
+        df_comentarios = pd.DataFrame(res_com.data) if res_com.data else pd.DataFrame(columns=['id', 'tarea_id', 'autor', 'tipo', 'comentario', 'fecha'])
     except Exception as e:
         st.error("Error al cargar la base de datos."); return
 
@@ -249,45 +306,35 @@ def mostrar_kanban():
 
     st.markdown("---")
     
-    # --- 🌟 VISTAS RÁPIDAS (ESTA SEMANA / BACKLOG / TODO) ---
+    # --- 🌟 VISTAS RÁPIDAS ---
     vista_actual = st.radio(
         "👁️ Selecciona tu Vista de Trabajo:", 
         ["🎯 Esta Semana", "📥 Backlog (Sin planificar)", "🌍 Ver Todo"], 
-        horizontal=True,
-        index=0
+        horizontal=True, index=0
     )
     
     df_filtrado = df_tareas.copy()
     
     if not df_filtrado.empty:
-        # Cálculos de fechas para la semana actual
         hoy = date.today()
-        inicio_semana = hoy - timedelta(days=hoy.weekday()) # Lunes
-        fin_semana = inicio_semana + timedelta(days=6)      # Domingo
+        inicio_semana = hoy - timedelta(days=hoy.weekday())
+        fin_semana = inicio_semana + timedelta(days=6)
         
-        # Parseamos todas las fechas de la BD a formato date seguro
         df_filtrado['f_ini_dt'] = pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date
         df_filtrado['f_fin_dt'] = pd.to_datetime(df_filtrado['fecha_fin'], errors='coerce').dt.date
         df_filtrado['f_crea_dt'] = pd.to_datetime(df_filtrado['fecha_creacion'], errors='coerce').dt.date
         
-        # --- LÓGICA DE VISTAS INTELIGENTES ---
         if vista_actual == "🎯 Esta Semana":
-            # 1. En Progreso siempre se muestra
             mask_prog = df_filtrado['estado'] == 'EN PROGRESO'
-            # 2. Por Hacer: que tengan alguna fecha y que toque esta semana o esté atrasada
             mask_por_hacer = (df_filtrado['estado'] == 'POR HACER') & ((df_filtrado['f_ini_dt'] <= fin_semana) | (df_filtrado['f_fin_dt'] <= fin_semana))
-            # 3. Completado: solo las que se terminaron recientemente o se crearon esta misma semana
             mask_completadas = (df_filtrado['estado'] == 'COMPLETADO') & ((df_filtrado['f_fin_dt'] >= inicio_semana) | (df_filtrado['f_ini_dt'] >= inicio_semana) | (df_filtrado['f_crea_dt'] >= inicio_semana))
-            
             df_filtrado = df_filtrado[mask_prog | mask_por_hacer | mask_completadas]
             
         elif vista_actual == "📥 Backlog (Sin planificar)":
-            # Backlog son solo las tareas Por Hacer que NO tienen fecha o son para el futuro
             mask_sin_fecha = df_filtrado['f_ini_dt'].isna() & df_filtrado['f_fin_dt'].isna()
             mask_futuras = (df_filtrado['f_ini_dt'] > fin_semana) | (df_filtrado['f_fin_dt'] > fin_semana)
             df_filtrado = df_filtrado[(df_filtrado['estado'] == 'POR HACER') & (mask_sin_fecha | mask_futuras)]
 
-        # --- 🔍 FILTROS MANUALES ADICIONALES ---
         with st.expander("🔍 Añadir Filtros Específicos (Buscar, Tipo, Prioridad, Dificultad)", expanded=False):
             col_f1, col_f2, col_f3, col_f4 = st.columns(4)
             f_texto = col_f1.text_input("🔍 Título:")
@@ -308,16 +355,16 @@ def mostrar_kanban():
         st.markdown(f"### 📌 Por Hacer ({len(df_filtrado[df_filtrado['estado'] == 'POR HACER'])})")
         st.markdown("<div style='height: 4px; background-color: #ffb74d; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
         if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'POR HACER'].iterrows(): dibujar_tarjeta(t, df_tareas)
+            for _, t in df_filtrado[df_filtrado['estado'] == 'POR HACER'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
 
     with col_progreso:
         st.markdown(f"### ⏳ En Progreso ({len(df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'])})")
         st.markdown("<div style='height: 4px; background-color: #4fc3f7; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
         if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'].iterrows(): dibujar_tarjeta(t, df_tareas)
+            for _, t in df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
 
     with col_done:
         st.markdown(f"### ✅ Completado ({len(df_filtrado[df_filtrado['estado'] == 'COMPLETADO'])})")
         st.markdown("<div style='height: 4px; background-color: #81c784; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
         if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'COMPLETADO'].iterrows(): dibujar_tarjeta(t, df_tareas)
+            for _, t in df_filtrado[df_filtrado['estado'] == 'COMPLETADO'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
