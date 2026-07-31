@@ -315,57 +315,74 @@ def mostrar_inventario():
         st.write("")
         
         if modo_edicion == "📱 Vista Móvil (Formulario)":
-            titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
-            titulo_a_editar = st.selectbox("Busca y selecciona un libro para editar:", titulos_filtrados, key="sel_editar")
             
-            if titulo_a_editar:
-                libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
-                with st.form("form_editar_movil"):
-                    st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
-                    opciones_autor = obtener_unicos(df_inventario, 'autor')
-                    opciones_editorial = obtener_unicos(df_inventario, 'editorial')
-                    opciones_genero = obtener_unicos(df_inventario, 'genero')
-                    opciones_enc = obtener_unicos(df_inventario, 'encuadernacion')
-                    col1, col2 = st.columns(2)
-                    try: idx_autor = opciones_autor.index(libro['autor'])
-                    except ValueError: idx_autor = 0
-                    nuevo_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
-                    try: idx_editorial = opciones_editorial.index(libro['editorial'])
-                    except ValueError: idx_editorial = 0
-                    nueva_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
-                    col3, col4 = st.columns(2)
-                    try: idx_genero = opciones_genero.index(libro['genero'])
-                    except ValueError: idx_genero = 0
-                    nuevo_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
-                    try: idx_enc = opciones_enc.index(libro['encuadernacion'])
-                    except ValueError: idx_enc = 0
-                    nueva_encuadernacion = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
-                    col5, col6, col7 = st.columns(3)
-                    nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
-                    nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
+            # 1. Creamos un diccionario que une el ID único con el Título {15: "El Principito"}
+            dict_libros = dict(zip(df_filtrado['libro_id'], df_filtrado['titulo']))
+            
+            # 2. Creamos la lista de opciones usando los IDs (agregando None al principio para que quede vacío por defecto)
+            opciones_ids = [None] + list(dict_libros.keys())
+            
+            # 3. El selectbox usa los IDs, pero MUESTRA los títulos gracias a format_func
+            libro_id_a_editar = st.selectbox(
+                "Busca y selecciona un libro para editar:", 
+                options=opciones_ids,
+                format_func=lambda x: "" if x is None else dict_libros[x],
+                key="sel_editar_id"
+            )
+            
+            if libro_id_a_editar:
+                filas_encontradas = df_filtrado[df_filtrado['libro_id'] == libro_id_a_editar]
+                
+                if filas_encontradas.empty:
+                    st.warning("⚠️ El libro seleccionado ya no está disponible en los filtros actuales. Por favor, refresca la página.")
+                else:
+                    libro = filas_encontradas.iloc[0]
+                    with st.form("form_editar_movil"):
+                        st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
+                        opciones_autor = obtener_unicos(df_inventario, 'autor')
+                        opciones_editorial = obtener_unicos(df_inventario, 'editorial')
+                        opciones_genero = obtener_unicos(df_inventario, 'genero')
+                        opciones_enc = obtener_unicos(df_inventario, 'encuadernacion')
+                        col1, col2 = st.columns(2)
+                        try: idx_autor = opciones_autor.index(libro['autor'])
+                        except ValueError: idx_autor = 0
+                        nuevo_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
+                        try: idx_editorial = opciones_editorial.index(libro['editorial'])
+                        except ValueError: idx_editorial = 0
+                        nueva_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
+                        col3, col4 = st.columns(2)
+                        try: idx_genero = opciones_genero.index(libro['genero'])
+                        except ValueError: idx_genero = 0
+                        nuevo_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
+                        try: idx_enc = opciones_enc.index(libro['encuadernacion'])
+                        except ValueError: idx_enc = 0
+                        nueva_encuadernacion = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
+                        col5, col6, col7 = st.columns(3)
+                        nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
+                        nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
                     
-                    # 🔴 En el modo móvil también mostramos el precio original
-                    nuevo_precio_original = col7.number_input("Precio Original ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
-                    
-                    if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                        # 🔴 Mandamos a guardar el precio_original y dejamos que el procesador batch haga la matemática
-                        datos_actualizados = {"autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero, "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock, "costo": nuevo_costo, "precio_original": nuevo_precio_original}
+                        # En el modo móvil también mostramos el precio original
+                        nuevo_precio_original = col7.number_input("Precio Original ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                         
-                        # Rescatamos el porcentaje de descuento para calcular en móvil
-                        pct_dcto = float(libro.get('Dcto %', 0))
-                        if pct_dcto > 0:
-                            datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
-                        else:
-                            datos_actualizados['precio'] = nuevo_precio_original
+                        if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                            # Mandamos a guardar el precio_original y dejamos que el procesador batch haga la matemática
+                            datos_actualizados = {"autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero, "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock, "costo": nuevo_costo, "precio_original": nuevo_precio_original}
                             
-                        exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
-                        if exito:
-                            st.success("¡Libro actualizado correctamente!")
-                            st.snow()
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error(f"Error: {error}")
+                            # Rescatamos el porcentaje de descuento para calcular en móvil
+                            pct_dcto = float(libro.get('Dcto %', 0))
+                            if pct_dcto > 0:
+                                datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
+                            else:
+                                datos_actualizados['precio'] = nuevo_precio_original
+                                
+                            exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
+                            if exito:
+                                st.success("¡Libro actualizado correctamente!")
+                                st.snow()
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(f"Error: {error}")
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
