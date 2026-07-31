@@ -119,7 +119,7 @@ def cargar_asignaciones_mes(ano, mes):
         res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, fecha_actualizacion_librero").in_("cliente_id", ids_clientes_mes).execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
 
-        res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia").in_("cliente_id", ids_clientes_mes).execute()
+        res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia, metodo_entrega").in_("cliente_id", ids_clientes_mes).execute()
         df_suscripciones = pd.DataFrame(res_suscripciones.data) if res_suscripciones.data else pd.DataFrame()
         
         df_libros = pd.DataFrame()
@@ -139,7 +139,7 @@ def cargar_asignaciones_mes(ano, mes):
             'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
             'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 
             'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'rut', 
-            'fecha_actualizacion_librero', 'generos_preferencia'
+            'fecha_actualizacion_librero', 'generos_preferencia', 'metodo_entrega'
         ]
         for col in columnas_esperadas:
             if col not in df_merged.columns:
