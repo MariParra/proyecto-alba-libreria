@@ -205,7 +205,19 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
             # Historial de Comentarios
             if not comentarios_tarea.empty:
                 for _, com in comentarios_tarea.iterrows():
-                    fecha_com = pd.to_datetime(com['fecha']).strftime("%d/%m/%Y %H:%M")
+                                        # --- CONVERSIÓN DE UTC A ZONA HORARIA DE CHILE (CORREGIDO) ---
+                    # 1. Convertimos la fecha de la base de datos a formato de tiempo
+                    fecha_utc = pd.to_datetime(com['fecha'])
+                    
+                    # 2. Le indicamos a Python que la hora original viene en UTC y la convertimos a Chile (Santiago)
+                    if fecha_utc.tzinfo is None:
+                        fecha_chile = fecha_utc.tz_localize('UTC').tz_convert('America/Santiago')
+                    else:
+                        fecha_chile = fecha_utc.tz_convert('America/Santiago')
+                        
+                    # 3. Formateamos la fecha resultante para la pantalla
+                    fecha_com = fecha_chile.strftime("%d/%m/%Y %H:%M")
+
                     color_borde = "#1976d2" if "Nota" in com['tipo'] else ("#c62828" if "Error" in com['tipo'] or "Bloqueo" in com['tipo'] else "#388e3c")
                     
                     st.markdown(f"""
