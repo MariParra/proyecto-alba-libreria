@@ -159,22 +159,48 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
 
         if asignacion_id:
             try:
+                # 1. Obtenemos los datos actuales de la base de datos (sin cambios)
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
                 if res_asig.data:
                     asig_actual = res_asig.data[0]
                     extras_previos_raw = asig_actual.get('extras') or ""
-                    extras_previos = str(extras_previos_raw).strip().upper()
                     valor_previo = float(asig_actual.get('valor_extras') or 0.0)
+
+                    # 2. Convertimos los extras existentes (vengan con '|' o '\n') a una lista limpia
+                    #    Esta función es robusta: entiende el formato viejo y el nuevo.
+                    lista_extras_previos = []
+                    if extras_previos_raw:
+                        # Reemplazamos saltos de línea por pipes para unificar, luego separamos.
+                        items = extras_previos_raw.replace('\n', '|').split('|')
+                        for item in items:
+                            # Limpiamos cada item de numeración (ej: "1. ") y espacios.
+                            item_limpio = item.strip()
+                            if '.' in item_limpio:
+                                item_limpio = item_limpio.split('.', 1)[-1].strip()
+                            if item_limpio:
+                                lista_extras_previos.append(item_limpio.upper())
+
+                    # 3. Creamos una lista con los NUEVOS extras del carrito (sin cambios)
+                    nuevos_extras_list = [f"{item['cantidad']} x {item['titulo']}".upper() for item in carrito]
+
+                    # 4. Unimos la lista de extras previos con los nuevos
+                    lista_completa = lista_extras_previos + nuevos_extras_list
+
+                    # 5. Convertimos la lista completa a un texto enumerado con saltos de línea
+                    extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
                     
-                    nuevos_extras_str = " | ".join([f"{item['cantidad']} x {item['titulo']}" for item in carrito]).upper()
-                    extras_final = f"{extras_previos} | {nuevos_extras_str}".strip(" |").upper()
+                    # 6. Calculamos el valor final (sin cambios)
                     valor_final = valor_previo + subtotal_libros
+
+                    # 7. Actualizamos la base de datos con el nuevo formato enumerado
                     conn.table("asignaciones").update({
-                        "extras": extras_final,
+                        "extras": extras_final_enumerado,  # <--- Guardamos el texto con saltos de línea
                         "valor_extras": valor_final
                     }).eq("asignacion_id", asignacion_id).execute()
+
             except Exception as ex:
                 print(f"Error inyectando extras en asignacion: {ex}")
+
                 
         st.session_state.carrito_caja = []
         return True, ""

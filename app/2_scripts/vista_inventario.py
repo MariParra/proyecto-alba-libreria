@@ -285,12 +285,15 @@ def mostrar_inventario():
         columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
         
         def estilizar_catalogo(data):
+            # Creamos un DataFrame vacío para almacenar los estilos CSS
             estilos = pd.DataFrame('', index=data.index, columns=data.columns)
-            sin_stock = df_filtrado.loc[data.index, 'stock'] <= 0
-            en_oferta = df_filtrado.loc[data.index, 'Oferta'] != 'Estándar'
+
+            con_stock = df_filtrado.loc[data.index, 'stock'] > 0
+
             for col in data.columns:
-                estilos.loc[en_oferta, col] = 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
+                estilos.loc[con_stock, col] = 'background-color: #d7edd2; color: #75956f; font-weight: bold'
             return estilos
+
             
         df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
         
