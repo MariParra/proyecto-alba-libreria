@@ -315,11 +315,25 @@ def mostrar_inventario():
         st.write("")
         
         if modo_edicion == "📱 Vista Móvil (Formulario)":
-            titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
-            titulo_a_editar = st.selectbox("Busca y selecciona un libro para editar:", titulos_filtrados, key="sel_editar")
             
-            if titulo_a_editar:
-                libro = df_filtrado[df_filtrado['titulo'] == titulo_a_editar].iloc[0]
+            # 1. Creamos un diccionario que une el ID único con el Título {15: "El Principito"}
+            dict_libros = dict(zip(df_filtrado['libro_id'], df_filtrado['titulo']))
+            
+            # 2. Creamos la lista de opciones usando los IDs (agregando None al principio para que quede vacío por defecto)
+            opciones_ids = [None] + list(dict_libros.keys())
+            
+            # 3. El selectbox usa los IDs, pero MUESTRA los títulos gracias a format_func
+            libro_id_a_editar = st.selectbox(
+                "Busca y selecciona un libro para editar:", 
+                options=opciones_ids,
+                format_func=lambda x: "" if x is None else dict_libros[x],
+                key="sel_editar_id"
+            )
+            
+            if libro_id_a_editar:
+                # 4. Ahora buscamos el libro en la tabla usando su ID único y exacto
+                libro = df_filtrado[df_filtrado['libro_id'] == libro_id_a_editar].iloc[0]
+                
                 with st.form("form_editar_movil"):
                     st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
                     opciones_autor = obtener_unicos(df_inventario, 'autor')
