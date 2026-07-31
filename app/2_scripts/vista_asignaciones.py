@@ -691,7 +691,9 @@ def mostrar_asignaciones():
                     else:
                         with st.container(border=True):
                             st.markdown("##### 🔽 Filtrar Clientes Pendientes")
-                            metodos_disponibles = sorted(df_pendientes['metodo_entrega'].dropna().unique())
+                            df_pendientes['metodo_entrega_limpio'] = df_pendientes['metodo_entrega'].apply(limpiar_texto)
+                            metodos_disponibles = sorted(df_pendientes['metodo_entrega_limpio'].dropna().unique())
+                            metodos_disponibles = [m for m in metodos_disponibles if m]
                             metodo_seleccionado = st.multiselect(
                                 "Filtrar por Método de Envío:",
                                 options=metodos_disponibles
@@ -700,7 +702,7 @@ def mostrar_asignaciones():
                         # Filtramos la lista de clientes según la selección
                         df_clientes_a_mostrar = df_pendientes.copy()
                         if metodo_seleccionado:
-                            df_clientes_a_mostrar = df_clientes_a_mostrar[df_clientes_a_mostrar['metodo_entrega'].isin(metodo_seleccionado)]
+                            df_clientes_a_mostrar = df_clientes_a_mostrar[df_clientes_a_mostrar['metodo_entrega_limpio'].isin(metodo_seleccionado)]
                             
                         st.markdown("---")
                         
