@@ -4,7 +4,7 @@ import os
 import base64
 import json
 from dotenv import load_dotenv
-
+import time
 # --- IMPORTACIÓN DE VISTAS ---
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
@@ -13,12 +13,11 @@ from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
 from vista_libreros import mostrar_importacion_libreros
-
-# Nuevas importaciones añadidas
 from vista_creacion_masiva import mostrar_creacion_masiva
 from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
 from vista_kanban import mostrar_kanban
+from vista_rollback import mostrar_rollback
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -49,6 +48,18 @@ if CLIENT_ID and CLIENT_SECRET:
 else:
     oauth2 = None
     
+# HILO DE CONEXIÓN ACTIVA (HEARTBEAT)
+# Se ejecuta silenciosamente cada 5 minutos (300 segundos) de fondo
+# para mantener el Websocket abierto sin recargar la pantalla completa.
+@st.fragment(run_every=300)
+def mantener_conexion_activa():
+    # Solo hace una operación diminuta de fondo
+    _ = time.time()
+    
+mantener_conexion_activa()
+
+# --- FIN DEL HEARTBEAT ---
+
 @st.cache_data
 def get_image_as_base64(path):
     """Convierte una imagen local a una cadena de texto Base64 de forma instantánea."""
@@ -168,10 +179,16 @@ else:
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
         ruta_logo = os.path.join(script_dir, "logo.png")
+        
         try:
-            st.sidebar.image(ruta_logo, use_container_width=True)
+            # Creamos 3 columnas invisibles en la barra lateral: 
+            # Los bordes (1) actúan como márgenes, y el centro (2) contiene el logo.
+            col_margen1, col_logo, col_margen2 = st.sidebar.columns([1, 2, 1])
+            with col_logo:
+                st.image(ruta_logo, use_container_width=True)
         except Exception:
             st.sidebar.warning("Logo no encontrado")
+            
         st.sidebar.title("📚 Panel de Control")
         st.sidebar.info("Selecciona un módulo para gestionar tu negocio.")
         
@@ -224,6 +241,9 @@ else:
         if st.button("📋 TABLERO KANBAN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📋 TABLERO KANBAN" else "secondary"):
             st.session_state.pagina_actual = "📋 TABLERO KANBAN"
             st.rerun()
+        if st.button("⏪ ROLLBACK BD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⏪ ROLLBACK BD" else "secondary"):
+            st.session_state.pagina_actual = "⏪ ROLLBACK BD"
+            st.rerun()
 
         st.markdown("---")
         if st.button("🔄 Refrescar Toda la App", type="secondary", use_container_width=True):
@@ -263,8 +283,6 @@ else:
             mostrar_herramientas()
         elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
             mostrar_importacion_libreros()
-            
-        # --- NUEVAS RUTAS AÑADIDAS ---
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
         elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA":
@@ -273,3 +291,5 @@ else:
             mostrar_actualizacion_masiva()
         elif st.session_state.pagina_actual == "📋 TABLERO KANBAN":
             mostrar_kanban()
+        elif st.session_state.pagina_actual == "⏪ ROLLBACK BD": 
+            mostrar_rollback()
