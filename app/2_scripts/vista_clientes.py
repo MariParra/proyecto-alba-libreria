@@ -191,9 +191,10 @@ def mostrar_clientes():
                             st.info("✅ La clienta **recibirá una caja** en la próxima generación del mes.")
                         elif estado_actual == 'PAUSADO':
                             st.warning("⏸️ Suscripción en pausa. **NO recibirá caja** hasta que la vuelvas a cambiar a ACTIVA.")
-                        else:
-                            st.markdown("La clienta **NO recibirá caja** de suscripción (puede seguir haciendo compras directas).")
-                
+                        elif estado_actual == 'CLIENTE REGULAR':
+                            st.success("🛍️ Es un **Cliente Regular** de la tienda. Puede hacer compras directas pero no está en el club de suscripción.")
+                        else: # Este 'else' ahora solo captura 'INACTIVO' y cualquier otro estado inesperado
+                            st.error("🔴 Suscripción cancelada. **NO recibirá caja**.")
                 st.markdown("---")
                 
                 df_historial = obtener_historial_completo(c_id)
