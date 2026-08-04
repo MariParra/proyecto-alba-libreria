@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
-from utilidades import get_db_connection
+from utilidades import get_db_connection, log_error
 
 # Esta función ya está bien, la mantenemos
 @st.cache_data(ttl=60)
@@ -43,10 +43,18 @@ def mostrar_alertas_proactivas():
                 st.error("Los siguientes libros están a punto de agotarse o ya no tienen stock:")
                 for l in libros_criticos:
                     st.markdown(f"- **{l['titulo']}** (Stock actual: `{l['stock']}` unidades)")
-    except Exception:
-        pass
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_dashboard",
+            funcion="mostrar_alertas_proactivas",
+            error=f"Fallo al obtener alertas de stock crítico. Detalle: {e}",
+            email_usuario=email_usuario
+        )
+        
+        st.toast("No se pudieron verificar las alertas de stock.", icon="❗")
 
-# Esta función también estaba en tu código, la incluimos
 def obtener_top_libros_populares(df_ventas_filt, df_asig_filt):
     conn = get_db_connection()
     conteo_libros = {}
@@ -65,7 +73,13 @@ def obtener_top_libros_populares(df_ventas_filt, df_asig_filt):
                         l_id = l.get('libro_id')
                         if l_id:
                             conteo_libros[int(l_id)] = conteo_libros.get(int(l_id), 0) + 1
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError) as json_e:
+                    log_error(
+                        vista="vista_dashboard",
+                        funcion="obtener_top_libros_populares (JSON Ventas)",
+                        error=f"JSON Corrupto en venta ID {row.get('venta_id', 'N/A')}. Detalle: {json_e}",
+                        email_usuario="Sistema"
+                    )
                     continue
         
         if not conteo_libros:
@@ -80,6 +94,13 @@ def obtener_top_libros_populares(df_ventas_filt, df_asig_filt):
             df_top = df_detalles.sort_values(by="Cantidad", ascending=False).head(10)
             return df_top.set_index('titulo')[['Cantidad']]
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_dashboard",
+            funcion="obtener_top_libros_populares",
+            error=f"Error generando ranking de libros: {e}",
+            email_usuario=email_usuario
+        )
         st.error(f"Error generando ranking de libros: {e}")
     return pd.DataFrame()
 

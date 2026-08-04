@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 
 # ==========================================================
 # 🛠️ FUNCIONES DE GENERACIÓN DE PLANTILLAS (EXCEL)
@@ -20,6 +20,15 @@ def generar_plantilla_actualizacion_libros():
                 worksheet.set_column(i, i, 20)
         return output.getvalue()
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_actualizacion_masiva", 
+            funcion="generar_plantilla_actualizacion_libros",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
         st.error(f"Error generando plantilla de libros: {e}")
         return None
 
@@ -36,6 +45,15 @@ def generar_plantilla_actualizacion_clientes():
                 worksheet.set_column(i, i, 20)
         return output.getvalue()
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                
+        log_error(
+            vista="vista_actualizacion_masiva", 
+            funcion="generar_plantilla_actualizacion_clientes",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
         st.error(f"Error generando plantilla de clientes: {e}")
         return None
 
@@ -131,65 +149,120 @@ def mostrar_actualizacion_masiva():
         st.markdown("### 1. Descarga el Inventario Actual")
         st.caption("Obtén el archivo Excel con tus libros actuales, modifícalo en tu equipo y súbelo abajo.")
         
-        plantilla_libros = generar_plantilla_actualizacion_libros()
-        if plantilla_libros:
-            st.download_button(
-                label="📥 Descargar Inventario de Libros (.xlsx)",
-                data=plantilla_libros,
-                file_name="inventario_libros_actualizar.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+        try:
+            plantilla_libros = generar_plantilla_actualizacion_libros()
+            if plantilla_libros:
+                st.download_button(
+                    label="📥 Descargar Inventario de Libros (.xlsx)",
+                    data=plantilla_libros,
+                    file_name="inventario_libros_actualizar.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        except Exception as e:
+            # --- LOGGING DE ERROR (GENERACIÓN PLANTILLA) ---
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            log_error(
+                vista="vista_actualizacion_masiva", 
+                funcion="generar_plantilla_actualizacion_libros",
+                error=e,
+                email_usuario=email_usuario
             )
+            st.error(f"Error al generar la plantilla de libros: {e}")
             
         st.markdown("---")
         st.markdown("### 2. Sube tus Modificaciones")
         archivo_libros = st.file_uploader("Sube el archivo Excel modificado de Libros", type=['xlsx', 'csv'], key="up_libros")
         
-        if archivo_libros and st.button("🚀 Aplicar Cambios en Libros", type="primary", use_container_width=True):
-            with st.spinner("Actualizando catálogo de libros en Supabase..."):
-                df = pd.read_excel(archivo_libros) if archivo_libros.name.endswith('.xlsx') else pd.read_csv(archivo_libros)
-                updates, errores = procesar_actualizacion_libros(df)
-                
-                if updates > 0:
-                    st.success(f"✅ ¡Se actualizaron {updates} libros exitosamente!")
-                    st.balloons()
-                if errores:
-                    st.error(f"⚠️ Se presentaron {len(errores)} errores:")
-                    for e in errores: st.write(e)
-                st.cache_data.clear()
+        if archivo_libros:
+            if st.button("🚀 Aplicar Cambios en Libros", type="primary", use_container_width=True):
+                with st.spinner("Actualizando catálogo de libros en Supabase..."):
+                    try:
+                        df = pd.read_excel(archivo_libros) if archivo_libros.name.endswith('.xlsx') else pd.read_csv(archivo_libros)
+                        updates, errores = procesar_actualizacion_libros(df)
+                        
+                        if updates > 0:
+                            st.success(f"✅ ¡Se actualizaron {updates} libros exitosamente!")
+                            st.balloons()
+                        if errores:
+                            st.error(f"⚠️ Se presentaron {len(errores)} errores durante la actualización:")
+                            for err in errores: st.write(err)
+                        
+                        # Limpiamos caché solo si hubo éxito para poder reintentar si falla
+                        if updates > 0 and not errores:
+                            st.cache_data.clear()
+                            
+                    except Exception as e:
+                        # --- LOGGING DE ERROR (PROCESAMIENTO ARCHIVO) ---
+                        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                        log_error(
+                            vista="vista_actualizacion_masiva", 
+                            funcion="procesar_actualizacion_libros",
+                            error=e,
+                            email_usuario=email_usuario
+                        )
+                        st.error(f"Error crítico al procesar el archivo: {e}")
+                        st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
 
-    # --- PESTAÑA 2: CLIENTES ---
+
+        # --- PESTAÑA 2: CLIENTES ---
     with tab_clientes:
         st.markdown("### 1. Descarga el Listado de Clientes Actual")
         st.caption("Obtén el archivo Excel con tus clientes actuales, edita su RUT, dirección o correo y súbelo abajo.")
         
-        plantilla_clientes = generar_plantilla_actualizacion_clientes()
-        if plantilla_clientes:
-            st.download_button(
-                label="📥 Descargar Listado de Clientes (.xlsx)",
-                data=plantilla_clientes,
-                file_name="listado_clientes_actualizar.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+        try:
+            plantilla_clientes = generar_plantilla_actualizacion_clientes()
+            if plantilla_clientes:
+                st.download_button(
+                    label="📥 Descargar Listado de Clientes (.xlsx)",
+                    data=plantilla_clientes,
+                    file_name="listado_clientes_actualizar.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        except Exception as e:
+            # --- LOGGING DE ERROR (GENERACIÓN PLANTILLA CLIENTES) ---
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            log_error(
+                vista="vista_actualizacion_masiva", 
+                funcion="generar_plantilla_actualizacion_clientes",
+                error=e,
+                email_usuario=email_usuario
             )
+            st.error(f"Error al generar la plantilla de clientes: {e}")
             
         st.markdown("---")
         st.markdown("### 2. Sube tus Modificaciones")
         archivo_clientes = st.file_uploader("Sube el archivo Excel modificado de Clientes", type=['xlsx', 'csv'], key="up_clientes")
         
-        if archivo_clientes and st.button("🚀 Aplicar Cambios en Clientes", type="primary", use_container_width=True):
-            with st.spinner("Actualizando datos de clientes en Supabase..."):
-                # Leemos todo como string para no romper formatos de RUT o teléfonos
-                df_cli = pd.read_excel(archivo_clientes, dtype=str) if archivo_clientes.name.endswith('.xlsx') else pd.read_csv(archivo_clientes, dtype=str)
-                updates_cli, errores_cli = procesar_actualizacion_clientes(df_cli)
-                
-                if updates_cli > 0:
-                    st.success(f"✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!")
-                    st.balloons()
-                if errores_cli:
-                    st.error(f"⚠️ Se presentaron {len(errores_cli)} errores:")
-                    for e in errores_cli: st.write(e)
-                st.cache_data.clear()
+        if archivo_clientes:
+            if st.button("🚀 Aplicar Cambios en Clientes", type="primary", use_container_width=True):
+                with st.spinner("Actualizando datos de clientes en Supabase..."):
+                    try:
+                        # Leemos todo como string para no romper formatos de RUT o teléfonos
+                        df_cli = pd.read_excel(archivo_clientes, dtype=str) if archivo_clientes.name.endswith('.xlsx') else pd.read_csv(archivo_clientes, dtype=str)
+                        updates_cli, errores_cli = procesar_actualizacion_clientes(df_cli)
+                        
+                        if updates_cli > 0:
+                            st.success(f"✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!")
+                            st.balloons()
+                        if errores_cli:
+                            st.error(f"⚠️ Se presentaron {len(errores_cli)} errores durante la actualización:")
+                            for err in errores_cli: st.write(err)
+                        
+                        if updates_cli > 0 and not errores_cli:
+                            st.cache_data.clear()
 
+                    except Exception as e:
+                        # --- LOGGING DE ERROR (PROCESAMIENTO ARCHIVO CLIENTES) ---
+                        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                        log_error(
+                            vista="vista_actualizacion_masiva", 
+                            funcion="procesar_actualizacion_clientes",
+                            error=e,
+                            email_usuario=email_usuario
+                        )
+                        st.error(f"Error crítico al procesar el archivo de clientes: {e}")
+                        st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
 if __name__ == "__main__":
     mostrar_actualizacion_masiva()

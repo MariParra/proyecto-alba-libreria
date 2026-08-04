@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
-from utilidades import get_db_connection
+from utilidades import get_db_connection, log_error
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -43,6 +43,17 @@ def enviar_correo(titulo, tipo, prioridad, fecha_comprometida, es_alerta_vencimi
         server.quit()
         return True
     except Exception as e:
+        error_detalle = (
+            f"Fallo crítico en el motor de correo (SMTP). Tarea: '{titulo}'. "
+            f"Destinatario intentado: '{destinatario}'. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="Sistema de Notificaciones",
+            funcion="enviar_correo",
+            error=error_detalle,
+            email_usuario="Sistema" # Es una acción automática del sistema
+        )
         print(f"Error enviando correo: {e}")
         return False
 
@@ -62,7 +73,22 @@ def verificar_alertas_vencimiento(df_tareas):
                 try:
                     conn.table("tareas_internas").update({"alerta_enviada": True}).eq("id", int(tarea['id'])).execute()
                     st.toast(f"📧 Alerta de vencimiento enviada para: {tarea['titulo']}")
-                except: pass
+                except Exception as e:
+                    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                    
+                    error_detalle = (
+                        f"¡Crítico! Se ENVIÓ correo para la tarea '{tarea['titulo']}' (ID: {tarea['id']}), "
+                        f"pero FALLÓ al marcar 'alerta_enviada' como True. La alerta podría repetirse. Detalle: {e}"
+                    )
+                    
+                    log_error(
+                        vista="vista_kanban",
+                        funcion="verificar_alertas_vencimiento",
+                        error=error_detalle,
+                        email_usuario=email_usuario
+                    )
+                    
+                    st.warning(f"Alerta enviada para '{tarea['titulo']}', pero no se pudo marcar como registrada. ¡Podría enviarse de nuevo!")
 
 # --- FUNCIONES DE BASE DE DATOS KANBAN ---
 def parsear_fecha(fecha_str):
@@ -75,14 +101,39 @@ def mover_tarea(tarea_id, nuevo_estado):
     try:
         conn.table("tareas_internas").update({"estado": nuevo_estado}).eq("id", int(tarea_id)).execute()
         st.rerun()
-    except Exception as e: st.error(f"Error al mover tarea: {e}")
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al mover la tarea ID {tarea_id} al estado '{nuevo_estado}'. "
+            f"Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_kanban",
+            funcion="mover_tarea",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error al mover tarea: {e}")
 
 def eliminar_tarea(tarea_id):
     conn = get_db_connection()
     try:
         conn.table("tareas_internas").delete().eq("id", int(tarea_id)).execute()
         st.rerun()
-    except Exception as e: st.error(f"Error al eliminar tarea: {e}")
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = f"Fallo al ELIMINAR la tarea ID {tarea_id}. Detalle: {e}"
+        
+        log_error(
+            vista="vista_kanban",
+            funcion="eliminar_tarea",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error al eliminar tarea: {e}")
 
 def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, dep_id):
     if not titulo:
@@ -104,7 +155,21 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, 
         enviar_correo(titulo, tipo, prioridad, f_fin, es_alerta_vencimiento=False)
         st.toast("✅ Tarea creada y notificada")
         st.rerun()
-    except Exception as e: st.error(f"Error al crear tarea: {e}")
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al crear la tarea '{titulo}'. "
+            f"Datos intentados: {str(nueva_tarea)}. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_kanban",
+            funcion="crear_tarea",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error al crear tarea: {e}")
 
 def editar_tarea(tarea_id, titulo, tipo, prioridad, dificultad, estado, f_ini, f_fin):
     if not titulo: return
@@ -119,7 +184,22 @@ def editar_tarea(tarea_id, titulo, tipo, prioridad, dificultad, estado, f_ini, f
         conn.table("tareas_internas").update(datos_update).eq("id", int(tarea_id)).execute()
         st.toast("✅ Tarea modificada con éxito")
         st.rerun()
-    except Exception as e: st.error(f"Error al editar: {e}")
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al editar la tarea ID {tarea_id}. "
+            f"Datos intentados: {str(datos_update)}. Detalle: {e}"
+        )
+        
+
+        log_error(
+            vista="vista_kanban",
+            funcion="editar_tarea",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error al editar: {e}")
 
 # --- 💬 FUNCIONES DE COMENTARIOS ---
 def agregar_comentario(tarea_id, autor, tipo, texto):
@@ -139,6 +219,19 @@ def agregar_comentario(tarea_id, autor, tipo, texto):
         st.toast("💬 Comentario guardado con éxito")
         st.rerun()
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al guardar comentario en la tarea ID {tarea_id}. "
+            f"Autor: {autor}, Tipo: {tipo}. Detalle: {e}"
+        )
+    
+        log_error(
+            vista="vista_kanban",
+            funcion="agregar_comentario",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
         st.error(f"Error al guardar comentario: {e}")
 
 # --- UTILIDADES VISUALES ---

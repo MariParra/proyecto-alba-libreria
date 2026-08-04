@@ -6,6 +6,7 @@ from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 import json
 import re
+from utilidades import log_error
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -24,7 +25,16 @@ def cargar_valores_suscripcion():
     try:
         res = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         return pd.DataFrame(res.data)
-    except: 
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_asignaciones",
+            funcion="cargar_valores_suscripcion",
+            error=e,
+            email_usuario=email_usuario
+        )
+        st.error("⚠️ No se pudieron cargar los montos de suscripción desde la base de datos. Por favor, refresca la página.")
+        print(f"Error crítico al cargar los valores de suscripción: {e}")
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
@@ -44,6 +54,14 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
             
         return df
     except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_asignaciones",
+            funcion="cargar_catalogo_completo_libros",
+            error=e,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error cargando catálogo asignaciones: {e}")
         print(f"Error cargando catálogo asignaciones: {e}")
         return pd.DataFrame()
 
@@ -72,11 +90,30 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
                             if libro.get('libro_id') is not None:
                                 ids_poseidos.add(libro['libro_id'])
                     except (json.JSONDecodeError, TypeError):
+                        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                        
+                        error_detalle = f"JSON corrupto en ventas del cliente {cliente_id}. Detalle: {e}"
+                        
+                        log_error(
+                            vista="vista_asignaciones",
+                            funcion="obtener_ids_libros_poseidos_por_cliente (Lectura JSON)",
+                            error=error_detalle,
+                            email_usuario=email_usuario
+                        )
+                        
                         continue
                         
         return ids_poseidos
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_asignaciones",
+            funcion="obtener_ids_libros_poseidos_por_cliente",
+            error=e,
+            email_usuario=email_usuario
+        )
         st.error(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
+        print(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
         return set()
     
 def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
@@ -98,7 +135,18 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         
         return df_catalogo, generos_pref
     except Exception as e:
-        st.error(f"Error en cargar_libros_filtrados_para_cliente: {e}")
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="cargar_libros_filtrados_para_cliente",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
+        st.error("⚠️ No se pudo filtrar el catálogo de libros para este cliente. Se mostrará el catálogo completo como medida de seguridad.")
+        
+        print(f"Error en cargar_libros_filtrados_para_cliente: {e}")
         return cargar_catalogo_completo_libros(incluir_sin_stock), []
 
 # --- 🚀 CARGA DE ASIGNACIONES OPTIMIZADA EN SEGUNDOS (FILTRADO EN BD) ---
@@ -152,6 +200,15 @@ def cargar_asignaciones_mes(ano, mes):
         
         return df_merged
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="cargar_asignaciones_mes",
+            error=e,
+            email_usuario=email_usuario
+        )
+        print(f"Error crítico al cargar datos de asignaciones: {e}")
         st.error(f"Error crítico al cargar datos de asignaciones: {e}")
         return pd.DataFrame()
 
@@ -163,7 +220,18 @@ def verificar_mes_cerrado(ano, mes):
     try:
         res = conn.table("meses_cerrados").select("id").eq("ano", int(ano)).eq("mes", int(mes)).execute()
         return len(res.data) > 0
-    except: 
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="verificar_mes_cerrado",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
+        st.warning("⚠️ No se pudo verificar si este mes está cerrado. Por seguridad, se limitarán los cambios hasta restablecer la conexión.")
+        print(f"Error crítico al verificar mes cerrado: {e}")
         return False
 
 def cambiar_estado_mes(ano, mes, cerrar=True):
@@ -178,6 +246,16 @@ def cambiar_estado_mes(ano, mes, cerrar=True):
             verificar_mes_cerrado.clear()
             return True, f"El mes {mes}/{ano} ha sido REABIERTO."
     except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        accion = "CERRAR" if cerrar else "REABRIR"
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="cambiar_estado_mes",
+            error=f"Fallo al intentar {accion} el mes {mes}/{ano}. Detalle: {e}",
+            email_usuario=email_usuario
+        )
+        
         return False, str(e)
 
 # --- ACCIONES ---
@@ -201,7 +279,7 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
         return True, "✅ ¡Todo al día! No se encontraron nuevos clientes activos para agregar al mes."
         
     conn = get_db_connection()
-    creados, errores = 0, []
+    creados, errores_visibles = 0, []
     total_a_crear = len(df_faltantes)
     
     barra_progreso = progress_placeholder.progress(0, text=f"Iniciando creación de {total_a_crear} cajas...")
@@ -223,14 +301,21 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
             conn.table("asignaciones").insert(datos).execute()
             creados += 1
         except Exception as e:
-            error_msg = f"Error con cliente '{cliente['nombre']}' (ID: {cliente['cliente_id']}): {str(e)}"
-            errores.append(error_msg)
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Fallo al crear caja para cliente '{cliente['nombre']}' (ID: {cliente['cliente_id']}). Detalle: {e}"
+            log_error(
+                vista="vista_asignaciones",
+                funcion="comenzar_mes (bucle de creación)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            errores_visibles.append(f"Error con cliente '{cliente['nombre']}' (ID: {cliente['cliente_id']}): {str(e)}")
             
-    if errores:
+    if errores_visibles:
         st.error("Se encontraron errores durante la creación:")
         with st.expander("Ver detalle de los errores", expanded=True):
-            for err in errores: st.write(err)
-        return False, f"Proceso finalizado con {len(errores)} errores de {total_a_crear} intentos."
+            for err in errores_visibles: st.write(err)
+        return False, f"Proceso finalizado con {len(errores_visibles)} errores de {total_a_crear} intentos."
         
     if creados > 0:
         return True, f"🎉 ¡Éxito! Se crearon {creados} nuevas cajas para el mes."
@@ -252,6 +337,18 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
             
         return True, ""
     except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        error_detalle = (
+            f"Fallo al asignar el libro '{titulo}' (ID: {libro_id}) a la asignación {asignacion_id} "
+            f"(Cliente ID: {cliente_id}). Detalle técnico: {e}"
+        )
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="asignar_libro_principal",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
         return False, str(e)
 
 def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
@@ -318,11 +415,11 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
         
     return propuesta, sin_asignar
 
-# --- CORRECCIÓN EN CONFIRMACIÓN: REMOCIÓN DE .CLEAR() INEXISTENTE ---
+
 def confirmar_propuesta_azar(propuesta, ano, mes):
     conn = get_db_connection()
     exitos = 0
-    errores = []
+    errores_visibles = []
     
     for prop in propuesta:
         try:
@@ -342,11 +439,25 @@ def confirmar_propuesta_azar(propuesta, ano, mes):
                 }).execute()
             exitos += 1
         except Exception as e:
-            errores.append(str(e))
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            
+            error_detalle = (
+                f"Fallo al confirmar propuesta para cliente '{prop.get('nombre', 'Desconocido')}' (ID: {prop.get('cliente_id', 'N/A')}) "
+                f"con el libro (ID: {prop.get('libro_id', 'N/A')}). Detalle: {e}"
+            )
+            
+            log_error(
+                vista="vista_asignaciones",
+                funcion="confirmar_propuesta_azar (bucle de confirmación)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            
+            errores_visibles.append(f"Error con cliente '{prop.get('nombre', 'Desconocido')}': {str(e)}")
             
     # Limpieza de caché que SÍ tiene decoradores de forma segura
     cargar_catalogo_completo_libros.clear()
-    return exitos, errores
+    return exitos, errores_visibles
 
 def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extras_manual, valor_extras_manual):
     conn = get_db_connection()
@@ -365,7 +476,21 @@ def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extr
         
         conn.table("asignaciones").update(datos_update).eq("asignacion_id", int(asignacion_id)).execute()
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al ajustar logística para la asignación {asignacion_id} (Cliente ID: {cliente_id}). "
+            f"Valores intentados: Envio={nuevo_envio}, Extras={valor_extras_manual}. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="guardar_ajustes_logistica",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        return False, str(e)
 
 def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, monto_descuento=0.0):
     conn = get_db_connection()
@@ -403,7 +528,21 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
                 
         cargar_catalogo_completo_libros.clear()
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al intentar quitar el libro '{titulo_quitar}' (Tipo: {tipo}) de la asignación {asignacion_id} "
+            f"(Cliente ID: {cliente_id}). Detalle técnico: {e}"
+        )
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="quitar_un_libro",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        return False, str(e)
 
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
@@ -425,7 +564,21 @@ def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_ext
                     
         conn.table("asignaciones").delete().eq("asignacion_id", int(asignacion_id)).execute()
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al ELIMINAR la asignación {asignacion_id} (Cliente ID: {cliente_id}). "
+            f"Libro principal ID: {libro_id}, Extras: '{texto_extras}'. Detalle técnico: {e}"
+        )
+        
+        log_error(
+            vista="vista_asignaciones",
+            funcion="eliminar_asignacion",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        return False, str(e)
 
 def actualizar_asignaciones_batch(df_editado, df_mes_completo):
     df_original = st.session_state.get('asignaciones_original')
@@ -436,6 +589,7 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
     
     conn = get_db_connection()
     updates = 0
+    errores = []
     for a_id, row in filas_cambiadas.iterrows():
         try:
             c_id = df_mes_completo[df_mes_completo['asignacion_id'] == a_id].iloc[0]['cliente_id']
@@ -456,9 +610,24 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             }
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
-        except: continue
+        except Exception as e: 
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            nombre_cliente = df_mes_completo.loc[df_mes_completo['asignacion_id'] == a_id, 'nombre'].iloc[0]
+            
+            error_detalle = (
+                f"Fallo al actualizar la fila de la asignación {a_id} (Cliente: {nombre_cliente}). Detalle: {e}"
+            )
+            
+            log_error(
+                vista="vista_asignaciones",
+                funcion="actualizar_asignaciones_batch (bucle)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            errores.append(f"Error en la fila del cliente '{nombre_cliente}': {str(e)}")
+            continue
         
-    return updates
+    return updates, errores
 
 def mapear_sino(val):
     v = str(val).upper()

@@ -3,24 +3,39 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import time
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 
 def unificar_formatos_fecha(serie_fechas):
+    """
+    Convierte una serie de Pandas con fechas en múltiples formatos de texto
+    a un formato de fecha unificado (datetime), manejando errores de forma robusta.
+    """
     def parsear_valor(val):
-        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() == 'nan':
+        # Primero, manejamos los casos vacíos o nulos
+        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() in ['nan', 'nat']:
             return pd.NaT
+
         val_str = str(val).strip()
-        formatos_a_probar = [
-            "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f",
-            "%d-%m-%Y", "%d-%m-%Y %H:%M:%S", "%d/%m/%Y", "%d/%m/%Y %H:%M:%S",
-            "%Y/%m/%d", "%Y/%m/%d %H:%M:%S"
-        ]
-        for fmt in formatos_a_probar:
-            try: return datetime.strptime(val_str, fmt)
-            except ValueError: continue
-        try: return pd.to_datetime(val_str, errors='coerce', dayfirst=True)
-        except Exception: return pd.NaT
-    return serie_fechas.apply(parsear_valor)
+
+        # Usamos el parser de Pandas que es mucho más potente y rápido.
+        # Le indicamos que priorice el formato día-mes-año.
+        # Si no puede convertirlo, 'coerce' lo transforma en NaT (Not a Time) automáticamente.
+        fecha_parseada = pd.to_datetime(val_str, dayfirst=True, errors='coerce')
+        
+        return fecha_parseada
+
+    try:
+        return serie_fechas.apply(parsear_valor)
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_caja (o donde se use)", 
+            funcion="unificar_formatos_fecha",
+            error=f"Error inesperado al parsear fechas. Detalle: {e}",
+            email_usuario=email_usuario
+        )
+        return pd.to_datetime(serie_fechas, errors='coerce')
+
 
 def cargar_libros_caja():
     conn = get_db_connection()
@@ -33,6 +48,16 @@ def cargar_libros_caja():
             df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
         return df
     except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_caja",
+            funcion="cargar_libros_caja",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
+        st.error("Error crítico: No se pudo cargar el catálogo de libros. El menú de venta no funcionará.")
         print(f"Error cargando libros caja: {e}")
         return pd.DataFrame()
 
@@ -41,7 +66,19 @@ def cargar_clientes_caja():
     try:
         res = conn.table("clientes").select("cliente_id, nombre, email, telefono, status, rut, direccion").execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except: 
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_caja",
+            funcion="cargar_clientes_caja",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
+        st.error("Error crítico: No se pudo cargar el listado de clientes. No se podrán registrar ventas asociadas a clientes.")
+        print(f"Error cargando clientes para la caja: {e}")
+        
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
 def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_existente=None):
@@ -64,6 +101,24 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
             response = conn.table("clientes").insert(datos).execute()
             return response.data[0]['cliente_id']
     except Exception as e: 
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        accion = "actualizar" if cliente_id_existente else "crear"
+        id_cliente_log = cliente_id_existente if cliente_id_existente else "Nuevo"
+        
+        error_detalle = (
+            f"Fallo al intentar {accion} al cliente '{nombre}' (ID: {id_cliente_log}). Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_caja",
+            funcion="gestionar_cliente",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        
+        print(f"Error gestionando cliente: {e}")
+        
+        st.error(f"No se pudo {accion} al cliente '{nombre}'. Error: {e}")
         print(f"Error gestionando cliente: {e}")
         return None
 
@@ -101,7 +156,14 @@ def cargar_historial_completo():
         
         return df_ventas
     except Exception as e:
-        st.error(f"Error cargando historial: {e}")
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_caja",
+            funcion="cargar_historial_completo",
+            error=e,
+            email_usuario=email_usuario
+        )
+        st.error(f"Error crítico al cargar el historial de ventas: {e}")
         return pd.DataFrame()
 
 def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
@@ -118,9 +180,12 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
 
 def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, abono_venta, asignacion_id=None):
     conn = get_db_connection()
+    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    
     libros_para_json = []
     costo_total_venta = 0.0
-    
+
+    # 1. Conservamos exactamente tu misma lógica de preparación del carrito (Fiel al original)
     for item in carrito:
         libros_para_json.append({
             "libro_id": item['libro_id'], "titulo": item['titulo'], "autor": item['autor'],
@@ -129,10 +194,12 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         costo_unitario = item.get('costo', 0.0)
         if pd.isna(costo_unitario) or costo_unitario is None: costo_unitario = 0.0
         costo_total_venta += float(costo_unitario) * int(item['cantidad'])
+        
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     monto_final = subtotal_libros + valor_envio
-    
+
     try:
+        # --- PASO 1: Insertar la venta (Fiel al original) ---
         datos_venta = {
             "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
             "libros_vendidos": json.dumps(libros_para_json, ensure_ascii=False), 
@@ -143,68 +210,73 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
         
+        # --- PASO 2: Actualizar stock, gestionar libros e historial (Fiel al original) ---
         for item in carrito:
             l_id = item['libro_id']
-            if item['es_nuevo']: l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None)
+            if item['es_nuevo']: 
+                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None)
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
                 nuevo_stock = item['stock_actual'] - item['cantidad']
                 conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
             
+            # Actualización del librero histórico (Fiel al original)
             if cliente_id and l_id:
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", l_id).execute()
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
 
+        # --- PASO 3: Agregar extras a la asignación del mes si corresponde (Fiel al original) ---
         if asignacion_id:
             try:
-                # 1. Obtenemos los datos actuales de la base de datos (sin cambios)
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
                 if res_asig.data:
                     asig_actual = res_asig.data[0]
                     extras_previos_raw = asig_actual.get('extras') or ""
                     valor_previo = float(asig_actual.get('valor_extras') or 0.0)
-
-                    # 2. Convertimos los extras existentes (vengan con '|' o '\n') a una lista limpia
-                    #    Esta función es robusta: entiende el formato viejo y el nuevo.
+                    
                     lista_extras_previos = []
                     if extras_previos_raw:
-                        # Reemplazamos saltos de línea por pipes para unificar, luego separamos.
                         items = extras_previos_raw.replace('\n', '|').split('|')
                         for item in items:
-                            # Limpiamos cada item de numeración (ej: "1. ") y espacios.
                             item_limpio = item.strip()
                             if '.' in item_limpio:
                                 item_limpio = item_limpio.split('.', 1)[-1].strip()
                             if item_limpio:
                                 lista_extras_previos.append(item_limpio.upper())
-
-                    # 3. Creamos una lista con los NUEVOS extras del carrito (sin cambios)
+                                
                     nuevos_extras_list = [f"{item['cantidad']} x {item['titulo']}".upper() for item in carrito]
-
-                    # 4. Unimos la lista de extras previos con los nuevos
                     lista_completa = lista_extras_previos + nuevos_extras_list
-
-                    # 5. Convertimos la lista completa a un texto enumerado con saltos de línea
                     extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
                     
-                    # 6. Calculamos el valor final (sin cambios)
                     valor_final = valor_previo + subtotal_libros
-
-                    # 7. Actualizamos la base de datos con el nuevo formato enumerado
+                    
                     conn.table("asignaciones").update({
-                        "extras": extras_final_enumerado,  # <--- Guardamos el texto con saltos de línea
+                        "extras": extras_final_enumerado, 
                         "valor_extras": valor_final
                     }).eq("asignacion_id", asignacion_id).execute()
+                    
+            except Exception as ex_asig:
+                # Si falla la asignación de extras, guardamos log de advertencia, pero NO cancelamos la venta
+                log_error("vista_caja", "procesar_venta_carrito (actualizar extras asignación)", f"Error asignando extras a la asignación {asignacion_id}. Detalle: {ex_asig}", email_usuario)
+                st.warning(f"⚠️ La venta se procesó con éxito, pero no se pudieron registrar automáticamente los extras en la planilla mensual del cliente. Por favor, revísalo en la planilla. Detalle: {ex_asig}")
 
-            except Exception as ex:
-                print(f"Error agregando extras en asignacion: {ex}")
-
-                
-        st.session_state.carrito_caja = []
         return True, ""
-    except Exception as e: return False, str(e)
+
+    except Exception as e:
+        error_detalle = (
+            f"Fallo crítico registrando venta en caja para cliente {cliente_id}. "
+            f"Carrito intentado: {json.dumps(libros_para_json, ensure_ascii=False)}. Detalle técnico: {e}"
+        )
+        log_error(
+            vista="vista_caja",
+            funcion="procesar_venta_carrito",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        
+        return False, str(e)
 
 def anular_venta(venta_id, texto_libros_vendidos):
     conn = get_db_connection()
@@ -213,14 +285,35 @@ def anular_venta(venta_id, texto_libros_vendidos):
         for item in items:
             partes = item.split(" x ", 1)
             if len(partes) == 2:
-                cantidad_devuelta, titulo_libro = int(partes[0].strip()), partes[1].strip()
+                try:
+                    cantidad_devuelta = int(partes[0].strip())
+                    titulo_libro = partes[1].strip()
+                except ValueError:
+                    # Si no se puede convertir la cantidad a número, se salta este item y se registra
+                    log_error("vista_caja", "anular_venta (parseo)", f"Formato de cantidad incorrecto en item '{item}' para venta ID {venta_id}", st.session_state.get('email_usuario', 'Desconocido'))
+                    continue
+                
                 res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_libro).execute()
                 if res_l.data:
                     l_id, nuevo_stock = res_l.data[0]['libro_id'], res_l.data[0]['stock'] + cantidad_devuelta
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
+                    
         conn.table("registro_ventas").delete().eq("venta_id", venta_id).execute()
         return True, ""
-    except Exception as e: return False, str(e)
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        error_detalle = (
+            f"Fallo al ANULAR la venta ID {venta_id}. "
+            f"Detalle de libros: '{texto_libros_vendidos}'. Detalle técnico: {e}"
+        )
+        
+        log_error(
+            vista="vista_caja",
+            funcion="anular_venta",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
+        return False, str(e)
 
 def actualizar_historial_batch(df_editado):
     df_original = st.session_state.get('historial_original')
@@ -245,6 +338,17 @@ def actualizar_historial_batch(df_editado):
                 conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
                 updates += 1
         except Exception as e: 
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Fallo al actualizar la fila de la venta ID {venta_id}. Datos intentados: {datos}. Detalle: {e}"
+            log_error(
+                vista="vista_caja",
+                funcion="actualizar_historial_batch (bucle)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            
+            st.error(f"⚠️ Error al guardar los cambios de la venta ID {venta_id}: {e}")
+            
             print(f"Error actualizando venta {venta_id}: {e}")
             continue
     return updates
