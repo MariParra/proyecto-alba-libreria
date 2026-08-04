@@ -267,13 +267,13 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                 if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
                     editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_dif, e_estado, e_ini, e_fin)
                 
-                st.markdown("---")
-                st.error("🔴 Zona de Peligro")
+            st.markdown("---")
+            st.error("🔴 Zona de Peligro")
                 
-                confirmar_borrado = st.checkbox("Estoy segura de que quiero eliminar esta tarea permanentemente.", key=f"check_del_{tarea['id']}")
+            confirmar_borrado = st.checkbox("Estoy segura de que quiero eliminar esta tarea permanentemente.", key=f"check_del_{tarea['id']}")
                 
-                if st.button("🗑️ Eliminar Tarea", type="primary", use_container_width=True, disabled=not confirmar_borrado, key=f"btn_del_{tarea['id']}"):
-                    eliminar_tarea(tarea['id'])
+            if st.button("🗑️ Eliminar Tarea", type="primary", use_container_width=True, disabled=not confirmar_borrado, key=f"btn_del_{tarea['id']}"):
+                eliminar_tarea(tarea['id'])
 
 def mostrar_kanban():
     st.markdown("<h2 style='color: #4A4D7E;'>📋 Tablero de Proyectos y Tareas</h2>", unsafe_allow_html=True)
