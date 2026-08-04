@@ -199,7 +199,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     }).eq("asignacion_id", asignacion_id).execute()
 
             except Exception as ex:
-                print(f"Error inyectando extras en asignacion: {ex}")
+                print(f"Error agregando extras en asignacion: {ex}")
 
                 
         st.session_state.carrito_caja = []
@@ -400,8 +400,8 @@ def mostrar_caja():
                     opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado_envio','')} (ID: {c['asignacion_id']})" for c in cajas_abiertas]
                     caja_sel = col_e2.selectbox("Caja de Suscripción abierta:", opciones_cajas)
                     asignacion_id_target = int(caja_sel.split("(ID: ")[1].strip(")"))
-                    metodo_envio_final = f"Inyectado a {caja_sel.split(' -')[0]}"
-                    st.info("Los libros se inyectarán como Extras a la caja seleccionada (Envío $0).")
+                    metodo_envio_final = f"Agregado a {caja_sel.split(' -')[0]}"
+                    st.info("Los libros se agregarán como Extras a la caja seleccionada (Envío $0).")
                 else:
                     col_e2.warning("El cliente no tiene cajas de suscripción abiertas para añadir.")
                     bloquear_venta = True
@@ -452,7 +452,7 @@ def mostrar_caja():
                     estado_venta_sel, abono_inicial, asignacion_id_target
                 )
                 if exito: 
-                    st.success("🎉 ¡Venta registrada y extras inyectados (si aplica)!")
+                    st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
                     st.balloons()
                     time.sleep(2)
                     st.rerun()
