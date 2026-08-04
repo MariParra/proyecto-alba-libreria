@@ -1,9 +1,10 @@
 import streamlit as st
 import json
 import time
-from utilidades import get_db_connection
+from utilidades import get_db_connection, log_error # Asegúrate de importar log_error
 
 def mostrar_rollback():
+    # --- TODA TU LÓGICA DE INTERFAZ ORIGINAL SE MANTIENE INTACTA ---
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("⏪ Rollback de Base de Datos")
@@ -16,7 +17,6 @@ def mostrar_rollback():
     with st.container(border=True):
         st.markdown("### 🛠️ Configuración de Restauración")
         
-        # 1. Selector de tabla
         tablas_disponibles = [
             "asignaciones", "clientes", "librero_historico", 
             "libros", "meses_cerrados", "registro_ventas", 
@@ -24,13 +24,11 @@ def mostrar_rollback():
         ]
         tabla_seleccionada = st.selectbox("1. Selecciona la tabla que deseas restaurar:", tablas_disponibles)
         
-        # 2. Subida del archivo de respaldo
         archivo_respaldo = st.file_uploader("2. Sube el archivo de respaldo (.json):", type=['json'])
         
         st.markdown("---")
         st.warning("⚠️ **CUIDADO:** Esta acción sobreescribirá los datos actuales en Supabase con los del archivo de respaldo. Asegúrate de estar subiendo el archivo correcto.")
         
-        # 3. Botón de ejecución
         if archivo_respaldo is not None:
             confirmacion = st.text_input(f"Escribe el nombre de la tabla ('{tabla_seleccionada}') para confirmar:")
             
@@ -38,7 +36,7 @@ def mostrar_rollback():
                 if st.button("🚨 EJECUTAR ROLLBACK", type="primary", use_container_width=True):
                     with st.spinner(f"Procesando archivo para la tabla '{tabla_seleccionada}'..."):
                         try:
-                            # Leer y decodificar el archivo NDJSON
+                            # --- TODA TU LÓGICA DE PROCESAMIENTO Y UPSERT SE MANTIENE INTACTA ---
                             registros = []
                             contenido = archivo_respaldo.getvalue().decode("utf-8")
                             for linea in contenido.splitlines():
@@ -52,19 +50,14 @@ def mostrar_rollback():
                                 
                             st.info(f"📦 Se encontraron {total_registros} filas para restaurar. Iniciando subida...")
                             
-                            # Conectar a Supabase
                             conn = get_db_connection()
                             tamanio_lote = 100
                             exitosos = 0
                             
-                            # Barra de progreso visual
                             progress_bar = st.progress(0, text="Iniciando restauración...")
                             
-                            # Inserción en lotes (Upsert)
                             for i in range(0, total_registros, tamanio_lote):
                                 lote = registros[i:i + tamanio_lote]
-                                
-                                # .upsert() actualiza si existe, inserta si no existe
                                 conn.table(tabla_seleccionada).upsert(lote).execute()
                                 
                                 exitosos += len(lote)
@@ -75,5 +68,23 @@ def mostrar_rollback():
                             st.balloons()
                             
                         except Exception as e:
+                            # --- BLOQUE DE LOGGING DE ERRORES (ÚNICA MODIFICACIÓN) ---
+                            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                            
+                            # 1. Creamos un mensaje de error detallado
+                            error_detalle = (
+                                f"Fallo CRÍTICO durante el ROLLBACK de la tabla '{tabla_seleccionada}'. "
+                                f"Archivo: {archivo_respaldo.name}. Detalle: {e}"
+                            )
+                            
+                            # 2. Registramos el error en la "caja negra"
+                            log_error(
+                                vista="vista_rollback",
+                                funcion="mostrar_rollback",
+                                error=error_detalle,
+                                email_usuario=email_usuario
+                            )
+                            
+                            # 3. Mantenemos tu UI de error original
                             st.error(f"❌ Error crítico durante el rollback: {str(e)}")
                             st.caption("Verifica que tu aplicación web tenga permisos de escritura (Service Role) en Supabase para realizar restauraciones masivas.")
