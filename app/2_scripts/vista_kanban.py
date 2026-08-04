@@ -194,8 +194,6 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
             c1, c2 = st.columns(2)
             if c1.button("⬅️ Pausar", key=f"pau_{tarea['id']}", use_container_width=True): mover_tarea(tarea['id'], "POR HACER")
             if c2.button("✅ Listo", key=f"fin_{tarea['id']}", type="primary", use_container_width=True): mover_tarea(tarea['id'], "COMPLETADO")
-        elif tarea['estado'] == 'COMPLETADO':
-            if st.button("🗑️ Eliminar", key=f"del_{tarea['id']}", type="secondary", use_container_width=True): eliminar_tarea(tarea['id'])
             
         # --- 💬 SECCIÓN DE COMENTARIOS (JIRA STYLE) ---
         comentarios_tarea = df_comentarios[df_comentarios['tarea_id'] == tarea['id']].sort_values('fecha', ascending=False)
@@ -268,6 +266,14 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                 
                 if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
                     editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_dif, e_estado, e_ini, e_fin)
+                
+                st.markdown("---")
+                st.error("🔴 Zona de Peligro")
+                
+                confirmar_borrado = st.checkbox("Estoy segura de que quiero eliminar esta tarea permanentemente.", key=f"check_del_{tarea['id']}")
+                
+                if st.button("🗑️ Eliminar Tarea", type="primary", use_container_width=True, disabled=not confirmar_borrado):
+                    eliminar_tarea(tarea['id'])
 
 def mostrar_kanban():
     st.markdown("<h2 style='color: #4A4D7E;'>📋 Tablero de Proyectos y Tareas</h2>", unsafe_allow_html=True)
