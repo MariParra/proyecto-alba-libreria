@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 import unicodedata
+import traceback
 
 def get_db_connection() -> Client:
     """
@@ -35,3 +36,27 @@ def limpiar_texto(texto):
     
     # Pasa a mayúsculas, elimina espacios extra y retorna
     return ' '.join(s.strip().upper().split())
+
+def log_error(vista, funcion, error, email_usuario="No disponible"):
+    """
+    Registra un error de la aplicación en la tabla 'errores_app',
+    incluyendo el email del usuario que lo experimentó.
+    """
+    try:
+        conn = get_db_connection()
+        traceback_completo = traceback.format_exc()
+        
+        datos_error = {
+            "vista": vista,
+            "funcion": funcion,
+            "mensaje_error": str(error),
+            "traceback": traceback_completo,
+            "email_usuario": email_usuario
+        }
+        
+        conn.table("errores_app").insert(datos_error).execute()
+        
+    except Exception as e:
+        print(f"--- ERROR CRÍTICO EN EL SISTEMA DE LOGS ---")
+        print(f"No se pudo registrar el siguiente error en Supabase: {str(error)}")
+        print(f"Causa del fallo en el log: {str(e)}")

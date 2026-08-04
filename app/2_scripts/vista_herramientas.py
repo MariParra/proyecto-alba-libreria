@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import base64
 import time
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -15,7 +15,16 @@ def obtener_resumen_clientes():
         if df.empty: return 0, 0, 0
         total, activos, inactivos = len(df), len(df[df['status'] == 'ACTIVA']), len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
-    except:
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        # 1. Registramos el error silenciosamente en la "caja negra"
+        log_error(
+            vista="vista_herramientas",
+            funcion="obtener_resumen_clientes",
+            error=f"Fallo al obtener métricas de clientes. Detalle: {e}",
+            email_usuario=email_usuario
+        )
         return 0, 0, 0
 
 def sync_google_sheets():
@@ -139,6 +148,13 @@ def sync_google_sheets():
         return True
         
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_herramientas",
+            funcion="sync_google_sheets (Sincronización)",
+            error=f"Error crítico durante la sincronización a la BD. Detalle: {e}",
+            email_usuario=email_usuario
+        )
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 

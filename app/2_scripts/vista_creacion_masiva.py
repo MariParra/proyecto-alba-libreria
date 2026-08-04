@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import json
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 
 # ====================================================
 # --- LÓGICA 1: CREACIÓN DE CLIENTES NUEVOS ---
@@ -61,7 +61,18 @@ def procesar_clientes_masivos(df):
             exitos += 1
             catalogo_actual.append(nombre_limpio)
         except Exception as e:
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Fallo en creación masiva en Fila {indice + 2} ('{nombre_limpio}'). Detalle: {e}"
+            
+            log_error(
+                vista="vista_creacion_masiva",
+                funcion="procesar_clientes_masivos (bucle)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            
             errores.append(f"Fila {indice + 2} ('{nombre_limpio}'): Error -> {str(e)}")
+            continue
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, duplicados, errores
@@ -120,6 +131,15 @@ def procesar_nuevos_libros(df):
             exitos += 1
             catalogo_actual.append((titulo_limpio, autor_limpio))
         except Exception as e:
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Fallo en creación masiva en Fila {indice + 2} ('{titulo_limpio}'). Detalle: {e}"
+            
+            log_error(
+                vista="vista_creacion_masiva",
+                funcion="procesar_nuevos_libros",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
             errores.append(f"Fila {indice + 2} ('{titulo_limpio}'): Error -> {str(e)}")
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
@@ -217,6 +237,15 @@ def procesar_ventas_masivas(df):
             exitos += 1
 
         except Exception as e:
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Fallo en creación masiva en Fecha-Cliente {fecha_dt.strftime('%Y-%m-%d')} ('{cliente_nombre}'). Detalle: {e}"
+            
+            log_error(
+                vista="vista_creacion_masiva",
+                funcion="procesar_ventas_masivas",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
             errores.append(f"Error en Venta de {cliente_nombre} ({fecha_dt.strftime('%Y-%m-%d')}): {str(e)}")
 
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
@@ -241,6 +270,15 @@ def generar_plantilla_suscripciones():
             worksheet.set_column('C:C', 20)
         return output.getvalue()
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        log_error(
+            vista="vista_creacion_masiva",
+            funcion="generar_plantilla_suscripciones",
+            error=e,
+            email_usuario=email_usuario
+        )
+        
         st.error(f"Error al generar plantilla de suscripciones: {e}")
         return None
 

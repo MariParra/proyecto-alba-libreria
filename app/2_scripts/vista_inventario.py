@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 import time
 
 def obtener_unicos(df, columna):
@@ -62,6 +62,13 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         if res.data:
             return False, f"El libro '{titulo_limpio}' del autor '{autor_limpio}' ya existe en el catálogo."
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_inventario",
+            funcion="crear_nuevo_libro (verificación duplicado)",
+            error=f"Fallo al verificar duplicado para '{titulo_limpio}'. Detalle: {e}",
+            email_usuario=email_usuario
+        )
         return False, f"Error al verificar duplicados: {str(e)}"
 
     datos = {
@@ -75,6 +82,13 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         cargar_datos_completos.clear()
         return True, ""
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_inventario",
+            funcion="crear_nuevo_libro (inserción)",
+            error=f"Fallo al insertar el libro '{titulo_limpio}'. Detalle: {e}",
+            email_usuario=email_usuario
+        )
         return False, f"Error al insertar en la base de datos: {str(e)}"
 
 def actualizar_un_libro(libro_id, datos):
@@ -84,6 +98,19 @@ def actualizar_un_libro(libro_id, datos):
         cargar_datos_completos.clear()
         return True, ""
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al actualizar el libro ID {libro_id}. "
+            f"Datos intentados: {str(datos)}. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_inventario",
+            funcion="actualizar_un_libro",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
         return False, str(e)
 
 def actualizar_libros_batch(df_original, df_editado):
@@ -141,6 +168,15 @@ def actualizar_libros_batch(df_original, df_editado):
                 conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
                 updates_count += 1
         except Exception as e:
+            
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            log_error(
+                vista="vista_inventario",
+                funcion="actualizar_libros_batch",
+                error=f"Error actualizando libro {libro_id}. Detalle: {e}",
+                email_usuario=email_usuario
+            )
+            
             print(f"Error actualizando libro {libro_id}: {e}")
             continue
             
@@ -156,6 +192,18 @@ def eliminar_libro(libro_id):
         cargar_datos_completos.clear()
         return True, ""
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo al intentar ELIMINAR el libro ID {libro_id}. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_inventario",
+            funcion="eliminar_libro",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
         return False, str(e)
 
 def aplicar_descuento_masivo(lista_ids, porcentaje):
@@ -183,6 +231,19 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
         cargar_datos_completos.clear()
         return True, f"Se actualizó el precio de {actualizados} libros con un {porcentaje}% de descuento."
     except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        
+        error_detalle = (
+            f"Fallo en descuento masivo del {porcentaje}%. "
+            f"Error en el bucle de actualización. Detalle: {e}"
+        )
+        
+        log_error(
+            vista="vista_inventario",
+            funcion="aplicar_descuento_masivo",
+            error=error_detalle,
+            email_usuario=email_usuario
+        )
         return False, str(e)
 
 def mostrar_inventario():

@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import time
-from utilidades import get_db_connection
+from utilidades import get_db_connection, log_error
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -11,75 +11,87 @@ def obtener_historial_completo(cliente_id):
     conn = get_db_connection()
     historial = []
 
-    # 1. Librero Histórico
-    res_hist = conn.table("librero_historico").select("libro_id, origen, autor_historico").eq("cliente_id", cliente_id).execute()
-    if res_hist.data:
-        df_hist = pd.DataFrame(res_hist.data).rename(columns={"origen": "Fuente", "autor_historico": "Autor"})
-        historial.append(df_hist)
+    try:
+        # --- PARTE 1, 2 Y 3: Recopilación de datos (Tu lógica original intacta) ---
+        # 1. Librero Histórico
+        res_hist = conn.table("librero_historico").select("libro_id, origen, autor_historico").eq("cliente_id", cliente_id).execute()
+        if res_hist.data:
+            df_hist = pd.DataFrame(res_hist.data).rename(columns={"origen": "Fuente", "autor_historico": "Autor"})
+            historial.append(df_hist)
 
-    # 2. Asignaciones
-    res_asig = conn.table("asignaciones").select("libro_suscripcion_id, fecha_asignacion").eq("cliente_id", cliente_id).execute()
-    if res_asig.data:
-        df_asig = pd.DataFrame(res_asig.data).rename(columns={"libro_suscripcion_id": "libro_id"})
-        df_asig['Fuente'] = "Suscripción (" + pd.to_datetime(df_asig['fecha_asignacion']).dt.strftime('%Y-%m-%d') + ")"
-        df_asig['Autor'] = "N/A"
-        historial.append(df_asig)
+        # 2. Asignaciones
+        res_asig = conn.table("asignaciones").select("libro_suscripcion_id, fecha_asignacion").eq("cliente_id", cliente_id).execute()
+        if res_asig.data:
+            df_asig = pd.DataFrame(res_asig.data).rename(columns={"libro_suscripcion_id": "libro_id"})
+            df_asig['Fuente'] = "Suscripción (" + pd.to_datetime(df_asig['fecha_asignacion']).dt.strftime('%Y-%m-%d') + ")"
+            df_asig['Autor'] = "N/A"
+            historial.append(df_asig)
 
-    # 3. Ventas Directas
-    res_ventas = conn.table("registro_ventas").select("libros_vendidos, fecha_venta").eq("cliente_id", cliente_id).execute()
-    if res_ventas.data:
-        libros_venta = []
-        for v in res_ventas.data:
-            try:
-                items = json.loads(v['libros_vendidos'])
-                for item in items:
-                    libros_venta.append({
-                        "libro_id": item.get('libro_id'),
-                        "Autor": item.get('autor', 'N/A'),
-                        "Fuente": f"Venta Directa ({v['fecha_venta']})"
-                    })
-            except (json.JSONDecodeError, TypeError):
-                continue
-        if libros_venta:
-            historial.append(pd.DataFrame(libros_venta))
-
-    if not historial:
-        return pd.DataFrame(columns=columnas_finales)
-
-    df_consolidado = pd.concat(historial, ignore_index=True)
-    df_consolidado.dropna(subset=['libro_id'], inplace=True)
-
-    if df_consolidado.empty:
-        return pd.DataFrame(columns=columnas_finales)
-
-    ids_libros_limpios = []
-    for val in df_consolidado['libro_id'].unique():
-        try:
-            ids_libros_limpios.append(int(float(val)))
-        except (ValueError, TypeError):
-            continue
-
-    if not ids_libros_limpios:
-        return pd.DataFrame(columns=columnas_finales)
-
-    res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
-
-    if not res_libros.data:
-        return pd.DataFrame(columns=columnas_finales)
+        # 3. Ventas Directas
+        res_ventas = conn.table("registro_ventas").select("libros_vendidos, fecha_venta").eq("cliente_id", cliente_id).execute()
+        if res_ventas.data:
+            libros_venta = []
+            for v in res_ventas.data:
+                try:
+                    items = json.loads(v['libros_vendidos'])
+                    for item in items:
+                        libros_venta.append({
+                            "libro_id": item.get('libro_id'),
+                            "Autor": item.get('autor', 'N/A'),
+                            "Fuente": f"Venta Directa ({v['fecha_venta']})"
+                        })
+                except (json.JSONDecodeError, TypeError) as e_json:
+                    # LOGGING DE JSON CORRUPTO (Silencioso)
+                    log_error("vista_clientes", "obtener_historial_completo (JSON Ventas)", f"JSON Corrupto en venta del cliente {cliente_id}. Detalle: {e_json}", "N/A")
+                    continue
+            if libros_venta:
+                historial.append(pd.DataFrame(libros_venta))
         
-    df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
-    
-    df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
-    
-    df_final = df_consolidado.merge(df_nombres, on="libro_id", how="inner")
-    
-    # Lógica para usar el mejor autor disponible
-    df_final['Autor'] = df_final.apply(
-        lambda row: row['autor_catalogo'] if pd.notna(row['autor_catalogo']) and row['autor_catalogo'] != 'N/A' else row['Autor'],
-        axis=1
-    )
-    
-    return df_final[columnas_finales]
+        # --- PARTE 4: Consolidación y cruce (Tu lógica original intacta) ---
+        if not historial:
+            return pd.DataFrame(columns=columnas_finales)
+
+        df_consolidado = pd.concat(historial, ignore_index=True)
+        df_consolidado.dropna(subset=['libro_id'], inplace=True)
+        if df_consolidado.empty:
+            return pd.DataFrame(columns=columnas_finales)
+
+        ids_libros_limpios = []
+        for val in df_consolidado['libro_id'].unique():
+            try:
+                ids_libros_limpios.append(int(float(val)))
+            except (ValueError, TypeError):
+                continue
+        
+        if not ids_libros_limpios:
+            return pd.DataFrame(columns=columnas_finales)
+
+        res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
+        if not res_libros.data:
+            return pd.DataFrame(columns=columnas_finales)
+            
+        df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
+        df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
+        df_final = df_consolidado.merge(df_nombres, on="libro_id", how="inner")
+        
+        df_final['Autor'] = df_final.apply(
+            lambda row: row['autor_catalogo'] if pd.notna(row['autor_catalogo']) and row['autor_catalogo'] != 'N/A' else row['Autor'],
+            axis=1
+        )
+        
+        return df_final[columnas_finales]
+
+    except Exception as e:
+        # --- BLOQUE DE ERROR PRINCIPAL ---
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_clientes",
+            funcion="obtener_historial_completo",
+            error=f"Error obteniendo historial para cliente ID {cliente_id}. Detalle: {e}",
+            email_usuario=email_usuario
+        )
+        st.error(f"No se pudo cargar el historial completo del cliente. Error: {e}")
+        return pd.DataFrame(columns=columnas_finales) # Devolvemos DF vacío en caso de fallo
 
 @st.cache_data
 def cargar_todos_los_clientes():
@@ -94,7 +106,15 @@ def actualizar_status_cliente(cliente_id, nuevo_status):
         conn.table("clientes").update({"status": nuevo_status}).eq("cliente_id", cliente_id).execute()
         return True, ""
     except Exception as e:
-        return False, str(e)
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_clientes",
+            funcion="cargar_todos_los_clientes",
+            error=e,
+            email_usuario=email_usuario
+        )
+        st.error(f"No se pudo cargar la lista de clientes. Error: {e}")
+        return pd.DataFrame()
 
 
 # --- VISTA PRINCIPAL ---
@@ -165,6 +185,15 @@ def mostrar_clientes():
                         try:
                             idx_estado = estados_totales.index(estado_actual)
                         except ValueError:
+                            error_detalle = (
+                                f"Estado no reconocido encontrado en la base de datos para el cliente "
+                            )
+                            log_error(
+                                vista="vista_clientes",
+                                funcion="UI - Mostrar Cliente (búsqueda de índice de estado)",
+                                error=error_detalle,
+                                email_usuario="Sistema"
+                            )
                             idx_estado = 2 # INACTIVO por defecto
                             
                         nuevo_estado_rapido = st.selectbox(
@@ -296,16 +325,41 @@ def mostrar_clientes():
                 else:
                     conn = get_db_connection()
                     try:
+                        nombre_mayus = str(nombre_n).strip().upper() if nombre_n else ""
+                        email_mayus = str(email_n).strip().upper() if email_n else ""
+                        tel_mayus = str(tel_n).strip().upper() if tel_n else ""
+                        rut_mayus = str(rut_n).strip().upper() if rut_n else ""
+                        dir_mayus = str(dir_n).strip().upper() if dir_n else ""
+                        ig_mayus = str(ig_n).strip().upper() if ig_n else ""
+                        estado_mayus = str(estado_n).strip().upper() if estado_n else "CLIENTE REGULAR"
+
                         conn.table("clientes").insert({
-                            "nombre": nombre_n, "email": email_n, "telefono": tel_n, 
-                            "rut": rut_n, "direccion": dir_n, "instagram": ig_n, "status": estado_n
-                        }).execute()
+                                        "nombre": nombre_mayus, 
+                                        "email": email_mayus, 
+                                        "telefono": tel_mayus, 
+                                        "rut": rut_mayus, 
+                                        "direccion": dir_mayus, 
+                                        "instagram": ig_mayus, 
+                                        "status": estado_mayus
+                                    }).execute()
+                        
                         st.success(f"¡Cliente {nombre_n} registrado exitosamente!")
                         cargar_todos_los_clientes.clear()
                         time.sleep(1.5)
                         st.rerun() 
                     except Exception as e:
-                        st.error(f"Error al guardar: {e}")
+                        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                        error_detalle = (
+                            f"Fallo al intentar CREAR al nuevo cliente '{nombre_n}'. "
+                            f"Datos intentados: email='{email_n}', status='{estado_n}'. Detalle: {e}"
+                        )
+                        log_error(
+                                        vista="vista_clientes",
+                                        funcion="UI - Formulario Nuevo Cliente",
+                                        error=error_detalle,
+                                        email_usuario=email_usuario
+                                    )
+                        st.error(f"Error al guardar el nuevo cliente: {e}")
 
     with tab_editar:
         st.markdown("### Modificar Datos Existentes")

@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import re
 from datetime import datetime
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 
 # --- VERSIÓN DEFINITIVA DE LA FUNCIÓN DE PROCESAMIENTO ---
 def procesar_archivos_masivos(archivos):
@@ -55,7 +55,15 @@ def procesar_archivos_masivos(archivos):
         try:
             df = pd.read_excel(archivo) if archivo.name.lower().endswith('.xlsx') else pd.read_csv(archivo)
         except Exception as e:
-            log_resultados.append(f"❌ {archivo.name}: Error al leer. {e}")
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Error leyendo el archivo '{archivo.name}'. Podría estar corrupto, tener un formato inválido o una contraseña. Detalle: {e}"
+            log_error(
+                vista="vista_libreros",
+                funcion="procesar_archivos_masivos (lectura archivo)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
+            log_resultados.append(f"❌ {archivo.name}: Error al leer. El archivo podría estar dañado o tener un formato incorrecto.")
             continue
 
         col_titulo = next((c for c in df.columns if str(c).lower().strip() in ['titulo', 'título', 'libro']), None)
@@ -92,6 +100,14 @@ def procesar_archivos_masivos(archivos):
                 log_resultados.append(f"❌ {archivo.name}: Se enlazaron {libros_asignados} libros, pero NO SE PUDO guardar la fecha para {cliente_encontrado['nombre']}. Verifique el ID del cliente.")
         
         except Exception as e:
+            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+            error_detalle = f"Error CRÍTICO al guardar la fecha para {cliente_encontrado['nombre']} (ID: {cliente_id}) del archivo '{archivo.name}'. Detalle: {e}"
+            log_error(
+                vista="vista_libreros",
+                funcion="procesar_archivos_masivos (guardar fecha)",
+                error=error_detalle,
+                email_usuario=email_usuario
+            )
             log_resultados.append(f"❌ Error CRÍTICO al registrar la fecha para {cliente_encontrado['nombre']}: {e}")
             
     st.cache_data.clear()
