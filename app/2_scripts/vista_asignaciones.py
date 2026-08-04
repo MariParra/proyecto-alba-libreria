@@ -119,7 +119,7 @@ def cargar_asignaciones_mes(ano, mes):
         res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, fecha_actualizacion_librero").in_("cliente_id", ids_clientes_mes).execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
 
-        res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia, metodo_entrega").in_("cliente_id", ids_clientes_mes).execute()
+        res_suscripciones = conn.table("suscripciones").select("cliente_id, generos_preferencia, metodo_entrega, fecha_pago").in_("cliente_id", ids_clientes_mes).execute()
         df_suscripciones = pd.DataFrame(res_suscripciones.data) if res_suscripciones.data else pd.DataFrame()
         
         df_libros = pd.DataFrame()
@@ -139,7 +139,8 @@ def cargar_asignaciones_mes(ano, mes):
             'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
             'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 
             'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'rut', 
-            'fecha_actualizacion_librero', 'generos_preferencia', 'metodo_entrega'
+            'fecha_actualizacion_librero', 'generos_preferencia', 'metodo_entrega',
+            'fecha_pago'
         ]
         for col in columnas_esperadas:
             if col not in df_merged.columns:
@@ -523,18 +524,36 @@ def mostrar_asignaciones():
     if opcion_menu == "📋 Gestión (Tabla Editable)":
         if df_mes.empty: st.warning("No hay registros para este mes.")
         else:
-            col_fa1, col_fa2, col_fa3, col_fa4 = st.columns(4)
-            f_nombre = col_fa1.text_input("🔍 Buscar Cliente:")
-            filtro_estado = col_fa2.selectbox("Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
-            filtro_pagado = col_fa3.selectbox("Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
-            filtro_libro = col_fa4.selectbox("Asignación:", ["Todos", "Sin Libro", "Con Libro"])
-            
+            st.markdown("##### 🔽 Filtros de Búsqueda")
+            col_fa1, col_fa2 = st.columns(2)
+            f_nombre = col_fa1.text_input("🔍 Buscar por Nombre de Cliente:")
+    
+            # Obtenemos las fechas de pago únicas y limpias
+            fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
+            filtro_fecha_pago = col_fa2.selectbox("Filtrar por Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
+    
+            st.markdown("---")
+            col_fa3, col_fa4, col_fa5 = st.columns(3)
+            filtro_estado = col_fa3.selectbox("Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
+            filtro_pagado = col_fa4.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+            filtro_libro = col_fa5.selectbox("Asignación de Libro:", ["Todos", "Sin Libro", "Con Libro"])
+    
+            st.markdown("---")
+    
+            # Aplicación de todos los filtros
             df_filtrado = df_mes.copy()
-            if f_nombre: df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
-            if filtro_estado != "Todos": df_filtrado = df_filtrado[df_filtrado['estado_envio'] == filtro_estado]
-            if filtro_pagado != "Todos": df_filtrado = df_filtrado[df_filtrado['pagado'] == filtro_pagado]
-            if filtro_libro == "Sin Libro": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
-            elif filtro_libro == "Con Libro": df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
+            if f_nombre: 
+                df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
+            if filtro_fecha_pago != "Todas":
+                df_filtrado = df_filtrado[df_filtrado['fecha_pago'] == filtro_fecha_pago] # <-- LÓGICA DEL NUEVO FILTRO
+            if filtro_estado != "Todos": 
+                df_filtrado = df_filtrado[df_filtrado['estado_envio'] == filtro_estado]
+            if filtro_pagado != "Todos": 
+                df_filtrado = df_filtrado[df_filtrado['pagado'] == filtro_pagado]
+            if filtro_libro == "Sin Libro": 
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
+            elif filtro_libro == "Con Libro": 
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
             
             st.caption("Doble clic en las celdas para modificar. Los totales se recalcularán automáticamente.")
             
