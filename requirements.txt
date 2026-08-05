@@ -1,12 +1,10 @@
-streamlit
-streamlit-oauth
-pandas
-python-dotenv
-packaging
-st-supabase-connection
-gspread
-openpyxl
-xlsxwriter
-starlette==0.37.2
-pytz
-# Forzar reconstrucción del entorno - 2024-08-06
+streamlit==1.35.0
+streamlit-oauth==0.1.2
+pandas==2.2.0
+python-dotenv==1.0.1
+packaging==23.2
+st-supabase-connection==0.3.0
+gspread==5.12.4
+openpyxl==3.1.2
+xlsxwriter==3.2.0
+pytz==2024.1
