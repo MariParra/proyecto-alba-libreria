@@ -191,7 +191,7 @@ else:
         
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
-        ruta_logo = os.path.join(script_dir, "logo.png")
+        ruta_logo = "logo.png"
         
         try:
             # Creamos 3 columnas invisibles en la barra lateral: 
