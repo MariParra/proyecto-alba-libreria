@@ -797,7 +797,7 @@ def mostrar_asignaciones():
                 "2. **Ve al formulario** que está debajo de la tabla y elige qué columna deseas modificar.\n"
                 "3. **Ingresa el nuevo valor** que quieres aplicarles a todos por igual y presiona `Previsualizar Cambios`.\n"
                 "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo.\n"
-                
+                "\n"
                 "**_Nota: TI del sistema no se hace responsable si el resultado no es el esperado. Usar con precaución :D_**"
             )
             df_mostrar.insert(0, "Seleccionar", False)
@@ -806,7 +806,7 @@ def mostrar_asignaciones():
         if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
             st.session_state.asignaciones_original = df_mostrar.copy()
 
-                # --- 6. CONFIGURACIÓN Y DIBUJO DE LA TABLA ---
+        # --- 6. CONFIGURACIÓN Y DIBUJO DE LA TABLA ---
         st.caption("Doble clic en las celdas para modificar manualmente. Los totales se recalcularán al guardar.")
         
         config_cols = {
