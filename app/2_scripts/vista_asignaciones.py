@@ -669,6 +669,30 @@ def actualizar_asignaciones_masivo(lista_asignacion_ids, columna, nuevo_valor):
         )
         return False, str(e)
 
+def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afectados, valores_antiguos, mes, ano):
+    """Guarda un registro de la operación en bloque incluyendo el valor antiguo."""
+    conn = get_db_connection()
+    try:
+        lista_clientes = [
+            {"id": i, "nombre": n, "valor_antiguo": str(v)} 
+            for i, n, v in zip(ids_afectados, nombres_afectados, valores_antiguos)
+        ]
+        
+        datos_log = {
+            "email_usuario": email,
+            "columna_afectada": columna,
+            "valor_nuevo": str(valor),
+            "clientes_afectados": json.dumps(lista_clientes),
+            "total_filas_afectadas": len(ids_afectados),
+            "mes_afectado": int(mes),
+            "ano_afectado": int(ano)
+        }
+        conn.table("historial_cambios_masivos").insert(datos_log).execute()
+        return True
+    except Exception as e:
+        log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo al guardar log: {e}", email)
+        return False
+
 # --- INTERFAZ PRINCIPAL ---
 
 def mostrar_asignaciones():
@@ -722,7 +746,7 @@ def mostrar_asignaciones():
     st.markdown("---")
     
     # ==========================================================
-    # 1. TABLA EDITABLE (CON EDICIÓN EN BLOQUE INTEGRADA)
+    # 1. TABLA EDITABLE (VERSIÓN FINAL COMPLETA)
     # ==========================================================
     if opcion_menu == "📋 Gestión (Tabla Editable)":
         if df_mes.empty: 
@@ -751,7 +775,8 @@ def mostrar_asignaciones():
             columnas_visibles = st.multiselect(
                 "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
                 options=columnas_opcionales, 
-                default=columnas_opcionales
+                default=columnas_opcionales,
+                help="Quita las columnas que no necesites ver para tener una vista más limpia."
             )
             st.markdown("---")
 
@@ -775,6 +800,7 @@ def mostrar_asignaciones():
             # --- 3. PREPARACIÓN DE COLUMNAS ---
             columnas_visibles_ordenadas = [col for col in columnas_opcionales if col in columnas_visibles]
             columnas_mostrar = ['asignacion_id'] + columnas_visibles_ordenadas
+            
             columnas_seguras = [col for col in columnas_mostrar if col in df_filtrado.columns]
             df_mostrar = df_filtrado[columnas_seguras].copy()
 
@@ -782,25 +808,31 @@ def mostrar_asignaciones():
             if 'edit_mode' not in st.session_state:
                 st.session_state.edit_mode = False
 
-            if st.button("✏️ Activar/Desactivar Edición en Bloque", use_container_width=True):
+            if st.button("✏️ Activar/Desactivar Edición en Bloque", use_container_width=True, help="Selecciona varias filas y aplica un cambio a todas a la vez."):
                 st.session_state.edit_mode = not st.session_state.edit_mode
                 if not st.session_state.edit_mode and 'propuesta_cambio' in st.session_state:
                     del st.session_state.propuesta_cambio
                 st.rerun()
 
             if st.session_state.edit_mode:
-                st.info("💡 **GUÍA RÁPIDA:** 1. Selecciona clientes. 2. Elige columna y valor abajo. 3. Previsualiza y confirma.")
+                st.info(
+                    "💡 **GUÍA RÁPIDA: ¿Cómo usar la Edición en Bloque?**\n"
+                    "1. ✅ **Selecciona a los clientes:** Marca la casilla en la primera columna de la tabla (`Seleccionar`) para cada cliente que quieras modificar.\n"
+                    "2. ✍️ **Elige el cambio:** Ve al formulario de abajo y escoge la **columna** que quieres cambiar y el **nuevo valor** que le aplicarás a todos.\n"
+                    "3. 🔍 **Previsualiza:** Presiona el botón `Previsualizar Cambios`. El sistema te mostrará un resumen de lo que estás a punto de hacer.\n"
+                    "4. 🛡️ **Confirma con seguridad:** En el cuadro de previsualización, escribe la palabra `CONFIRMAR CAMBIOS` y presiona `Confirmar y Ejecutar` para aplicar los cambios de forma masiva."
+                )
                 df_mostrar.insert(0, "Seleccionar", False)
 
-            # --- 5. GUARDADO ESTADO ORIGINAL ---
+            # --- 5. GUARDADO DE ESTADO ORIGINAL ---
             if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                 st.session_state.asignaciones_original = df_mostrar.copy()
 
-            # --- 6. TABLA EDITABLE ---
-            st.caption("Doble clic en las celdas para modificar manualmente.")
+            # --- 6. CONFIGURACIÓN Y DIBUJO DE LA TABLA ---
+            st.caption("Doble clic en las celdas para modificar manualmente. Los totales se recalcularán al guardar.")
             
             config_cols = {
-                "asignacion_id": None, 
+                "asignacion_id": None,
                 "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                 "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                 "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
@@ -823,71 +855,7 @@ def mostrar_asignaciones():
                 use_container_width=True
             )
 
-            # --- 7. FORMULARIO DE EDICIÓN EN BLOQUE ---
-            if st.session_state.edit_mode:
-                st.markdown("---")
-                col_limite, _ = st.columns([1, 2])
-                limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20], index=0)
-
-                filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
-                excede_limite = len(filas_seleccionadas) > limite_filas
-                
-                st.markdown("##### ⚙️ Aplicar Cambios en Lote")
-                st.warning("⚠️ Revisa bien las filas seleccionadas antes de proceder.")
-
-                opciones_desplegables = {
-                    "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
-                    "pagado": ["SI", "NO", "ABONO"],
-                    "envio_pagado": ["SI", "NO", "NO APLICA"]
-                }
-                columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar")
-                
-                with col2:
-                    if columna_a_cambiar in opciones_desplegables:
-                        nuevo_valor = st.selectbox("2. Nuevo valor:", options=opciones_desplegables[columna_a_cambiar], key="valor_selectbox")
-                    elif columna_a_cambiar == "valor_envio":
-                        nuevo_valor = st.number_input("2. Nuevo valor ($):", min_value=0.0, step=100.0, format="%.0f", key="valor_number")
-                    else:
-                        nuevo_valor = st.text_input("2. Nuevo valor:", value="", key="valor_text")
-
-                # 🔴 BOTÓN DE PREVISUALIZAR: Ahora hace un st.rerun() inmediato
-                if st.button("🔍 Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite), type="primary"):
-                    nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
-                    
-                    st.session_state.propuesta_cambio = {
-                        "columna": columna_a_cambiar, 
-                        "valor": nuevo_valor,
-                        "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
-                        "nombres_afectados": nombres_lista
-                    }
-                    st.rerun()
-
-            # --- 8. GUARDADO MANUAL ---
-            elif not st.session_state.edit_mode:
-                if not st.session_state.asignaciones_original.equals(df_editado) and not mes_esta_cerrado:
-                    if st.button("💾 Guardar Cambios Manuales (Recalcula Total)", type="primary"):
-                        with st.spinner("Calculando..."):
-                            resultado = actualizar_asignaciones_batch(df_editado, df_mes)
-                            if isinstance(resultado, tuple):
-                                num, errores = resultado
-                                if errores:
-                                    st.error("Errores:")
-                                    for e in errores: st.write(e)
-                            else:
-                                num = resultado
-                                
-                            if num > 0:
-                                st.success(f"¡Actualizados {num} registros!")
-                                del st.session_state.asignaciones_original
-                                time.sleep(1)
-                                st.rerun()
-
-            # --- 9. PREVISUALIZACIÓN Y CONFIRMACIÓN ---
-            # Este bloque está alineado perfectamente con los bloques 7 y 8
+            # --- 7. PREVISUALIZACIÓN Y CONFIRMACIÓN ---
             if 'propuesta_cambio' in st.session_state:
                 propuesta = st.session_state.propuesta_cambio
                 st.markdown("---")
@@ -897,28 +865,118 @@ def mostrar_asignaciones():
                     
                     nombres_preview = "- " + "\n- ".join(propuesta['nombres_afectados'][:10])
                     st.code(nombres_preview, language=None)
+                    if len(propuesta['nombres_afectados']) > 10:
+                        st.caption(f"...y {len(propuesta['nombres_afectados']) - 10} más.")
+                    
+                    st.warning("⚠️ **Por favor, revisa la lista de arriba muy bien.**")
+                    st.info("""
+                        🤷‍♀️ **Aviso del Departamento de TI:** Te hemos entregado un gran poder, y un gran poder conlleva una gran responsabilidad. \n 
+                        Si omites revisar, cambias todo al valor equivocado y dejas la escoba en la base de datos... *TI se lava las manos*. \n
+                        ¡Úsalo con sabiduría! 🪄✨ Porque al **CONFIRMAR CAMBIOS** aceptas los términos y condiciones 🙂‍↕️.
+                    """)                    
+                    st.markdown("---")
                     
                     with st.form("form_confirmacion_final"):
-                        confirmacion_texto = st.text_input("Escribe **CONFIRMAR CAMBIOS** en mayúsculas:")
+                        confirmacion_texto = st.text_input("Si estás seguro de no arruinarlo, escribe **CONFIRMAR CAMBIOS** en mayúsculas:")
                         submit_final = st.form_submit_button("✅ Confirmar y Ejecutar", type="primary", use_container_width=True)
 
                         if submit_final and confirmacion_texto == "CONFIRMAR CAMBIOS":
-                            exito, error_msg = actualizar_asignaciones_masivo(propuesta['ids_afectados'], propuesta['columna'], propuesta['valor'])
-                            if exito:
-                                st.success("¡Éxito!")
-                                del st.session_state.propuesta_cambio
-                                if 'asignaciones_original' in st.session_state:
-                                    del st.session_state.asignaciones_original
-                                st.session_state.edit_mode = False
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error(f"Error: {error_msg}")
+                            with st.spinner("Aplicando cambios y registrando en el historial..."):
+                                exito, error_msg = actualizar_asignaciones_masivo(propuesta['ids_afectados'], propuesta['columna'], propuesta['valor'])
+                                if exito:
+                                    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+                                    registrar_cambio_masivo(
+                                        email=email_usuario,
+                                        columna=propuesta['columna'],
+                                        valor=propuesta['valor'],
+                                        ids_afectados=propuesta['ids_afectados'],
+                                        nombres_afectados=propuesta['nombres_afectados'],
+                                        valores_antiguos=propuesta['valores_antiguos'], 
+                                        mes=mes_num,
+                                        ano=ano_sel
+                                    )
+                                    st.success("¡Cambios aplicados y registrados con éxito!")
+                                    del st.session_state.propuesta_cambio
+                                    if 'asignaciones_original' in st.session_state:
+                                        del st.session_state.asignaciones_original
+                                    st.session_state.edit_mode = False
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error al aplicar los cambios: {error_msg}")
                     
-                    if st.button("❌ Cancelar Operación Masiva", use_container_width=True):
+                    if st.button("❌ Arrepentirse y Cancelar", use_container_width=True):
                         del st.session_state.propuesta_cambio
                         st.rerun()
-                            
+
+            # --- 8. HERRAMIENTAS DE EDICIÓN MASIVA ---
+            else:
+                if st.session_state.edit_mode:
+                    st.markdown("---")
+                    col_limite, _ = st.columns([1, 2])
+                    limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20], index=0)
+
+                    filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
+                    excede_limite = len(filas_seleccionadas) > limite_filas
+                    
+                    st.markdown("##### ⚙️ Aplicar Cambios en Lote")
+                    st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
+                    
+                    def forzar_rerun():
+                        pass 
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
+                        columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar", on_change=forzar_rerun)
+                    
+                    with col2:
+                        opciones_desplegables = {
+                            "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
+                            "pagado": ["SI", "NO", "ABONO"],
+                            "envio_pagado": ["SI", "NO", "NO APLICA"]
+                        }
+                        if columna_a_cambiar in opciones_desplegables:
+                            nuevo_valor = st.selectbox("2. Nuevo valor:", options=opciones_desplegables[columna_a_cambiar])
+                        elif columna_a_cambiar == "valor_envio":
+                            nuevo_valor = st.number_input("2. Nuevo valor ($):", min_value=0.0, step=1000.0, format="%.0f")
+                        else:
+                            nuevo_valor = st.text_input("2. Nuevo valor:", value="")
+
+                    if st.button("🔍 Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite), type="primary"):
+                        nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
+                        valores_antiguos = filas_seleccionadas[columna_a_cambiar].tolist()
+                        
+                        st.session_state.propuesta_cambio = {
+                            "columna": columna_a_cambiar, 
+                            "valor": nuevo_valor,
+                            "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
+                            "nombres_afectados": nombres_lista, 
+                            "valores_antiguos": valores_antiguos
+                        }
+                        st.rerun()
+
+                # --- 9. GUARDADO MANUAL ---
+                else:
+                    if not st.session_state.asignaciones_original.equals(df_editado) and not mes_esta_cerrado:
+                        if st.button("💾 Guardar Cambios Manuales (Recalcula Total)", type="primary"):
+                            with st.spinner("Calculando totales..."):
+                                resultado = actualizar_asignaciones_batch(df_editado, df_mes)
+                                
+                                if isinstance(resultado, tuple):
+                                    num, errores = resultado
+                                    if errores:
+                                        st.error("Ocurrieron errores:")
+                                        for e in errores: st.write(e)
+                                else:
+                                    num = resultado
+                                    
+                                if num > 0:
+                                    st.success(f"¡Se actualizaron {num} registros!")
+                                    del st.session_state.asignaciones_original
+                                    time.sleep(1)
+                                    st.rerun()
+
     # ==========================================================
     # 2. ASIGNAR SOLO LIBRO PRINCIPAL
     # ==========================================================
