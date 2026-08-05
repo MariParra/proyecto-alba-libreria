@@ -796,7 +796,7 @@ def mostrar_asignaciones():
                 "1. **Selecciona a los clientes** marcando la casilla en la primera columna de la tabla (`Seleccionar`).\n"
                 "2. **Ve al formulario** que está debajo de la tabla y elige qué columna deseas modificar.\n"
                 "3. **Ingresa el nuevo valor** que quieres aplicarles a todos por igual y presiona `Previsualizar Cambios`.\n"
-                "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo."
+                "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo.\n"
                 
                 "Nota: TI del sistema no se hace responsable si el resultado no es el esperado. Usar con precaución :D"
             )
