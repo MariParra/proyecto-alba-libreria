@@ -3,11 +3,10 @@ import pandas as pd
 import random
 import time
 from datetime import datetime
-from utilidades import get_db_connection, limpiar_texto
+from utilidades import get_db_connection, limpiar_texto, log_error
 import json
 import re
 import pytz
-from utilidades import log_error
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -675,7 +674,6 @@ def cargar_historial_cambios():
     """Carga los últimos 5 registros del historial de cambios masivos desde Supabase."""
     conn = get_db_connection()
     try:
-        # Pide los 5 registros más recientes, ordenados por fecha
         res = conn.table("historial_cambios_masivos").select("*").order("fecha_cambio", desc=True).limit(5).execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception as e:
@@ -686,12 +684,7 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
     """Guarda un registro de la operación de edición en bloque en la tabla de auditoría."""
     conn = get_db_connection()
     try:
-        # Prepara la lista de clientes con su valor antiguo para guardarla como JSON
-        lista_clientes = [
-            {"id": i, "nombre": n, "valor_antiguo": str(v)} 
-            for i, n, v in zip(ids_afectados, nombres_afectados, valores_antiguos)
-        ]
-        
+        lista_clientes = [{"id": i, "nombre": n, "valor_antiguo": str(v)} for i, n, v in zip(ids_afectados, nombres_afectados, valores_antiguos)]
         datos_log = {
             "email_usuario": email,
             "columna_afectada": columna,
@@ -702,13 +695,9 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
             "ano_afectado": int(ano)
         }
         conn.table("historial_cambios_masivos").insert(datos_log).execute()
-        
-        # Limpia el caché para que el historial se actualice en el siguiente rerun
         cargar_historial_cambios.clear()
         return True
-        
     except Exception as e:
-        # Si el guardado del log falla, no se detiene la app, pero se registra en la caja negra
         log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo CRÍTICO al guardar log de auditoría: {e}", email)
         return False
 
