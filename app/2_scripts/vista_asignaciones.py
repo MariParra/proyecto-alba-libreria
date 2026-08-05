@@ -798,7 +798,7 @@ def mostrar_asignaciones():
                 "3. **Ingresa el nuevo valor** que quieres aplicarles a todos por igual y presiona `Previsualizar Cambios`.\n"
                 "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo.\n"
                 
-                "Nota: TI del sistema no se hace responsable si el resultado no es el esperado. Usar con precaución :D"
+                "**_Nota: TI del sistema no se hace responsable si el resultado no es el esperado. Usar con precaución :D_**"
             )
             df_mostrar.insert(0, "Seleccionar", False)
 
