@@ -830,7 +830,7 @@ def mostrar_asignaciones():
                 # 🔴 Fila 3: Visibilidad de Columnas
                 columnas_opcionales = [
                     'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
-                    'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario'
+                    'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'metodo_entrega'
                 ]
                 columnas_visibles = st.multiselect(
                     "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
