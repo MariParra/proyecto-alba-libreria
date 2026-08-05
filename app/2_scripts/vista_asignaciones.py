@@ -769,7 +769,6 @@ def mostrar_asignaciones():
                     with st.container(border=True):
                         # Intentamos formatear la fecha a hora de Chile
                         try:
-                            import pytz
                             fecha_utc = pd.to_datetime(row['fecha_cambio']).tz_convert('America/Santiago')
                             fecha_str = fecha_utc.strftime('%d-%m-%Y a las %H:%M:%S hrs')
                         except:
