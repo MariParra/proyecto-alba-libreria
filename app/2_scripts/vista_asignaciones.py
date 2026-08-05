@@ -790,7 +790,14 @@ def mostrar_asignaciones():
             st.rerun()
 
         if st.session_state.edit_mode:
-            st.info("**Modo Edición en Bloque Activado:** Selecciona las filas en la primera columna y usa el formulario de abajo.")
+            # 🔴 NUEVO: Cuadro de instrucciones detallado
+            st.info(
+                "💡 **GUÍA RÁPIDA: ¿Cómo usar la Edición en Bloque?**\n"
+                "1. **Selecciona a los clientes** marcando la casilla en la primera columna de la tabla (`Seleccionar`).\n"
+                "2. **Ve al formulario** que está debajo de la tabla y elige qué columna deseas modificar.\n"
+                "3. **Ingresa el nuevo valor** que quieres aplicarles a todos por igual y presiona `Previsualizar Cambios`.\n"
+                "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo."
+            )
             df_mostrar.insert(0, "Seleccionar", False)
 
         # --- 5. GUARDADO DE ESTADO ORIGINAL ---
