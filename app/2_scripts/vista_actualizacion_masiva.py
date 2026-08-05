@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 # ==========================================================
 # 🛠️ FUNCIONES DE GENERACIÓN DE PLANTILLAS (EXCEL)
@@ -79,7 +79,7 @@ def procesar_actualizacion_libros(df):
             for col in df.columns:
                 if col in fila and pd.notna(fila[col]) and col != 'libro_id':
                     if col in columnas_texto:
-                        datos_update[col] = limpiar_texto(str(fila[col]))
+                        datos_update[col] = limpiar_texto_para_busqueda(str(fila[col]))
                     
                     # --- CORRECCIÓN CLAVE ---
                     # Tratamos el stock estrictamente como un entero para evitar "0.0"

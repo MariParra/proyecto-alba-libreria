@@ -4,7 +4,8 @@ import pandas as pd
 import json
 import base64
 import time
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error, normalizar_nombre_para_duplicados
+
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -80,7 +81,7 @@ def sync_google_sheets():
             for index, row in df.iterrows():
                 # Extracción súper segura con validación de existencia de columnas
                 nombre_raw = row[col_nombre] if col_nombre in df.columns else ""
-                nombre_sync = limpiar_texto(str(nombre_raw))
+                nombre_sync = limpiar_texto_para_busqueda(str(nombre_raw))
                 if not nombre_sync or nombre_sync == "SIN INFORMACION" or nombre_sync == "NAN": continue
                 
                 estado_raw = row[col_estado] if col_estado in df.columns else "ACTIVA"
@@ -89,10 +90,10 @@ def sync_google_sheets():
                 if estado_sync == "INACTIVO": estado_sync = "NO ACTIVA"
 
                 tel_raw = row[col_telefono] if col_telefono in df.columns else ""
-                tel_sync = limpiar_texto(str(tel_raw))
+                tel_sync = limpiar_texto_para_busqueda(str(tel_raw))
 
                 email_raw = row[col_email] if col_email and col_email in df.columns else ""
-                email_sync = limpiar_texto(str(email_raw))
+                email_sync = limpiar_texto_para_busqueda(str(email_raw))
 
                 fecha_raw = row[col_fecha] if col_fecha in df.columns else ""
                 fecha_sync = str(fecha_raw).strip()
@@ -104,12 +105,26 @@ def sync_google_sheets():
                 metodo_sync = str(metodo_raw).strip()
                 
                 # Búsqueda e inserción
-                res_nombre = conn.table("clientes").select("*").eq("nombre", nombre_sync).execute()
-                res_email = conn.table("clientes").select("*").eq("email", email_sync).execute() if email_sync else None
+                # 1. Normalizamos el nombre que viene de Google Sheets
+                nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
+                
+                # 2. Descargamos la lista actual de clientes de Supabase para comparar en memoria
+                todos_clientes_db = conn.table("clientes").select("cliente_id, nombre, email").execute().data
                 
                 cliente_existente = None
-                if res_nombre.data: cliente_existente = res_nombre.data[0]
-                elif res_email and res_email.data: cliente_existente = res_email.data[0]
+                
+                # A. Buscamos primero si hay coincidencia por nombre normalizado (Ignora tildes, mayúsculas y la Ñ)
+                for cliente_db in todos_clientes_db:
+                    if normalizar_nombre_para_duplicados(cliente_db['nombre']) == nombre_normalizado_sync:
+                        cliente_existente = cliente_db
+                        break
+                
+                # B. Si no coincidió por nombre, buscamos si hay coincidencia por email
+                if not cliente_existente and email_sync:
+                    for cliente_db in todos_clientes_db:
+                        if cliente_db.get('email') and str(cliente_db['email']).strip().lower() == email_sync.lower():
+                            cliente_existente = cliente_db
+                            break
                 
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']

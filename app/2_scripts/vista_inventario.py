@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 import time
 
 def obtener_unicos(df, columna):
@@ -54,8 +54,8 @@ def cargar_datos_completos():
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
     
-    titulo_limpio = limpiar_texto(titulo)
-    autor_limpio = limpiar_texto(autor)
+    titulo_limpio = limpiar_texto_para_busqueda(titulo)
+    autor_limpio = limpiar_texto_para_busqueda(autor)
 
     try:
         res = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
@@ -73,8 +73,8 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
 
     datos = {
         "titulo": titulo_limpio, "autor": autor_limpio,
-        "editorial": limpiar_texto(editorial), "genero": limpiar_texto(genero),
-        "encuadernacion": limpiar_texto(encuadernacion), "stock": stock,
+        "editorial": limpiar_texto_para_busqueda(editorial), "genero": limpiar_texto_para_busqueda(genero),
+        "encuadernacion": limpiar_texto_para_busqueda(encuadernacion), "stock": stock,
         "precio": precio, "precio_original": precio, "costo": costo
     }
     try:
@@ -134,10 +134,10 @@ def actualizar_libros_batch(df_original, df_editado):
     for libro_id, row in filas_cambiadas.iterrows():
         try:
             datos = {}
-            if 'autor' in row: datos['autor'] = limpiar_texto(str(row['autor']))
-            if 'editorial' in row: datos['editorial'] = limpiar_texto(str(row['editorial']))
-            if 'genero' in row: datos['genero'] = limpiar_texto(str(row['genero']))
-            if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto(str(row['encuadernacion']))
+            if 'autor' in row: datos['autor'] = limpiar_texto_para_busqueda(str(row['autor']))
+            if 'editorial' in row: datos['editorial'] = limpiar_texto_para_busqueda(str(row['editorial']))
+            if 'genero' in row: datos['genero'] = limpiar_texto_para_busqueda(str(row['genero']))
+            if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto_para_busqueda(str(row['encuadernacion']))
             if 'stock' in row: datos['stock'] = int(row['stock'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
             
@@ -297,9 +297,9 @@ def mostrar_inventario():
 
     # Búsqueda por título con normalización
     if busqueda_titulo: 
-        busqueda_limpia = limpiar_texto(busqueda_titulo)
+        busqueda_limpia = limpiar_texto_para_busqueda(busqueda_titulo)
         df_filtrado = df_filtrado[
-            df_filtrado['titulo'].apply(limpiar_texto).str.contains(busqueda_limpia, case=False, na=False)
+            df_filtrado['titulo'].apply(limpiar_texto_para_busqueda).str.contains(busqueda_limpia, case=False, na=False)
         ]
 
     if autores_seleccionados: 
