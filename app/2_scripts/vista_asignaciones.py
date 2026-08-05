@@ -797,6 +797,8 @@ def mostrar_asignaciones():
                 "2. **Ve al formulario** que está debajo de la tabla y elige qué columna deseas modificar.\n"
                 "3. **Ingresa el nuevo valor** que quieres aplicarles a todos por igual y presiona `Previsualizar Cambios`.\n"
                 "4. **Revisa la lista** final y escribe la palabra de seguridad para aplicar el cambio masivo."
+                
+                "Nota: TI del sistema no se hace responsable si el resultado no es el esperado. Usar con precaución :D"
             )
             df_mostrar.insert(0, "Seleccionar", False)
 
@@ -834,60 +836,68 @@ def mostrar_asignaciones():
         # --- 7. FORMULARIO DE EDICIÓN EN BLOQUE ---
         if st.session_state.edit_mode:
             st.markdown("---")
+            # Límite de filas
             col_limite, _ = st.columns([1, 2])
             limite_filas = col_limite.selectbox(
                 "🛑 Límite de filas a editar a la vez:", 
-                options=[5, 10, 15, 20], 
-                index=0, 
-                help="Por seguridad, elige el tamaño del lote de edición."
+                options=[5, 10, 15, 20], index=0
             )
 
             filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
             excede_limite = len(filas_seleccionadas) > limite_filas
             
+            # Inicio del formulario
             with st.form("form_edicion_bloque"):
                 st.markdown("##### ⚙️ Aplicar Cambios en Lote")
-                st.warning("⚠️ **ACCIÓN DELICADA:** Estás a punto de sobreescribir los datos de varias asignaciones. Revisa bien las filas seleccionadas.")
+                st.warning("⚠️ **ACCIÓN DELICADA:** Estás a punto de sobreescribir los datos. Revisa bien las filas seleccionadas.")
 
+                # Mensajes de estado de selección
                 if filas_seleccionadas.empty:
                     st.info("📌 Selecciona una o más filas para empezar.")
                 elif excede_limite:
-                    st.error(f"🚨 **LÍMITE SUPERADO:** Has seleccionado {len(filas_seleccionadas)} filas, superando el límite de {limite_filas}. Desmarca algunas para continuar.")
+                    st.error(f"🚨 **LÍMITE SUPERADO:** Has seleccionado {len(filas_seleccionadas)} filas. Desmarca algunas para continuar.")
                 else:
-                    st.success(f"✅ **{len(filas_seleccionadas)} filas seleccionadas correctamente.**")
+                    st.success(f"✅ **{len(filas_seleccionadas)} filas seleccionadas.**")
                 
+                # --- Columnas del formulario y lógica dinámica ---
                 col1, col2 = st.columns(2)
                 
-                opciones_desplegables = {
-                    "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
-                    "pagado": ["SI", "NO", "ABONO"],
-                    "envio_pagado": ["SI", "NO", "NO APLICA"]
-                }
+                with col1:
+                    # Opciones para las listas desplegables
+                    opciones_desplegables = {
+                        "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
+                        "pagado": ["SI", "NO"],
+                        "envio_pagado": ["SI", "NO", "NO APLICA"]
+                    }
+                    columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
+                    columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar")
+
+                with col2:
+                    if columna_a_cambiar in opciones_desplegables:
+                        # Si es un estado o pago, muestra una lista desplegable
+                        nuevo_valor = st.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar], key="valor_selectbox")
+                    elif columna_a_cambiar == "valor_envio":
+                        # Si es un valor monetario, muestra un campo de número
+                        nuevo_valor = st.number_input("2. Nuevo valor de envío ($):", min_value=0.0, step=100.0, format="%.0f", key="valor_number")
+                    else: # Para "comentario" y cualquier otro caso
+                        # Si es cualquier otra cosa (ej. comentario), muestra un campo de texto
+                        nuevo_valor = st.text_input("2. Nuevo valor para aplicar:", value="", key="valor_text")
                 
-                columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
-                columna_a_cambiar = col1.selectbox("1. Columna a modificar:", columnas_modificables)
-                
-                if columna_a_cambiar in opciones_desplegables:
-                    nuevo_valor = col2.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar])
-                else:
-                    if columna_a_cambiar == "valor_envio":
-                        st.caption("💡 *Nota: Ingresa solo números (ej: 3500).*")
-                    nuevo_valor = col2.text_input("2. Nuevo valor para aplicar:", value="") # Usamos value="" para claridad
-                
+                # Botón de envío del formulario
                 submit_previsualizar = st.form_submit_button("Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite))
                 
-                # 🔴 LÍNEA CORREGIDA: Se quitó 'and nuevo_valor'
                 if submit_previsualizar:
                     # Fallback por si la columna de nombres está oculta
                     nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
                     
                     st.session_state.propuesta_cambio = {
                         "columna": columna_a_cambiar,
-                        "valor": nuevo_valor, # Guardamos el valor, incluso si es un string vacío
+                        "valor": nuevo_valor,
                         "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
                         "nombres_afectados": nombres_lista
                     }
                     st.rerun()
+
 
 
         # --- 8. GUARDADO MANUAL (Si la edición en bloque está apagada) ---
