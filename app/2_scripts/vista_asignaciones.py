@@ -846,11 +846,22 @@ def mostrar_asignaciones():
             filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
             excede_limite = len(filas_seleccionadas) > limite_filas
             
+            st.markdown("##### ⚙️ Aplicar Cambios en Lote")
+            
+            # 🔴 LA SOLUCIÓN: Sacamos este selector AFUERA del formulario para que sea dinámico
+            columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
+            columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar")
+            
+            opciones_desplegables = {
+                "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
+                "pagado": ["SI", "NO"],
+                "envio_pagado": ["SI", "NO", "NO APLICA"]
+            }
+            
             # Inicio del formulario
             with st.form("form_edicion_bloque"):
-                st.markdown("##### ⚙️ Aplicar Cambios en Lote")
                 st.warning("⚠️ **ACCIÓN DELICADA:** Estás a punto de sobreescribir los datos. Revisa bien las filas seleccionadas.")
-
+                
                 # Mensajes de estado de selección
                 if filas_seleccionadas.empty:
                     st.info("📌 Selecciona una o más filas para empezar.")
@@ -859,30 +870,17 @@ def mostrar_asignaciones():
                 else:
                     st.success(f"✅ **{len(filas_seleccionadas)} filas seleccionadas.**")
                 
-                # --- Columnas del formulario y lógica dinámica ---
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Opciones para las listas desplegables
-                    opciones_desplegables = {
-                        "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
-                        "pagado": ["SI", "NO"],
-                        "envio_pagado": ["SI", "NO", "NO APLICA"]
-                    }
-                    columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
-                    columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar")
-
-                with col2:
-                    if columna_a_cambiar in opciones_desplegables:
-                        # Si es un estado o pago, muestra una lista desplegable
-                        nuevo_valor = st.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar], key="valor_selectbox")
-                    elif columna_a_cambiar == "valor_envio":
-                        # Si es un valor monetario, muestra un campo de número
-                        nuevo_valor = st.number_input("2. Nuevo valor de envío ($):", min_value=0.0, step=100.0, format="%.0f", key="valor_number")
-                    else: # Para "comentario" y cualquier otro caso
-                        # Si es cualquier otra cosa (ej. comentario), muestra un campo de texto
-                        nuevo_valor = st.text_input("2. Nuevo valor para aplicar:", value="", key="valor_text")
-                
+                # --- Lógica dinámica (Ahora reaccionará instantáneamente) ---
+                if columna_a_cambiar in opciones_desplegables:
+                    # Si es un estado o pago, muestra una lista desplegable
+                    nuevo_valor = st.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar], key="valor_selectbox")
+                elif columna_a_cambiar == "valor_envio":
+                    # Si es un valor monetario, muestra un campo de número
+                    nuevo_valor = st.number_input("2. Nuevo valor de envío ($):", min_value=0.0, step=100.0, format="%.0f", key="valor_number")
+                else: # Para "comentario" y cualquier otro caso
+                    # Si es cualquier otra cosa (ej. comentario), muestra un campo de texto
+                    nuevo_valor = st.text_input("2. Nuevo valor para aplicar:", value="", key="valor_text")
+            
                 # Botón de envío del formulario
                 submit_previsualizar = st.form_submit_button("Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite))
                 
@@ -897,6 +895,7 @@ def mostrar_asignaciones():
                         "nombres_afectados": nombres_lista
                     }
                     st.rerun()
+
 
 
 
