@@ -92,7 +92,7 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
                     except (json.JSONDecodeError, TypeError):
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         
-                        error_detalle = f"JSON corrupto en ventas del cliente {cliente_id}. Detalle: {e}"
+                        error_detalle = f"JSON corrupto en ventas del cliente {cliente_id}."
                         
                         log_error(
                             vista="vista_asignaciones",
