@@ -19,6 +19,28 @@ from vista_reportes import mostrar_reportes
 from vista_kanban import mostrar_kanban
 from vista_rollback import mostrar_rollback
 
+# --- INYECCIÓN DE CSS PARA BARRA LATERAL FIJA (PC Y MÓVIL) ---
+st.markdown("""
+    <style>
+        /* Contenedor principal de la barra lateral */
+        [data-testid="stSidebar"] {
+            /* Asegura que el contenido interno que se desborde permita hacer scroll */
+            overflow-y: auto;
+        }
+
+        /* Cabecera de la barra lateral (donde está la X o flecha) */
+        [data-testid="stSidebarHeader"] {
+            position: sticky; /* La clave: se pega al borde superior */
+            top: 0;
+            z-index: 100; /* Se asegura de que esté por encima del contenido */
+            /* Usa la variable de color de Streamlit para que coincida con el tema */
+            background-color: var(--secondary-background-color);
+            border-bottom: 1px solid rgba(49, 51, 63, 0.2); /* Línea sutil de separación */
+            padding-bottom: 10px; /* Un poco de espacio extra */
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
