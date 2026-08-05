@@ -6,6 +6,7 @@ from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto
 import json
 import re
+import pytz
 from utilidades import log_error
 
 # --- FUNCIONES DE BASE DE DATOS ---
@@ -669,10 +670,23 @@ def actualizar_asignaciones_masivo(lista_asignacion_ids, columna, nuevo_valor):
         )
         return False, str(e)
 
-def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afectados, valores_antiguos, mes, ano):
-    """Guarda un registro de la operación en bloque incluyendo el valor antiguo."""
+@st.cache_data(ttl=60)
+def cargar_historial_cambios():
+    """Carga los últimos 5 registros del historial de cambios masivos desde Supabase."""
     conn = get_db_connection()
     try:
+        # Pide los 5 registros más recientes, ordenados por fecha
+        res = conn.table("historial_cambios_masivos").select("*").order("fecha_cambio", desc=True).limit(5).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception as e:
+        st.toast(f"⚠️ No se pudo cargar el historial: {e}")
+        return pd.DataFrame()
+
+def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afectados, valores_antiguos, mes, ano):
+    """Guarda un registro de la operación de edición en bloque en la tabla de auditoría."""
+    conn = get_db_connection()
+    try:
+        # Prepara la lista de clientes con su valor antiguo para guardarla como JSON
         lista_clientes = [
             {"id": i, "nombre": n, "valor_antiguo": str(v)} 
             for i, n, v in zip(ids_afectados, nombres_afectados, valores_antiguos)
@@ -688,9 +702,14 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
             "ano_afectado": int(ano)
         }
         conn.table("historial_cambios_masivos").insert(datos_log).execute()
+        
+        # Limpia el caché para que el historial se actualice en el siguiente rerun
+        cargar_historial_cambios.clear()
         return True
+        
     except Exception as e:
-        log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo al guardar log: {e}", email)
+        # Si el guardado del log falla, no se detiene la app, pero se registra en la caja negra
+        log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo CRÍTICO al guardar log de auditoría: {e}", email)
         return False
 
 # --- INTERFAZ PRINCIPAL ---
@@ -749,6 +768,38 @@ def mostrar_asignaciones():
     # 1. TABLA EDITABLE (VERSIÓN FINAL COMPLETA)
     # ==========================================================
     if opcion_menu == "📋 Gestión (Tabla Editable)":
+        with st.expander("📖 Ver Historial de Últimos Cambios Masivos"):
+            # Llamamos a la función que busca los datos en Supabase
+            df_historial = cargar_historial_cambios()
+            
+            if df_historial.empty:
+                st.caption("Aún no se han registrado ediciones en bloque.")
+            else:
+                st.caption("Mostrando los últimos 5 cambios realizados con la herramienta de edición masiva.")
+                for _, row in df_historial.iterrows():
+                    with st.container(border=True):
+                        # Intentamos formatear la fecha a hora de Chile
+                        try:
+                            import pytz
+                            fecha_utc = pd.to_datetime(row['fecha_cambio']).tz_convert('America/Santiago')
+                            fecha_str = fecha_utc.strftime('%d-%m-%Y a las %H:%M:%S hrs')
+                        except:
+                            fecha_str = str(row['fecha_cambio'])[:19] # Fallback si no hay pytz
+
+                        st.markdown(f"**Fecha:** {fecha_str} | **Usuario:** `{row['email_usuario']}`")
+                        st.markdown(
+                            f"Se cambió la columna **`{row['columna_afectada']}`** al nuevo valor **`{row['valor_nuevo']}`** "
+                            f"para **{row['total_filas_afectadas']} clientes** en el mes **{row['mes_afectado']}/{row['ano_afectado']}**."
+                        )
+                        
+                        # Tratamos de leer el JSON con los clientes afectados y sus valores antiguos
+                        try:
+                            import json
+                            clientes = json.loads(row['clientes_afectados'])
+                            nombres_clientes = [f"{c['nombre']} *(Antes: {c.get('valor_antiguo', 'N/A')})*" for c in clientes]
+                            st.code("- " + "\n- ".join(nombres_clientes), language=None)
+                        except Exception as e:
+                            st.caption(f"No se pudo cargar el detalle de las clientas. Error: {e}")
         if df_mes.empty: 
             st.warning("No hay registros para este mes.")
         else:
