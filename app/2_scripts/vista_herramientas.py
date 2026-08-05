@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import base64
 import time
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -80,7 +80,7 @@ def sync_google_sheets():
             for index, row in df.iterrows():
                 # Extracción súper segura con validación de existencia de columnas
                 nombre_raw = row[col_nombre] if col_nombre in df.columns else ""
-                nombre_sync = limpiar_texto(str(nombre_raw))
+                nombre_sync = limpiar_texto_para_busqueda(str(nombre_raw))
                 if not nombre_sync or nombre_sync == "SIN INFORMACION" or nombre_sync == "NAN": continue
                 
                 estado_raw = row[col_estado] if col_estado in df.columns else "ACTIVA"
@@ -89,10 +89,10 @@ def sync_google_sheets():
                 if estado_sync == "INACTIVO": estado_sync = "NO ACTIVA"
 
                 tel_raw = row[col_telefono] if col_telefono in df.columns else ""
-                tel_sync = limpiar_texto(str(tel_raw))
+                tel_sync = limpiar_texto_para_busqueda(str(tel_raw))
 
                 email_raw = row[col_email] if col_email and col_email in df.columns else ""
-                email_sync = limpiar_texto(str(email_raw))
+                email_sync = limpiar_texto_para_busqueda(str(email_raw))
 
                 fecha_raw = row[col_fecha] if col_fecha in df.columns else ""
                 fecha_sync = str(fecha_raw).strip()

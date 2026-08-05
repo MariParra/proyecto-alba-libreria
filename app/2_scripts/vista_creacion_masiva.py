@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import json
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 # ====================================================
 # --- LÓGICA 1: CREACIÓN DE CLIENTES NUEVOS ---
@@ -23,7 +23,7 @@ def procesar_clientes_masivos(df):
     exitos, duplicados, errores = 0, 0, []
 
     res_clientes = conn.table("clientes").select("nombre").execute()
-    catalogo_actual = [limpiar_texto(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
+    catalogo_actual = [limpiar_texto_para_busqueda(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de clientes...")
     total_filas = len(df)
@@ -33,7 +33,7 @@ def procesar_clientes_masivos(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando cliente {indice + 1}/{total_filas}...")
         
-        nombre_limpio = limpiar_texto(fila.get('nombre', ''))
+        nombre_limpio = limpiar_texto_para_busqueda(fila.get('nombre', ''))
         
         if not nombre_limpio:
             errores.append(f"Fila {indice + 2}: Falta el 'nombre'. Es obligatorio.")
@@ -49,13 +49,13 @@ def procesar_clientes_masivos(df):
             for col in df.columns:
                 if pd.notna(fila[col]):
                     if col in columnas_texto:
-                        nuevo_cliente[col] = limpiar_texto(str(fila[col]))
+                        nuevo_cliente[col] = limpiar_texto_para_busqueda(str(fila[col]))
                     else:
                         nuevo_cliente[col] = fila[col]
             
             # Asegurarse de que el nombre principal esté limpio
             if 'nombre' in nuevo_cliente:
-                nuevo_cliente['nombre'] = limpiar_texto(nuevo_cliente['nombre'])
+                nuevo_cliente['nombre'] = limpiar_texto_para_busqueda(nuevo_cliente['nombre'])
 
             conn.table("clientes").insert(nuevo_cliente).execute()
             exitos += 1
@@ -96,7 +96,7 @@ def procesar_nuevos_libros(df):
     exitos, duplicados, errores = 0, 0, []
     
     res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(limpiar_texto(l['titulo']), limpiar_texto(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
+    catalogo_actual = [(limpiar_texto_para_busqueda(l['titulo']), limpiar_texto_para_busqueda(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
     total_filas = len(df)
@@ -106,8 +106,8 @@ def procesar_nuevos_libros(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
-        titulo_limpio = limpiar_texto(fila.get('titulo', ''))
-        autor_limpio = limpiar_texto(fila.get('autor', ''))
+        titulo_limpio = limpiar_texto_para_busqueda(fila.get('titulo', ''))
+        autor_limpio = limpiar_texto_para_busqueda(fila.get('autor', ''))
         
         if not titulo_limpio:
             errores.append(f"Fila {indice + 2}: Falta el 'titulo'. Es obligatorio.")
@@ -123,7 +123,7 @@ def procesar_nuevos_libros(df):
             for col in df.columns:
                 if pd.notna(fila[col]):
                     if col in columnas_texto:
-                        nuevo_libro[col] = limpiar_texto(str(fila[col]))
+                        nuevo_libro[col] = limpiar_texto_para_busqueda(str(fila[col]))
                     else:
                         nuevo_libro[col] = fila[col]
                     
@@ -172,8 +172,8 @@ def procesar_ventas_masivas(df):
     res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
     res_libros = conn.table("libros").select("libro_id, titulo, autor, costo").execute()
     
-    map_clientes = {limpiar_texto(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
-    map_libros = {limpiar_texto(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
+    map_clientes = {limpiar_texto_para_busqueda(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
+    map_libros = {limpiar_texto_para_busqueda(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
 
     df['Valor_Envio'] = pd.to_numeric(df['Valor_Envio'], errors='coerce').fillna(0)
     df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(1)
@@ -189,7 +189,7 @@ def procesar_ventas_masivas(df):
         barra_progreso.progress(actual / total_grupos, text=f"Procesando venta {actual} de {total_grupos}...")
         
         try:
-            cliente_norm = limpiar_texto(str(cliente_nombre))
+            cliente_norm = limpiar_texto_para_busqueda(str(cliente_nombre))
             if cliente_norm not in map_clientes:
                 errores.append(f"Venta {fecha_dt.strftime('%Y-%m-%d')}: Cliente '{cliente_nombre}' no existe en tu base de datos.")
                 continue
@@ -198,11 +198,11 @@ def procesar_ventas_masivas(df):
             libros_vendidos, subtotal, costo_total_venta = [], 0.0, 0.0
 
             for _, fila in grupo.iterrows():
-                titulo_norm = limpiar_texto(fila.get('Titulo_Libro', ''))
+                titulo_norm = limpiar_texto_para_busqueda(fila.get('Titulo_Libro', ''))
                 libro_info = map_libros.get(titulo_norm)
                 
                 libro_id = int(libro_info['libro_id']) if libro_info and pd.notna(libro_info.get('libro_id')) else None
-                autor_libro = limpiar_texto(libro_info['autor']) if libro_info and pd.notna(libro_info.get('autor')) else "DESCONOCIDO"
+                autor_libro = limpiar_texto_para_busqueda(libro_info['autor']) if libro_info and pd.notna(libro_info.get('autor')) else "DESCONOCIDO"
 
                 if libro_info and pd.notna(libro_info.get('costo')):
                     costo_total_venta += float(libro_info['costo']) * int(fila['Cantidad'])
@@ -217,9 +217,9 @@ def procesar_ventas_masivas(df):
                 subtotal += (cant * precio_u)
 
             valor_envio = float(grupo['Valor_Envio'].iloc[0])
-            metodo_envio = limpiar_texto(str(grupo['Metodo_Envio'].iloc[0])) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "NO ESPECIFICADO"
-            comentario = limpiar_texto(str(grupo['Comentario'].iloc[0])) if pd.notna(grupo['Comentario'].iloc[0]) else "IMPORTACION MASIVA"
-            estado_venta = limpiar_texto(str(grupo['Estado'].iloc[0])) if pd.notna(grupo['Estado'].iloc[0]) else "FINALIZADO"
+            metodo_envio = limpiar_texto_para_busqueda(str(grupo['Metodo_Envio'].iloc[0])) if pd.notna(grupo['Metodo_Envio'].iloc[0]) else "NO ESPECIFICADO"
+            comentario = limpiar_texto_para_busqueda(str(grupo['Comentario'].iloc[0])) if pd.notna(grupo['Comentario'].iloc[0]) else "IMPORTACION MASIVA"
+            estado_venta = limpiar_texto_para_busqueda(str(grupo['Estado'].iloc[0])) if pd.notna(grupo['Estado'].iloc[0]) else "FINALIZADO"
             fecha_str = fecha_dt.strftime('%Y-%m-%d')
             abono_total_venta = float(grupo['Abono'].sum())
             monto_final = subtotal + valor_envio

@@ -16,7 +16,7 @@ def get_db_connection() -> Client:
     supabase: Client = create_client(url, key)
     return supabase
 
-def limpiar_texto(texto):
+def limpiar_texto_para_busqueda(texto):
     """
     Normaliza un texto de forma exhaustiva:
     1. Convierte a string.
@@ -60,3 +60,18 @@ def log_error(vista, funcion, error, email_usuario="No disponible"):
         print(f"--- ERROR CRÍTICO EN EL SISTEMA DE LOGS ---")
         print(f"No se pudo registrar el siguiente error en Supabase: {str(error)}")
         print(f"Causa del fallo en el log: {str(e)}")
+
+def normalizar_nombre_para_duplicados(nombre):
+    """
+    Crea una "huella digital" de un nombre para detectar duplicados.
+    Pasa a mayúsculas, quita tildes Y convierte 'Ñ' a 'N'.
+    """
+    if nombre is None:
+        return ""
+    nombre_str = str(nombre)
+    # 1. Reemplaza 'Ñ' y pasa a mayúsculas
+    sin_ene = nombre_str.upper().replace('Ñ', 'N')
+    # 2. Elimina tildes
+    s = ''.join(c for c in unicodedata.normalize('NFD', sin_ene) if unicodedata.category(c) != 'Mn')
+    # 3. Limpia espacios
+    return ' '.join(s.strip().split())

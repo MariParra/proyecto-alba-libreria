@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import time
 from datetime import datetime
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 import json
 import re
 import pytz
@@ -131,7 +131,7 @@ def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
             generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
-            generos_pref = [limpiar_texto(g.strip()).upper() for g in generos_brutos if g.strip()]
+            generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
         
         return df_catalogo, generos_pref
     except Exception as e:
@@ -333,7 +333,7 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
         
         res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).execute()
         if not res_hist.data:
-            conn.table("librero_historico").insert({"cliente_id": int(cliente_id), "libro_id": int(libro_id), "autor_historico": limpiar_texto(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
+            conn.table("librero_historico").insert({"cliente_id": int(cliente_id), "libro_id": int(libro_id), "autor_historico": limpiar_texto_para_busqueda(autor), "origen": f"ASIGNACIÓN {mes}/{ano}"}).execute()
             
         return True, ""
     except Exception as e: 
@@ -374,7 +374,7 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
         generos_pref = []
         if res_susc.data and res_susc.data[0].get('generos_preferencia'):
             generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
-            generos_pref = [limpiar_texto(g.strip()).upper() for g in generos_brutos if g.strip()]
+            generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
             
         libros_disponibles = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)].copy()
         
@@ -386,7 +386,7 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             continue
             
         if generos_pref:
-            libros_disponibles['genero_limpio'] = libros_disponibles['genero'].apply(lambda x: limpiar_texto(str(x)).upper())
+            libros_disponibles['genero_limpio'] = libros_disponibles['genero'].apply(lambda x: limpiar_texto_para_busqueda(str(x)).upper())
             patron = '|'.join([re.escape(g) for g in generos_pref])
             mask_gustos = libros_disponibles['genero_limpio'].str.contains(patron, na=False)
             df_sugeridos = libros_disponibles[mask_gustos]
@@ -434,7 +434,7 @@ def confirmar_propuesta_azar(propuesta, ano, mes):
                 conn.table("librero_historico").insert({
                     "cliente_id": prop['cliente_id'], 
                     "libro_id": prop['libro_id'], 
-                    "autor_historico": limpiar_texto(prop['Autor']), 
+                    "autor_historico": limpiar_texto_para_busqueda(prop['Autor']), 
                     "origen": f"ASIGNACIÓN {mes}/{ano}"
                 }).execute()
             exitos += 1
@@ -469,7 +469,7 @@ def guardar_ajustes_logistica(asignacion_id, cliente_id, nuevo_envio, texto_extr
         
         datos_update = {
             "valor_envio": float(nuevo_envio), 
-            "extras": limpiar_texto(texto_extras_manual),
+            "extras": limpiar_texto_para_busqueda(texto_extras_manual),
             "valor_extras": float(valor_extras_manual), 
             "monto_total": nuevo_monto_total
         }
@@ -830,9 +830,9 @@ def mostrar_asignaciones():
             # --- 2. APLICACIÓN DE FILTROS ---
             df_filtrado = df_mes.copy()
             if f_nombre: 
-                df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto(f_nombre), case=False, na=False)]
+                df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto_para_busqueda(f_nombre), case=False, na=False)]
             if f_libro_titulo:
-                df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(limpiar_texto(f_libro_titulo), case=False, na=False)]
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(limpiar_texto_para_busqueda(f_libro_titulo), case=False, na=False)]
             if filtro_fecha_pago != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['fecha_pago'] == filtro_fecha_pago]
             if filtro_estado != "Todos": 
@@ -1137,7 +1137,7 @@ def mostrar_asignaciones():
                     else:
                         with st.container(border=True):
                             st.markdown("##### 🔽 Filtrar Clientes Pendientes")
-                            df_pendientes['metodo_entrega_limpio'] = df_pendientes['metodo_entrega'].apply(limpiar_texto)
+                            df_pendientes['metodo_entrega_limpio'] = df_pendientes['metodo_entrega'].apply(limpiar_texto_para_busqueda)
                             metodos_disponibles = sorted(df_pendientes['metodo_entrega_limpio'].dropna().unique())
                             metodos_disponibles = [m for m in metodos_disponibles if m]
                             metodo_seleccionado = st.multiselect(
@@ -1185,7 +1185,7 @@ def mostrar_asignaciones():
                                         df_libros_a_mostrar = df_libros_disponibles.copy()
                                         
                                         if gustos_cliente:
-                                            df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto(str(x)).upper())
+                                            df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto_para_busqueda(str(x)).upper())
                                             
                                             def es_sugerido(row):
                                                 return not set(gustos_cliente).isdisjoint(set(row['genero_limpio'].split()))

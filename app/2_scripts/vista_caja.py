@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import time
-from utilidades import get_db_connection, limpiar_texto, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 def unificar_formatos_fecha(serie_fechas):
     """
@@ -85,11 +85,11 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
     if not nombre: return None
     conn = get_db_connection()
     datos = {
-        "nombre": limpiar_texto(nombre), 
-        "email": limpiar_texto(correo), 
-        "telefono": limpiar_texto(telefono),
-        "rut": limpiar_texto(rut),
-        "direccion": limpiar_texto(direccion)
+        "nombre": limpiar_texto_para_busqueda(nombre), 
+        "email": limpiar_texto_para_busqueda(correo), 
+        "telefono": limpiar_texto_para_busqueda(telefono),
+        "rut": limpiar_texto_para_busqueda(rut),
+        "direccion": limpiar_texto_para_busqueda(direccion)
     }
     
     try:
@@ -168,7 +168,7 @@ def cargar_historial_completo():
 
 def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
     conn = get_db_connection()
-    datos = {"titulo": limpiar_texto(titulo), "autor": limpiar_texto(autor), "precio": float(precio_catalogo)}
+    datos = {"titulo": limpiar_texto_para_busqueda(titulo), "autor": limpiar_texto_para_busqueda(autor), "precio": float(precio_catalogo)}
     if libro_id_existente:
         conn.table("libros").update(datos).eq("libro_id", libro_id_existente).execute()
         return libro_id_existente
@@ -224,7 +224,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             if cliente_id and l_id:
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", l_id).execute()
                 if not res_hist.data:
-                    datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto(item['autor']), "origen": "VENTA CAJA"}
+                    datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto_para_busqueda(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
 
         # --- PASO 3: Agregar extras a la asignación del mes si corresponde (Fiel al original) ---
