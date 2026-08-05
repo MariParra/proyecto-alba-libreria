@@ -840,40 +840,50 @@ def mostrar_asignaciones():
             
             with st.form("form_edicion_bloque"):
                 st.markdown("##### ⚙️ Aplicar Cambios en Lote")
-                
-                # 🔴 NUEVA ADVERTENCIA PRINCIPAL DEL FORMULARIO
-                st.warning("⚠️ **ACCIÓN DELICADA:** Estás a punto de sobreescribir los datos de varias asignaciones al mismo tiempo. Asegúrate de haber seleccionado a las personas correctas.")
-                
+                st.warning("⚠️ **ACCIÓN DELICADA:** Estás a punto de sobreescribir los datos de varias asignaciones. Revisa bien las filas seleccionadas.")
+
                 if filas_seleccionadas.empty:
-                    st.info("📌 Selecciona una o más filas en la tabla marcando la casilla 'Seleccionar' para empezar.")
+                    st.info("📌 Selecciona una o más filas para empezar.")
                 elif excede_limite:
-                    st.error(f"🚨 **LÍMITE SUPERADO:** Has seleccionado {len(filas_seleccionadas)} filas, superando el límite de {limite_filas}. Por favor desmarca algunas para continuar.")
+                    st.error(f"🚨 **LÍMITE SUPERADO:** Has seleccionado {len(filas_seleccionadas)} filas, superando el límite de {limite_filas}. Desmarca algunas para continuar.")
                 else:
                     st.success(f"✅ **{len(filas_seleccionadas)} filas seleccionadas correctamente.**")
                 
                 col1, col2 = st.columns(2)
-                columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio"]
+                
+                opciones_desplegables = {
+                    "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
+                    "pagado": ["SI", "NO", "ABONO"],
+                    "envio_pagado": ["SI", "NO", "NO APLICA"]
+                }
+                
+                columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
                 columna_a_cambiar = col1.selectbox("1. Columna a modificar:", columnas_modificables)
                 
-                # 🔴 NUEVO RECORDATORIO DE FORMATO
-                if columna_a_cambiar == "valor_envio":
-                    st.caption("💡 *Nota: Para 'valor_envio', ingresa solo números (ej: 3500).*")
-                    
-                nuevo_valor = col2.text_input("2. Nuevo valor para aplicar:")
+                if columna_a_cambiar in opciones_desplegables:
+                    nuevo_valor = col2.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar])
+                else:
+                    if columna_a_cambiar == "valor_envio":
+                        st.caption("💡 *Nota: Ingresa solo números (ej: 3500).*")
+                    nuevo_valor = col2.text_input("2. Nuevo valor para aplicar:", value="") # Usamos value="" para claridad
                 
                 submit_previsualizar = st.form_submit_button("Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite))
                 
-                if submit_previsualizar and nuevo_valor:
+                # 🔴 LÍNEA CORREGIDA: Se quitó 'and nuevo_valor'
+                if submit_previsualizar:
+                    # Fallback por si la columna de nombres está oculta
                     nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
                     
                     st.session_state.propuesta_cambio = {
-                        "columna": columna_a_cambiar, "valor": nuevo_valor,
+                        "columna": columna_a_cambiar,
+                        "valor": nuevo_valor, # Guardamos el valor, incluso si es un string vacío
                         "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
                         "nombres_afectados": nombres_lista
                     }
                     st.rerun()
 
-            # --- 8. GUARDADO MANUAL (Si la edición en bloque está apagada) ---
+
+        # --- 8. GUARDADO MANUAL (Si la edición en bloque está apagada) ---
         else:
             if not st.session_state.asignaciones_original.equals(df_editado) and not mes_esta_cerrado:
                 if st.button("💾 Guardar Cambios Manuales (Recalcula Total)", type="primary"):
