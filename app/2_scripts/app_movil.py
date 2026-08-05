@@ -71,18 +71,7 @@ if CLIENT_ID and CLIENT_SECRET:
     )
 else:
     oauth2 = None
-    
-# HILO DE CONEXIÓN ACTIVA (HEARTBEAT)
-# Se ejecuta silenciosamente cada 5 minutos (300 segundos) de fondo
-# para mantener el Websocket abierto sin recargar la pantalla completa.
-@st.fragment(run_every=300)
-def mantener_conexion_activa():
-    # Solo hace una operación diminuta de fondo
-    _ = time.time()
-    
-mantener_conexion_activa()
 
-# --- FIN DEL HEARTBEAT ---
 
 @st.cache_data
 def get_image_as_base64(path):
@@ -290,6 +279,35 @@ else:
             st.session_state.clear()
             st.rerun()
 
+        with st.expander("🛠️ Auditoría de Sistema (Versiones)"):
+                    import pandas as pd
+                    import pytz
+                    import gspread
+                    import openpyxl
+                    import xlsxwriter
+                    
+                    # Manejo seguro para librerías que a veces no exponen __version__ fácilmente
+                    try:
+                        import starlette
+                        version_starlette = starlette.__version__
+                    except:
+                        version_starlette = "No instalada o versión oculta"
+                        
+                    try:
+                        import streamlit_oauth
+                        version_oauth = streamlit_oauth.__version__
+                    except:
+                        version_oauth = "No instalada o versión oculta"
+
+                    st.markdown("##### Librerías Instaladas")
+                    st.write(f"🟢 **Streamlit:** `{st.__version__}`")
+                    st.write(f"🟢 **Pandas:** `{pd.__version__}`")
+                    st.write(f"🟢 **Pytz:** `{pytz.__version__}`")
+                    st.write(f"🟢 **Gspread:** `{gspread.__version__}`")
+                    st.write(f"🟢 **Openpyxl:** `{openpyxl.__version__}`")
+                    st.write(f"🟢 **Xlsxwriter:** `{xlsxwriter.__version__}`")
+                    st.write(f"🟢 **Starlette:** `{version_starlette}`")
+                    st.write(f"🟢 **Streamlit-OAuth:** `{version_oauth}`")
     # ================= ÁREA PRINCIPAL =================
     col_izq, col_central, col_der = st.columns([1, 8, 1])
     with col_central:
