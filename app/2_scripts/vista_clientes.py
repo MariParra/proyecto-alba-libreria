@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import time
-from utilidades import get_db_connection, log_error
+from utilidades import get_db_connection, log_error, normalizar_nombre_para_duplicados
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -323,30 +323,40 @@ def mostrar_clientes():
                 if not nombre_n:
                     st.error("El nombre es obligatorio.")
                 else:
+                    # Usamos la nueva función para crear la huella digital
+                    nombre_normalizado_nuevo = normalizar_nombre_para_duplicados(nombre_n)
+                    
+                    # Verificamos si ya existe en la base de datos
                     conn = get_db_connection()
                     try:
-                        nombre_mayus = str(nombre_n).strip().upper() if nombre_n else ""
-                        email_mayus = str(email_n).strip().upper() if email_n else ""
-                        tel_mayus = str(tel_n).strip().upper() if tel_n else ""
-                        rut_mayus = str(rut_n).strip().upper() if rut_n else ""
-                        dir_mayus = str(dir_n).strip().upper() if dir_n else ""
-                        ig_mayus = str(ig_n).strip().upper() if ig_n else ""
-                        estado_mayus = str(estado_n).strip().upper() if estado_n else "CLIENTE REGULAR"
+                        todos_los_clientes = conn.table("clientes").select("nombre").execute().data
+                        duplicado_encontrado = False
+                        nombre_existente = ""
 
-                        conn.table("clientes").insert({
-                                        "nombre": nombre_mayus, 
-                                        "email": email_mayus, 
-                                        "telefono": tel_mayus, 
-                                        "rut": rut_mayus, 
-                                        "direccion": dir_mayus, 
-                                        "instagram": ig_mayus, 
-                                        "status": estado_mayus
-                                    }).execute()
+                        for cliente_db in todos_los_clientes:
+                            if normalizar_nombre_para_duplicados(cliente_db['nombre']) == nombre_normalizado_nuevo:
+                                duplicado_encontrado = True
+                                nombre_existente = cliente_db['nombre']
+                                break
                         
-                        st.success(f"¡Cliente {nombre_n} registrado exitosamente!")
-                        cargar_todos_los_clientes.clear()
-                        time.sleep(1.5)
-                        st.rerun() 
+                        if duplicado_encontrado:
+                            st.error(f"🚫 ¡DUPLICADO DETENIDO! Ya existe un cliente con un nombre idéntico: '{nombre_existente}'.")
+                        else:
+                            # Si no hay duplicados, procedemos a insertar los datos originales
+                            conn.table("clientes").insert({
+                                "nombre": str(nombre_n).strip(), 
+                                "email": str(email_n).strip(), 
+                                "telefono": str(tel_n).strip(), 
+                                "rut": str(rut_n).strip(), 
+                                "direccion": str(dir_n).strip(), 
+                                "instagram": str(ig_n).strip(), 
+                                "status": str(estado_n).strip()
+                            }).execute()
+                            
+                            st.success(f"¡Cliente {nombre_n} registrado exitosamente!")
+                            cargar_todos_los_clientes.clear()
+                            time.sleep(1.5)
+                            st.rerun()
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         error_detalle = (

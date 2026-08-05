@@ -4,7 +4,8 @@ import pandas as pd
 import json
 import base64
 import time
-from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error, normalizar_nombre_para_duplicados
+
 
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
@@ -104,12 +105,26 @@ def sync_google_sheets():
                 metodo_sync = str(metodo_raw).strip()
                 
                 # Búsqueda e inserción
-                res_nombre = conn.table("clientes").select("*").eq("nombre", nombre_sync).execute()
-                res_email = conn.table("clientes").select("*").eq("email", email_sync).execute() if email_sync else None
+                # 1. Normalizamos el nombre que viene de Google Sheets
+                nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
+                
+                # 2. Descargamos la lista actual de clientes de Supabase para comparar en memoria
+                todos_clientes_db = conn.table("clientes").select("cliente_id, nombre, email").execute().data
                 
                 cliente_existente = None
-                if res_nombre.data: cliente_existente = res_nombre.data[0]
-                elif res_email and res_email.data: cliente_existente = res_email.data[0]
+                
+                # A. Buscamos primero si hay coincidencia por nombre normalizado (Ignora tildes, mayúsculas y la Ñ)
+                for cliente_db in todos_clientes_db:
+                    if normalizar_nombre_para_duplicados(cliente_db['nombre']) == nombre_normalizado_sync:
+                        cliente_existente = cliente_db
+                        break
+                
+                # B. Si no coincidió por nombre, buscamos si hay coincidencia por email
+                if not cliente_existente and email_sync:
+                    for cliente_db in todos_clientes_db:
+                        if cliente_db.get('email') and str(cliente_db['email']).strip().lower() == email_sync.lower():
+                            cliente_existente = cliente_db
+                            break
                 
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']
