@@ -7,3 +7,4 @@ st-supabase-connection
 gspread
 openpyxl
 xlsxwriter
+starlette==0.37.2
