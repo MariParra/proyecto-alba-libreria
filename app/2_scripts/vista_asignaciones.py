@@ -833,10 +833,9 @@ def mostrar_asignaciones():
             use_container_width=True
         )
 
-    # --- 7. FORMULARIO DE EDICIÓN EN BLOQUE (VERSIÓN FINAL) ---
+        # --- 7. FORMULARIO DE EDICIÓN EN BLOQUE (VERSIÓN SIMPLIFICADA Y FINAL) ---
         if st.session_state.edit_mode:
             st.markdown("---")
-            # Límite de filas
             col_limite, _ = st.columns([1, 2])
             limite_filas = col_limite.selectbox(
                 "🛑 Límite de filas a editar a la vez:", 
@@ -847,64 +846,42 @@ def mostrar_asignaciones():
             excede_limite = len(filas_seleccionadas) > limite_filas
             
             st.markdown("##### ⚙️ Aplicar Cambios en Lote")
-
-            # --- Lógica del Selector Dinámico ---
+            st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
             
-            # Definimos una función simple que solo reinicia la app
-            def forzar_rerun():
-                st.session_state.force_rerun = True # Marcamos para saber por qué se reinició
+            # --- Divisor para separar la selección de la acción ---
+            st.markdown("---")
 
-            # Diccionario de opciones
+            # --- LÓGICA DEL FORMULARIO Y PREVISUALIZACIÓN ---
             opciones_desplegables = {
                 "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
                 "pagado": ["SI", "NO", "ABONO"],
                 "envio_pagado": ["SI", "NO", "NO APLICA"]
             }
             columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
-            
-            # 🔴 LA MAGIA: Usamos 'on_change' para forzar la actualización
-            columna_a_cambiar = st.selectbox(
-                "1. Columna a modificar:", 
-                columnas_modificables, 
-                key="col_a_cambiar",
-                on_change=forzar_rerun # Cuando cambie, llama a la función de reinicio
-            )
-            
-            # Formulario para el segundo valor y el botón
-            with st.form("form_edicion_bloque"):
-                
-                st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
-                if filas_seleccionadas.empty:
-                    st.info("📌 Selecciona una o más filas para empezar.")
-                elif excede_limite:
-                    st.error(f"🚨 **LÍMITE SUPERADO:** Has seleccionado {len(filas_seleccionadas)}. Desmarca algunas.")
-                else:
-                    st.success(f"✅ **{len(filas_seleccionadas)} filas seleccionadas.**")
 
-                # El segundo campo ahora se dibujará correctamente en cada reinicio
-                if columna_a_cambiar in opciones_desplegables:
-                    nuevo_valor = st.selectbox("2. Nuevo valor para aplicar:", options=opciones_desplegables[columna_a_cambiar])
-                elif columna_a_cambiar == "valor_envio":
-                    nuevo_valor = st.number_input("2. Nuevo valor de envío ($):", min_value=0.0, step=100.0, format="%.0f")
-                else:
-                    nuevo_valor = st.text_input("2. Nuevo valor para aplicar:", value="")
+            col1, col2 = st.columns(2)
             
-                # Botón de envío del formulario
-                submit_previsualizar = st.form_submit_button("Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite))
+            with col1:
+                columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar")
+            
+            with col2:
+                if columna_a_cambiar in opciones_desplegables:
+                    nuevo_valor = st.selectbox("2. Nuevo valor:", options=opciones_desplegables[columna_a_cambiar], key="valor_selectbox")
+                elif columna_a_cambiar == "valor_envio":
+                    nuevo_valor = st.number_input("2. Nuevo valor ($):", min_value=0.0, step=100.0, format="%.0f", key="valor_number")
+                else:
+                    nuevo_valor = st.text_input("2. Nuevo valor:", value="", key="valor_text")
+
+            # El botón de previsualización ahora está fuera del formulario
+            if st.button("Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite)):
+                nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
                 
-                if submit_previsualizar:
-                    nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
-                    
-                    st.session_state.propuesta_cambio = {
-                        "columna": columna_a_cambiar,
-                        "valor": nuevo_valor,
-                        "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
-                        "nombres_afectados": nombres_lista
-                    }
-                    # ¡IMPORTANTE! Limpiamos la bandera de forzar_rerun aquí
-                    if 'force_rerun' in st.session_state:
-                        del st.session_state.force_rerun
-                    st.rerun() # Ahora sí, este rerun es para mostrar la preview
+                st.session_state.propuesta_cambio = {
+                    "columna": columna_a_cambiar, "valor": nuevo_valor,
+                    "ids_afectados": filas_seleccionadas['asignacion_id'].tolist(),
+                    "nombres_afectados": nombres_lista
+                }
+                st.rerun()
 
 
         # --- 8. GUARDADO MANUAL (Si la edición masiva está APAGADA) ---
@@ -928,28 +905,24 @@ def mostrar_asignaciones():
                             st.rerun()
 
         # --- 9. CONTENEDOR DE PREVISUALIZACIÓN Y CONFIRMACIÓN ---
-        # (Este bloque debe estar completamente fuera del formulario y de los condicionales anteriores)
         if 'propuesta_cambio' in st.session_state:
             propuesta = st.session_state.propuesta_cambio
             with st.container(border=True):
                 st.error("🚨 **¡ESTÁS A UN PASO DE APLICAR CAMBIOS MASIVOS!** 🚨")
                 st.markdown("### 🔍 Previsualización de Cambios")
-                
-                st.write(f"Vas a sobreescribir la columna **'{propuesta['columna']}'** con el nuevo valor **'{propuesta['valor']}'** en las siguientes **{len(propuesta['ids_afectados'])}** filas:")
+                st.write(f"Vas a sobreescribir la columna **'{propuesta['columna']}'** con el valor **'{propuesta['valor']}'** en **{len(propuesta['ids_afectados'])}** filas:")
                 
                 nombres_preview = "- " + "\n- ".join(propuesta['nombres_afectados'][:10])
                 st.code(nombres_preview, language=None)
-                if len(propuesta['nombres_afectados']) > 10:
-                    st.caption(f"...y {len(propuesta['nombres_afectados']) - 10} más.")
                 
                 st.warning("⚠️ **Por favor, revisa la lista de arriba.**")
                 st.markdown("---")
                 
-                confirmacion_texto = st.text_input("Si estás seguro, escribe **CONFIRMAR CAMBIOS** en mayúsculas:")
-                
-                col_conf1, col_conf2 = st.columns(2)
-                with col_conf1:
-                    if st.button("✅ Confirmar y Ejecutar", type="primary", use_container_width=True, disabled=(confirmacion_texto != "CONFIRMAR CAMBIOS")):
+                with st.form("form_confirmacion_final"):
+                    confirmacion_texto = st.text_input("Si estás seguro, escribe **CONFIRMAR CAMBIOS** en mayúsculas:")
+                    submit_final = st.form_submit_button("✅ Confirmar y Ejecutar", type="primary", use_container_width=True)
+
+                    if submit_final and confirmacion_texto == "CONFIRMAR CAMBIOS":
                         exito, error_msg = actualizar_asignaciones_masivo(propuesta['ids_afectados'], propuesta['columna'], propuesta['valor'])
                         if exito:
                             st.success("¡Cambios aplicados con éxito!")
@@ -962,10 +935,9 @@ def mostrar_asignaciones():
                         else:
                             st.error(f"Error al aplicar los cambios: {error_msg}")
                 
-                with col_conf2:
-                    if st.button("❌ Arrepentirse y Cancelar", use_container_width=True):
-                        del st.session_state.propuesta_cambio
-                        st.rerun()
+                if st.button("❌ Arrepentirse y Cancelar"):
+                    del st.session_state.propuesta_cambio
+                    st.rerun()
 
                             
     # ==========================================================
