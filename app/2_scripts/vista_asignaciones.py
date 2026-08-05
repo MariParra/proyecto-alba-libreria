@@ -803,42 +803,41 @@ def mostrar_asignaciones():
         if df_mes.empty: 
             st.warning("No hay registros para este mes.")
         else:
-            # --- 1. FILTROS DE BÚSQUEDA ---
-            st.markdown("##### 🔽 Filtros de Búsqueda")
-            
-            with st.container(border=True): # Opcional: Agrega un borde para agrupar visualmente
-                col_fa1, col_fa2 = st.columns(2)
+            with st.expander("🔽 Filtros de Búsqueda y Visibilidad de Columnas", expanded=False):
+                # 🔴 Fila 1: Tres columnas perfectamente equilibradas
+                col_fa1, col_fa2, col_fa3 = st.columns(3)
                 with col_fa1:
-                    f_nombre = st.text_input("🔍 Buscar por Nombre de Cliente:")
-                    f_libro_titulo = st.text_input("📖 Buscar por Título de Libro:")
-                
+                    f_nombre = st.text_input("🔍 Buscar Nombre de Cliente:")
                 with col_fa2:
-                    fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
-                    filtro_fecha_pago = st.selectbox("Filtrar por Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
-                
-                st.markdown("---") # Separador visual
-
-                # --- 🔴 SECCIÓN CORREGIDA: Filtros en 3 columnas ---
-                col_fa3, col_fa4, col_fa5 = st.columns(3)
+                    f_libro_titulo = st.text_input("📖 Buscar Título de Libro:")
                 with col_fa3:
-                    filtro_estado = st.selectbox("Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
-                with col_fa4:
-                    filtro_pagado = st.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
-                with col_fa5:
-                    filtro_libro = st.selectbox("Asignación de Libro:", ["Todos", "Sin Libro", "Con Libro"])
+                    fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
+                    filtro_fecha_pago = st.selectbox("📅 Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
+                
+                st.markdown("---")
 
-            st.markdown("---")
-            columnas_opcionales = [
-                'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
-                'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario'
-            ]
-            columnas_visibles = st.multiselect(
-                "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
-                options=columnas_opcionales, 
-                default=columnas_opcionales,
-                help="Quita las columnas que no necesites ver para tener una vista más limpia."
-            )
-            st.markdown("---")
+                # 🔴 Fila 2: Filtros de estados
+                col_fa4, col_fa5, col_fa6 = st.columns(3)
+                with col_fa4:
+                    filtro_estado = st.selectbox("📦 Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
+                with col_fa5:
+                    filtro_pagado = st.selectbox("💳 Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+                with col_fa6:
+                    filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
+                
+                st.markdown("---")
+                
+                # 🔴 Fila 3: Visibilidad de Columnas
+                columnas_opcionales = [
+                    'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
+                    'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario'
+                ]
+                columnas_visibles = st.multiselect(
+                    "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
+                    options=columnas_opcionales, 
+                    default=columnas_opcionales,
+                    help="Quita las columnas que no necesites ver para tener una vista más limpia."
+                )
 
             # --- 2. APLICACIÓN DE FILTROS ---
             df_filtrado = df_mes.copy()
