@@ -9,3 +9,4 @@ openpyxl
 xlsxwriter
 starlette==0.37.2
 pytz
+# Forzar reconstrucción del entorno - 2024-08-06
