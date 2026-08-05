@@ -754,19 +754,28 @@ def mostrar_asignaciones():
         else:
             # --- 1. FILTROS DE BÚSQUEDA ---
             st.markdown("##### 🔽 Filtros de Búsqueda")
-            col_fa1, col_fa2 = st.columns(2)
-            f_nombre = col_fa1.text_input("🔍 Buscar por Nombre de Cliente:")
-            f_libro_titulo = col_fa1.text_input("📖 Buscar por Título de Libro:")
             
-            fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
-            filtro_fecha_pago = col_fa2.selectbox("Filtrar por Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
-            
-            st.markdown("---")
-            col_fa3, col_fa4, col_fa5 = st.columns(3)
-            filtro_estado = col_fa3.selectbox("Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
-            filtro_pagado = col_fa4.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
-            filtro_libro = col_fa5.selectbox("Asignación de Libro:", ["Todos", "Sin Libro", "Con Libro"])
-            
+            with st.container(border=True): # Opcional: Agrega un borde para agrupar visualmente
+                col_fa1, col_fa2 = st.columns(2)
+                with col_fa1:
+                    f_nombre = st.text_input("🔍 Buscar por Nombre de Cliente:")
+                    f_libro_titulo = st.text_input("📖 Buscar por Título de Libro:")
+                
+                with col_fa2:
+                    fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
+                    filtro_fecha_pago = st.selectbox("Filtrar por Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
+                
+                st.markdown("---") # Separador visual
+
+                # --- 🔴 SECCIÓN CORREGIDA: Filtros en 3 columnas ---
+                col_fa3, col_fa4, col_fa5 = st.columns(3)
+                with col_fa3:
+                    filtro_estado = st.selectbox("Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
+                with col_fa4:
+                    filtro_pagado = st.selectbox("Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+                with col_fa5:
+                    filtro_libro = st.selectbox("Asignación de Libro:", ["Todos", "Sin Libro", "Con Libro"])
+
             st.markdown("---")
             columnas_opcionales = [
                 'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
