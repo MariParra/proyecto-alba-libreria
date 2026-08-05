@@ -867,7 +867,7 @@ def mostrar_asignaciones():
             if 'edit_mode' not in st.session_state:
                 st.session_state.edit_mode = False
 
-            if st.button("✏️ Activar/Desactivar Edición en Bloque", use_container_width=True, help="Selecciona varias filas y aplica un cambio a todas a la vez."):
+            if st.button("✏️ Activar/Desactivar Edición en Bloque", use_container_width=True, type="primary", help="Selecciona varias filas y aplica un cambio a todas a la vez."):
                 st.session_state.edit_mode = not st.session_state.edit_mode
                 if not st.session_state.edit_mode and 'propuesta_cambio' in st.session_state:
                     del st.session_state.propuesta_cambio
