@@ -9,7 +9,7 @@ import time
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
 from vista_clientes import mostrar_clientes
-from vista_asignaciones import mostrar_asignaciones
+# from vista_asignaciones import mostrar_asignaciones
 from vista_dashboard import mostrar_dashboard
 from vista_herramientas import mostrar_herramientas
 from vista_libreros import mostrar_importacion_libreros
@@ -297,8 +297,8 @@ else:
             mostrar_caja()
         elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
             mostrar_clientes()
-        elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
-            mostrar_asignaciones()
+        # elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
+        #     mostrar_asignaciones()
         elif st.session_state.pagina_actual == "📊 DASHBOARD":
             mostrar_dashboard()
         elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
