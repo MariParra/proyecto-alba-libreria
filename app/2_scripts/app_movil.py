@@ -19,6 +19,16 @@ from vista_reportes import mostrar_reportes
 from vista_kanban import mostrar_kanban
 from vista_rollback import mostrar_rollback
 
+import sys
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+    
+# --- 1. CONFIGURACIÓN DE LA PÁGINA (¡SIEMPRE PRIMERO!) ---
+st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
+load_dotenv()
+
+
 # --- INYECCIÓN DE CSS PARA BARRA LATERAL FIJA (PC Y MÓVIL) ---
 st.markdown("""
     <style>
@@ -40,14 +50,6 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-
-import sys
-script_dir = os.path.dirname(os.path.abspath(__file__))
-if script_dir not in sys.path:
-    sys.path.append(script_dir)
-    
-st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
-load_dotenv()
 
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
