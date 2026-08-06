@@ -119,7 +119,6 @@ def mostrar_ventas_masivas():
     st.info("Utiliza esta sección para registrar ingresos y costos de eventos como ferias, rifas o ventas de bodega donde no hay un cliente único.")
 
     # --- INICIALIZACIÓN DE LA MEMORIA (SESSION STATE) ---
-    # Si las variables no existen en la memoria, las creamos. Esto solo se ejecuta una vez.
     if 'vm_carrito' not in st.session_state:
         st.session_state.vm_carrito = []
     if 'vm_nombre_evento' not in st.session_state:
@@ -134,7 +133,14 @@ def mostrar_ventas_masivas():
         st.session_state.vm_ingreso = 0.0
     if 'vm_costo' not in st.session_state:
         st.session_state.vm_costo = 0.0
-    # ... (podríamos añadir más si fuera necesario)
+    if 'vm_descontar_stock' not in st.session_state:
+        st.session_state.vm_descontar_stock = False
+    if 'vm_estado_evento' not in st.session_state:
+        st.session_state.vm_estado_evento = "POR EMPEZAR"
+    if 'vm_estado_pago' not in st.session_state:
+        st.session_state.vm_estado_pago = "PENDIENTE"
+    if 'vm_comentarios' not in st.session_state:
+        st.session_state.vm_comentarios = ""
 
     tipos_evento_predefinidos = ["VENTA EN FERIA", "RIFA", "CLUB DE LECTURA", "EVENTO ESPECIAL", "VENTA DE BODEGA", "OTRO"]
     estados_evento = ["POR EMPEZAR", "EN CURSO", "FINALIZADO"]
