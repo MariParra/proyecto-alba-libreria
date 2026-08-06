@@ -33,12 +33,10 @@ def procesar_nueva_venta_masiva(datos_evento):
     """Inserta una nueva venta masiva, crea libros nuevos (limpios y en mayúsculas) y descuenta el stock."""
     conn = get_db_connection()
     
-    # 0. Primero procesamos los libros NUEVOS para insertarlos en la tabla 'libros'
     if datos_evento.get("libros_implicados"):
         for libro in datos_evento["libros_implicados"]:
             if libro.get("es_nuevo"):
                 try:
-                    # Limpieza profunda (sin tildes/signos y a mayúsculas)
                     datos_libro = {
                         "titulo": limpiar_texto_para_busqueda(libro["titulo"]),
                         "autor": limpiar_texto_para_busqueda(libro.get("autor", "")),
@@ -52,12 +50,11 @@ def procesar_nueva_venta_masiva(datos_evento):
                     }
                     res = conn.table("libros").insert(datos_libro).execute()
                     nuevo_id = res.data[0]['libro_id']
-                    libro["libro_id"] = nuevo_id # Actualizamos el JSON con el ID real de la BD
+                    libro["libro_id"] = nuevo_id 
                 except Exception as e:
                     log_error("vista_ventas_masivas", "crear_libro_nuevo", f"Error al crear {libro.get('titulo')}: {e}")
-                    return False, f"Error al crear el libro nuevo '{libro.get('titulo')}' en el catálogo. La venta no se procesó. Detalle: {e}"
+                    return False, f"Error al crear el libro nuevo '{libro.get('titulo')}'. Detalle: {e}"
 
-    # 1. Descontar el stock
     if datos_evento.get("stock_descontado") and datos_evento.get("libros_implicados"):
         try:
             with st.spinner("Descontando stock de libros..."):
@@ -68,10 +65,9 @@ def procesar_nueva_venta_masiva(datos_evento):
                         nuevo_stock = stock_actual - libro["cantidad"]
                         conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", libro["libro_id"]).execute()
         except Exception as e:
-            log_error("vista_ventas_masivas", "procesar_nueva_venta_masiva (descontar stock)", e)
+            log_error("vista_ventas_masivas", "descontar_stock", e)
             return False, f"Error al descontar stock. La venta NO se registró. Detalle: {e}"
 
-    # 2. Insertar el registro de la venta masiva
     try:
         with st.spinner("Registrando la venta masiva..."):
             if 'libros_implicados' in datos_evento:
@@ -79,8 +75,8 @@ def procesar_nueva_venta_masiva(datos_evento):
             conn.table("ventas_masivas").insert(datos_evento).execute()
         return True, ""
     except Exception as e:
-        log_error("vista_ventas_masivas", "procesar_nueva_venta_masiva (insertar evento)", e)
-        return False, f"Error al registrar el evento en la base de datos: {e}"
+        log_error("vista_ventas_masivas", "insertar_evento", e)
+        return False, f"Error al registrar el evento: {e}"
 
 def anular_venta_masiva(evento_id, stock_fue_descontado, libros_implicados_json):
     conn = get_db_connection()
@@ -95,15 +91,22 @@ def anular_venta_masiva(evento_id, stock_fue_descontado, libros_implicados_json)
                         nuevo_stock = stock_actual + libro["cantidad"]
                         conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", libro["libro_id"]).execute()
         except Exception as e:
-            log_error("vista_ventas_masivas", "anular_venta_masiva (restaurar stock)", e)
+            log_error("vista_ventas_masivas", "anular_venta_masiva", e)
             st.error(f"No se pudo restaurar el stock por completo. Detalle: {e}")
     try:
         with st.spinner("Anulando el registro de la venta..."):
             conn.table("ventas_masivas").delete().eq("evento_id", evento_id).execute()
         return True, ""
     except Exception as e:
-        log_error("vista_ventas_masivas", "anular_venta_masiva (eliminar evento)", e)
+        log_error("vista_ventas_masivas", "anular_venta_masiva (eliminar)", e)
         return False, f"Error al anular la venta: {e}"
+
+# --- EVENTOS ON_CHANGE ---
+
+def on_estado_evento_change():
+    """Si el estado cambia a FINALIZADO, fuerza el pago a PAGADO en tiempo real"""
+    if st.session_state.vm_estado_evento == "FINALIZADO":
+        st.session_state.vm_estado_pago = "PAGADO"
 
 # --- VISTA PRINCIPAL ---
 
@@ -111,31 +114,31 @@ def mostrar_ventas_masivas():
     st.title("📈 Ventas Masivas y Eventos")
     st.info("Utiliza esta sección para registrar ingresos y costos de eventos como ferias, rifas o ventas de bodega donde no hay un cliente único.")
 
-    # --- INICIALIZACIÓN COMPLETA DE LA MEMORIA (SESSION STATE) ---
-    if 'vm_carrito' not in st.session_state:
-        st.session_state.vm_carrito = []
-    if 'vm_nombre_evento' not in st.session_state:
-        st.session_state.vm_nombre_evento = ""
-    if 'vm_tipo_sel' not in st.session_state:
-        st.session_state.vm_tipo_sel = ""
-    if 'vm_tipo_pers' not in st.session_state:
-        st.session_state.vm_tipo_pers = ""
-    if 'vm_fecha_evento' not in st.session_state:
-        st.session_state.vm_fecha_evento = None
-    if 'vm_ingreso' not in st.session_state:
-        st.session_state.vm_ingreso = 0.0
-    if 'vm_costo' not in st.session_state:
-        st.session_state.vm_costo = 0.0
-    if 'vm_descontar_stock' not in st.session_state:
-        st.session_state.vm_descontar_stock = False
-    if 'vm_estado_evento' not in st.session_state:
-        st.session_state.vm_estado_evento = "POR EMPEZAR"
-    if 'vm_estado_pago' not in st.session_state:
-        st.session_state.vm_estado_pago = "PENDIENTE"
-    if 'vm_comentarios' not in st.session_state:
-        st.session_state.vm_comentarios = ""
-    if 'vm_modo_libro' not in st.session_state:
-        st.session_state.vm_modo_libro = "📚 Existente en Catálogo"
+    # --- 1. INICIALIZACIÓN ESTRICTA DE MEMORIA ---
+    # Variables de la venta
+    vm_keys = ['vm_carrito', 'vm_nombre_evento', 'vm_tipo_sel', 'vm_tipo_pers', 'vm_fecha_evento', 
+               'vm_ingreso', 'vm_costo', 'vm_descontar_stock', 'vm_estado_evento', 'vm_estado_pago', 
+               'vm_comentarios', 'vm_modo_libro']
+    defaults = {
+        'vm_carrito': [], 'vm_nombre_evento': "", 'vm_tipo_sel': "", 'vm_tipo_pers': "", 
+        'vm_fecha_evento': None, 'vm_ingreso': 0.0, 'vm_costo': 0.0, 'vm_descontar_stock': False, 
+        'vm_estado_evento': "POR EMPEZAR", 'vm_estado_pago': "PENDIENTE", 'vm_comentarios': "", 
+        'vm_modo_libro': "📚 Existente en Catálogo"
+    }
+    for key in vm_keys:
+        if key not in st.session_state:
+            st.session_state[key] = defaults[key]
+            
+    # Variables temporales para crear un libro nuevo (sin que se borre el resto)
+    tmp_keys = ['tmp_titulo', 'tmp_autor', 'tmp_genero', 'tmp_editorial', 'tmp_encuadernacion', 
+                'tmp_precio', 'tmp_costo', 'tmp_stock', 'tmp_cant']
+    tmp_defaults = {
+        'tmp_titulo': "", 'tmp_autor': "", 'tmp_genero': "", 'tmp_editorial': "", 'tmp_encuadernacion': "",
+        'tmp_precio': 0.0, 'tmp_costo': 0.0, 'tmp_stock': 0, 'tmp_cant': 1
+    }
+    for key in tmp_keys:
+        if key not in st.session_state:
+            st.session_state[key] = tmp_defaults[key]
 
     tipos_evento_predefinidos = ["VENTA EN FERIA", "RIFA", "CLUB DE LECTURA", "EVENTO ESPECIAL", "VENTA DE BODEGA", "OTRO"]
     estados_evento = ["POR EMPEZAR", "EN CURSO", "FINALIZADO"]
@@ -146,7 +149,7 @@ def mostrar_ventas_masivas():
     with tab_nueva:
         st.markdown("### Registrar Nuevo Evento de Venta")
         
-        # --- 1. Detalles del Evento ---
+        # --- Información General ---
         st.markdown("#### 1. Información General del Evento")
         col1, col2 = st.columns(2)
         
@@ -158,13 +161,13 @@ def mostrar_ventas_masivas():
             
         st.date_input("Fecha del Evento (Opcional)", key="vm_fecha_evento")
 
-        # --- 2. Datos Financieros ---
+        # --- Datos Financieros ---
         st.markdown("#### 2. Datos Financieros")
         col_f1, col_f2 = st.columns(2)
         col_f1.number_input("Ingreso Total Bruto ($)*", min_value=0.0, step=10000.0, key="vm_ingreso")
         col_f2.number_input("Costo Total del Evento ($)", min_value=0.0, step=5000.0, help="Incluye costos de stand, traslados, etc.", key="vm_costo")
 
-        # --- 3. Libros y Gestión de Stock ---
+        # --- Gestión de Libros y Stock ---
         st.markdown("#### 3. Libros y Gestión de Stock (Opcional)")
         st.checkbox("Descontar stock de los libros asociados a este evento", key="vm_descontar_stock")
         
@@ -179,11 +182,14 @@ def mostrar_ventas_masivas():
                     sel_libro_label = col_b1.selectbox("Busca un libro:", [""] + df_libros_catalogo['label_busqueda'].tolist())
                     cant_descontar = col_b2.number_input("Cantidad implicada:", min_value=1, step=1, value=1)
                     
-                    if st.button("➕ Añadir a la lista", key="btn_add_existente"):
+                    if st.button("➕ Añadir a la lista", type="secondary"):
                         if sel_libro_label:
                             libro_data = df_libros_catalogo[df_libros_catalogo['label_busqueda'] == sel_libro_label].iloc[0]
                             if not any(d['titulo'] == libro_data['titulo'] for d in st.session_state.vm_carrito):
-                                st.session_state.vm_carrito.append({"libro_id": int(libro_data['libro_id']), "titulo": libro_data['titulo'], "cantidad": cant_descontar, "stock_actual": int(libro_data['stock']), "es_nuevo": False})
+                                st.session_state.vm_carrito.append({
+                                    "libro_id": int(libro_data['libro_id']), "titulo": libro_data['titulo'], 
+                                    "cantidad": cant_descontar, "stock_actual": int(libro_data['stock']), "es_nuevo": False
+                                })
                                 st.rerun()
                             else:
                                 st.warning("El libro ya está en la lista. Ajusta la cantidad en la tabla de abajo.")
@@ -193,40 +199,45 @@ def mostrar_ventas_masivas():
                     st.warning("El catálogo está vacío.")
                     
             elif st.session_state.vm_modo_libro == "➕ Crear Nuevo Libro":
-                with st.form("form_nuevo_libro", clear_on_submit=True):
-                    st.info("💡 Este libro se creará en el catálogo general. Todos los textos se guardarán en mayúsculas y sin tildes.")
-                    col_n1, col_n2 = st.columns(2)
-                    n_titulo = col_n1.text_input("Título*")
-                    n_autor = col_n2.text_input("Autor")
-                    
-                    col_n3, col_n4, col_n5 = st.columns(3)
-                    n_genero = col_n3.text_input("Género")
-                    n_editorial = col_n4.text_input("Editorial")
-                    n_encuadernacion = col_n5.selectbox("Encuadernación", ["", "TAPA BLANDA", "TAPA DURA", "ESPIRAL"])
-                    
-                    col_n6, col_n7, col_n8, col_n9 = st.columns(4)
-                    n_precio = col_n6.number_input("Precio Oficial ($)*", min_value=0.0, step=500.0)
-                    n_costo = col_n7.number_input("Costo ($)", min_value=0.0, step=500.0)
-                    n_stock_inicial = col_n8.number_input("Stock Inicial Total*", min_value=0, step=1)
-                    n_cant_implicada = col_n9.number_input("Cant. Implicada*", min_value=1, max_value=max(1, n_stock_inicial), step=1, value=1)
-                    
-                    if st.form_submit_button("➕ Crear y Añadir a la lista"):
-                        if not n_titulo:
-                            st.error("El Título es obligatorio.")
+                # AQUI ELIMINAMOS EL ST.FORM PARA QUE SEA 100% ESTABLE
+                st.info("💡 Este libro se creará en el catálogo general. Todos los textos se guardarán en mayúsculas y sin tildes.")
+                col_n1, col_n2 = st.columns(2)
+                col_n1.text_input("Título*", key="tmp_titulo")
+                col_n2.text_input("Autor", key="tmp_autor")
+                
+                col_n3, col_n4, col_n5 = st.columns(3)
+                col_n3.text_input("Género", key="tmp_genero")
+                col_n4.text_input("Editorial", key="tmp_editorial")
+                col_n5.selectbox("Encuadernación", ["", "TAPA BLANDA", "TAPA DURA", "ESPIRAL"], key="tmp_encuadernacion")
+                
+                col_n6, col_n7, col_n8, col_n9 = st.columns(4)
+                col_n6.number_input("Precio Oficial ($)*", min_value=0.0, step=500.0, key="tmp_precio")
+                col_n7.number_input("Costo ($)", min_value=0.0, step=500.0, key="tmp_costo")
+                col_n8.number_input("Stock Inicial Total*", min_value=0, step=1, key="tmp_stock")
+                col_n9.number_input("Cant. Implicada*", min_value=1, step=1, key="tmp_cant")
+                
+                if st.button("➕ Crear y Añadir a la lista", type="secondary"):
+                    if not st.session_state.tmp_titulo:
+                        st.error("El Título es obligatorio.")
+                    else:
+                        titulo_limpio = limpiar_texto_para_busqueda(st.session_state.tmp_titulo)
+                        conn = get_db_connection()
+                        res_check = conn.table("libros").select("titulo").eq("titulo", titulo_limpio).execute()
+                        
+                        if res_check.data:
+                            st.error(f"🚫 DUPLICADO: Ya existe un libro con el título '{titulo_limpio}'. Búscalo en 'Catálogo'.")
                         else:
-                            titulo_limpio = limpiar_texto_para_busqueda(n_titulo)
-                            conn = get_db_connection()
-                            res_check = conn.table("libros").select("titulo").eq("titulo", titulo_limpio).execute()
-                            if res_check.data:
-                                st.error(f"🚫 DUPLICADO: Ya existe un libro con el título '{titulo_limpio}'. Búscalo en 'Catálogo'.")
-                            else:
-                                st.session_state.vm_carrito.append({
-                                    "libro_id": None, "titulo": n_titulo, "cantidad": n_cant_implicada, 
-                                    "stock_actual": n_stock_inicial, "es_nuevo": True, "autor": n_autor, 
-                                    "genero": n_genero, "editorial": n_editorial, "encuadernacion": n_encuadernacion, 
-                                    "precio": n_precio, "costo": n_costo, "stock_inicial": n_stock_inicial
-                                })
-                                st.rerun()
+                            st.session_state.vm_carrito.append({
+                                "libro_id": None, "titulo": st.session_state.tmp_titulo, "cantidad": st.session_state.tmp_cant, 
+                                "stock_actual": st.session_state.tmp_stock, "es_nuevo": True, "autor": st.session_state.tmp_autor, 
+                                "genero": st.session_state.tmp_genero, "editorial": st.session_state.tmp_editorial, 
+                                "encuadernacion": st.session_state.tmp_encuadernacion, "precio": st.session_state.tmp_precio, 
+                                "costo": st.session_state.tmp_costo, "stock_inicial": st.session_state.tmp_stock
+                            })
+                            # Limpieza manual de los campos temporales
+                            for k in tmp_keys:
+                                st.session_state[k] = tmp_defaults[k]
+                            st.rerun()
 
         # --- Visualización del Carrito ---
         if st.session_state.vm_carrito:
@@ -247,7 +258,6 @@ def mostrar_ventas_masivas():
                 hide_index=True, use_container_width=True, key="editor_carrito_vm"
             )
             
-            # Guardar en memoria si el usuario altera las cantidades
             for i, row in df_editado.iterrows():
                 st.session_state.vm_carrito[i]['cantidad'] = row['cantidad']
                 
@@ -266,12 +276,12 @@ def mostrar_ventas_masivas():
         st.markdown("#### 4. Estado del Evento")
         col_e1, col_e2 = st.columns(2)
         
-        # Lógica automática de pago
+        # Usamos on_change para la automatización del pago
+        col_e1.selectbox("Estado del Evento", options=estados_evento, key="vm_estado_evento", on_change=on_estado_evento_change)
+        
         if st.session_state.vm_estado_evento == "FINALIZADO":
-            st.session_state.vm_estado_pago = "PAGADO"
-            st.info("💡 Evento FINALIZADO: El estado del pago se establecerá automáticamente en PAGADO.")
+            st.info("💡 Evento FINALIZADO: El estado del pago se ha establecido automáticamente en PAGADO.")
             
-        col_e1.selectbox("Estado del Evento", options=estados_evento, key="vm_estado_evento")
         col_e2.selectbox("Estado del Pago", options=estados_pago, key="vm_estado_pago")
         st.text_area("Comentarios Adicionales (Opcional)", key="vm_comentarios")
         
@@ -284,7 +294,6 @@ def mostrar_ventas_masivas():
             if not nombre_limpio or not tipo_final:
                 st.error("El nombre y el tipo de evento son obligatorios.")
             else:
-                final_estado_pago = "PAGADO" if st.session_state.vm_estado_evento == "FINALIZADO" else st.session_state.vm_estado_pago
                 datos_para_db = {
                     "nombre_evento": nombre_limpio, 
                     "tipo_evento": tipo_final,
@@ -294,7 +303,7 @@ def mostrar_ventas_masivas():
                     "libros_implicados": st.session_state.vm_carrito,
                     "stock_descontado": st.session_state.vm_descontar_stock,
                     "estado_evento": st.session_state.vm_estado_evento,
-                    "estado_pago": final_estado_pago,
+                    "estado_pago": st.session_state.vm_estado_pago,
                     "comentarios": comentarios_limpios
                 }
                 
@@ -304,10 +313,11 @@ def mostrar_ventas_masivas():
                 if exito:
                     st.success(f"¡Venta masiva '{nombre_limpio}' registrada con éxito!")
                     st.balloons()
-                    # Limpiamos la memoria completa del módulo de ventas masivas
-                    for key in list(st.session_state.keys()):
-                        if key.startswith('vm_'):
-                            del st.session_state[key]
+                    
+                    # Limpiamos la memoria completa 
+                    keys_to_clear = [k for k in st.session_state.keys() if k.startswith('vm_') or k.startswith('tmp_')]
+                    for k in keys_to_clear:
+                        del st.session_state[k]
                             
                     cargar_historial_ventas_masivas.clear()
                     cargar_catalogo_libros_vm.clear()

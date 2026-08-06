@@ -71,10 +71,20 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
 def cargar_historial_completo():
     conn = get_db_connection()
     try:
-        res_ventas = conn.table("registro_ventas").select("*").order("venta_id", desc=True).execute()
+        # Traemos también los datos del cliente usando un JOIN
+        res_ventas = conn.table("registro_ventas").select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono)").order("venta_id", desc=True).execute()
         if not res_ventas.data: return pd.DataFrame()
+        
         df_ventas = pd.DataFrame(res_ventas.data)
         
+        # Aplanar los datos del cliente para que queden como columnas en la tabla
+        if 'cliente' in df_ventas.columns:
+            df_clientes_data = pd.json_normalize(df_ventas['cliente']).add_prefix('cliente_')
+            df_ventas = pd.concat([df_ventas.drop(columns=['cliente']), df_clientes_data], axis=1)
+            df_ventas['cliente_nombre'] = df_ventas['cliente_nombre'].fillna('Cliente Eliminado')
+        else: 
+            df_ventas['cliente_nombre'] = 'Sin Cliente'
+            
         def formatear_libros(libros_data):
             if not isinstance(libros_data, str) or not libros_data.strip(): return "Sin Detalle"
             if libros_data.strip().startswith('['):
@@ -86,13 +96,8 @@ def cargar_historial_completo():
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
         
-        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
-        if res_clientes.data:
-            df_clientes = pd.DataFrame(res_clientes.data)
-            df_ventas = df_ventas.merge(df_clientes, on='cliente_id', how='left')
-            df_ventas.rename(columns={'nombre': 'nombre_cliente'}, inplace=True)
-            df_ventas['nombre_cliente'] = df_ventas['nombre_cliente'].fillna('Cliente Eliminado')
-        else: df_ventas['nombre_cliente'] = 'Sin Cliente'
+        # Ojo: Mantenemos el nombre_cliente antiguo para compatibilidad con código existente
+        df_ventas['nombre_cliente'] = df_ventas['cliente_nombre']
         
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
@@ -150,7 +155,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "monto_final": float(monto_final), "metodo_envio": metodo_envio, 
             "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
             "estado_pago": estado_pago, 
-            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None, # Se envía la fecha elegida
+            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None, 
             "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
@@ -232,46 +237,71 @@ def anular_venta(venta_id, texto_libros_vendidos):
         log_error("vista_caja", "anular_venta", e, st.session_state.get('email_usuario', 'Desconocido'))
         return False, str(e)
 
-def actualizar_historial_batch(df_editado):
-    df_original = st.session_state.get('historial_original')
-    if df_original is None: return 0
-    df_original_comp = df_original.set_index('venta_id')
-    df_editado_comp = df_editado.set_index('venta_id')
-    diff_mask = df_original_comp.ne(df_editado_comp).any(axis=1)
-    filas_cambiadas = df_editado_comp[diff_mask]
+def actualizar_historial_caja(df_editado):
+    df_original = st.session_state.get('historial_original', pd.DataFrame())
+    if df_original.empty: return 0
+
+    df_original.set_index('venta_id', inplace=True, drop=False)
+    df_editado.set_index('venta_id', inplace=True, drop=False)
+    
+    diff_mask = df_original.ne(df_editado).any(axis=1)
+    filas_cambiadas = df_editado[diff_mask]
+    
     if filas_cambiadas.empty: return 0
+
     conn = get_db_connection()
     updates = 0
-    
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            datos = {}
-            if 'monto_final' in row: datos['monto_final'] = float(row['monto_final'])
-            if 'metodo_envio' in row: datos['metodo_envio'] = str(row['metodo_envio'])
-            if 'comentario' in row: datos['comentario'] = str(row['comentario'])
-            if 'estado' in row: datos['estado'] = str(row['estado'])
-            if 'estado_pago' in row: datos['estado_pago'] = str(row['estado_pago'])
-            if 'fecha_pago' in row: 
-                datos['fecha_pago'] = row['fecha_pago'].isoformat() if pd.notna(row['fecha_pago']) else None
-            if 'abono' in row: datos['abono'] = float(row['abono'])
-            if 'costo_venta' in row: datos['costo_venta'] = float(row['costo_venta'])
+            # Datos de la Venta
+            datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
+            # Datos del Cliente
+            datos_cliente_raw = {
+                'nombre': row.get('cliente_nombre'),
+                'rut': row.get('cliente_rut'),
+                'email': row.get('cliente_email'),
+                'telefono': row.get('cliente_telefono')
+            }
+            
+            # 1. Actualizamos el Cliente
+            cliente_id = row.get('cliente_id')
+            if pd.isna(cliente_id):
+                # Como respaldo, por si 'cliente_id' en la base se unió con otro nombre
+                cliente_id = row.get('cliente_cliente_id')
+                
+            if cliente_id and pd.notna(cliente_id):
+                datos_cliente_limpios = {k: v for k, v in datos_cliente_raw.items() if pd.notna(v)}
+                if datos_cliente_limpios:
+                    conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
 
-            monto_actual = float(row.get('monto_final', df_original_comp.loc[venta_id, 'monto_final']))
-            est_venta = datos.get('estado', df_original_comp.loc[venta_id, 'estado'])
-            est_pago = datos.get('estado_pago', df_original_comp.loc[venta_id].get('estado_pago', 'PENDIENTE'))
+            # 2. Actualizamos la Venta
+            datos_venta_limpios = {}
+            for k, v in datos_venta_raw.items():
+                if k in df_original.columns and not k.startswith('cliente_') and k not in ['deuda', 'utilidad', 'libros_vendidos']:
+                    if k == 'fecha_pago':
+                        datos_venta_limpios[k] = v.isoformat() if pd.notna(v) else None
+                    else:
+                        datos_venta_limpios[k] = v
+                        
+            # Lógica Automática de Auto-pago en el Historial
+            monto_actual = float(row.get('monto_final', df_original.loc[venta_id, 'monto_final']))
+            est_venta = datos_venta_limpios.get('estado', df_original.loc[venta_id, 'estado'])
+            est_pago = datos_venta_limpios.get('estado_pago', df_original.loc[venta_id].get('estado_pago', 'PENDIENTE'))
             
             if est_venta == 'FINALIZADO' or est_pago == 'PAGADO':
-                datos['estado_pago'] = 'PAGADO'
-                datos['abono'] = monto_actual
+                datos_venta_limpios['estado_pago'] = 'PAGADO'
+                datos_venta_limpios['abono'] = monto_actual
+
+            if datos_venta_limpios:
+                conn.table("registro_ventas").update(datos_venta_limpios).eq("venta_id", venta_id).execute()
             
-            if datos:
-                conn.table("registro_ventas").update(datos).eq("venta_id", venta_id).execute()
-                updates += 1
-        except Exception as e: 
-            log_error("vista_caja", "actualizar_historial_batch", e, st.session_state.get('email_usuario', 'Desconocido'))
-            st.error(f"⚠️ Error al guardar los cambios de la venta ID {venta_id}: {e}")
+            updates += 1
+        except Exception as e:
+            log_error("vista_caja", "actualizar_historial_caja", f"Error actualizando venta #{venta_id}: {e}")
+            st.warning(f"No se pudo guardar la fila de la venta #{venta_id}.")
             continue
     return updates
+
 
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
@@ -395,7 +425,6 @@ def mostrar_caja():
         if len(st.session_state.carrito_caja) > 0:
             st.markdown("#### 🛒 Tu Carrito Actual")
             df_carrito = pd.DataFrame(st.session_state.carrito_caja)
-            # Agregar checkbox dinámico para eliminar
             df_carrito.insert(0, 'Quitar', False)
             
             df_editado_carrito = st.data_editor(
@@ -409,10 +438,8 @@ def mostrar_caja():
             
             col_cart1, col_cart2 = st.columns(2)
             if col_cart1.button("🗑️ Quitar Seleccionados"):
-                # Capturamos los índices donde el usuario marcó la casilla
                 indices_a_quitar = df_editado_carrito[df_editado_carrito['Quitar'] == True].index.tolist()
                 if indices_a_quitar:
-                    # Eliminamos en reversa para no descuadrar los índices
                     for i in sorted(indices_a_quitar, reverse=True):
                         st.session_state.carrito_caja.pop(i)
                     st.rerun()
@@ -505,7 +532,9 @@ def mostrar_caja():
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
+                # ✅ SOLUCIÓN AL BUG: Primero creamos o actualizamos al cliente
                 final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
+                
                 exito, err = procesar_venta_carrito(
                     st.session_state.carrito_caja, final_cliente_id, valor_envio, 
                     metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
@@ -524,12 +553,13 @@ def mostrar_caja():
         st.markdown("### 📜 Historial de Ventas")
         df_ventas = df_ventas_global.copy()
         
-        if df_ventas.empty: st.info("Aún no hay ventas registradas.")
+        if df_ventas.empty: 
+            st.info("Aún no hay ventas registradas.")
         else:
             fechas_invalidas = df_ventas['fecha_limpia'].isna()
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas ilegibles"):
-                    st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'nombre_cliente']], hide_index=True)
+                    st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'cliente_nombre']], hide_index=True)
             with st.expander("🔍 Filtros del Historial"):
                 col_f1, col_f2, col_f3, col_f4 = st.columns(4)
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
@@ -543,7 +573,7 @@ def mostrar_caja():
                     rango_fechas = col_f1.date_input("Rango personalizado:", value=(limite_min, limite_max), min_value=limite_min, max_value=limite_max)
                 else: rango_fechas = col_f1.date_input("Rango personalizado:", value=(), disabled=True)
                 
-                clientes_hist = ["Todos"] + sorted(df_ventas['nombre_cliente'].unique().tolist())
+                clientes_hist = ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar Cliente:", clientes_hist)
                 estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
                 estado_filtro = col_f3.selectbox("Filtrar Estado:", estados_hist)
@@ -554,8 +584,8 @@ def mostrar_caja():
                 mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 st.markdown("---")
-                columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
-                columnas_por_defecto = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
+                columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
+                columnas_por_defecto = ['venta_id', 'fecha_venta', 'cliente_nombre', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
             df_filtrado_general = df_ventas.copy()
@@ -564,7 +594,7 @@ def mostrar_caja():
             elif len(rango_fechas) == 2:
                 df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])]
                 
-            if cliente_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['nombre_cliente'] == cliente_filtro]
+            if cliente_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['cliente_nombre'] == cliente_filtro]
             if estado_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado'] == estado_filtro]
             if estado_pago_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado_pago'] == estado_pago_filtro]
                 
@@ -579,31 +609,37 @@ def mostrar_caja():
             df_mostrar = df_filtrado_general.copy()
             if solo_costo_cero: df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             df_mostrar = df_mostrar[columnas_a_mostrar].copy()
+            
             st.session_state.historial_original = df_mostrar.copy()
             
+            # ✅ CONFIGURACIÓN DE EDICIÓN EN LA TABLA DEL HISTORIAL
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
-                "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f"),
-                "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
+                "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f", disabled=True),
+                "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f", disabled=True),
                 "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
                 "estado": st.column_config.SelectboxColumn("Estado Venta", options=estados_posibles),
                 "estado_pago": st.column_config.SelectboxColumn("Estado Pago", options=["PENDIENTE", "PAGADO"]),
-                "fecha_pago": st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY")
+                "fecha_pago": st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
+                "cliente_nombre": st.column_config.TextColumn("Nombre Cliente"),
+                "cliente_rut": st.column_config.TextColumn("RUT Cliente"),
+                "cliente_email": st.column_config.TextColumn("Email Cliente"),
+                "cliente_telefono": st.column_config.TextColumn("Teléfono Cliente")
             }
             
             if 'costo_venta' in df_mostrar.columns:
                 df_estilizado = df_mostrar.style.apply(lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s], subset=['costo_venta'])
             else: df_estilizado = df_mostrar
                 
-            disabled_cols = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'deuda', 'utilidad']
+            disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
             df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist)
             
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Historial", type="primary"):
-                    num = actualizar_historial_batch(df_editado)
+                    num = actualizar_historial_caja(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
                     
@@ -618,22 +654,23 @@ def mostrar_caja():
                     fecha_min_c = df_deudores['fecha_limpia'].min().date()
                     fecha_max_c = df_deudores['fecha_limpia'].max().date()
                     rango_fechas_c = col_c1.date_input("Filtrar por Fecha de Venta:", value=(fecha_min_c, fecha_max_c), min_value=fecha_min_c, max_value=fecha_max_c, key="rango_cob")
-                    clientes_cob = ["Todos"] + sorted(df_deudores['nombre_cliente'].unique().tolist())
+                    clientes_cob = ["Todos"] + sorted(df_deudores['cliente_nombre'].unique().tolist())
                     cliente_filtro_c = col_c2.selectbox("Filtrar por Cliente:", clientes_cob, key="cliente_cob")
                 if len(rango_fechas_c) == 2:
                     df_deudores = df_deudores[(df_deudores['fecha_limpia'].dt.date >= rango_fechas_c[0]) & (df_deudores['fecha_limpia'].dt.date <= rango_fechas_c[1])]
                 if cliente_filtro_c != "Todos":
-                    df_deudores = df_deudores[df_deudores['nombre_cliente'] == cliente_filtro_c]
+                    df_deudores = df_deudores[df_deudores['cliente_nombre'] == cliente_filtro_c]
                 if df_deudores.empty: st.info("No hay deudas que coincidan con los filtros actuales.")
                 else:
                     st.markdown(f"#### 💰 Total por Cobrar (Filtrado): **${df_deudores['deuda'].sum():,.0f}**")
                     df_deudores['Nivel Mora'] = df_deudores['dias_mora'].apply(lambda x: "🔴 Crítico (>14 días)" if x > 14 else ("🟡 Medio (7-14 días)" if x > 7 else "🟢 Normal"))
-                    columnas_mostrar_cob = ['fecha_venta', 'nombre_cliente', 'monto_final', 'abono', 'deuda', 'Nivel Mora', 'estado', 'estado_pago']
+                    columnas_mostrar_cob = ['fecha_venta', 'cliente_nombre', 'monto_final', 'abono', 'deuda', 'Nivel Mora', 'estado', 'estado_pago']
                     st.dataframe(df_deudores[columnas_mostrar_cob], hide_index=True, use_container_width=True, 
                         column_config={
                             "monto_final": st.column_config.NumberColumn("Monto Venta", format="$%.0f"),
                             "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
-                            "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f")
+                            "deuda": st.column_config.NumberColumn("Deuda Pendiente", format="$%.0f"),
+                            "cliente_nombre": st.column_config.TextColumn("Nombre Cliente")
                         }
                     )
         else: st.info("No hay deudas registradas.")
