@@ -18,6 +18,8 @@ from vista_actualizacion_masiva import mostrar_actualizacion_masiva
 from vista_reportes import mostrar_reportes 
 from vista_kanban import mostrar_kanban
 from vista_rollback import mostrar_rollback
+from vista_ventas_masivas import mostrar_ventas_masivas
+
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -192,17 +194,6 @@ else:
         st.markdown("---")
         st.markdown("### 🧭 NAVEGACIÓN")
         
-        ruta_logo = "https://raw.githubusercontent.com/MariParra/proyecto-alba-libreria/refs/heads/main/app/2_scripts/logo.png"
-        
-        try:
-            # Creamos 3 columnas invisibles en la barra lateral: 
-            # Los bordes (1) actúan como márgenes, y el centro (2) contiene el logo.
-            col_margen1, col_logo, col_margen2 = st.sidebar.columns([1, 2, 1])
-            with col_logo:
-                st.image(ruta_logo, use_container_width=True)
-        except Exception:
-            st.sidebar.warning("Logo no encontrado")
-            
         st.sidebar.title("📚 Panel de Control")
         st.sidebar.info("Selecciona un módulo para gestionar tu negocio.")
         
@@ -216,7 +207,12 @@ else:
         if st.button("🛒 CAJA / VENTAS RÁPIDAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS" else "secondary"):
             st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
             st.rerun()
-            
+        
+        if st.sidebar.button("🎡 VENTAS MASIVAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎡 VENTAS MASIVAS" else "secondary"):
+            st.session_state.pagina_actual = "🎡 VENTAS MASIVAS" 
+            st.rerun()
+
+        
         if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
             st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
             st.rerun()
@@ -316,6 +312,8 @@ else:
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
             mostrar_caja()
+        elif st.session_state.pagina_actual == '🎡 VENTAS MASIVAS':
+            mostrar_ventas_masivas()
         elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
             mostrar_clientes()
         elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
