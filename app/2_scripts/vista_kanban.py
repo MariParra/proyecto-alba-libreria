@@ -331,31 +331,30 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                     agregar_comentario(tarea['id'], autor_com, tipo_com, texto_com)
 
         # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
+                # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
         with st.expander("✏️ Editar Detalles", expanded=False):
             with st.form(f"form_edit_{tarea['id']}"):
                 e_tit = st.text_input("Título", value=tarea['titulo'])
-                c_edit1, c_edit2 = st.columns(2)
+                
                 ops_tipo = ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"]
                 idx_t = ops_tipo.index(tarea['tipo']) if tarea['tipo'] in ops_tipo else 0
-                e_tipo = c_edit1.selectbox("Cambiar Tipo", ops_tipo, index=idx_t)
+                e_tipo = st.selectbox("Cambiar Tipo", ops_tipo, index=idx_t)
                 
                 ops_est = ["POR HACER", "EN PROGRESO", "COMPLETADO"]
                 idx_est = ops_est.index(tarea['estado']) if tarea['estado'] in ops_est else 0
-                e_estado = c_edit2.selectbox("Cambiar Estado", ops_est, index=idx_est)
+                e_estado = st.selectbox("Cambiar Estado", ops_est, index=idx_est)
                 
-                c_edit3, c_edit4 = st.columns(2)
                 ops_prio = ["Alta 🔴", "Media 🟡", "Baja 🟢"]
                 idx_p = ops_prio.index(tarea['prioridad']) if tarea.get('prioridad') in ops_prio else 1
-                e_prio = c_edit3.selectbox("Prioridad", ops_prio, index=idx_p)
+                e_prio = st.selectbox("Prioridad", ops_prio, index=idx_p)
                 
                 ops_dif = ["Alta 🔺", "Media 🔸", "Baja 🔹"]
                 dificultad_actual = tarea.get('dificultad', 'Media 🔸')
                 idx_d = ops_dif.index(dificultad_actual) if dificultad_actual in ops_dif else 1
-                e_dif = c_edit4.selectbox("Dificultad", ops_dif, index=idx_d)
+                e_dif = st.selectbox("Dificultad", ops_dif, index=idx_d)
                 
-                c_ini, c_fin = st.columns(2)
-                e_ini = c_ini.date_input("Nueva Fecha Inicio", value=parsear_fecha(tarea.get('fecha_inicio')))
-                e_fin = c_fin.date_input("Nuevo Due Date", value=parsear_fecha(tarea.get('fecha_fin')))
+                e_ini = st.date_input("Nueva Fecha Inicio", value=parsear_fecha(tarea.get('fecha_inicio')))
+                e_fin = st.date_input("Nuevo Due Date", value=parsear_fecha(tarea.get('fecha_fin')))
                 
                 if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
                     editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_dif, e_estado, e_ini, e_fin)
