@@ -323,9 +323,9 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
             st.markdown("---")
             # Formulario Nuevo Comentario
             with st.form(f"form_com_{tarea['id']}"):
-                c_c1, c_c2 = st.columns(2)
-                autor_com = c_c1.text_input("Tu Nombre", placeholder="Ej: Mariana P.")
-                tipo_com = c_c2.selectbox("Tipo de Nota", ["Nota Informativa 📝", "Resolución de Error 🐛", "Avance 🚀", "Duda / Consulta ❓", "Bloqueo 🛑"])
+                # Eliminamos las columnas anidadas. Los campos ahora se mostrarán en vertical.
+                autor_com = st.text_input("Tu Nombre", placeholder="Ej: Mariana P.")
+                tipo_com = st.selectbox("Tipo de Nota", ["Nota Informativa 📝", "Resolución de Error 🐛", "Avance 🚀", "Duda / Consulta ❓", "Bloqueo 🛑"])
                 texto_com = st.text_area("Comentario", placeholder="Escribe tu actualización aquí...")
                 if st.form_submit_button("Publicar Comentario", use_container_width=True):
                     agregar_comentario(tarea['id'], autor_com, tipo_com, texto_com)
