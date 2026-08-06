@@ -804,13 +804,18 @@ def mostrar_asignaciones():
                 
                 st.markdown("---")
 
-                # 🔴 Fila 2: Filtros de estados
-                col_fa4, col_fa5, col_fa6 = st.columns(3)
+                # 🔴 Fila 2: Filtros de estados y envío
+                col_fa4, col_fa5, col_fa6, col_fa7 = st.columns(4)
                 with col_fa4:
                     filtro_estado = st.selectbox("📦 Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
                 with col_fa5:
                     filtro_pagado = st.selectbox("💳 Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
                 with col_fa6:
+                    filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
+                with col_fa7:
+                    # Filtro nuevo de Método de Envío (Multiselección)
+                    opciones_envio = [str(x) for x in df_mes['metodo_entrega'].dropna().unique().tolist() if str(x).strip()]
+                    filtro_metodo_envio = st.multiselect("🚚 Método Envío:", options=opciones_envio, default=[])
                     filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
                 
                 st.markdown("---")
@@ -827,12 +832,23 @@ def mostrar_asignaciones():
                     help="Quita las columnas que no necesites ver para tener una vista más limpia."
                 )
 
-            # --- 2. APLICACIÓN DE FILTROS ---
+            # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
             df_filtrado = df_mes.copy()
-            if f_nombre: 
-                df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(limpiar_texto_para_busqueda(f_nombre), case=False, na=False)]
+            
+            # Buscador Inteligente de Múltiples Nombres separados por coma
+            if f_nombre:
+                terminos_nom = [limpiar_texto_para_busqueda(t.strip()) for t in f_nombre.split(',') if t.strip()]
+                if terminos_nom:
+                    patron_nom = '|'.join(terminos_nom) # Crea un patrón "nombre1|nombre2" (OR)
+                    df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(patron_nom, case=False, na=False)]
+                    
+            # Buscador Inteligente de Múltiples Títulos separados por coma
             if f_libro_titulo:
-                df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(limpiar_texto_para_busqueda(f_libro_titulo), case=False, na=False)]
+                terminos_tit = [limpiar_texto_para_busqueda(t.strip()) for t in f_libro_titulo.split(',') if t.strip()]
+                if terminos_tit:
+                    patron_tit = '|'.join(terminos_tit) # Crea un patrón "titulo1|titulo2" (OR)
+                    df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(patron_tit, case=False, na=False)]
+                    
             if filtro_fecha_pago != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['fecha_pago'] == filtro_fecha_pago]
             if filtro_estado != "Todos": 
@@ -843,6 +859,9 @@ def mostrar_asignaciones():
                 df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
             elif filtro_libro == "Con Libro": 
                 df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
+                
+            if filtro_metodo_envio:
+                df_filtrado = df_filtrado[df_filtrado['metodo_entrega'].isin(filtro_metodo_envio)]
 
             # --- 3. PREPARACIÓN DE COLUMNAS ---
             columnas_visibles_ordenadas = [col for col in columnas_opcionales if col in columnas_visibles]
@@ -960,12 +979,22 @@ def mostrar_asignaciones():
             else:
                 if st.session_state.edit_mode:
                     st.markdown("---")
-                    col_limite, _ = st.columns([1, 2])
-                    limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20], index=0)
+                    col_limite, col_contador = st.columns([1, 2])
+                    limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20, 25, 30], index=0)
 
                     filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
+                    cantidad_sel = len(filas_seleccionadas)
                     excede_limite = len(filas_seleccionadas) > limite_filas
                     
+                    with col_contador:
+                        st.write("") # Pequeño espacio para alinear con el cuadro de la izquierda
+                        st.write("")
+                        if cantidad_sel == 0:
+                            st.info("👉 No has marcado ninguna fila todavía.")
+                        elif excede_limite:
+                            st.error(f"⚠️ Has marcado **{cantidad_sel}** filas. ¡Superaste el límite permitido de {limite_filas}!")
+                        else:
+                            st.success(f"✅ Llevas **{cantidad_sel}** filas seleccionadas listas para modificar.")
                     st.markdown("##### ⚙️ Aplicar Cambios en Lote")
                     st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
                     
