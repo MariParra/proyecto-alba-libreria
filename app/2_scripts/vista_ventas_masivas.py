@@ -31,8 +31,6 @@ def cargar_historial_ventas_masivas():
         st.error("No se pudo cargar el historial de ventas masivas.")
         return pd.DataFrame()
 
-d# REEMPLAZA ESTA FUNCIÓN COMPLETA EN TU ARCHIVO
-
 def procesar_nueva_venta_masiva(datos_evento):
     """Inserta una nueva venta masiva, crea libros nuevos (limpios y en mayúsculas) y descuenta el stock."""
     conn = get_db_connection()
