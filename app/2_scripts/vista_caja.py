@@ -98,9 +98,12 @@ def cargar_historial_completo():
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
         df_ventas['estado_pago'] = df_ventas.get('estado_pago', 'PENDIENTE').fillna('PENDIENTE')
-        df_ventas['fecha_pago'] = pd.to_datetime(df_ventas.get('fecha_pago'), errors='coerce').dt.date # Nuevo formato fecha pago
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
         df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
+        
+        if 'fecha_pago' not in df_ventas.columns:
+            df_ventas['fecha_pago'] = pd.NaT
+        df_ventas['fecha_pago'] = pd.to_datetime(df_ventas['fecha_pago'], errors='coerce').dt.date
         
         return df_ventas
     except Exception as e:
