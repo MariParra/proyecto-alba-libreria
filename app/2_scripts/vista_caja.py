@@ -455,19 +455,37 @@ def mostrar_caja():
         comentario_venta = st.text_area("Comentario (Opcional):", placeholder="Ej: Entregar por conserjería...")
         
         st.markdown("---")
+        
         st.markdown("#### ⚙️ Estado y Abono")
         col_abono1, col_abono2, col_abono3 = st.columns(3)
+
+        # 1. Creamos los selectores y capturamos sus valores
         estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=0)
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
-        abono_inicial = col_abono3.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0)
-        
+
+        # 2. Calculamos el monto final ANTES de definir el abono
         monto_final = subtotal_carrito + valor_envio
-        
-        # LOGICA AUTOMÁTICA DE PAGO
+
+        # 3. Lógica de Auto-pago: Determinamos el valor por defecto del abono
+        abono_default = 0.0
+        mensaje_exito = ""
+
         if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
-            abono_inicial = monto_final
-            estado_pago_sel = "PAGADO"
-            st.success("💡 Estado PAGADO o FINALIZADO: El Abono Inicial se ha igualado al Monto Final automáticamente.")
+            abono_default = monto_final  # El valor por defecto será el total
+            estado_pago_sel = "PAGADO"    # Forzamos el estado de pago a PAGADO
+            mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total automáticamente."
+
+        # 4. Ahora sí, dibujamos el campo de abono, usando el valor que acabamos de calcular
+        abono_inicial = col_abono3.number_input(
+            "Abono Inicial ($):", 
+            min_value=0.0, 
+            step=1000.0,
+            value=abono_default 
+        )
+
+        # 5. Mostramos el mensaje de éxito si corresponde
+        if mensaje_exito:
+            st.success(mensaje_exito)
 
         st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
         st.write("")
