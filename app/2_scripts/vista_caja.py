@@ -486,7 +486,7 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        opciones_envio = ["Retiro en Manuel mONTT 111", "Envío por Paket", "Envío por Blue Express", "Entrega en metro", "Acordar con vendedor", "Añadir a compra anterior", "Añadir a caja de suscripción"]
+        opciones_envio = ["Retiro en Manuel Montt 111", "Envío por Paket", "Envío por Blue Express", "Entrega en metro", "Acordar con vendedor", "Añadir a compra anterior", "Añadir a caja de suscripción"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
         valor_envio = 0.0
