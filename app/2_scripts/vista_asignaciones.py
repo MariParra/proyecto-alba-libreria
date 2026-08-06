@@ -816,7 +816,6 @@ def mostrar_asignaciones():
                     # Filtro nuevo de Método de Envío (Multiselección)
                     opciones_envio = [str(x) for x in df_mes['metodo_entrega'].dropna().unique().tolist() if str(x).strip()]
                     filtro_metodo_envio = st.multiselect("🚚 Método Envío:", options=opciones_envio, default=[])
-                    filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
                 
                 st.markdown("---")
                 
