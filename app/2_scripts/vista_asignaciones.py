@@ -979,12 +979,22 @@ def mostrar_asignaciones():
             else:
                 if st.session_state.edit_mode:
                     st.markdown("---")
-                    col_limite, _ = st.columns([1, 2])
-                    limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20], index=0)
+                    col_limite, col_contador = st.columns([1, 2])
+                    limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20, 25, 30], index=0)
 
                     filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
+                    cantidad_sel = len(filas_seleccionadas)
                     excede_limite = len(filas_seleccionadas) > limite_filas
                     
+                    with col_contador:
+                        st.write("") # Pequeño espacio para alinear con el cuadro de la izquierda
+                        st.write("")
+                        if cantidad_sel == 0:
+                            st.info("👉 No has marcado ninguna fila todavía.")
+                        elif excede_limite:
+                            st.error(f"⚠️ Has marcado **{cantidad_sel}** filas. ¡Superaste el límite permitido de {limite_filas}!")
+                        else:
+                            st.success(f"✅ Llevas **{cantidad_sel}** filas seleccionadas listas para modificar.")
                     st.markdown("##### ⚙️ Aplicar Cambios en Lote")
                     st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
                     
