@@ -796,14 +796,14 @@ def mostrar_asignaciones():
                 col_fa1, col_fa2, col_fa3 = st.columns(3)
                 
                 with col_fa1:
-                    f_nombre_texto = st.text_input("🔍 Buscar Nombre(s) por coma:")
-                    opciones_nombre = [""] + sorted(df_mes['nombre'].dropna().unique())
-                    f_nombre_selector = st.selectbox("O selecciona de la lista:", opciones_nombre, label_visibility="collapsed")
+                    # Selección Múltiple con Autocompletado para Clientes
+                    opciones_nombre = sorted(df_mes['nombre'].dropna().unique())
+                    filtro_nombres_sel = st.multiselect("🔍 Seleccionar Cliente(s):", options=opciones_nombre, placeholder="Escribe o selecciona clientes...")
                     
                 with col_fa2:
-                    f_libro_texto = st.text_input("📖 Buscar Título(s) por coma:")
-                    opciones_libro = [""] + sorted(df_mes['titulo_libro'].dropna().unique())
-                    f_libro_selector = st.selectbox("O selecciona de la lista:", opciones_libro, label_visibility="collapsed")
+                    # Selección Múltiple con Autocompletado para Libros
+                    opciones_libro = sorted(df_mes['titulo_libro'].dropna().unique())
+                    filtro_libros_sel = st.multiselect("📖 Seleccionar Libro(s):", options=opciones_libro, placeholder="Escribe o selecciona libros...")
                     
                 with col_fa3:
                     fechas_pago_unicas = sorted([d for d in df_mes['fecha_pago'].dropna().unique()], reverse=True)
@@ -820,7 +820,7 @@ def mostrar_asignaciones():
                 with col_fa6:
                     filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
                 with col_fa7:
-                    # Filtro nuevo de Método de Envío (Multiselección)
+                    # Filtro de Método de Envío (Multiselección)
                     opciones_envio = [str(x) for x in df_mes['metodo_entrega'].dropna().unique().tolist() if str(x).strip()]
                     filtro_metodo_envio = st.multiselect("🚚 Método Envío:", options=opciones_envio, default=[])
                 
