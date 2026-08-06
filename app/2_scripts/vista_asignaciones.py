@@ -838,26 +838,18 @@ def mostrar_asignaciones():
                     help="Quita las columnas que no necesites ver para tener una vista más limpia."
                 )
 
-            # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
+                        # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
             df_filtrado = df_mes.copy()
             
-            nombre_a_buscar = f_nombre_texto if f_nombre_texto else f_nombre_selector
-            libro_a_buscar = f_libro_texto if f_libro_texto else f_libro_selector
-            
-            # Buscador de Nombres
-            if nombre_a_buscar:
-                terminos = [limpiar_texto_para_busqueda(t.strip()) for t in nombre_a_buscar.split(',') if t.strip()]
-                if terminos:
-                    patron = '|'.join(terminos)
-                    df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(patron, case=False, na=False)]
+            # Buscador de Nombres (usa la lista del multiselect 'filtro_nombres_sel')
+            if filtro_nombres_sel:
+                df_filtrado = df_filtrado[df_filtrado['nombre'].isin(filtro_nombres_sel)]
                     
-            # Buscador de Títulos
-            if libro_a_buscar:
-                terminos = [limpiar_texto_para_busqueda(t.strip()) for t in libro_a_buscar.split(',') if t.strip()]
-                if terminos:
-                    patron = '|'.join(terminos)
-                    df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(patron, case=False, na=False)]
-                    
+            # Buscador de Títulos (usa la lista del multiselect 'filtro_libros_sel')
+            if filtro_libros_sel:
+                df_filtrado = df_filtrado[df_filtrado['titulo_libro'].isin(filtro_libros_sel)]
+                
+            # (El resto de tus filtros de fecha, estado, etc. se mantienen igual)
             if filtro_fecha_pago != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['fecha_pago'] == filtro_fecha_pago]
             if filtro_estado != "Todos": 
@@ -871,6 +863,7 @@ def mostrar_asignaciones():
                 
             if filtro_metodo_envio:
                 df_filtrado = df_filtrado[df_filtrado['metodo_entrega'].isin(filtro_metodo_envio)]
+
 
             # --- 3. PREPARACIÓN DE COLUMNAS ---
             columnas_visibles_ordenadas = [col for col in columnas_opcionales if col in columnas_visibles]
