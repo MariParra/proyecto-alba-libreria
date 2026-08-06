@@ -45,10 +45,12 @@ def cargar_clientes_caja():
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
 def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_existente=None):
-    if not nombre: return None
+    if not nombre: return None, "El nombre del cliente es obligatorio."
     conn = get_db_connection()
+    
+    nombre_limpio = limpiar_texto_para_busqueda(nombre)
     datos = {
-        "nombre": limpiar_texto_para_busqueda(nombre), 
+        "nombre": nombre_limpio, 
         "email": limpiar_texto_para_busqueda(correo), 
         "telefono": limpiar_texto_para_busqueda(telefono),
         "rut": limpiar_texto_para_busqueda(rut),
@@ -58,15 +60,19 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
     try:
         if cliente_id_existente:
             conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
-            return cliente_id_existente
+            return cliente_id_existente, ""
         else:
+            # VALIDACIÓN ANTI-DUPLICADOS
+            res_check = conn.table("clientes").select("cliente_id").eq("nombre", nombre_limpio).execute()
+            if res_check.data:
+                return None, f"¡DUPLICADO DETENIDO! Ya existe un cliente registrado con el nombre '{nombre_limpio}'."
+                
             datos["status"] = "CLIENTE REGULAR"
             response = conn.table("clientes").insert(datos).execute()
-            return response.data[0]['cliente_id']
+            return response.data[0]['cliente_id'], ""
     except Exception as e: 
         log_error("vista_caja", "gestionar_cliente", f"Error: {e}", st.session_state.get('email_usuario', 'Desconocido'))
-        st.error(f"No se pudo {'actualizar' if cliente_id_existente else 'crear'} al cliente '{nombre}'.")
-        return None
+        return None, f"No se pudo {'actualizar' if cliente_id_existente else 'crear'} al cliente '{nombre}'. Detalle: {e}"
 
 def cargar_historial_completo():
     conn = get_db_connection()
@@ -84,6 +90,10 @@ def cargar_historial_completo():
             df_ventas['cliente_nombre'] = df_ventas['cliente_nombre'].fillna('Cliente Eliminado')
         else: 
             df_ventas['cliente_nombre'] = 'Sin Cliente'
+            df_ventas['cliente_rut'] = ''
+            df_ventas['cliente_email'] = ''
+            df_ventas['cliente_telefono'] = ''
+            df_ventas['cliente_id'] = None
             
         def formatear_libros(libros_data):
             if not isinstance(libros_data, str) or not libros_data.strip(): return "Sin Detalle"
@@ -96,7 +106,7 @@ def cargar_historial_completo():
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
         
-        # Ojo: Mantenemos el nombre_cliente antiguo para compatibilidad con código existente
+        # Mantenemos el nombre_cliente antiguo para compatibilidad con código existente
         df_ventas['nombre_cliente'] = df_ventas['cliente_nombre']
         
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
@@ -155,7 +165,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "monto_final": float(monto_final), "metodo_envio": metodo_envio, 
             "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
             "estado_pago": estado_pago, 
-            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None, 
+            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None,
             "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
@@ -253,51 +263,51 @@ def actualizar_historial_caja(df_editado):
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            # Datos de la Venta
-            datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
-            # Datos del Cliente
-            datos_cliente_raw = {
-                'nombre': row.get('cliente_nombre'),
-                'rut': row.get('cliente_rut'),
-                'email': row.get('cliente_email'),
-                'telefono': row.get('cliente_telefono')
-            }
-            
             # 1. Actualizamos el Cliente
             cliente_id = row.get('cliente_id')
             if pd.isna(cliente_id):
-                # Como respaldo, por si 'cliente_id' en la base se unió con otro nombre
                 cliente_id = row.get('cliente_cliente_id')
                 
             if cliente_id and pd.notna(cliente_id):
-                datos_cliente_limpios = {k: v for k, v in datos_cliente_raw.items() if pd.notna(v)}
+                datos_cliente = {
+                    'nombre': limpiar_texto_para_busqueda(str(row.get('cliente_nombre'))) if pd.notna(row.get('cliente_nombre')) else None,
+                    'rut': limpiar_texto_para_busqueda(str(row.get('cliente_rut'))) if pd.notna(row.get('cliente_rut')) else None,
+                    'email': limpiar_texto_para_busqueda(str(row.get('cliente_email'))) if pd.notna(row.get('cliente_email')) else None,
+                    'telefono': limpiar_texto_para_busqueda(str(row.get('cliente_telefono'))) if pd.notna(row.get('cliente_telefono')) else None
+                }
+                datos_cliente_limpios = {k: v for k, v in datos_cliente.items() if v is not None and v != 'nan'}
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
 
             # 2. Actualizamos la Venta
-            datos_venta_limpios = {}
-            for k, v in datos_venta_raw.items():
-                if k in df_original.columns and not k.startswith('cliente_') and k not in ['deuda', 'utilidad', 'libros_vendidos']:
-                    if k == 'fecha_pago':
-                        datos_venta_limpios[k] = v.isoformat() if pd.notna(v) else None
-                    else:
-                        datos_venta_limpios[k] = v
-                        
+            datos_venta = {k: v for k, v in row.items() if not k.startswith('cliente_')}
+            
             # Lógica Automática de Auto-pago en el Historial
             monto_actual = float(row.get('monto_final', df_original.loc[venta_id, 'monto_final']))
-            est_venta = datos_venta_limpios.get('estado', df_original.loc[venta_id, 'estado'])
-            est_pago = datos_venta_limpios.get('estado_pago', df_original.loc[venta_id].get('estado_pago', 'PENDIENTE'))
+            est_venta = datos_venta.get('estado', df_original.loc[venta_id, 'estado'])
+            est_pago = datos_venta.get('estado_pago', df_original.loc[venta_id].get('estado_pago', 'PENDIENTE'))
             
             if est_venta == 'FINALIZADO' or est_pago == 'PAGADO':
-                datos_venta_limpios['estado_pago'] = 'PAGADO'
-                datos_venta_limpios['abono'] = monto_actual
+                datos_venta['estado_pago'] = 'PAGADO'
+                datos_venta['abono'] = monto_actual
+
+            # Filtramos solo las columnas válidas para la base de datos de ventas
+            datos_venta_limpios = {}
+            columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario']
+            for col in columnas_venta_validas:
+                if col in datos_venta:
+                    if col == 'fecha_pago':
+                        val = datos_venta[col]
+                        datos_venta_limpios[col] = pd.to_datetime(val).isoformat() if pd.notna(val) else None
+                    else:
+                        datos_venta_limpios[col] = datos_venta[col]
 
             if datos_venta_limpios:
                 conn.table("registro_ventas").update(datos_venta_limpios).eq("venta_id", venta_id).execute()
             
             updates += 1
         except Exception as e:
-            log_error("vista_caja", "actualizar_historial_caja", f"Error actualizando venta #{venta_id}: {e}")
+            log_error("vista_caja", "actualizar_historial_caja", f"Error actualizando venta #{venta_id}: {e}", st.session_state.get('email_usuario', 'Desconocido'))
             st.warning(f"No se pudo guardar la fila de la venta #{venta_id}.")
             continue
     return updates
@@ -332,7 +342,7 @@ def mostrar_caja():
                 st.sidebar.markdown("### 🚨 ALERTAS DE COBRANZA")
                 st.sidebar.error(f"Tienes **{len(deudas_criticas)}** deudas con más de 2 semanas.")
                 for _, row in deudas_criticas.iterrows():
-                    st.sidebar.warning(f"👤 **{row['nombre_cliente']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días")
+                    st.sidebar.warning(f"👤 **{row['cliente_nombre']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días")
                 st.error(f"🚨 **¡ATENCIÓN!** Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora.")
     
     tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
@@ -532,22 +542,24 @@ def mostrar_caja():
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
-                # ✅ SOLUCIÓN AL BUG: Primero creamos o actualizamos al cliente
-                final_cliente_id = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
+                final_cliente_id, error_cliente = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
                 
-                exito, err = procesar_venta_carrito(
-                    st.session_state.carrito_caja, final_cliente_id, valor_envio, 
-                    metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
-                    estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, asignacion_id_target
-                )
-                if exito: 
-                    st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
-                    st.balloons()
-                    time.sleep(2)
-                    st.session_state.carrito_caja = []
-                    st.rerun()
-                else: 
-                    st.error(f"Error: {err}")
+                if error_cliente:
+                    st.error(error_cliente)
+                else:
+                    exito, err = procesar_venta_carrito(
+                        st.session_state.carrito_caja, final_cliente_id, valor_envio, 
+                        metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
+                        estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, asignacion_id_target
+                    )
+                    if exito: 
+                        st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
+                        st.balloons()
+                        time.sleep(2)
+                        st.session_state.carrito_caja = []
+                        st.rerun()
+                    else: 
+                        st.error(f"Error: {err}")
                     
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
@@ -612,7 +624,6 @@ def mostrar_caja():
             
             st.session_state.historial_original = df_mostrar.copy()
             
-            # ✅ CONFIGURACIÓN DE EDICIÓN EN LA TABLA DEL HISTORIAL
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
