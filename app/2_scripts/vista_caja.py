@@ -16,13 +16,7 @@ def unificar_formatos_fecha(serie_fechas):
     try:
         return serie_fechas.apply(parsear_valor)
     except Exception as e:
-        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        log_error(
-            vista="vista_caja", 
-            funcion="unificar_formatos_fecha",
-            error=f"Error inesperado al parsear fechas. Detalle: {e}",
-            email_usuario=email_usuario
-        )
+        log_error("vista_caja", "unificar_formatos_fecha", f"Error inesperado al parsear fechas. Detalle: {e}", st.session_state.get('email_usuario', 'Desconocido'))
         return pd.to_datetime(serie_fechas, errors='coerce')
 
 def cargar_libros_caja():
@@ -103,7 +97,8 @@ def cargar_historial_completo():
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
-        df_ventas['estado_pago'] = df_ventas.get('estado_pago', 'PENDIENTE').fillna('PENDIENTE') # Nueva columna
+        df_ventas['estado_pago'] = df_ventas.get('estado_pago', 'PENDIENTE').fillna('PENDIENTE')
+        df_ventas['fecha_pago'] = pd.to_datetime(df_ventas.get('fecha_pago'), errors='coerce').dt.date # Nuevo formato fecha pago
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
         df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
         
@@ -125,7 +120,7 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         response = conn.table("libros").insert(datos).execute()
         return response.data[0]['libro_id']
 
-def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, abono_venta, asignacion_id=None):
+def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, asignacion_id=None):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     
@@ -151,7 +146,8 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             "subtotal_libros": float(subtotal_libros), "valor_envio": float(valor_envio), 
             "monto_final": float(monto_final), "metodo_envio": metodo_envio, 
             "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
-            "estado_pago": estado_pago, # Agregado nuevo estado de pago
+            "estado_pago": estado_pago, 
+            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None, # Se envía la fecha elegida
             "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
         }
         conn.table("registro_ventas").insert(datos_venta).execute()
@@ -252,10 +248,11 @@ def actualizar_historial_batch(df_editado):
             if 'comentario' in row: datos['comentario'] = str(row['comentario'])
             if 'estado' in row: datos['estado'] = str(row['estado'])
             if 'estado_pago' in row: datos['estado_pago'] = str(row['estado_pago'])
+            if 'fecha_pago' in row: 
+                datos['fecha_pago'] = row['fecha_pago'].isoformat() if pd.notna(row['fecha_pago']) else None
             if 'abono' in row: datos['abono'] = float(row['abono'])
             if 'costo_venta' in row: datos['costo_venta'] = float(row['costo_venta'])
 
-            # LOGICA INTELIGENTE AUTO-PAGO EN HISTORIAL
             monto_actual = float(row.get('monto_final', df_original_comp.loc[venta_id, 'monto_final']))
             est_venta = datos.get('estado', df_original_comp.loc[venta_id, 'estado'])
             est_pago = datos.get('estado_pago', df_original_comp.loc[venta_id].get('estado_pago', 'PENDIENTE'))
@@ -395,9 +392,31 @@ def mostrar_caja():
         if len(st.session_state.carrito_caja) > 0:
             st.markdown("#### 🛒 Tu Carrito Actual")
             df_carrito = pd.DataFrame(st.session_state.carrito_caja)
-            st.dataframe(df_carrito[['cantidad', 'titulo', 'precio_cobrado', 'subtotal']], hide_index=True, use_container_width=True)
+            # Agregar checkbox dinámico para eliminar
+            df_carrito.insert(0, 'Quitar', False)
+            
+            df_editado_carrito = st.data_editor(
+                df_carrito[['Quitar', 'cantidad', 'titulo', 'precio_cobrado', 'subtotal']], 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={"Quitar": st.column_config.CheckboxColumn("Quitar ❌", default=False)}
+            )
+            
             subtotal_carrito = df_carrito['subtotal'].sum()
-            if st.button("🗑️ Vaciar Carrito"):
+            
+            col_cart1, col_cart2 = st.columns(2)
+            if col_cart1.button("🗑️ Quitar Seleccionados"):
+                # Capturamos los índices donde el usuario marcó la casilla
+                indices_a_quitar = df_editado_carrito[df_editado_carrito['Quitar'] == True].index.tolist()
+                if indices_a_quitar:
+                    # Eliminamos en reversa para no descuadrar los índices
+                    for i in sorted(indices_a_quitar, reverse=True):
+                        st.session_state.carrito_caja.pop(i)
+                    st.rerun()
+                else:
+                    st.warning("Marca la casilla 'Quitar ❌' en los libros que desees eliminar.")
+                    
+            if col_cart2.button("🗑️ Vaciar Todo el Carrito"):
                 st.session_state.carrito_caja = []
                 st.rerun()
                 
@@ -455,35 +474,24 @@ def mostrar_caja():
         comentario_venta = st.text_area("Comentario (Opcional):", placeholder="Ej: Entregar por conserjería...")
         
         st.markdown("---")
-        
         st.markdown("#### ⚙️ Estado y Abono")
-        col_abono1, col_abono2, col_abono3 = st.columns(3)
-
-        # 1. Creamos los selectores y capturamos sus valores
+        col_abono1, col_abono2, col_abono3, col_abono4 = st.columns(4)
+        
         estado_venta_sel = col_abono1.selectbox("Estado de la Venta:", estados_posibles, index=0)
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
-
-        # 2. Calculamos el monto final ANTES de definir el abono
+        fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
+        
         monto_final = subtotal_carrito + valor_envio
-
-        # 3. Lógica de Auto-pago: Determinamos el valor por defecto del abono
         abono_default = 0.0
         mensaje_exito = ""
 
         if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
-            abono_default = monto_final  # El valor por defecto será el total
-            estado_pago_sel = "PAGADO"    # Forzamos el estado de pago a PAGADO
-            mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total automáticamente."
+            abono_default = monto_final
+            estado_pago_sel = "PAGADO"
+            mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
 
-        # 4. Ahora sí, dibujamos el campo de abono, usando el valor que acabamos de calcular
-        abono_inicial = col_abono3.number_input(
-            "Abono Inicial ($):", 
-            min_value=0.0, 
-            step=1000.0,
-            value=abono_default 
-        )
+        abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
 
-        # 5. Mostramos el mensaje de éxito si corresponde
         if mensaje_exito:
             st.success(mensaje_exito)
 
@@ -498,13 +506,13 @@ def mostrar_caja():
                 exito, err = procesar_venta_carrito(
                     st.session_state.carrito_caja, final_cliente_id, valor_envio, 
                     metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
-                    estado_venta_sel, estado_pago_sel, abono_inicial, asignacion_id_target
+                    estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, asignacion_id_target
                 )
                 if exito: 
                     st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
                     st.balloons()
                     time.sleep(2)
-                    st.session_state.carrito_caja = [] # Vacía el carrito al vender
+                    st.session_state.carrito_caja = []
                     st.rerun()
                 else: 
                     st.error(f"Error: {err}")
@@ -543,8 +551,8 @@ def mostrar_caja():
                 mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 st.markdown("---")
-                columnas_hist_todas = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
-                columnas_por_defecto = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago']
+                columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
+                columnas_por_defecto = ['venta_id', 'fecha_venta', 'nombre_cliente', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
             df_filtrado_general = df_ventas.copy()
@@ -569,6 +577,7 @@ def mostrar_caja():
             if solo_costo_cero: df_mostrar = df_mostrar[df_mostrar['costo_venta'] == 0]
             df_mostrar = df_mostrar[columnas_a_mostrar].copy()
             st.session_state.historial_original = df_mostrar.copy()
+            
             config_cols_hist = {
                 "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
@@ -576,7 +585,8 @@ def mostrar_caja():
                 "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f"),
                 "costo_venta": st.column_config.NumberColumn("Costo Venta", format="$%.0f"),
                 "estado": st.column_config.SelectboxColumn("Estado Venta", options=estados_posibles),
-                "estado_pago": st.column_config.SelectboxColumn("Estado Pago", options=["PENDIENTE", "PAGADO"])
+                "estado_pago": st.column_config.SelectboxColumn("Estado Pago", options=["PENDIENTE", "PAGADO"]),
+                "fecha_pago": st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY")
             }
             
             if 'costo_venta' in df_mostrar.columns:
