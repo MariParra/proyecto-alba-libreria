@@ -794,12 +794,19 @@ def mostrar_asignaciones():
             with st.expander("🔽 Filtros de Búsqueda y Visibilidad de Columnas", expanded=False):
                 # 🔴 Fila 1: Tres columnas perfectamente equilibradas
                 col_fa1, col_fa2, col_fa3 = st.columns(3)
+                
                 with col_fa1:
-                    f_nombre = st.text_input("🔍 Buscar Nombre de Cliente:")
+                    f_nombre_texto = st.text_input("🔍 Buscar Nombre(s) por coma:")
+                    opciones_nombre = [""] + sorted(df_mes['nombre'].dropna().unique())
+                    f_nombre_selector = st.selectbox("O selecciona de la lista:", opciones_nombre, label_visibility="collapsed")
+                    
                 with col_fa2:
-                    f_libro_titulo = st.text_input("📖 Buscar Título de Libro:")
+                    f_libro_texto = st.text_input("📖 Buscar Título(s) por coma:")
+                    opciones_libro = [""] + sorted(df_mes['titulo_libro'].dropna().unique())
+                    f_libro_selector = st.selectbox("O selecciona de la lista:", opciones_libro, label_visibility="collapsed")
+                    
                 with col_fa3:
-                    fechas_pago_unicas = df_mes['fecha_pago'].dropna().unique().tolist()
+                    fechas_pago_unicas = sorted([d for d in df_mes['fecha_pago'].dropna().unique()], reverse=True)
                     filtro_fecha_pago = st.selectbox("📅 Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
                 
                 st.markdown("---")
@@ -834,19 +841,22 @@ def mostrar_asignaciones():
             # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
             df_filtrado = df_mes.copy()
             
-            # Buscador Inteligente de Múltiples Nombres separados por coma
-            if f_nombre:
-                terminos_nom = [limpiar_texto_para_busqueda(t.strip()) for t in f_nombre.split(',') if t.strip()]
-                if terminos_nom:
-                    patron_nom = '|'.join(terminos_nom) # Crea un patrón "nombre1|nombre2" (OR)
-                    df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(patron_nom, case=False, na=False)]
+            nombre_a_buscar = f_nombre_texto if f_nombre_texto else f_nombre_selector
+            libro_a_buscar = f_libro_texto if f_libro_texto else f_libro_selector
+            
+            # Buscador de Nombres
+            if nombre_a_buscar:
+                terminos = [limpiar_texto_para_busqueda(t.strip()) for t in nombre_a_buscar.split(',') if t.strip()]
+                if terminos:
+                    patron = '|'.join(terminos)
+                    df_filtrado = df_filtrado[df_filtrado['nombre'].str.contains(patron, case=False, na=False)]
                     
-            # Buscador Inteligente de Múltiples Títulos separados por coma
-            if f_libro_titulo:
-                terminos_tit = [limpiar_texto_para_busqueda(t.strip()) for t in f_libro_titulo.split(',') if t.strip()]
-                if terminos_tit:
-                    patron_tit = '|'.join(terminos_tit) # Crea un patrón "titulo1|titulo2" (OR)
-                    df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(patron_tit, case=False, na=False)]
+            # Buscador de Títulos
+            if libro_a_buscar:
+                terminos = [limpiar_texto_para_busqueda(t.strip()) for t in libro_a_buscar.split(',') if t.strip()]
+                if terminos:
+                    patron = '|'.join(terminos)
+                    df_filtrado = df_filtrado[df_filtrado['titulo_libro'].str.contains(patron, case=False, na=False)]
                     
             if filtro_fecha_pago != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['fecha_pago'] == filtro_fecha_pago]
