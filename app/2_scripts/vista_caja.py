@@ -251,63 +251,60 @@ def actualizar_historial_caja(df_editado):
     df_original = st.session_state.get('historial_original', pd.DataFrame())
     if df_original.empty: return 0
 
-    df_original.set_index('venta_id', inplace=True, drop=False)
-    df_editado.set_index('venta_id', inplace=True, drop=False)
-    
-    diff_mask = df_original.ne(df_editado).any(axis=1)
+    # ✅ CORRECCIÓN: Convertimos todo a string antes de comparar para evitar errores de tipo
+    # Esto hace que las diferencias de formato (ej. None vs NaT) se ignoren
+    df_original_str = df_original.astype(str)
+    df_editado_str = df_editado.astype(str)
+
+    # Comparamos las versiones en texto
+    diff_mask = df_original_str.ne(df_editado_str).any(axis=1)
     filas_cambiadas = df_editado[diff_mask]
     
-    if filas_cambiadas.empty: return 0
+    if filas_cambiadas.empty:
+        st.info("No se detectaron cambios para guardar.")
+        return 0
 
     conn = get_db_connection()
     updates = 0
     for venta_id, row in filas_cambiadas.iterrows():
         try:
-            # 1. Actualizamos el Cliente
-            cliente_id = row.get('cliente_id')
-            if pd.isna(cliente_id):
-                cliente_id = row.get('cliente_cliente_id')
-                
+            # 1. DATOS DEL CLIENTE
+            cliente_id = row.get('cliente_cliente_id') # El ID viene con prefijo del JOIN
             if cliente_id and pd.notna(cliente_id):
                 datos_cliente = {
-                    'nombre': limpiar_texto_para_busqueda(str(row.get('cliente_nombre'))) if pd.notna(row.get('cliente_nombre')) else None,
-                    'rut': limpiar_texto_para_busqueda(str(row.get('cliente_rut'))) if pd.notna(row.get('cliente_rut')) else None,
-                    'email': limpiar_texto_para_busqueda(str(row.get('cliente_email'))) if pd.notna(row.get('cliente_email')) else None,
-                    'telefono': limpiar_texto_para_busqueda(str(row.get('cliente_telefono'))) if pd.notna(row.get('cliente_telefono')) else None
+                    'nombre': limpiar_texto_para_busqueda(row.get('cliente_nombre')),
+                    'rut': limpiar_texto_para_busqueda(row.get('cliente_rut')),
+                    'email': limpiar_texto_para_busqueda(row.get('cliente_email')),
+                    'telefono': limpiar_texto_para_busqueda(row.get('cliente_telefono'))
                 }
-                datos_cliente_limpios = {k: v for k, v in datos_cliente.items() if v is not None and v != 'nan'}
+                datos_cliente_limpios = {k: v for k, v in datos_cliente.items() if pd.notna(v) and v != 'nan'}
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
 
-            # 2. Actualizamos la Venta
-            datos_venta = {k: v for k, v in row.items() if not k.startswith('cliente_')}
+            # 2. DATOS DE LA VENTA
+            datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
             
-            # Lógica Automática de Auto-pago en el Historial
-            monto_actual = float(row.get('monto_final', df_original.loc[venta_id, 'monto_final']))
-            est_venta = datos_venta.get('estado', df_original.loc[venta_id, 'estado'])
-            est_pago = datos_venta.get('estado_pago', df_original.loc[venta_id].get('estado_pago', 'PENDIENTE'))
-            
-            if est_venta == 'FINALIZADO' or est_pago == 'PAGADO':
-                datos_venta['estado_pago'] = 'PAGADO'
-                datos_venta['abono'] = monto_actual
+            monto_final_actual = float(row.get('monto_final', df_original.loc[venta_id, 'monto_final']))
+            if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
+                datos_venta_raw['estado_pago'] = 'PAGADO'
+                datos_venta_raw['abono'] = monto_final_actual
 
-            # Filtramos solo las columnas válidas para la base de datos de ventas
-            datos_venta_limpios = {}
+            datos_venta_final = {}
             columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario']
             for col in columnas_venta_validas:
-                if col in datos_venta:
+                if col in datos_venta_raw:
+                    valor = datos_venta_raw[col]
                     if col == 'fecha_pago':
-                        val = datos_venta[col]
-                        datos_venta_limpios[col] = pd.to_datetime(val).isoformat() if pd.notna(val) else None
+                        datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) else None
                     else:
-                        datos_venta_limpios[col] = datos_venta[col]
+                        datos_venta_final[col] = valor
 
-            if datos_venta_limpios:
-                conn.table("registro_ventas").update(datos_venta_limpios).eq("venta_id", venta_id).execute()
+            if datos_venta_final:
+                conn.table("registro_ventas").update(datos_venta_final).eq("venta_id", venta_id).execute()
             
             updates += 1
         except Exception as e:
-            log_error("vista_caja", "actualizar_historial_caja", f"Error actualizando venta #{venta_id}: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+            log_error("vista_caja", "actualizar_historial_caja", f"Error en venta #{venta_id}: {e}", st.session_state.get('email_usuario', 'Desconocido'))
             st.warning(f"No se pudo guardar la fila de la venta #{venta_id}.")
             continue
     return updates
