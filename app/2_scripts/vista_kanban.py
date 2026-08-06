@@ -284,9 +284,9 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
         if tarea['estado'] == 'POR HACER':
             if st.button("➡️ Iniciar", key=f"ini_{tarea['id']}", use_container_width=True, disabled=bloqueada): mover_tarea(tarea['id'], "EN PROGRESO")
         elif tarea['estado'] == 'EN PROGRESO':
-            c1, c2 = st.columns(2)
-            if c1.button("⬅️ Pausar", key=f"pau_{tarea['id']}", use_container_width=True): mover_tarea(tarea['id'], "POR HACER")
-            if c2.button("✅ Listo", key=f"fin_{tarea['id']}", type="primary", use_container_width=True): mover_tarea(tarea['id'], "COMPLETADO")
+            # Eliminamos las columnas. Los botones ahora se apilarán verticalmente.
+            if st.button("✅ Listo para Revisión", key=f"fin_{tarea['id']}", type="primary", use_container_width=True): mover_tarea(tarea['id'], "COMPLETADO")
+            if st.button("⬅️ Pausar Tarea", key=f"pau_{tarea['id']}", use_container_width=True): mover_tarea(tarea['id'], "POR HACER")
             
         # --- 💬 SECCIÓN DE COMENTARIOS (JIRA STYLE) ---
         comentarios_tarea = df_comentarios[df_comentarios['tarea_id'] == tarea['id']].sort_values('fecha', ascending=False)
