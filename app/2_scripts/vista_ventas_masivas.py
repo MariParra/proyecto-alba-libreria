@@ -259,7 +259,8 @@ def mostrar_ventas_masivas():
                                     "libro_id": int(libro_data['libro_id']), "titulo": libro_data['titulo'], 
                                     "cantidad": cant_descontar, "stock_actual": int(libro_data['stock']), "es_nuevo": False
                                 })
-                                st.rerun()
+                                st.success(f"'{libro_data['titulo']}' añadido al carrito.")
+                                time.sleep(1)
                             else:
                                 st.warning("El libro ya está en la lista. Ajusta la cantidad en la tabla de abajo.")
                         else:
