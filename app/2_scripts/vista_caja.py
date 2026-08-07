@@ -420,6 +420,7 @@ def mostrar_caja():
                         l_precio_catalogo = float(datos_l['precio'])
                         l_costo = float(datos_l['costo']) 
                         l_autor = datos_l.get('autor', '')
+                        l_editorial = datos_l.get('editorial', '') 
                         with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
                             l_autor = st.text_input("Autor:", value=l_autor)
                             l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0)
