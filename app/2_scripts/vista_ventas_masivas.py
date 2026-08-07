@@ -130,31 +130,31 @@ def anadir_nuevo_libro_carrito():
     """Callback que procesa, valida, añade al carrito y limpia los inputs de forma segura."""
     titulo = st.session_state.get('tmp_titulo', '').strip()
     
-    # --- Resolver Selectboxes combinados ---
-    sel_autor = st.session_state.get('sel_autor', '')
+    # --- Resolver Selectboxes combinados desde memoria ---
+    sel_autor = st.session_state.get('sel_autor')
     if sel_autor == "➕ Crear Nuevo Autor":
         autor = st.session_state.get('tmp_autor_nuevo', '').strip()
-    elif sel_autor == "Seleccionar existente...":
-        autor = ""
-    else:
+    elif sel_autor:
         autor = sel_autor
+    else:
+        autor = ""
         
-    sel_gen = st.session_state.get('sel_genero', '')
+    sel_gen = st.session_state.get('sel_genero')
     if sel_gen == "➕ Crear Nuevo Género":
         genero = st.session_state.get('tmp_genero_nuevo', '').strip()
-    elif sel_gen == "Seleccionar existente...":
-        genero = ""
-    else:
+    elif sel_gen:
         genero = sel_gen
+    else:
+        genero = ""
         
-    sel_edit = st.session_state.get('sel_editorial', '')
+    sel_edit = st.session_state.get('sel_editorial')
     if sel_edit == "➕ Crear Nueva Editorial":
         editorial = st.session_state.get('tmp_editorial_nueva', '').strip()
-    elif sel_edit == "Seleccionar existente...":
-        editorial = ""
-    else:
+    elif sel_edit:
         editorial = sel_edit
-        
+    else:
+        editorial = ""
+
     encuadernacion = st.session_state.get('tmp_encuadernacion', '')
     precio = st.session_state.get('tmp_precio', 0.0)
     costo = st.session_state.get('tmp_costo', 0.0)
@@ -182,7 +182,7 @@ def anadir_nuevo_libro_carrito():
         "costo": costo, "stock_inicial": stock
     })
     
-    # Limpiamos todos los campos temporales. En un callback esto no lanza la excepción.
+    # Limpiamos todos los campos temporales
     st.session_state['vm_error_libro'] = ""
     keys_to_clear = [
         'tmp_titulo', 'sel_autor', 'tmp_autor_nuevo', 'sel_genero', 'tmp_genero_nuevo', 
