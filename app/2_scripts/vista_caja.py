@@ -44,6 +44,21 @@ def cargar_clientes_caja():
         st.error("Error crítico: No se pudo cargar el listado de clientes.")
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
+def cargar_listas_desplegables_caja():
+    """Obtiene Autores y Editoriales únicos para los desplegables de caja."""
+    conn = get_db_connection()
+    try:
+        res_autores = conn.table("libros").select("autor").execute()
+        res_editoriales = conn.table("libros").select("editorial").execute()
+        
+        autores = sorted(list(set([r['autor'] for r in res_autores.data if r.get('autor')]))) if res_autores.data else []
+        editoriales = sorted(list(set([r['editorial'] for r in res_editoriales.data if r.get('editorial')]))) if res_editoriales.data else []
+        
+        return autores, editoriales
+    except Exception as e:
+        log_error("vista_caja", "cargar_listas_desplegables_caja", f"Error: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+        return [], []
+
 def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_existente=None):
     if not nombre: return None, "El nombre del cliente es obligatorio."
     conn = get_db_connection()
@@ -126,19 +141,17 @@ def cargar_historial_completo():
         st.error(f"Error crítico al cargar el historial de ventas: {e}")
         return pd.DataFrame()
 
-def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion=""):
+def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion="", editorial=""):
     conn = get_db_connection()
     datos = {
         "titulo": limpiar_texto_para_busqueda(titulo), 
         "autor": limpiar_texto_para_busqueda(autor), 
         "precio": float(precio_catalogo),
-        # --- CAMBIO AÑADIDO ---
-        "encuadernacion": limpiar_texto_para_busqueda(encuadernacion)
-        # ---------------------
+        "encuadernacion": limpiar_texto_para_busqueda(encuadernacion),
+        "editorial": limpiar_texto_para_busqueda(editorial)
     }
     
     if libro_id_existente:
-        # Solo actualizamos el dato si se provee explícitamente
         datos_actualizar = {k: v for k, v in datos.items() if v}
         if datos_actualizar:
             conn.table("libros").update(datos_actualizar).eq("libro_id", libro_id_existente).execute()
@@ -184,7 +197,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
-                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''))
+                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''))
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
                 nuevo_stock = item['stock_actual'] - item['cantidad']
@@ -413,12 +426,34 @@ def mostrar_caja():
                 else: st.warning("El inventario está vacío.")
             else:
                 es_nuevo = True
+                autores_db, editoriales_db = cargar_listas_desplegables_caja()
+                
                 l_titulo = st.text_input("Título del libro:")
-                l_autor = st.text_input("Autor (Opcional):")
+                
+                col_rap1, col_rap2 = st.columns(2)
+                
+                sel_autor = col_rap1.selectbox("Autor:", ["Seleccionar existente...", "➕ Crear Nuevo Autor"] + autores_db)
+                if sel_autor == "➕ Crear Nuevo Autor":
+                    l_autor = col_rap1.text_input("Nombre del nuevo autor:")
+                elif sel_autor == "Seleccionar existente...":
+                    l_autor = ""
+                else:
+                    l_autor = sel_autor
+                    
+                sel_edit = col_rap2.selectbox("Editorial:", ["Seleccionar existente...", "➕ Crear Nueva Editorial"] + editoriales_db)
+                if sel_edit == "➕ Crear Nueva Editorial":
+                    l_editorial = col_rap2.text_input("Nombre de la nueva editorial:")
+                elif sel_edit == "Seleccionar existente...":
+                    l_editorial = ""
+                else:
+                    l_editorial = sel_edit
+
                 l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
-                l_precio_catalogo = st.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
-                l_costo = st.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
-                l_stock_actual = 999 
+                
+                col_num1, col_num2 = st.columns(2)
+                l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
+                l_costo = col_num2.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
+                l_stock_actual = 999  
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             col_c1, col_c2 = st.columns(2)
@@ -432,7 +467,7 @@ def mostrar_caja():
                 if not l_titulo: st.error("Debes seleccionar un libro.")
                 else:
                     st.session_state.carrito_caja.append({
-                        'libro_id': l_id, 'titulo': l_titulo, 'autor': l_autor, 
+                        'libro_id': l_id, 'titulo': l_titulo, 'autor': l_autor, 'editorial': l_editorial,
                         'precio_catalogo': l_precio_catalogo, 'precio_cobrado': precio_a_cobrar, 
                         'cantidad': cantidad, 'subtotal': precio_a_cobrar * cantidad,
                         'stock_actual': l_stock_actual, 'costo': l_costo, 'es_nuevo': es_nuevo,
