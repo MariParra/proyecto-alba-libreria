@@ -182,7 +182,7 @@ def anadir_nuevo_libro_carrito():
         "costo": costo, "stock_inicial": stock
     })
     
-    # Limpiamos todos los campos temporales
+    # Limpiamos todos los campos temporales. En un callback esto no lanza la excepción.
     st.session_state['vm_error_libro'] = ""
     keys_to_clear = [
         'tmp_titulo', 'sel_autor', 'tmp_autor_nuevo', 'sel_genero', 'tmp_genero_nuevo', 
@@ -247,7 +247,7 @@ def mostrar_ventas_masivas():
                 df_libros_catalogo = cargar_catalogo_libros_vm()
                 if not df_libros_catalogo.empty:
                     df_libros_catalogo['label_busqueda'] = df_libros_catalogo.apply(lambda r: f"{r['titulo']} (Stock actual: {r['stock']})", axis=1)
-                    col_b1, col_b2 = st.columns([3, 1])
+                    col_b1, col_b2 = st.columns()
                     sel_libro_label = col_b1.selectbox("Busca un libro:", [""] + df_libros_catalogo['label_busqueda'].tolist())
                     cant_descontar = col_b2.number_input("Cantidad implicada:", min_value=1, step=1, value=1)
                     
@@ -282,17 +282,20 @@ def mostrar_ventas_masivas():
                 col_n1, col_n2, col_n3 = st.columns(3)
                 
                 # Selector de Autor Inteligente
-                sel_autor = col_n1.selectbox("Autor", ["Seleccionar existente...", "➕ Crear Nuevo Autor"] + autores_db, key="sel_autor")
+                opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
+                sel_autor = col_n1.selectbox("Autor", options=opciones_autor, key="sel_autor", index=None, placeholder="Busca o selecciona...")
                 if sel_autor == "➕ Crear Nuevo Autor":
                     col_n1.text_input("Nombre del nuevo autor", key="tmp_autor_nuevo")
                     
                 # Selector de Género Inteligente
-                sel_gen = col_n2.selectbox("Género", ["Seleccionar existente...", "➕ Crear Nuevo Género"] + generos_db, key="sel_genero")
+                opciones_genero = ["➕ Crear Nuevo Género"] + generos_db
+                sel_gen = col_n2.selectbox("Género", options=opciones_genero, key="sel_genero", index=None, placeholder="Busca o selecciona...")
                 if sel_gen == "➕ Crear Nuevo Género":
                     col_n2.text_input("Nombre del nuevo género", key="tmp_genero_nuevo")
                     
                 # Selector de Editorial Inteligente
-                sel_edit = col_n3.selectbox("Editorial", ["Seleccionar existente...", "➕ Crear Nueva Editorial"] + editoriales_db, key="sel_editorial")
+                opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
+                sel_edit = col_n3.selectbox("Editorial", options=opciones_editorial, key="sel_editorial", index=None, placeholder="Busca o selecciona...")
                 if sel_edit == "➕ Crear Nueva Editorial":
                     col_n3.text_input("Nombre de la nueva editorial", key="tmp_editorial_nueva")
                 
