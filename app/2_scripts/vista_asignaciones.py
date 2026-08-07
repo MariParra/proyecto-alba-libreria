@@ -1298,7 +1298,7 @@ def mostrar_asignaciones():
                             else: 
                                 st.error(err)
 
-    # ==========================================================
+        # ==========================================================
     # 4. COMENZAR MES
     # ==========================================================
     elif opcion_menu == "🚀 Generar / Actualizar Mes":
@@ -1311,9 +1311,24 @@ def mostrar_asignaciones():
                 df_suscritos_activos = cargar_clientes_suscritos()
                 total_clientes_activos = len(df_suscritos_activos)
                 
+                # --- NUEVA LÓGICA: DETECTAR INACTIVOS CON CAJA ---
+                df_inactivos_mes = pd.DataFrame()
                 if not df_mes.empty:
+                    conn = get_db_connection()
+                    ids_mes = df_mes['cliente_id'].dropna().unique().tolist()
+                    if ids_mes:
+                        # Extraemos el estado actual de los clientes que tienen caja este mes
+                        res_status = conn.table("clientes").select("cliente_id, status").in_("cliente_id", [int(x) for x in ids_mes]).execute()
+                        if res_status.data:
+                            df_status = pd.DataFrame(res_status.data)
+                            df_mes_con_status = pd.merge(df_mes, df_status, on='cliente_id', how='left')
+                            # Filtramos a las que ya NO son "ACTIVA"
+                            df_inactivos_mes = df_mes_con_status[df_mes_con_status['status'] != 'ACTIVA']
+
                     clientes_en_mes = df_mes['cliente_id'].nunique()
-                    clientes_faltantes = total_clientes_activos - clientes_en_mes
+                    # Clientes activos que aún no tienen caja
+                    ids_activos = df_suscritos_activos['cliente_id'].tolist()
+                    clientes_faltantes = len(set(ids_activos) - set(ids_mes))
                 else:
                     clientes_en_mes = 0
                     clientes_faltantes = total_clientes_activos
@@ -1324,6 +1339,55 @@ def mostrar_asignaciones():
                 col3.metric("⏳ Cajas Pendientes por Crear", max(0, clientes_faltantes), help="Clientes activos que aún no tienen una caja para este mes.")
                 st.markdown("---")
                 
+                # --- NUEVA SECCIÓN: ALERTA Y ELIMINACIÓN DE INACTIVOS ---
+                if not df_inactivos_mes.empty:
+                    st.error(f"🚨 **¡ATENCIÓN!** Hay **{len(df_inactivos_mes)} cliente(s)** con caja asignada en este mes que actualmente NO ESTÁN ACTIVAS (Ej: Pausadas, Inactivas).")
+                    
+                    df_mostrar_inact = df_inactivos_mes[['asignacion_id', 'nombre', 'status', 'titulo_libro', 'libro_suscripcion_id', 'cliente_id', 'extras']].copy()
+                    
+                    # Destacamos si tienen libro asignado
+                    df_mostrar_inact['Alerta Libro'] = df_mostrar_inact['titulo_libro'].apply(
+                        lambda x: "⚠️ DEVOLVERÁ STOCK" if x != "⏳ PENDIENTE DE ASIGNAR" else "Caja vacía (Seguro borrar)"
+                    )
+
+                    st.dataframe(
+                        df_mostrar_inact[['nombre', 'status', 'titulo_libro', 'Alerta Libro']],
+                        column_config={
+                            "nombre": "Cliente",
+                            "status": "Estado Actual",
+                            "titulo_libro": "Libro Asignado",
+                            "Alerta Libro": "Aviso Stock"
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
+                    
+                    if st.button("🗑️ Eliminar Cajas de estos Clientes Inactivos", type="primary"):
+                        with st.spinner("Eliminando registros y devolviendo stock al inventario..."):
+                            exitos = 0
+                            errores = []
+                            for _, row in df_mostrar_inact.iterrows():
+                                ex, err = eliminar_asignacion(
+                                    asignacion_id=int(row['asignacion_id']), 
+                                    libro_id=row['libro_suscripcion_id'], 
+                                    cliente_id=int(row['cliente_id']), 
+                                    ano=ano_sel, 
+                                    mes=mes_num, 
+                                    texto_extras=row.get('extras', '')
+                                )
+                                if ex: exitos += 1
+                                else: errores.append(f"Error con {row['nombre']}: {err}")
+                            
+                            if exitos > 0:
+                                st.success(f"✅ Se eliminaron {exitos} cajas inútiles correctamente. ¡Stock restaurado!")
+                            if errores:
+                                for e in errores: st.error(e)
+                            
+                            time.sleep(2)
+                            st.rerun()
+                    st.markdown("---")
+
+                # --- SECCIÓN ORIGINAL DE CREACIÓN ---
                 st.info(
                     "💡 **¿Cómo usar esta herramienta?**\n\n"
                     "1. **A principio de mes:** Crea las cajas en blanco para todas tus clientas en estado 'ACTIVA'.\n"
@@ -1331,7 +1395,7 @@ def mostrar_asignaciones():
                     "🛡️ **Tranquilidad:** El sistema es inteligente y **solo agregará a las clientas faltantes** con un costo fijo de caja base de $10.000."
                 )
                 
-                if st.button("Crear Registros Faltantes del Mes", type="primary", use_container_width=True):
+                if st.button("🚀 Crear Registros Faltantes del Mes", type="primary", use_container_width=True):
                     df_mes_fresco = cargar_asignaciones_mes(ano_sel, mes_num)
                     progress_placeholder = st.empty()
                     ex, msg = comenzar_mes(ano_sel, mes_num, df_mes_fresco, progress_placeholder)
