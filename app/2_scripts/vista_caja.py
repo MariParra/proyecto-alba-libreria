@@ -434,32 +434,37 @@ def mostrar_caja():
                 
                 col_rap1, col_rap2 = st.columns(2)
                 
-                opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
-                sel_autor = col_rap1.selectbox("Autor:", options=opciones_autor, placeholder="Busca o selecciona un autor...", index=None)
+                # --- Lógica de Autor Corregida ---
+            opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
+            sel_autor = col_rap1.selectbox("Autor:", options=opciones_autor, placeholder="Busca o selecciona...", index=None, key="sel_autor_caja")
+            
+            if st.session_state.sel_autor_caja == "➕ Crear Nuevo Autor":
+                # Si se elige crear nuevo, mostramos el input y usamos su valor
+                l_autor = col_rap1.text_input("Nombre del nuevo autor:", key="nuevo_autor_caja")
+            elif st.session_state.sel_autor_caja:
+                # Si se selecciona uno existente, usamos ese valor
+                l_autor = st.session_state.sel_autor_caja
+            else:
+                # Si no hay nada seleccionado, es vacío
+                l_autor = ""
 
-                if sel_autor == "➕ Crear Nuevo Autor":
-                    l_autor = col_rap1.text_input("Nombre del nuevo autor:", key="nuevo_autor_caja") # Usamos una key única
-                elif sel_autor: # Si se seleccionó algo
-                    l_autor = sel_autor
-                else: # Si no se seleccionó nada
-                    l_autor = ""
-                    
-                opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
-                sel_edit = col_rap2.selectbox("Editorial:", options=opciones_editorial, placeholder="Busca o selecciona una editorial...", index=None)
+            # --- Lógica de Editorial Corregida ---
+            opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
+            sel_edit = col_rap2.selectbox("Editorial:", options=opciones_editorial, placeholder="Busca o selecciona...", index=None, key="sel_edit_caja")
 
-                if sel_edit == "➕ Crear Nueva Editorial":
-                    l_editorial = col_rap2.text_input("Nombre de la nueva editorial:", key="nueva_editorial_caja") # Usamos una key única
-                elif sel_edit: # Si se seleccionó algo
-                    l_editorial = sel_edit
-                else: # Si no se seleccionó nada
-                    l_editorial = ""
+            if st.session_state.sel_edit_caja == "➕ Crear Nueva Editorial":
+                l_editorial = col_rap2.text_input("Nombre de la nueva editorial:", key="nueva_editorial_caja")
+            elif st.session_state.sel_edit_caja:
+                l_editorial = st.session_state.sel_edit_caja
+            else:
+                l_editorial = ""
 
-                l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
-                
-                col_num1, col_num2 = st.columns(2)
-                l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
-                l_costo = col_num2.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
-                l_stock_actual = 999  
+            l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
+            
+            col_num1, col_num2 = st.columns(2)
+            l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
+            l_costo = col_num2.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
+            l_stock_actual = 999  
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             col_c1, col_c2 = st.columns(2)
