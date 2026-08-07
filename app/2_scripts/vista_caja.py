@@ -22,7 +22,7 @@ def unificar_formatos_fecha(serie_fechas):
 def cargar_libros_caja():
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, precio, costo, stock").execute()
+        res = conn.table("libros").select("libro_id, titulo, autor, precio, costo, stock, editorial, encuadernacion").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         if not df.empty:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
@@ -421,6 +421,7 @@ def mostrar_caja():
                         l_costo = float(datos_l['costo']) 
                         l_autor = datos_l.get('autor', '')
                         l_editorial = datos_l.get('editorial', '') 
+                        l_encuadernacion = datos_l.get('encuadernacion', '')
                         with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
                             l_autor = st.text_input("Autor:", value=l_autor)
                             l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0)
