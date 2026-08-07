@@ -432,21 +432,25 @@ def mostrar_caja():
                 
                 col_rap1, col_rap2 = st.columns(2)
                 
-                sel_autor = col_rap1.selectbox("Autor:", ["Seleccionar existente...", "➕ Crear Nuevo Autor"] + autores_db)
+                opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
+                sel_autor = col_rap1.selectbox("Autor:", options=opciones_autor, placeholder="Busca o selecciona un autor...", index=None)
+
                 if sel_autor == "➕ Crear Nuevo Autor":
-                    l_autor = col_rap1.text_input("Nombre del nuevo autor:")
-                elif sel_autor == "Seleccionar existente...":
-                    l_autor = ""
-                else:
+                    l_autor = col_rap1.text_input("Nombre del nuevo autor:", key="nuevo_autor_caja") # Usamos una key única
+                elif sel_autor: # Si se seleccionó algo
                     l_autor = sel_autor
+                else: # Si no se seleccionó nada
+                    l_autor = ""
                     
-                sel_edit = col_rap2.selectbox("Editorial:", ["Seleccionar existente...", "➕ Crear Nueva Editorial"] + editoriales_db)
+                opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
+                sel_edit = col_rap2.selectbox("Editorial:", options=opciones_editorial, placeholder="Busca o selecciona una editorial...", index=None)
+
                 if sel_edit == "➕ Crear Nueva Editorial":
-                    l_editorial = col_rap2.text_input("Nombre de la nueva editorial:")
-                elif sel_edit == "Seleccionar existente...":
-                    l_editorial = ""
-                else:
+                    l_editorial = col_rap2.text_input("Nombre de la nueva editorial:", key="nueva_editorial_caja") # Usamos una key única
+                elif sel_edit: # Si se seleccionó algo
                     l_editorial = sel_edit
+                else: # Si no se seleccionó nada
+                    l_editorial = ""
 
                 l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
                 
