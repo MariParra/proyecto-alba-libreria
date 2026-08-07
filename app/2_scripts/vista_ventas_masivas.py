@@ -247,7 +247,7 @@ def mostrar_ventas_masivas():
                 df_libros_catalogo = cargar_catalogo_libros_vm()
                 if not df_libros_catalogo.empty:
                     df_libros_catalogo['label_busqueda'] = df_libros_catalogo.apply(lambda r: f"{r['titulo']} (Stock actual: {r['stock']})", axis=1)
-                    col_b1, col_b2 = st.columns()
+                    col_b1, col_b2 = st.columns([3, 1])
                     sel_libro_label = col_b1.selectbox("Busca un libro:", [""] + df_libros_catalogo['label_busqueda'].tolist())
                     cant_descontar = col_b2.number_input("Cantidad implicada:", min_value=1, step=1, value=1)
                     

@@ -408,7 +408,11 @@ def mostrar_caja():
         st.markdown("### 2️⃣ Añadir Libros al Carrito")
         with st.container(border=True):
             modo_libro = st.radio("Libro:", ["📚 Buscar Existente", "➕ Rápido (No en catálogo)"], horizontal=True, label_visibility="collapsed")
-            l_id, l_titulo, l_autor, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion = None, "", "", 0.0, 0, 0.0, False, ""
+            # --- PASO 1: Cargar datos UNA SOLA VEZ, antes de cualquier lógica ---
+            autores_db, editoriales_db = cargar_listas_desplegables_caja()
+    
+            # --- PASO 2: Inicializar TODAS las variables ---
+            l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion = None, "", "", "", 0.0, 0, 0.0, False, ""
             if modo_libro == "📚 Buscar Existente":
                 if not df_libros.empty:
                     sel_libro = st.selectbox("Buscar libro:", [""] + df_libros['titulo'].tolist())
@@ -418,53 +422,48 @@ def mostrar_caja():
                         l_stock_actual = int(datos_l['stock'])
                         l_titulo = datos_l['titulo']
                         l_precio_catalogo = float(datos_l['precio'])
-                        l_costo = float(datos_l['costo']) 
+                        l_costo = float(datos_l['costo'])
                         l_autor = datos_l.get('autor', '')
-                        l_editorial = datos_l.get('editorial', '') 
+                        l_editorial = datos_l.get('editorial', '')
                         l_encuadernacion = datos_l.get('encuadernacion', '')
                         with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
-                            l_autor = st.text_input("Autor:", value=l_autor)
-                            l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0)
-                else: st.warning("El inventario está vacío.")
-            else:
+                            l_autor = st.text_input("Autor:", value=l_autor, key="autor_edit_caja_2")
+                            l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0, key="precio_edit_caja_2")
+                else:
+                    st.warning("El inventario está vacío.")
+            else: # MODO "RÁPIDO"
                 es_nuevo = True
-                autores_db, editoriales_db = cargar_listas_desplegables_caja()
                 
                 l_titulo = st.text_input("Título del libro:")
                 
                 col_rap1, col_rap2 = st.columns(2)
                 
-                # --- Lógica de Autor Corregida ---
-            opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
-            sel_autor = col_rap1.selectbox("Autor:", options=opciones_autor, placeholder="Busca o selecciona...", index=None, key="sel_autor_caja")
-            
-            if st.session_state.sel_autor_caja == "➕ Crear Nuevo Autor":
-                # Si se elige crear nuevo, mostramos el input y usamos su valor
-                l_autor = col_rap1.text_input("Nombre del nuevo autor:", key="nuevo_autor_caja")
-            elif st.session_state.sel_autor_caja:
-                # Si se selecciona uno existente, usamos ese valor
-                l_autor = st.session_state.sel_autor_caja
-            else:
-                # Si no hay nada seleccionado, es vacío
-                l_autor = ""
+                # Lógica de Autor
+                opciones_autor = ["➕ Crear Nuevo Autor"] + autores_db
+                sel_autor = col_rap1.selectbox("Autor:", options=opciones_autor, placeholder="Busca o selecciona...", index=None, key="sel_autor_caja")
+                if st.session_state.sel_autor_caja == "➕ Crear Nuevo Autor":
+                    l_autor = col_rap1.text_input("Nombre del nuevo autor:", key="nuevo_autor_caja")
+                elif st.session_state.sel_autor_caja:
+                    l_autor = st.session_state.sel_autor_caja
+                else:
+                    l_autor = ""
+                    
+                # Lógica de Editorial
+                opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
+                sel_edit = col_rap2.selectbox("Editorial:", options=opciones_editorial, placeholder="Busca o selecciona...", index=None, key="sel_edit_caja")
+                if st.session_state.sel_edit_caja == "➕ Crear Nueva Editorial":
+                    l_editorial = col_rap2.text_input("Nombre de la nueva editorial:", key="nueva_editorial_caja")
+                elif st.session_state.sel_edit_caja:
+                    l_editorial = st.session_state.sel_edit_caja
+                else:
+                    l_editorial = ""
 
-            # --- Lógica de Editorial Corregida ---
-            opciones_editorial = ["➕ Crear Nueva Editorial"] + editoriales_db
-            sel_edit = col_rap2.selectbox("Editorial:", options=opciones_editorial, placeholder="Busca o selecciona...", index=None, key="sel_edit_caja")
-
-            if st.session_state.sel_edit_caja == "➕ Crear Nueva Editorial":
-                l_editorial = col_rap2.text_input("Nombre de la nueva editorial:", key="nueva_editorial_caja")
-            elif st.session_state.sel_edit_caja:
-                l_editorial = st.session_state.sel_edit_caja
-            else:
-                l_editorial = ""
-
-            l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
-            
-            col_num1, col_num2 = st.columns(2)
-            l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
-            l_costo = col_num2.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
-            l_stock_actual = 999  
+                l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
+                
+                col_num1, col_num2 = st.columns(2)
+                l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
+                l_costo = col_num2.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
+                l_stock_actual = 999  
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             col_c1, col_c2 = st.columns(2)
