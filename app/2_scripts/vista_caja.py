@@ -126,11 +126,22 @@ def cargar_historial_completo():
         st.error(f"Error crítico al cargar el historial de ventas: {e}")
         return pd.DataFrame()
 
-def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None):
+def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion=""):
     conn = get_db_connection()
-    datos = {"titulo": limpiar_texto_para_busqueda(titulo), "autor": limpiar_texto_para_busqueda(autor), "precio": float(precio_catalogo)}
+    datos = {
+        "titulo": limpiar_texto_para_busqueda(titulo), 
+        "autor": limpiar_texto_para_busqueda(autor), 
+        "precio": float(precio_catalogo),
+        # --- CAMBIO AÑADIDO ---
+        "encuadernacion": limpiar_texto_para_busqueda(encuadernacion)
+        # ---------------------
+    }
+    
     if libro_id_existente:
-        conn.table("libros").update(datos).eq("libro_id", libro_id_existente).execute()
+        # Solo actualizamos el dato si se provee explícitamente
+        datos_actualizar = {k: v for k, v in datos.items() if v}
+        if datos_actualizar:
+            conn.table("libros").update(datos_actualizar).eq("libro_id", libro_id_existente).execute()
         return libro_id_existente
     else:
         datos["stock"] = int(stock_a_sumar)
@@ -173,7 +184,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
-                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None)
+                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''))
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
                 nuevo_stock = item['stock_actual'] - item['cantidad']
@@ -384,7 +395,7 @@ def mostrar_caja():
         st.markdown("### 2️⃣ Añadir Libros al Carrito")
         with st.container(border=True):
             modo_libro = st.radio("Libro:", ["📚 Buscar Existente", "➕ Rápido (No en catálogo)"], horizontal=True, label_visibility="collapsed")
-            l_id, l_titulo, l_autor, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo = None, "", "", 0.0, 0, 0.0, False
+            l_id, l_titulo, l_autor, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion = None, "", "", 0.0, 0, 0.0, False, ""
             if modo_libro == "📚 Buscar Existente":
                 if not df_libros.empty:
                     sel_libro = st.selectbox("Buscar libro:", [""] + df_libros['titulo'].tolist())
@@ -404,6 +415,7 @@ def mostrar_caja():
                 es_nuevo = True
                 l_titulo = st.text_input("Título del libro:")
                 l_autor = st.text_input("Autor (Opcional):")
+                l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
                 l_precio_catalogo = st.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
                 l_costo = st.number_input("Costo del libro nuevo ($):", min_value=0.0, step=100.0)
                 l_stock_actual = 999 
@@ -423,7 +435,8 @@ def mostrar_caja():
                         'libro_id': l_id, 'titulo': l_titulo, 'autor': l_autor, 
                         'precio_catalogo': l_precio_catalogo, 'precio_cobrado': precio_a_cobrar, 
                         'cantidad': cantidad, 'subtotal': precio_a_cobrar * cantidad,
-                        'stock_actual': l_stock_actual, 'costo': l_costo, 'es_nuevo': es_nuevo
+                        'stock_actual': l_stock_actual, 'costo': l_costo, 'es_nuevo': es_nuevo,
+                        'encuadernacion': l_encuadernacion
                     })
                     st.success(f"{l_titulo} añadido.")
                     st.rerun()
