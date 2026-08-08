@@ -275,12 +275,10 @@ def actualizar_historial_caja(df_editado):
     df_original = st.session_state.get('historial_original', pd.DataFrame())
     if df_original.empty: return 0
 
-    # ✅ CORRECCIÓN: Convertimos todo a string antes de comparar para evitar errores de tipo
-    # Esto hace que las diferencias de formato (ej. None vs NaT) se ignoren
+    # Nos aseguramos de conservar el venta_id real en ambas comparaciones
     df_original_str = df_original.astype(str)
     df_editado_str = df_editado.astype(str)
 
-    # Comparamos las versiones en texto
     diff_mask = df_original_str.ne(df_editado_str).any(axis=1)
     filas_cambiadas = df_editado[diff_mask]
     
@@ -290,10 +288,14 @@ def actualizar_historial_caja(df_editado):
 
     conn = get_db_connection()
     updates = 0
-    for venta_id, row in filas_cambiadas.iterrows():
+    
+    # Recorremos asegurándonos de extraer el ID real de la venta
+    for _, row in filas_cambiadas.iterrows():
         try:
+            venta_id = int(row['venta_id'])
+            
             # 1. DATOS DEL CLIENTE
-            cliente_id = row.get('cliente_cliente_id') # El ID viene con prefijo del JOIN
+            cliente_id = row.get('cliente_cliente_id') 
             if cliente_id and pd.notna(cliente_id):
                 datos_cliente = {
                     'nombre': limpiar_texto_para_busqueda(row.get('cliente_nombre')),
@@ -308,7 +310,10 @@ def actualizar_historial_caja(df_editado):
             # 2. DATOS DE LA VENTA
             datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
             
-            monto_final_actual = float(row.get('monto_final', df_original.loc[venta_id, 'monto_final']))
+            # Buscamos el monto original usando el venta_id real
+            monto_fila_original = df_original.loc[df_original['venta_id'] == venta_id, 'monto_final']
+            monto_final_actual = float(monto_fila_original.values[0]) if not monto_fila_original.empty else float(row.get('monto_final', 0))
+
             if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
                 datos_venta_raw['estado_pago'] = 'PAGADO'
                 datos_venta_raw['abono'] = monto_final_actual
@@ -319,7 +324,7 @@ def actualizar_historial_caja(df_editado):
                 if col in datos_venta_raw:
                     valor = datos_venta_raw[col]
                     if col == 'fecha_pago':
-                        datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) else None
+                        datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) and str(valor).strip() != '' else None
                     else:
                         datos_venta_final[col] = valor
 
@@ -328,10 +333,12 @@ def actualizar_historial_caja(df_editado):
             
             updates += 1
         except Exception as e:
-            log_error("vista_caja", "actualizar_historial_caja", f"Error en venta #{venta_id}: {e}", st.session_state.get('email_usuario', 'Desconocido'))
-            st.warning(f"No se pudo guardar la fila de la venta #{venta_id}.")
+            log_error("vista_caja", "actualizar_historial_caja", f"Error en venta #{row.get('venta_id', 'Desconocido')}: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+            st.warning(f"No se pudo guardar la fila de la venta #{row.get('venta_id', '')}.")
             continue
+            
     return updates
+
 
 
 # ==========================================
