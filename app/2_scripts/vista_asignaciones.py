@@ -38,13 +38,16 @@ def cargar_valores_suscripcion():
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def cargar_catalogo_completo_libros(incluir_sin_stock=False):
+def cargar_catalogo_completo_libros(incluir_sin_stock=False, filtrar_aptos=False):
     """Carga los libros. Permite incluir los que no tienen stock si se solicita."""
     conn = get_db_connection()
     try:
-        query = conn.table("libros").select("libro_id, titulo, autor, genero, precio, stock")
+        query = conn.table("libros").select("libro_id, titulo, autor, genero, precio, stock, apto_cajita")
         if not incluir_sin_stock:
             query = query.gt("stock", 0)
+            
+        if filtrar_aptos:
+            query = query.eq("apto_cajita", True)
             
         res = query.execute()
         df = pd.DataFrame(res.data)
@@ -64,6 +67,31 @@ def cargar_catalogo_completo_libros(incluir_sin_stock=False):
         st.error(f"Error cargando catálogo asignaciones: {e}")
         print(f"Error cargando catálogo asignaciones: {e}")
         return pd.DataFrame()
+
+@st.cache_data(ttl=60)
+def cargar_libros_aptitud():
+    """Carga libros con stock > 0 para gestionar si son aptos para cajitas."""
+    conn = get_db_connection()
+    try:
+        res = conn.table("libros").select("libro_id, titulo, encuadernacion, stock, apto_cajita").gt("stock", 0).order("titulo").execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
+
+def auto_descartar_tapa_dura():
+    """Marca automáticamente apto_cajita = False a los Tapa Dura."""
+    conn = get_db_connection()
+    try:
+        # Buscamos los que son TAPA DURA y están marcados como aptos (True o Is Null)
+        res = conn.table("libros").select("libro_id").eq("encuadernacion", "TAPA DURA").neq("apto_cajita", False).execute()
+        if res.data:
+            ids_actualizar = [item['libro_id'] for item in res.data]
+            # Los actualizamos masivamente a False
+            conn.table("libros").update({"apto_cajita": False}).in_("libro_id", ids_actualizar).execute()
+            return len(ids_actualizar)
+        return 0
+    except Exception as e:
+        return -1
 
 @st.cache_data(ttl=60)
 def obtener_ids_libros_poseidos_por_cliente(cliente_id):
@@ -117,7 +145,7 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
         return set()
     
 def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
-    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock)
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock, filtrar_aptos=True)
     if df_catalogo.empty or not cliente_id:
         return df_catalogo, []
     
@@ -354,7 +382,7 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
 def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
     conn = get_db_connection()
     
-    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock)
+    df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock, filtrar_aptos=True)
     stock_local = df_catalogo.set_index('libro_id')['stock'].to_dict() if not df_catalogo.empty else {}
     
     propuesta = []
@@ -1062,6 +1090,75 @@ def mostrar_asignaciones():
         if mes_esta_cerrado: 
             st.warning("Mes cerrado.")
         else:
+            with st.expander("⚙️ Gestionar Aptitud de Libros para Cajitas (Exclusiones)", expanded=False):
+                st.info("Marca con ✅ los libros que SÍ pueden enviarse en cajitas. Quita la marca para excluirlos de las asignaciones.")
+                
+                if st.button("🪄 Auto-excluir libros Tapa Dura", help="Marca como 'No Apto' a todos los libros con encuadernación TAPA DURA"):
+                    with st.spinner("Actualizando catálogo..."):
+                        modificados = auto_descartar_tapa_dura()
+                        if modificados > 0:
+                            st.success(f"¡Listo! Se excluyeron {modificados} libros Tapa Dura.")
+                        elif modificados == 0:
+                            st.info("Todos los libros Tapa Dura ya estaban excluidos.")
+                        else:
+                            st.error("Hubo un error al actualizar la base de datos.")
+                        
+                        cargar_libros_aptitud.clear()
+                        cargar_catalogo_completo_libros.clear()
+                        time.sleep(1.5)
+                        st.rerun()
+
+                df_aptitud = cargar_libros_aptitud()
+                
+                if not df_aptitud.empty:
+                    df_aptitud['apto_cajita'] = df_aptitud['apto_cajita'].fillna(True).astype(bool)
+                    
+                    total_libros_stock = len(df_aptitud)
+                    aptos = df_aptitud['apto_cajita'].sum()
+                    no_aptos = total_libros_stock - aptos
+                    
+                    st.markdown("##### Resumen de Estado Actual")
+                    col_m1, col_m2, col_m3 = st.columns(3)
+                    col_m1.metric("📚 Total con Stock", total_libros_stock)
+                    col_m2.metric("✅ Aptos para Cajita", aptos)
+                    col_m3.metric("❌ No Aptos", no_aptos)
+                    st.markdown("---")
+                
+                if not df_aptitud.empty:
+                    # Rellenamos nulos asumiendo que por defecto son aptos
+                    df_aptitud['apto_cajita'] = df_aptitud['apto_cajita'].fillna(True).astype(bool)
+                    
+                    df_editado_apt = st.data_editor(
+                        df_aptitud,
+                        column_config={
+                            "libro_id": None,
+                            "titulo": st.column_config.TextColumn("Título", disabled=True, width="large"),
+                            "encuadernacion": st.column_config.TextColumn("Encuadernación", disabled=True),
+                            "stock": st.column_config.NumberColumn("Stock", disabled=True),
+                            "apto_cajita": st.column_config.CheckboxColumn("¿Apto Cajita? ✅", default=True)
+                        },
+                        hide_index=True, use_container_width=True, key="editor_aptitud_libros"
+                    )
+                    
+                    if not df_aptitud.equals(df_editado_apt):
+                        if st.button("💾 Guardar Cambios de Aptitud", type="primary"):
+                            with st.spinner("Guardando..."):
+                                conn = get_db_connection()
+                                diff = df_editado_apt.merge(df_aptitud, on='libro_id', suffixes=('_nuevo', '_viejo'))
+                                cambios = diff[diff['apto_cajita_nuevo'] != diff['apto_cajita_viejo']]
+                                
+                                for _, row in cambios.iterrows():
+                                    conn.table("libros").update({"apto_cajita": row['apto_cajita_nuevo']}).eq("libro_id", row['libro_id']).execute()
+                                
+                                st.success(f"Se actualizaron {len(cambios)} libros.")
+                                cargar_libros_aptitud.clear()
+                                cargar_catalogo_completo_libros.clear()
+                                time.sleep(1)
+                                st.rerun()
+                else:
+                    st.warning("No hay libros con stock en el inventario.")
+            
+            st.markdown("---")
             if df_mes.empty: 
                 st.info("No hay suscripciones en el mes.")
             else:
