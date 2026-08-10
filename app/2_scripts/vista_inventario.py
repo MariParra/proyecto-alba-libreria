@@ -402,66 +402,92 @@ def mostrar_inventario():
                     st.warning("⚠️ El libro seleccionado ya no está disponible en los filtros actuales. Por favor, refresca la página.")
                 else:
                     libro = filas_encontradas.iloc[0]
-                    with st.form("form_editar_movil"):
+                    with st.container(border=True):
                         nuevo_titulo = st.text_input("Título:", value=libro['titulo'])
-                        opciones_autor = obtener_unicos(df_inventario, 'autor')
-                        opciones_editorial = obtener_unicos(df_inventario, 'editorial')
-                        opciones_genero = obtener_unicos(df_inventario, 'genero')
-                        opciones_enc = obtener_unicos(df_inventario, 'encuadernacion')
+                        
+                        # Cargamos opciones y añadimos la opción de crear
+                        opciones_autor = ["➕ Escribir nuevo..."] + obtener_unicos(df_inventario, 'autor')
+                        opciones_editorial = ["➕ Escribir nueva..."] + obtener_unicos(df_inventario, 'editorial')
+                        opciones_genero = ["➕ Escribir nuevo..."] + obtener_unicos(df_inventario, 'genero')
+                        opciones_enc = ["➕ Escribir nueva..."] + obtener_unicos(df_inventario, 'encuadernacion')
+                        
                         col1, col2 = st.columns(2)
-                        try: idx_autor = opciones_autor.index(libro['autor'])
-                        except ValueError: idx_autor = 0
-                        nuevo_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
-                        try: idx_editorial = opciones_editorial.index(libro['editorial'])
-                        except ValueError: idx_editorial = 0
-                        nueva_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
+                        
+                        # --- AUTOR ---
+                        idx_autor = opciones_autor.index(libro['autor']) if libro['autor'] in opciones_autor else 0
+                        sel_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
+                        if sel_autor == "➕ Escribir nuevo...":
+                            nuevo_autor = col1.text_input("Ingresa el nuevo autor:", placeholder="Ej: J.K. Rowling")
+                        else:
+                            nuevo_autor = sel_autor
+                            
+                        # --- EDITORIAL ---
+                        idx_editorial = opciones_editorial.index(libro['editorial']) if libro['editorial'] in opciones_editorial else 0
+                        sel_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
+                        if sel_editorial == "➕ Escribir nueva...":
+                            nueva_editorial = col2.text_input("Ingresa la nueva editorial:", placeholder="Ej: Planeta")
+                        else:
+                            nueva_editorial = sel_editorial
+                            
                         col3, col4 = st.columns(2)
-                        try: idx_genero = opciones_genero.index(libro['genero'])
-                        except ValueError: idx_genero = 0
-                        nuevo_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
-                        try: idx_enc = opciones_enc.index(libro['encuadernacion'])
-                        except ValueError: idx_enc = 0
-                        nueva_encuadernacion = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
+                        
+                        # --- GÉNERO ---
+                        idx_genero = opciones_genero.index(libro['genero']) if libro['genero'] in opciones_genero else 0
+                        sel_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
+                        if sel_genero == "➕ Escribir nuevo...":
+                            nuevo_genero = col3.text_input("Ingresa el nuevo género:", placeholder="Ej: Ficción")
+                        else:
+                            nuevo_genero = sel_genero
+                            
+                        # --- ENCUADERNACIÓN ---
+                        idx_enc = opciones_enc.index(libro['encuadernacion']) if libro['encuadernacion'] in opciones_enc else 0
+                        sel_enc = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
+                        if sel_enc == "➕ Escribir nueva...":
+                            nueva_encuadernacion = col4.text_input("Ingresa la nueva encuadernación:")
+                        else:
+                            nueva_encuadernacion = sel_enc
+                            
+                        # --- STOCK Y PRECIOS ---
                         col5, col6, col7 = st.columns(3)
                         nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
-                    
-                        # En el modo móvil también mostramos el precio original
-                        nuevo_precio_original = col7.number_input("Precio Original ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
+                        nuevo_precio_original = col7.number_input("Precio Orig. ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                         
+                        # --- APTO CAJITA ---
                         es_apto_actual = bool(libro.get('apto_cajita', True))
                         nuevo_apto_cajita = st.checkbox("🎁 Apto para Cajitas de Suscripción", value=es_apto_actual)
                         st.write("")
                         
-                        if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                            # Mandamos a guardar el precio_original y dejamos que el procesador batch haga la matemática
-                            datos_actualizados = {
-                                "titulo": nuevo_titulo,
-                                "autor": nuevo_autor, 
-                                "editorial": nueva_editorial, 
-                                "genero": nuevo_genero, 
-                                "encuadernacion": nueva_encuadernacion, 
-                                "stock": nuevo_stock, 
-                                "costo": nuevo_costo, 
-                                "precio_original": nuevo_precio_original,
-                                "apto_cajita": nuevo_apto_cajita
-                            }
-                            
-                            # Rescatamos el porcentaje de descuento para calcular en móvil
-                            pct_dcto = float(libro.get('Dcto %', 0))
-                            if pct_dcto > 0:
-                                datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
+                        if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                            if not nuevo_autor or not nueva_editorial or not nuevo_titulo:
+                                st.error("⚠️ El Título, Autor y Editorial no pueden estar vacíos.")
                             else:
-                                datos_actualizados['precio'] = nuevo_precio_original
+                                datos_actualizados = {
+                                    "titulo": nuevo_titulo,
+                                    "autor": nuevo_autor, 
+                                    "editorial": nueva_editorial, 
+                                    "genero": nuevo_genero, 
+                                    "encuadernacion": nueva_encuadernacion, 
+                                    "stock": nuevo_stock, 
+                                    "costo": nuevo_costo, 
+                                    "precio_original": nuevo_precio_original,
+                                    "apto_cajita": nuevo_apto_cajita
+                                }
                                 
-                            exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
-                            if exito:
-                                st.success("¡Libro actualizado correctamente!")
-                                st.snow()
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error(f"Error: {error}")
+                                pct_dcto = float(libro.get('Dcto %', 0))
+                                if pct_dcto > 0:
+                                    datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
+                                else:
+                                    datos_actualizados['precio'] = nuevo_precio_original
+                                    
+                                exito, error = actualizar_un_libro(int(libro['libro_id']), datos_actualizados)
+                                if exito:
+                                    st.success("¡Libro actualizado correctamente!")
+                                    st.snow()
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error: {error}")
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
@@ -476,12 +502,16 @@ def mostrar_inventario():
             
             st.session_state.df_original_para_editar = df_mostrar
             
+            autores_unicos = obtener_unicos(df_inventario, 'autor')
+            editoriales_unicas = obtener_unicos(df_inventario, 'editorial')
+            generos_unicos = obtener_unicos(df_inventario, 'genero')
+            encuadernaciones_unicas = obtener_unicos(df_inventario, 'encuadernacion')
+            
             config_columnas = {
-                "titulo": st.column_config.TextColumn("Título", required=True),
-                "autor": st.column_config.TextColumn("Autor", required=True),
-                "editorial": st.column_config.TextColumn("Editorial", required=True),
-                "genero": st.column_config.TextColumn("Género"),
-                "encuadernacion": st.column_config.TextColumn("Encuadernación"),
+                "autor": st.column_config.SelectboxColumn("Autor", options=autores_unicos, required=True),
+                "editorial": st.column_config.SelectboxColumn("Editorial", options=editoriales_unicas, required=True),
+                "genero": st.column_config.SelectboxColumn("Género", options=generos_unicos),
+                "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=encuadernaciones_unicas),
                 "stock": st.column_config.NumberColumn("Stock", step=1),
                 "costo": st.column_config.NumberColumn("Costo ($)", format="%.0f"),
                 "precio": st.column_config.NumberColumn("Precio ($)", format="%.0f"),
