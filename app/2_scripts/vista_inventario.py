@@ -463,16 +463,16 @@ def mostrar_inventario():
                                 st.error("⚠️ El Título, Autor y Editorial no pueden estar vacíos.")
                             else:
                                 datos_actualizados = {
-                                    "titulo": nuevo_titulo,
-                                    "autor": nuevo_autor, 
-                                    "editorial": nueva_editorial, 
-                                    "genero": nuevo_genero, 
-                                    "encuadernacion": nueva_encuadernacion, 
-                                    "stock": nuevo_stock, 
-                                    "costo": nuevo_costo, 
-                                    "precio_original": nuevo_precio_original,
-                                    "apto_cajita": nuevo_apto_cajita
-                                }
+                                        "titulo": limpiar_texto_para_busqueda(nuevo_titulo),
+                                        "autor": limpiar_texto_para_busqueda(nuevo_autor), 
+                                        "editorial": limpiar_texto_para_busqueda(nueva_editorial), 
+                                        "genero": limpiar_texto_para_busqueda(nuevo_genero), 
+                                        "encuadernacion": limpiar_texto_para_busqueda(nueva_encuadernacion), 
+                                        "stock": nuevo_stock, 
+                                        "costo": nuevo_costo, 
+                                        "precio_original": nuevo_precio_original,
+                                        "apto_cajita": nuevo_apto_cajita
+                                    }
                                 
                                 pct_dcto = float(libro.get('Dcto %', 0))
                                 if pct_dcto > 0:
