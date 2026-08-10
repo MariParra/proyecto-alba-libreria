@@ -36,6 +36,8 @@ def cargar_datos_completos():
             df['stock'] = pd.to_numeric(df['stock'], errors='coerce').fillna(0).astype(int)
         if 'costo' in df.columns:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
+        if 'apto_cajita' in df.columns:
+            df['apto_cajita'] = df['apto_cajita'].fillna(True).astype(bool)
             
         # LÓGICA DE DESCUENTOS SEGURA
         df['Dcto %'] = 0.0
@@ -140,6 +142,8 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto_para_busqueda(str(row['encuadernacion']))
             if 'stock' in row: datos['stock'] = int(row['stock'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
+            if 'titulo' in row: datos['titulo'] = limpiar_texto_para_busqueda(str(row['titulo']))
+            if 'apto_cajita' in row: datos['apto_cajita'] = bool(row['apto_cajita'])
             
             # 🔴 LÓGICA DE RECALCULO DE PRECIOS AUTOMÁTICA
             # Si cambiaron el precio_original, recalculamos el precio de oferta (si lo tenía)
@@ -399,7 +403,7 @@ def mostrar_inventario():
                 else:
                     libro = filas_encontradas.iloc[0]
                     with st.form("form_editar_movil"):
-                        st.text_input("Título (No editable):", value=libro['titulo'], disabled=True)
+                        nuevo_titulo = st.text_input("Título:", value=libro['titulo'])
                         opciones_autor = obtener_unicos(df_inventario, 'autor')
                         opciones_editorial = obtener_unicos(df_inventario, 'editorial')
                         opciones_genero = obtener_unicos(df_inventario, 'genero')
@@ -425,9 +429,23 @@ def mostrar_inventario():
                         # En el modo móvil también mostramos el precio original
                         nuevo_precio_original = col7.number_input("Precio Original ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                         
+                        es_apto_actual = bool(libro.get('apto_cajita', True))
+                        nuevo_apto_cajita = st.checkbox("🎁 Apto para Cajitas de Suscripción", value=es_apto_actual)
+                        st.write("")
+                        
                         if st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
                             # Mandamos a guardar el precio_original y dejamos que el procesador batch haga la matemática
-                            datos_actualizados = {"autor": nuevo_autor, "editorial": nueva_editorial, "genero": nuevo_genero, "encuadernacion": nueva_encuadernacion, "stock": nuevo_stock, "costo": nuevo_costo, "precio_original": nuevo_precio_original}
+                            datos_actualizados = {
+                                "titulo": nuevo_titulo,
+                                "autor": nuevo_autor, 
+                                "editorial": nueva_editorial, 
+                                "genero": nuevo_genero, 
+                                "encuadernacion": nueva_encuadernacion, 
+                                "stock": nuevo_stock, 
+                                "costo": nuevo_costo, 
+                                "precio_original": nuevo_precio_original,
+                                "apto_cajita": nuevo_apto_cajita
+                            }
                             
                             # Rescatamos el porcentaje de descuento para calcular en móvil
                             pct_dcto = float(libro.get('Dcto %', 0))
@@ -447,10 +465,10 @@ def mostrar_inventario():
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
-            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original"]
+            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original", "apto_cajita"]
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
-            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original"])
+            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original", "apto_cajita"])
             
             columnas_finales = columnas_base + columnas_a_mostrar
             
@@ -459,6 +477,7 @@ def mostrar_inventario():
             st.session_state.df_original_para_editar = df_mostrar
             
             config_columnas = {
+                "titulo": st.column_config.TextColumn("Título", required=True),
                 "autor": st.column_config.TextColumn("Autor", required=True),
                 "editorial": st.column_config.TextColumn("Editorial", required=True),
                 "genero": st.column_config.TextColumn("Género"),
@@ -466,10 +485,11 @@ def mostrar_inventario():
                 "stock": st.column_config.NumberColumn("Stock", step=1),
                 "costo": st.column_config.NumberColumn("Costo ($)", format="%.0f"),
                 "precio": st.column_config.NumberColumn("Precio ($)", format="%.0f"),
-                "precio_original": st.column_config.NumberColumn("Precio Original ($)", format="%.0f")
+                "precio_original": st.column_config.NumberColumn("Precio Original ($)", format="%.0f"),
+                "apto_cajita": st.column_config.CheckboxColumn("¿Apto Cajita? 🎁", default=True)
             }
             
-            disabled_finales = [c for c in ["libro_id", "titulo"] if c in df_mostrar.columns]
+            disabled_finales = [c for c in ["libro_id"] if c in df_mostrar.columns]
             
             df_editado = st.data_editor(
                 df_mostrar, use_container_width=True, hide_index=True, 
