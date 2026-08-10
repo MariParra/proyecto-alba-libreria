@@ -1150,11 +1150,25 @@ def mostrar_asignaciones():
                                 for _, row in cambios.iterrows():
                                     conn.table("libros").update({"apto_cajita": row['apto_cajita_nuevo']}).eq("libro_id", row['libro_id']).execute()
                                 
-                                st.success(f"Se actualizaron {len(cambios)} libros.")
-                                cargar_libros_aptitud.clear()
-                                cargar_catalogo_completo_libros.clear()
-                                time.sleep(1)
-                                st.rerun()
+                                if not cambios.empty:
+                                    st.success(f"Se actualizaron {len(cambios)} libros.")
+
+                                    total_libros_stock_final = len(df_editado_apt)
+                                    aptos_final = df_editado_apt['apto_cajita'].sum()
+                                    no_aptos_final = total_libros_stock_final - aptos_final
+                                    
+                                    st.markdown("##### Resumen Post-Cambio")
+                                    col_f1, col_f2, col_f3 = st.columns(3)
+                                    col_f1.metric("📚 Total con Stock", total_libros_stock_final)
+                                    col_f2.metric("✅ Aptos para Cajita", aptos_final)
+                                    col_f3.metric("❌ No Aptos", no_aptos_final)
+                                    cargar_libros_aptitud.clear()
+                                    cargar_catalogo_completo_libros.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.info("No se detectaron cambios para guardar.")
+                                    
                 else:
                     st.warning("No hay libros con stock en el inventario.")
             
