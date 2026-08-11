@@ -2,10 +2,10 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import requests
 
-def generar_collage_marketing(lista_libros, url_base_supabase):
+def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES"):
     """
-    Genera una imagen 1080x1920 con un collage de hasta 8 libros.
-    Incluye etiqueta de 'DISPONIBILIDAD INMEDIATA' si hay stock.
+    Genera una imagen 1080x1920 con un collage de los libros pasados (máximo 8).
+    El título superior es personalizable.
     """
     try:
         W, H = (1080, 1920)
@@ -13,44 +13,44 @@ def generar_collage_marketing(lista_libros, url_base_supabase):
         PRIMARY_COLOR = (33, 37, 41)
         ACCENT_COLOR = (220, 53, 69)
         MUTED_COLOR = (108, 117, 125)
-        BADGE_COLOR = (40, 167, 69) # Verde para disponibilidad
+        BADGE_COLOR = (40, 167, 69) 
 
         try:
             font_titulo = ImageFont.truetype("assets/Montserrat-Bold.ttf", 40)
             font_precio = ImageFont.truetype("assets/Montserrat-Bold.ttf", 55)
             font_tachado = ImageFont.truetype("assets/Montserrat-Regular.ttf", 45)
-            font_header = ImageFont.truetype("assets/Montserrat-Bold.ttf", 120)
-            font_badge = ImageFont.truetype("assets/Montserrat-Bold.ttf", 25) # Fuente para la etiqueta
+            font_header = ImageFont.truetype("assets/Montserrat-Bold.ttf", 100) # Un poco más pequeño por si el género es largo
+            font_badge = ImageFont.truetype("assets/Montserrat-Bold.ttf", 25) 
         except IOError:
             font_titulo = font_precio = font_tachado = font_header = font_badge = ImageFont.load_default()
 
         img = Image.new('RGB', (W, H), color=BG_COLOR)
         draw = ImageDraw.Draw(img)
 
-        # DIBUJAR TÍTULO "NOVEDADES"
-        draw.text((W/2, 150), "NOVEDADES", font=font_header, fill=PRIMARY_COLOR, anchor="ms")
+        # DIBUJAR TÍTULO DE LA HOJA
+        titulo_seguro = (titulo_header[:20] + '..') if len(titulo_header) > 22 else titulo_header
+        draw.text((W/2, 150), titulo_seguro.upper(), font=font_header, fill=PRIMARY_COLOR, anchor="ms")
 
-        # --- LÓGICA DE LA CUADRÍCULA (GRID) ---
+        # --- LÓGICA DE LA CUADRÍCULA ---
         padding = 60
-        num_libros = len(lista_libros)
+        num_libros = len(lista_libros_chunk)
         cols = 2
         rows = (num_libros + cols - 1) // cols 
+        if rows == 0: rows = 1 # Seguridad por si llega vacío
 
-        # Calculamos el tamaño de cada celda
         cell_w = (W - padding * (cols + 1)) / cols
         cell_h = (H - 300 - padding * (rows + 1)) / rows 
 
-        for i, libro in enumerate(lista_libros):
-            if i >= 8: break 
+        for i, libro in enumerate(lista_libros_chunk):
+            if i >= 8: break # Tope de seguridad máximo 8 por hoja
 
             row_idx = i // cols
             col_idx = i % cols
 
-            # Posición de la celda
             x0 = padding + col_idx * (cell_w + padding)
             y0 = 300 + padding + row_idx * (cell_h + padding)
 
-            # Cargar y pegar la portada
+            # Cargar Portada
             try:
                 url_portada = f"{url_base_supabase}{libro['libro_id']}.jpg"
                 response = requests.get(url_portada, stream=True, timeout=5)
@@ -62,17 +62,14 @@ def generar_collage_marketing(lista_libros, url_base_supabase):
                 x_portada = x0 + (cell_w - portada_img.width) / 2
                 y_portada = y0
                 img.paste(portada_img, (int(x_portada), int(y_portada)), portada_img)
-                
                 y_texto = y_portada + portada_img.height + 30
             except Exception:
                 y_texto = y0 + (cell_h * 0.7) + 30
 
-            # --- ETIQUETA DE DISPONIBILIDAD (NUEVO) ---
+            # Etiqueta de Stock
             stock_actual = int(libro.get('stock', 0))
             if stock_actual > 0:
                 texto_badge = " DISPONIBILIDAD INMEDIATA "
-                
-                # Calcular tamaño del texto de la etiqueta
                 try:
                     ancho_badge = draw.textlength(texto_badge, font=font_badge)
                 except AttributeError:
@@ -80,19 +77,17 @@ def generar_collage_marketing(lista_libros, url_base_supabase):
                 
                 alto_badge = 45
                 x_badge = x0 + (cell_w - ancho_badge) / 2
-                y_badge = y0 - 15 # Lo colocamos sobresaliendo un poquito por encima de la portada
+                y_badge = y0 - 15 
                 
-                # Dibujar rectángulo verde y texto blanco
                 draw.rectangle([x_badge, y_badge, x_badge + ancho_badge, y_badge + alto_badge], fill=BADGE_COLOR)
                 draw.text((x_badge + ancho_badge/2, y_badge + alto_badge/2), texto_badge, font=font_badge, fill="white", anchor="mm")
-            # ----------------------------------------
 
-            # Escribir título del libro
+            # Título del libro
             titulo_corto = (libro['titulo'][:25] + '...') if len(libro['titulo']) > 25 else libro['titulo']
             draw.text((x0 + cell_w/2, y_texto), titulo_corto.upper(), font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
             y_texto += 65
 
-            # Escribir precios
+            # Precios
             precio_float = float(libro['precio'])
             precio_orig_float = float(libro.get('precio_original', precio_float))
 
@@ -105,7 +100,6 @@ def generar_collage_marketing(lista_libros, url_base_supabase):
                 except AttributeError:
                     ancho_orig, _ = draw.textsize(texto_orig, font=font_tachado)
                     
-                # Línea de tachado
                 draw.line((x0 + cell_w/2 - ancho_orig/2, y_texto - 20, x0 + cell_w/2 + ancho_orig/2, y_texto - 20), fill=MUTED_COLOR, width=4)
                 y_texto += 55
 
@@ -114,5 +108,7 @@ def generar_collage_marketing(lista_libros, url_base_supabase):
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         return buf.getvalue()
+        
     except Exception as e:
+        print(f"Error crítico en el motor de collage: {e}")
         return None
