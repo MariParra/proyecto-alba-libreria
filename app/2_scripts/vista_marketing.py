@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import io # <-- IMPORTANTE PARA CONVERTIR AL DESCARGAR
+import io 
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
 
@@ -16,7 +16,7 @@ def cargar_libros_para_marketing():
 
 def mostrar_generador_marketing():
     st.title("🎨 Generador de Catálogos Masivos")
-    st.info("Genera imágenes para tus Stories. Si eliges muchos libros, el sistema creará varias hojas automáticamente.")
+    st.info("Genera imágenes para tus Stories (12 libros por página).")
 
     try:
         URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
@@ -39,13 +39,11 @@ def mostrar_generador_marketing():
         if genero_sel != "Todos":
             df_filtrado = df_libros[df_libros['genero'] == genero_sel]
 
-        # Etiquetas con aviso de stock
         df_filtrado['label_selectbox'] = df_filtrado.apply(
             lambda x: f"{x['titulo']} (Sin Stock)" if int(x.get('stock', 0)) <= 0 else x['titulo'], axis=1
         )
         opciones_libros = dict(zip(df_filtrado['label_selectbox'], df_filtrado['libro_id']))
 
-        # --- SELECCIÓN MASIVA ---
         seleccionar_todos = st.checkbox(f"✅ Seleccionar TODOS los libros filtrados ({len(df_filtrado)} libros)")
         
         if seleccionar_todos:
@@ -56,7 +54,6 @@ def mostrar_generador_marketing():
                 options=opciones_libros.keys()
             )
 
-    # --- GENERACIÓN DE IMÁGENES PAGINADAS ---
     if libros_seleccionados:
         st.markdown("---")
         st.markdown("#### 2. Configuración y Previsualización")
@@ -76,7 +73,9 @@ def mostrar_generador_marketing():
                     for genero, df_grupo in grupos:
                         titulo_base = str(genero).upper() if pd.notna(genero) else "OTROS"
                         lista_data = df_grupo.sort_values('titulo').to_dict('records')
-                        chunks = [lista_data[i:i + 8] for i in range(0, len(lista_data), 8)]
+                        
+                        # --- PARTIMOS DE 12 EN 12 (3x4) ---
+                        chunks = [lista_data[i:i + 12] for i in range(0, len(lista_data), 12)]
                         
                         for idx, chunk in enumerate(chunks):
                             titulo_hoja = titulo_base
@@ -89,17 +88,17 @@ def mostrar_generador_marketing():
                 else:
                     titulo_base = "NOVEDADES"
                     lista_data = df_final.sort_values('titulo').to_dict('records')
-                    chunks = [lista_data[i:i + 8] for i in range(0, len(lista_data), 8)]
+                    
+                    # --- PARTIMOS DE 12 EN 12 (3x4) ---
+                    chunks = [lista_data[i:i + 12] for i in range(0, len(lista_data), 12)]
                     
                     for idx, chunk in enumerate(chunks):
                         titulo_hoja = titulo_base if len(chunks) == 1 else f"{titulo_base} ({idx + 1}/{len(chunks)})"
                         img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
                         if img_obj: hojas_generadas.append((titulo_hoja, img_obj))
                         
-                # Guardamos en la sesión
                 st.session_state.hojas_generadas = hojas_generadas
 
-    # --- RENDERIZADO EN PANTALLA ---
     if 'hojas_generadas' in st.session_state and st.session_state.hojas_generadas:
         hojas = st.session_state.hojas_generadas
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
@@ -109,10 +108,8 @@ def mostrar_generador_marketing():
             for idx, (titulo_hoja, img_obj) in enumerate(hojas):
                 col = columnas_render[idx % 3]
                 with col:
-                    # 1. MOSTRAR LA IMAGEN DE FORMA NATIVA (A PRUEBA DE FALLOS)
-                    st.image(img_obj, caption=titulo_hoja, use_column_width=True)
+                    st.image(img_obj, caption=titulo_hoja, use_container_width=True)
                     
-                    # 2. CONVERTIRLA A BYTES SÓLO PARA EL BOTÓN DE DESCARGA
                     buf = io.BytesIO()
                     img_obj.save(buf, format="PNG")
                     png_bytes = buf.getvalue()
