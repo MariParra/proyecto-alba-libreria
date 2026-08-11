@@ -634,7 +634,8 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
                 "envio_pagado": str(row['envio_pagado']).upper(), "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')),
                 "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total,
-                "costo_caja": costo_c
+                "costo_caja": costo_c,
+                "preferencia_mensual": str(row.get('preferencia_mensual', ''))
             }
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
@@ -785,6 +786,65 @@ def mostrar_asignaciones():
     # 1. TABLA EDITABLE (VERSIÓN FINAL COMPLETA)
     # ==========================================================
     if opcion_menu == "📋 Gestión (Tabla Editable)":
+        
+        st.info(
+            "💡 **GUÍA RÁPIDA: Gestión de Preferencias Mensuales**\n\n"
+            "1. **¿Qué es?** Aquí puedes registrar el género que una clienta pidió **específicamente para este mes** (ej: 'Terror').\n"
+            "2. **¿Cómo funciona?** Escribe el o los géneros en la columna `Preferencia Mensual`. Si dejas la celda vacía, el sistema usará las preferencias de siempre de la clienta.\n"
+            "3. **Prioridad:** Lo que escribas aquí **siempre tendrá prioridad** sobre los gustos históricos de la clienta al momento de asignar libros.\n"
+            "4. **Guardado:** Haz doble clic en una celda para editar y luego presiona `💾 Guardar Cambios Manuales` al final de la tabla."
+        )
+        
+        # --- HERRAMIENTA DE ASIGNACIÓN DE PREFERENCIAS ---
+        with st.container(border=True):
+            st.markdown("#### ✨ Asignar Preferencia Mensual a un Cliente")
+            
+            # Obtenemos los datos necesarios
+            generos_disponibles = sorted(df_mes['generos_preferencia'].dropna().unique())
+            clientes_disponibles = dict(zip(df_mes['nombre'], df_mes['asignacion_id']))
+
+            col_a1, col_a2 = st.columns(2)
+
+            cliente_sel = col_a1.selectbox(
+                "1. Selecciona un Cliente:",
+                options=[""] + list(clientes_disponibles.keys()),
+                key="cliente_pref_sel"
+            )
+
+            if cliente_sel:
+                asignacion_id_sel = clientes_disponibles[cliente_sel]
+                
+                # Buscamos las preferencias actuales de ese cliente
+                preferencia_actual_str = df_mes.loc[df_mes['asignacion_id'] == asignacion_id_sel, 'preferencia_mensual'].values[0]
+                preferencias_actuales = [g.strip() for g in preferencia_actual_str.split(',')] if preferencia_actual_str and isinstance(preferencia_actual_str, str) else []
+
+                generos_sel = col_a2.multiselect(
+                    "2. Selecciona hasta 3 géneros:",
+                    options=generos_disponibles,
+                    default=preferencias_actuales,
+                    max_selections=3,
+                    key="generos_pref_sel"
+                )
+
+                if st.button("💾 Guardar Preferencia para este Cliente", type="primary", key="btn_guardar_pref"):
+                    # Unimos los géneros seleccionados en un solo string
+                    preferencia_final_str = ", ".join(generos_sel).upper()
+                    
+                    try:
+                        conn = get_db_connection()
+                        conn.table("asignaciones").update(
+                            {"preferencia_mensual": preferencia_final_str}
+                        ).eq("asignacion_id", asignacion_id_sel).execute()
+                        
+                        st.success(f"¡Preferencia '{preferencia_final_str}' guardada para {cliente_sel}!")
+                        time.sleep(1.5)
+                        st.rerun() # Refrescamos para que la tabla principal muestre el cambio
+                    except Exception as e:
+                        st.error(f"No se pudo guardar la preferencia. Error: {e}")
+
+        st.markdown("---")
+        # --------------------------------------------------------
+        
         with st.expander("📖 Ver Historial de Últimos Cambios Masivos"):
             # Llamamos a la función que busca los datos en Supabase
             df_historial = cargar_historial_cambios()
@@ -857,12 +917,14 @@ def mostrar_asignaciones():
                 # 🔴 Fila 3: Visibilidad de Columnas
                 columnas_opcionales = [
                     'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
-                    'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'metodo_entrega'
+                    'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'metodo_entrega',
+                    'preferencia_mensual' 
                 ]
+                
                 columnas_visibles = st.multiselect(
                     "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
                     options=columnas_opcionales, 
-                    default=columnas_opcionales,
+                    default=['pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 'preferencia_mensual'],
                     help="Quita las columnas que no necesites ver para tener una vista más limpia."
                 )
 
@@ -936,7 +998,12 @@ def mostrar_asignaciones():
                 "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                 "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
                 "monto_total": st.column_config.NumberColumn("Monto Total a Cobrar ($)", format="$%.0f"),
-                "comentario": st.column_config.TextColumn("Comentario", max_chars=300)
+                "comentario": st.column_config.TextColumn("Comentario", max_chars=300),
+                "preferencia_mensual": st.column_config.TextColumn(
+                    "Preferencia Mensual", 
+                    help="Este campo se edita en el formulario de arriba.",
+                    disabled=True
+                )
             }
             
             columnas_no_editables = ['asignacion_id', 'nombre', 'titulo_libro', 'monto_total']
