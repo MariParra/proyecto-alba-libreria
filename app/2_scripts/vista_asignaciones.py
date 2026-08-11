@@ -144,36 +144,53 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
         print(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
         return set()
     
-def cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=False):
+def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=False, usar_historica=False):
+    """
+    Carga los libros disponibles para un cliente, aplicando la jerarquía de preferencias:
+    1. Preferencia Mensual (si existe y no se pide usar la histórica forzosamente)
+    2. Preferencias Históricas (si no hay mensual o si se fuerza su uso)
+    """
     df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock, filtrar_aptos=True)
     if df_catalogo.empty or not cliente_id:
         return df_catalogo, []
-    
+
     conn = get_db_connection()
     try:
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         if ids_poseidos:
             df_catalogo = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)]
-            
-        res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+
+        # ========================================================
+        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS ---
+        # ========================================================
         generos_pref = []
-        if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
-            generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
         
+        preferencia_del_mes = asig_row.get('preferencia_mensual') if asig_row is not None else None
+        
+        # 1. Prioridad 1: Preferencia del Mes (SOLO si no forzamos la histórica)
+        if not usar_historica and preferencia_del_mes and isinstance(preferencia_del_mes, str) and preferencia_del_mes.strip():
+            generos_brutos = preferencia_del_mes.split(',')
+            generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+            
+        # 2. Prioridad 2: Preferencia Histórica (si se fuerza o si no hay mensual)
+        else:
+            res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+            if res_susc.data and res_susc.data[0].get('generos_preferencia'):
+                generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+                generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+        # ========================================================
+
         return df_catalogo, generos_pref
+
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         log_error(
             vista="vista_asignaciones",
             funcion="cargar_libros_filtrados_para_cliente",
             error=e,
             email_usuario=email_usuario
         )
-        
         st.error("⚠️ No se pudo filtrar el catálogo de libros para este cliente. Se mostrará el catálogo completo como medida de seguridad.")
-        
         print(f"Error en cargar_libros_filtrados_para_cliente: {e}")
         return cargar_catalogo_completo_libros(incluir_sin_stock), []
 
@@ -398,11 +415,30 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
-        res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+        # ========================================================
+        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS ---
+        # ========================================================
         generos_pref = []
-        if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+        origen_preferencia = ""
+        
+        preferencia_del_mes = asig.get('preferencia_mensual')
+        
+        # 1. Prioridad 1: Preferencia del Mes
+        if pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip():
+            generos_brutos = str(preferencia_del_mes).split(',')
             generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+            origen_preferencia = "🌟 MENSUAL"
+            
+        # 2. Prioridad 2: Preferencia Histórica (Fallback)
+        else:
+            res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+            if res_susc.data and res_susc.data[0].get('generos_preferencia'):
+                generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+                generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+                origen_preferencia = "📜 HISTÓRICA"
+            else:
+                origen_preferencia = "Sin Preferencias"
+        # ========================================================
             
         libros_disponibles = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)].copy()
         
@@ -439,6 +475,8 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             "Género del Libro": str(libro_elegido.get('genero', '')),
             "Preferencias": ", ".join(generos_pref) if generos_pref else "Sin preferencias específicas",
             "Autor": libro_elegido.get('autor', ''),
+            # --- NUEVA COLUMNA EN EL PREVIEW ---
+            "Origen Preferencia": origen_preferencia
         })
         
     return propuesta, sin_asignar
@@ -1400,11 +1438,35 @@ def mostrar_asignaciones():
                                     
                                     asig_row = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id].iloc[0]
                                     
-                                    col_chk1, col_chk2 = st.columns(2)
+                                    # Verificamos si la clienta tiene preferencia mensual para mostrar el checkbox
+                                    preferencia_del_mes = asig_row.get('preferencia_mensual')
+                                    tiene_pref_mensual = pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip() != ""
+                                    
+                                    # Ajustamos las columnas dinámicamente
+                                    if tiene_pref_mensual:
+                                        col_chk1, col_chk2, col_chk3 = st.columns(3)
+                                    else:
+                                        col_chk1, col_chk2 = st.columns(2)
+
                                     ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock disponible", value=True)
                                     ver_todos_generos = col_chk2.checkbox("📚 Mostrar todos los géneros (Ignorar preferencias)", value=False)
                                     
-                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, incluir_sin_stock=ver_sin_stock)
+                                    # --- NUEVO CHECKBOX DINÁMICO ---
+                                    usar_historica_forzada = False
+                                    if tiene_pref_mensual:
+                                        usar_historica_forzada = col_chk3.checkbox("📜 Ignorar pedido del mes (Usar perfil histórico)", value=False)
+                                    # --------------------------------
+
+                                    # Llamamos a la función con el nuevo parámetro
+                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(
+                                        cliente_id, 
+                                        asig_row, 
+                                        incluir_sin_stock=ver_sin_stock, 
+                                        usar_historica=usar_historica_forzada
+                                    )
+
+                                    
+                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=ver_sin_stock)
                                     
                                     if gustos_cliente:
                                         st.info(f"❤️ **Géneros preferidos del cliente:** {', '.join(gustos_cliente)}")
