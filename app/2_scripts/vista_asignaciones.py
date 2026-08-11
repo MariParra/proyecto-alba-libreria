@@ -398,11 +398,30 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
-        res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+        # ========================================================
+        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS ---
+        # ========================================================
         generos_pref = []
-        if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-            generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+        origen_preferencia = ""
+        
+        preferencia_del_mes = asig.get('preferencia_mensual')
+        
+        # 1. Prioridad 1: Preferencia del Mes
+        if pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip():
+            generos_brutos = str(preferencia_del_mes).split(',')
             generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+            origen_preferencia = "🌟 MENSUAL"
+            
+        # 2. Prioridad 2: Preferencia Histórica (Fallback)
+        else:
+            res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+            if res_susc.data and res_susc.data[0].get('generos_preferencia'):
+                generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+                generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+                origen_preferencia = "📜 HISTÓRICA"
+            else:
+                origen_preferencia = "Sin Preferencias"
+        # ========================================================
             
         libros_disponibles = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)].copy()
         
@@ -439,6 +458,8 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             "Género del Libro": str(libro_elegido.get('genero', '')),
             "Preferencias": ", ".join(generos_pref) if generos_pref else "Sin preferencias específicas",
             "Autor": libro_elegido.get('autor', ''),
+            # --- NUEVA COLUMNA EN EL PREVIEW ---
+            "Origen Preferencia": origen_preferencia
         })
         
     return propuesta, sin_asignar
