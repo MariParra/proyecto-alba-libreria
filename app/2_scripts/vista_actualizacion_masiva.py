@@ -10,7 +10,7 @@ from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 def generar_plantilla_actualizacion_libros():
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo").execute()
+        res = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita").execute()
         df = pd.DataFrame(res.data)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -66,7 +66,19 @@ def procesar_actualizacion_libros(df):
     updates, errores = 0, []
     
     columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
-    columnas_float = ['precio', 'costo']
+    columnas_float = ['precio', 'costo', 'precio_original']
+    columnas_bool = ['apto_cajita']
+
+    # Cargar datos originales para la lógica de precios
+    ids_libros = df['libro_id'].dropna().astype(int).tolist()
+    df_original = pd.DataFrame()
+    if ids_libros:
+        res_original = conn.table("libros").select("libro_id, precio, precio_original").in_("libro_id", ids_libros).execute()
+        if res_original.data:
+            df_original = pd.DataFrame(res_original.data).set_index('libro_id')
+            df_original['Dcto %'] = 0.0
+            mask_dcto = (df_original['precio_original'] > df_original['precio']) & (df_original['precio_original'] > 0)
+            df_original.loc[mask_dcto, 'Dcto %'] = (((df_original.loc[mask_dcto, 'precio_original'] - df_original.loc[mask_dcto, 'precio']) / df_original.loc[mask_dcto, 'precio_original']) * 100)
 
     for i, fila in df.iterrows():
         try:
@@ -80,14 +92,27 @@ def procesar_actualizacion_libros(df):
                 if col in fila and pd.notna(fila[col]) and col != 'libro_id':
                     if col in columnas_texto:
                         datos_update[col] = limpiar_texto_para_busqueda(str(fila[col]))
-                    
-                    # --- CORRECCIÓN CLAVE ---
-                    # Tratamos el stock estrictamente como un entero para evitar "0.0"
                     elif col == 'stock':
                         datos_update[col] = int(float(fila[col]))
-                        
                     elif col in columnas_float:
                         datos_update[col] = float(fila[col])
+                    elif col in columnas_bool:
+                        datos_update[col] = bool(fila[col])
+
+            # Lógica de Recálculo de Precios
+            if 'precio_original' in datos_update and not df_original.empty and libro_id in df_original.index:
+                nuevo_precio_orig = float(datos_update['precio_original'])
+                porcentaje_dcto_actual = float(df_original.loc[libro_id].get('Dcto %', 0))
+                
+                if porcentaje_dcto_actual > 0:
+                    factor = 1.0 - (porcentaje_dcto_actual / 100.0)
+                    datos_update['precio'] = round(nuevo_precio_orig * factor, 0)
+                else:
+                    datos_update['precio'] = nuevo_precio_orig
+            
+            if 'precio' in fila and pd.notna(fila['precio']):
+                if 'precio' not in datos_update or datos_update['precio'] != float(fila['precio']):
+                    datos_update['precio'] = float(fila['precio'])
 
             if datos_update:
                 conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
@@ -101,10 +126,8 @@ def procesar_actualizacion_clientes(df):
     conn = get_db_connection()
     updates, errores = 0, []
     
-    # Estandarizamos los nombres de las columnas del Excel
     df.columns = df.columns.str.lower().str.strip()
     
-    # Soporte para si escriben "correo" en lugar de "email"
     if 'correo' in df.columns and 'email' not in df.columns:
         df.rename(columns={'correo': 'email'}, inplace=True)
         
@@ -141,10 +164,8 @@ def mostrar_actualizacion_masiva():
     st.markdown("<h2 style='color: #4A4D7E;'>⚡ Actualización Masiva de Datos</h2>", unsafe_allow_html=True)
     st.markdown("Modifica registros de forma masiva subiendo un archivo Excel/CSV. **La columna ID es obligatoria** para aplicar los cambios.")
     
-    # Separación por pestañas para una navegación limpia
     tab_libros, tab_clientes = st.tabs(["📚 Actualizar Libros", "👥 Actualizar Clientes"])
     
-    # --- PESTAÑA 1: LIBROS ---
     with tab_libros:
         st.markdown("### 1. Descarga el Inventario Actual")
         st.caption("Obtén el archivo Excel con tus libros actuales, modifícalo en tu equipo y súbelo abajo.")
@@ -160,7 +181,6 @@ def mostrar_actualizacion_masiva():
                     use_container_width=True
                 )
         except Exception as e:
-            # --- LOGGING DE ERROR (GENERACIÓN PLANTILLA) ---
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
                 vista="vista_actualizacion_masiva", 
@@ -188,12 +208,10 @@ def mostrar_actualizacion_masiva():
                             st.error(f"⚠️ Se presentaron {len(errores)} errores durante la actualización:")
                             for err in errores: st.write(err)
                         
-                        # Limpiamos caché solo si hubo éxito para poder reintentar si falla
                         if updates > 0 and not errores:
                             st.cache_data.clear()
                             
                     except Exception as e:
-                        # --- LOGGING DE ERROR (PROCESAMIENTO ARCHIVO) ---
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
                             vista="vista_actualizacion_masiva", 
@@ -204,8 +222,6 @@ def mostrar_actualizacion_masiva():
                         st.error(f"Error crítico al procesar el archivo: {e}")
                         st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
 
-
-        # --- PESTAÑA 2: CLIENTES ---
     with tab_clientes:
         st.markdown("### 1. Descarga el Listado de Clientes Actual")
         st.caption("Obtén el archivo Excel con tus clientes actuales, edita su RUT, dirección o correo y súbelo abajo.")
@@ -221,7 +237,6 @@ def mostrar_actualizacion_masiva():
                     use_container_width=True
                 )
         except Exception as e:
-            # --- LOGGING DE ERROR (GENERACIÓN PLANTILLA CLIENTES) ---
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
                 vista="vista_actualizacion_masiva", 
@@ -239,7 +254,6 @@ def mostrar_actualizacion_masiva():
             if st.button("🚀 Aplicar Cambios en Clientes", type="primary", use_container_width=True):
                 with st.spinner("Actualizando datos de clientes en Supabase..."):
                     try:
-                        # Leemos todo como string para no romper formatos de RUT o teléfonos
                         df_cli = pd.read_excel(archivo_clientes, dtype=str) if archivo_clientes.name.endswith('.xlsx') else pd.read_csv(archivo_clientes, dtype=str)
                         updates_cli, errores_cli = procesar_actualizacion_clientes(df_cli)
                         
@@ -254,7 +268,6 @@ def mostrar_actualizacion_masiva():
                             st.cache_data.clear()
 
                     except Exception as e:
-                        # --- LOGGING DE ERROR (PROCESAMIENTO ARCHIVO CLIENTES) ---
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
                             vista="vista_actualizacion_masiva", 
@@ -264,5 +277,6 @@ def mostrar_actualizacion_masiva():
                         )
                         st.error(f"Error crítico al procesar el archivo de clientes: {e}")
                         st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
+
 if __name__ == "__main__":
     mostrar_actualizacion_masiva()
