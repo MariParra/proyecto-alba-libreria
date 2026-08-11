@@ -37,10 +37,8 @@ def cargar_catalogo_publico():
     try:
         res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        # Limpieza de datos preventiva
         if not df.empty:
             df.dropna(subset=['libro_id', 'titulo', 'precio'], inplace=True)
-            df['libro_id'] = df['libro_id'].astype(str)
         return df
     except Exception:
         return pd.DataFrame()
@@ -114,14 +112,19 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         with st.container():
             st.markdown('<div class="libro-card">', unsafe_allow_html=True)
             
-            # --- VALIDACIÓN DE URL (LA SOLUCIÓN) ---
-            libro_id_str = str(row.get('libro_id', '')).strip()
-            if libro_id_str:
-                url_imagen = f"{URL_BASE_SUPABASE}{libro_id_str}.jpg"
-                st.image(url_imagen, use_container_width=True)
+            # --- SOLUCIÓN: RENDERIZADO HTML SEGURO ---
+            try:
+                # Garantiza que el ID no tenga decimales (ej. 15.0 -> 15)
+                libro_id_limpio = str(int(float(row.get('libro_id', 0))))
+            except:
+                libro_id_limpio = ""
+
+            if libro_id_limpio and libro_id_limpio != "0":
+                url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+                # Delegamos la carga de imagen al navegador. Si falla, muestra un texto en gris
+                st.markdown(f'<img src="{url_imagen}" style="width:100%; border-radius: 5px; object-fit: contain; max-height: 250px;" onerror="this.onerror=null; this.src=\'https://via.placeholder.com/250x350?text=Sin+Portada\';">', unsafe_allow_html=True)
             else:
-                # Si no hay ID, muestra un espacio reservado
-                st.markdown("<div style='height: 200px; background-color: #f0f0f0; border-radius: 5px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 250px; background-color: #f0f0f0; border-radius: 5px; display: flex; align-items: center; justify-content: center;'><span style='color:#999'>Sin ID</span></div>", unsafe_allow_html=True)
 
             titulo_seguro = row.get('titulo', "Sin título")
             autor_seguro = row.get('autor', 'Desconocido')
@@ -134,9 +137,9 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
             
             if precio < precio_orig:
                 st.markdown(f"<span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span>", unsafe_allow_html=True)
-                st.button("➕ Añadir Oferta", key=f"add_{libro_id_str}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_str, titulo_seguro, precio))
+                st.button("➕ Añadir Oferta", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
             else:
                 st.markdown(f"<br><span class='precio-normal'>${precio:,.0f}</span>", unsafe_allow_html=True)
-                st.button("➕ Añadir al carrito", key=f"add_{libro_id_str}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_str, titulo_seguro, precio))
+                st.button("➕ Añadir al carrito", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
             
             st.markdown('</div>', unsafe_allow_html=True)
