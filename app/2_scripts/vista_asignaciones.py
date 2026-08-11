@@ -144,11 +144,11 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
         print(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
         return set()
     
-def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=False):
+def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=False, usar_historica=False):
     """
     Carga los libros disponibles para un cliente, aplicando la jerarquía de preferencias:
-    1. Preferencia Mensual (si existe)
-    2. Preferencias Históricas (si no hay mensual)
+    1. Preferencia Mensual (si existe y no se pide usar la histórica forzosamente)
+    2. Preferencias Históricas (si no hay mensual o si se fuerza su uso)
     """
     df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock, filtrar_aptos=True)
     if df_catalogo.empty or not cliente_id:
@@ -165,15 +165,14 @@ def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock
         # ========================================================
         generos_pref = []
         
-        # Primero, revisamos si la fila de la asignación tiene una preferencia mensual.
         preferencia_del_mes = asig_row.get('preferencia_mensual') if asig_row is not None else None
         
-        # 1. Prioridad 1: Preferencia del Mes
-        if preferencia_del_mes and isinstance(preferencia_del_mes, str) and preferencia_del_mes.strip():
+        # 1. Prioridad 1: Preferencia del Mes (SOLO si no forzamos la histórica)
+        if not usar_historica and preferencia_del_mes and isinstance(preferencia_del_mes, str) and preferencia_del_mes.strip():
             generos_brutos = preferencia_del_mes.split(',')
             generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
             
-        # 2. Prioridad 2: Preferencia Histórica (si no hay mensual)
+        # 2. Prioridad 2: Preferencia Histórica (si se fuerza o si no hay mensual)
         else:
             res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
             if res_susc.data and res_susc.data[0].get('generos_preferencia'):
@@ -1439,9 +1438,33 @@ def mostrar_asignaciones():
                                     
                                     asig_row = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id].iloc[0]
                                     
-                                    col_chk1, col_chk2 = st.columns(2)
+                                    # Verificamos si la clienta tiene preferencia mensual para mostrar el checkbox
+                                    preferencia_del_mes = asig_row.get('preferencia_mensual')
+                                    tiene_pref_mensual = pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip() != ""
+                                    
+                                    # Ajustamos las columnas dinámicamente
+                                    if tiene_pref_mensual:
+                                        col_chk1, col_chk2, col_chk3 = st.columns(3)
+                                    else:
+                                        col_chk1, col_chk2 = st.columns(2)
+
                                     ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock disponible", value=True)
                                     ver_todos_generos = col_chk2.checkbox("📚 Mostrar todos los géneros (Ignorar preferencias)", value=False)
+                                    
+                                    # --- NUEVO CHECKBOX DINÁMICO ---
+                                    usar_historica_forzada = False
+                                    if tiene_pref_mensual:
+                                        usar_historica_forzada = col_chk3.checkbox("📜 Ignorar pedido del mes (Usar perfil histórico)", value=False)
+                                    # --------------------------------
+
+                                    # Llamamos a la función con el nuevo parámetro
+                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(
+                                        cliente_id, 
+                                        asig_row, 
+                                        incluir_sin_stock=ver_sin_stock, 
+                                        usar_historica=usar_historica_forzada
+                                    )
+
                                     
                                     df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=ver_sin_stock)
                                     
