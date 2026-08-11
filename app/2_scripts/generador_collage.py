@@ -139,7 +139,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
 
         buf = io.BytesIO()
         img.save(buf, format='PNG')
-        return buf.getvalue()
+        return img
         
     except Exception as e:
         print(f"Error crítico en el motor de collage: {e}")

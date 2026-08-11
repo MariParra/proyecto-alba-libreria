@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io # <-- IMPORTANTE PARA CONVERTIR AL DESCARGAR
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
 
@@ -67,31 +68,24 @@ def mostrar_generador_marketing():
             ids_seleccionados = [opciones_libros[t] for t in libros_seleccionados]
             df_final = df_libros[df_libros['libro_id'].isin(ids_seleccionados)]
 
-            with st.spinner("Pintando hojas del catálogo..."):
-                hojas_generadas = [] # Guardaremos tuplas: (titulo_hoja, bytes_imagen)
+            with st.spinner("Pintando hojas del catálogo... Aguarda unos segundos."):
+                hojas_generadas = [] 
 
-                # Si agrupamos por género, iteramos sobre cada grupo
                 if agrupar_por_genero:
                     grupos = df_final.groupby('genero')
                     for genero, df_grupo in grupos:
                         titulo_base = str(genero).upper() if pd.notna(genero) else "OTROS"
-                        
-                        # Ordenamos por título y convertimos a lista de diccionarios
                         lista_data = df_grupo.sort_values('titulo').to_dict('records')
-                        
-                        # Partimos la lista en trozos (chunks) de máximo 8 libros
                         chunks = [lista_data[i:i + 8] for i in range(0, len(lista_data), 8)]
                         
                         for idx, chunk in enumerate(chunks):
-                            # Si hay más de 1 hoja para este género, le añadimos (1/2), (2/2)
                             titulo_hoja = titulo_base
                             if len(chunks) > 1:
                                 titulo_hoja += f" ({idx + 1}/{len(chunks)})"
                             
-                            img_bytes = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
-                            if img_bytes: hojas_generadas.append((titulo_hoja, img_bytes))
+                            img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
+                            if img_obj: hojas_generadas.append((titulo_hoja, img_obj))
 
-                # Si no agrupamos, simplemente partimos todo el bulto en bloques de 8
                 else:
                     titulo_base = "NOVEDADES"
                     lista_data = df_final.sort_values('titulo').to_dict('records')
@@ -99,26 +93,35 @@ def mostrar_generador_marketing():
                     
                     for idx, chunk in enumerate(chunks):
                         titulo_hoja = titulo_base if len(chunks) == 1 else f"{titulo_base} ({idx + 1}/{len(chunks)})"
-                        img_bytes = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
-                        if img_bytes: hojas_generadas.append((titulo_hoja, img_bytes))
+                        img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
+                        if img_obj: hojas_generadas.append((titulo_hoja, img_obj))
+                        
+                # Guardamos en la sesión
+                st.session_state.hojas_generadas = hojas_generadas
 
-            # --- RENDERIZADO EN PANTALLA ---
-            if not hojas_generadas:
-                st.error("No se pudo generar ninguna imagen. Revisa las configuraciones.")
-            else:
-                st.success(f"¡Se generaron {len(hojas_generadas)} hojas con éxito!")
-                
-                # Mostramos cada hoja generada en una columna para que se vea ordenado
-                columnas_render = st.columns(2)
-                for idx, (titulo_hoja, img_bytes) in enumerate(hojas_generadas):
-                    col = columnas_render[idx % 2]
-                    with col:
-                        st.image(img_bytes, caption=titulo_hoja, use_container_width=True)
-                        st.download_button(
-                            label=f"📥 Descargar {titulo_hoja}",
-                            data=img_bytes,
-                            file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
-                            mime="image/png",
-                            key=f"dl_btn_{idx}", # Clave única obligatoria para Streamlit
-                            use_container_width=True
-                        )
+    # --- RENDERIZADO EN PANTALLA ---
+    if 'hojas_generadas' in st.session_state and st.session_state.hojas_generadas:
+        hojas = st.session_state.hojas_generadas
+        st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
+        
+        with st.expander("Ver y Descargar las Hojas Generadas", expanded=True):
+            columnas_render = st.columns(3)
+            for idx, (titulo_hoja, img_obj) in enumerate(hojas):
+                col = columnas_render[idx % 3]
+                with col:
+                    # 1. MOSTRAR LA IMAGEN DE FORMA NATIVA (A PRUEBA DE FALLOS)
+                    st.image(img_obj, caption=titulo_hoja, use_column_width=True)
+                    
+                    # 2. CONVERTIRLA A BYTES SÓLO PARA EL BOTÓN DE DESCARGA
+                    buf = io.BytesIO()
+                    img_obj.save(buf, format="PNG")
+                    png_bytes = buf.getvalue()
+                    
+                    st.download_button(
+                        label=f"📥 Descargar {titulo_hoja}",
+                        data=png_bytes,
+                        file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
+                        mime="image/png",
+                        key=f"dl_btn_{idx}",
+                        use_container_width=True
+                    )
