@@ -799,22 +799,23 @@ def mostrar_asignaciones():
         with st.container(border=True):
             st.markdown("#### ✨ Asignar Preferencia Mensual a un Cliente")
             
-            # 1. Tomamos todas las preferencias guardadas (tanto mensuales como de suscripción)
-            generos_mensuales = df_mes['preferencia_mensual'].dropna().unique()
-            generos_suscripcion = df_mes['generos_preferencia'].dropna().unique()
-
-            # 2. Creamos un conjunto para almacenar géneros únicos y evitar duplicados
-            set_generos = set()
-
-            # 3. "Desempaquetamos" los strings y añadimos cada género individual al conjunto
-            for lista_str in list(generos_mensuales) + list(generos_suscripcion):
-                if isinstance(lista_str, str):
-                    generos_individuales = [g.strip().upper() for g in lista_str.split(',') if g.strip()]
-                    set_generos.update(generos_individuales)
+            # # 1. Cargamos todos los libros (incluso sin stock) para conocer el universo total de géneros
+            df_libros_completo = cargar_catalogo_completo_libros(incluir_sin_stock=True)
             
-            # 4. Convertimos el conjunto a una lista ordenada para el desplegable
+            set_generos = set()
+            if not df_libros_completo.empty and 'genero' in df_libros_completo.columns:
+                generos_raw = df_libros_completo['genero'].dropna().unique()
+                
+                # 2. Desempaquetamos y limpiamos los géneros de los libros
+                for g_str in generos_raw:
+                    if isinstance(g_str, str) and g_str.strip():
+                        # Dividimos por coma por si algún libro tiene más de un género
+                        generos_individuales = [g.strip().upper() for g in g_str.split(',') if g.strip()]
+                        set_generos.update(generos_individuales)
+            
+            # 3. Lista final limpia y ordenada
             generos_disponibles = sorted(list(set_generos))
-            # ----------------------------------------------------------------
+            # --------------------------------------------------------------
 
             clientes_disponibles = dict(zip(df_mes['nombre'], df_mes['asignacion_id']))
 
