@@ -141,14 +141,15 @@ def cargar_historial_completo():
         st.error(f"Error crítico al cargar el historial de ventas: {e}")
         return pd.DataFrame()
 
-def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion="", editorial=""):
+def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion="", editorial="", apto_cajita=True):
     conn = get_db_connection()
     datos = {
         "titulo": limpiar_texto_para_busqueda(titulo), 
         "autor": limpiar_texto_para_busqueda(autor), 
         "precio": float(precio_catalogo),
         "encuadernacion": limpiar_texto_para_busqueda(encuadernacion),
-        "editorial": limpiar_texto_para_busqueda(editorial)
+        "editorial": limpiar_texto_para_busqueda(editorial),
+        "apto_cajita": apto_cajita
     }
     
     if libro_id_existente:
@@ -197,7 +198,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
-                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''))
+                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True) )
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
                 nuevo_stock = item['stock_actual'] - item['cantidad']
@@ -419,7 +420,7 @@ def mostrar_caja():
             autores_db, editoriales_db = cargar_listas_desplegables_caja()
     
             # --- PASO 2: Inicializar TODAS las variables ---
-            l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion = None, "", "", "", 0.0, 0, 0.0, False, ""
+            l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion, l_apto_cajita = None, "", "", "", 0.0, 0, 0.0, False, "", True
             if modo_libro == "📚 Buscar Existente":
                 if not df_libros.empty:
                     sel_libro = st.selectbox("Buscar libro:", [""] + df_libros['titulo'].tolist())
@@ -466,6 +467,8 @@ def mostrar_caja():
                     l_editorial = ""
 
                 l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
+                es_tapa_dura = (l_encuadernacion == "TAPA DURA")
+                l_apto_cajita = st.checkbox("🎁 Apto para enviar en Cajitas de Suscripción", value=not es_tapa_dura)
                 
                 col_num1, col_num2 = st.columns(2)
                 l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
@@ -483,13 +486,27 @@ def mostrar_caja():
             if st.button("➕ AÑADIR AL CARRITO", use_container_width=True):
                 if not l_titulo: st.error("Debes seleccionar un libro.")
                 else:
+                    titulo_final = limpiar_texto_para_busqueda(l_titulo)
+                    autor_final = limpiar_texto_para_busqueda(l_autor)
+                    editorial_final = limpiar_texto_para_busqueda(l_editorial)
+                    encuadernacion_final = limpiar_texto_para_busqueda(l_encuadernacion)
+                    
                     st.session_state.carrito_caja.append({
-                        'libro_id': l_id, 'titulo': l_titulo, 'autor': l_autor, 'editorial': l_editorial,
-                        'precio_catalogo': l_precio_catalogo, 'precio_cobrado': precio_a_cobrar, 
-                        'cantidad': cantidad, 'subtotal': precio_a_cobrar * cantidad,
-                        'stock_actual': l_stock_actual, 'costo': l_costo, 'es_nuevo': es_nuevo,
-                        'encuadernacion': l_encuadernacion
+                        'libro_id': l_id, 
+                        'titulo': titulo_final,          
+                        'autor': autor_final,            
+                        'editorial': editorial_final,      
+                        'encuadernacion': encuadernacion_final, 
+                        'precio_catalogo': l_precio_catalogo, 
+                        'precio_cobrado': precio_a_cobrar, 
+                        'cantidad': cantidad, 
+                        'subtotal': precio_a_cobrar * cantidad,
+                        'stock_actual': l_stock_actual, 
+                        'costo': l_costo, 
+                        'es_nuevo': es_nuevo,
+                        'apto_cajita': l_apto_cajita
                     })
+                    
                     st.success(f"{l_titulo} añadido.")
                     st.rerun()
                     
@@ -527,7 +544,7 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        opciones_envio = ["Retiro en tienda", "Despacho a domicilio", "Starken", "Chilexpress", "Correos de Chile", "Acordar con vendedor", "Añadir a compra anterior", "Añadir a caja de suscripción"]
+        opciones_envio = ["Retiro en tienda", "Paket", "Bluexpress", "Envio por pagar", "Añadir a compra anterior", "Añadir a caja de suscripción"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
         valor_envio = 0.0

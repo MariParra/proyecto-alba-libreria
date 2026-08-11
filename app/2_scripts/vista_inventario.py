@@ -296,6 +296,7 @@ def mostrar_inventario():
         col_chk1, col_chk2 = st.columns(2)
         solo_descuentos = col_chk1.checkbox("🏷️ Mostrar solo libros con descuento activo", value=False)
         solo_con_stock = col_chk2.checkbox("📦 Mostrar solo libros con stock (> 0)", value=False)
+        solo_aptos_cajita = st.checkbox("🎁 Mostrar solo libros aptos para cajitas", value=False)
 
     df_filtrado = df_inventario.copy()
 
@@ -324,6 +325,10 @@ def mostrar_inventario():
         df_filtrado = df_filtrado[df_filtrado['Dcto %'] > 0]
     if solo_con_stock and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['stock'] > 0]
+        
+    if solo_aptos_cajita and not df_filtrado.empty:
+        if 'apto_cajita' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['apto_cajita'] == True]
 
     # Tabs de navegación
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
