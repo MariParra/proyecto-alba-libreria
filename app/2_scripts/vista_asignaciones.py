@@ -799,8 +799,23 @@ def mostrar_asignaciones():
         with st.container(border=True):
             st.markdown("#### ✨ Asignar Preferencia Mensual a un Cliente")
             
-            # Obtenemos los datos necesarios
-            generos_disponibles = sorted(df_mes['generos_preferencia'].dropna().unique())
+            # 1. Tomamos todas las preferencias guardadas (tanto mensuales como de suscripción)
+            generos_mensuales = df_mes['preferencia_mensual'].dropna().unique()
+            generos_suscripcion = df_mes['generos_preferencia'].dropna().unique()
+
+            # 2. Creamos un conjunto para almacenar géneros únicos y evitar duplicados
+            set_generos = set()
+
+            # 3. "Desempaquetamos" los strings y añadimos cada género individual al conjunto
+            for lista_str in list(generos_mensuales) + list(generos_suscripcion):
+                if isinstance(lista_str, str):
+                    generos_individuales = [g.strip().upper() for g in lista_str.split(',') if g.strip()]
+                    set_generos.update(generos_individuales)
+            
+            # 4. Convertimos el conjunto a una lista ordenada para el desplegable
+            generos_disponibles = sorted(list(set_generos))
+            # ----------------------------------------------------------------
+
             clientes_disponibles = dict(zip(df_mes['nombre'], df_mes['asignacion_id']))
 
             col_a1, col_a2 = st.columns(2)
