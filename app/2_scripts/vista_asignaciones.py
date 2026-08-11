@@ -1435,41 +1435,36 @@ def mostrar_asignaciones():
                                 if filas_cliente.empty:
                                     st.warning("⚠️ No se pudieron cargar los datos de este cliente. Por favor, refresca la página.")
                                 else:
-                                    
                                     asig_row = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id].iloc[0]
                                     
-                                    # Verificamos si la clienta tiene preferencia mensual para mostrar el checkbox
                                     preferencia_del_mes = asig_row.get('preferencia_mensual')
                                     tiene_pref_mensual = pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip() != ""
                                     
-                                    # Ajustamos las columnas dinámicamente
-                                    if tiene_pref_mensual:
-                                        col_chk1, col_chk2, col_chk3 = st.columns(3)
-                                    else:
-                                        col_chk1, col_chk2 = st.columns(2)
-
-                                    ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock disponible", value=True)
-                                    ver_todos_generos = col_chk2.checkbox("📚 Mostrar todos los géneros (Ignorar preferencias)", value=False)
+                                    st.write("---") # Separador visual
+                                    col_chk1, col_chk2 = st.columns(2)
+                                    ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock", value=False, key=f"chk_stock_{cliente_id}")
                                     
-                                    # --- NUEVO CHECKBOX DINÁMICO ---
+                                    # El checkbox "Ignorar pedido del mes" solo aparece si es relevante
                                     usar_historica_forzada = False
                                     if tiene_pref_mensual:
-                                        usar_historica_forzada = col_chk3.checkbox("📜 Ignorar pedido del mes (Usar perfil histórico)", value=False)
-                                    # --------------------------------
+                                        usar_historica_forzada = col_chk1.checkbox("📜 Usar preferencias de siempre", value=False, help="Ignora la preferencia del mes y usa las preferencias de siempre de la clienta.", key=f"chk_hist_{cliente_id}")
 
-                                    # Llamamos a la función con el nuevo parámetro
+                                    # El checkbox "Ignorar preferencias" se deshabilita si "Usar preferencias de siempre" está activo para evitar conflictos
+                                    ignorar_preferencias = col_chk2.checkbox("📚 Ignorar todas las preferencias", value=False, disabled=usar_historica_forzada, key=f"chk_ignorar_{cliente_id}")
+                                    st.write("---")
+                                    # --- FIN DE LA LÓGICA DE CHECKBOXES ---
+
                                     df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(
                                         cliente_id, 
                                         asig_row, 
                                         incluir_sin_stock=ver_sin_stock, 
                                         usar_historica=usar_historica_forzada
                                     )
-
                                     
-                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=ver_sin_stock)
-                                    
-                                    if gustos_cliente:
-                                        st.info(f"❤️ **Géneros preferidos del cliente:** {', '.join(gustos_cliente)}")
+                                    if ignorar_preferencias:
+                                        st.info("Mostrando todos los libros disponibles (preferencias ignoradas).")
+                                    elif gustos_cliente:
+                                        st.info(f"❤️ Géneros preferidos del cliente: **{', '.join(gustos_cliente)}**")
                                     else:
                                         st.caption("ℹ️ El cliente no registra géneros de preferencia específicos.")
                                         
@@ -1478,24 +1473,29 @@ def mostrar_asignaciones():
                                     else:
                                         df_libros_a_mostrar = df_libros_disponibles.copy()
                                         
-                                        if gustos_cliente:
+                                        # Aplicamos el filtro de géneros SOLO si no se pide ignorarlos
+                                        if gustos_cliente and not ignorar_preferencias:
                                             df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto_para_busqueda(str(x)).upper())
                                             
+                                            # Creamos la columna 'es_sugerido' para ordenar
                                             def es_sugerido(row):
                                                 return not set(gustos_cliente).isdisjoint(set(row['genero_limpio'].split()))
                                             df_libros_a_mostrar['es_sugerido'] = df_libros_a_mostrar.apply(es_sugerido, axis=1)
                                             
-                                            if not ver_todos_generos:
-                                                df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido']]
-                                                if df_libros_a_mostrar.empty:
-                                                    st.warning("⚠️ No hay libros que coincidan con sus gustos. Marca 'Mostrar todos los géneros' para ver el resto del catálogo.")
-                                                    
-                                            df_libros_a_mostrar.sort_values(by=['es_sugerido', 'titulo'], ascending=[False, True], inplace=True)
+                                            # Filtramos para mostrar SOLO los sugeridos
+                                            df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido']]
+                                            
+                                            if df_libros_a_mostrar.empty:
+                                                st.warning("⚠️ No hay libros en stock que coincidan con sus gustos. Marca 'Ignorar todas las preferencias' para ver el resto del catálogo.")
                                         else:
-                                            df_libros_a_mostrar['es_sugerido'] = False
-                                            df_libros_a_mostrar.sort_values(by='titulo', inplace=True)
+                                            df_libros_a_mostrar['es_sugerido'] = False # Si no hay gustos, nada es sugerido
+                                        
+                                        # Ordenamos: sugeridos primero, luego por título
+                                        df_libros_a_mostrar = df_libros_a_mostrar.sort_values(by=['es_sugerido', 'titulo'], ascending=[False, True])
                                             
                                         if not df_libros_a_mostrar.empty:
+                                            df_libros_a_mostrar = df_libros_a_mostrar.sort_values(by=['es_sugerido', 'stock', 'titulo'], ascending=[False, False, True])
+                                            
                                             df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
                                                 lambda row: f"⭐ {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})",
                                                 axis=1
