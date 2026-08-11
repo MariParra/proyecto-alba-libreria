@@ -8,7 +8,10 @@ app/config/credentials.json
 app/3_output_reports/
 app/4_backups/
 app/5_libreros/
-
+app/portadas_originales/
+app/2_scripts/emparejar_portadas.py
+app/sql queries
+app/1_input_data
 # --- Carpetas Deprecadas e Info ---
 info/
 deprecated_app/
@@ -17,3 +20,4 @@ app/config
 __pycache__/
 *.pyc
 
+app/emparejar_portadas.py
