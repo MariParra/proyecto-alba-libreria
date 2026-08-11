@@ -19,7 +19,7 @@ from vista_reportes import mostrar_reportes
 from vista_kanban import mostrar_kanban
 from vista_rollback import mostrar_rollback
 from vista_ventas_masivas import mostrar_ventas_masivas
-
+from vista_marketing import mostrar_generador_marketing
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -233,6 +233,10 @@ else:
             st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
             st.rerun()
 
+        if st.button("🎨 CATÁLOGO (🏗️)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)" else "secondary"):
+            st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
+            st.rerun()
+        
         st.markdown("---")
         st.markdown("### ⚙️ ADMIN AVANZADA")
         
@@ -318,6 +322,8 @@ else:
             mostrar_clientes()
         elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
             mostrar_asignaciones()
+        elif st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)":
+            mostrar_generador_marketing()
         elif st.session_state.pagina_actual == "📊 DASHBOARD":
             mostrar_dashboard()
         elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":

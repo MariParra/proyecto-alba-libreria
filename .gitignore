@@ -12,6 +12,7 @@ app/portadas_originales/
 app/2_scripts/emparejar_portadas.py
 app/sql queries
 app/1_input_data
+app/portadas_listas_para_subir
 # --- Carpetas Deprecadas e Info ---
 info/
 deprecated_app/
