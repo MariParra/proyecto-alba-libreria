@@ -1,20 +1,24 @@
+# cache_utils.py
 import streamlit as st
 import pandas as pd
 import requests
 import concurrent.futures
 from utilidades import get_db_connection
 
-# --- LÓGICA DE DATOS AISLADA PARA EVITAR EL BUG "TOKENERROR" ---
-
 @st.cache_data(ttl=120)
 def cargar_catalogo_publico():
     conn = get_db_connection()
+    # Intenta buscar la nueva columna "destacado". Si no existe, usa los fallbacks.
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
+        res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock, destacado").gt("stock", 0).gt("precio", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
-        res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        try:
+            res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        except Exception:
+            res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
+            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
     if not df.empty:
         df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
