@@ -72,7 +72,7 @@ st.markdown("""
             min-height: 430px; height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
-        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
+        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 250px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
