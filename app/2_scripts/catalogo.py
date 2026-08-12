@@ -18,57 +18,60 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS AESTHETIC Y CORRECCIONES VISUALES ---
+# --- CSS CON LA PALETA OFICIAL Y NUEVAS FUENTES ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Montserrat:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Playwrite+DE+SAS+Guides&display=swap');
         
         html, body, [class*="css"] { 
-            font-family: 'Montserrat', sans-serif; 
+            font-family: 'Lato', sans-serif; 
         }
         
+        /* Títulos principales con la fuente Playwrite */
         h1, h2, h3 { 
-            font-family: 'Playfair Display', serif !important; 
+            font-family: 'Playwrite DE SAS Guides', cursive !important; 
+            color: #dc4990 !important;
         }
         
+        /* Fondo general usando la paleta oficial (#fcf5f7) */
         .stApp { 
-            background: linear-gradient(180deg, #fefbfc 0%, #FDF2F8 100%); 
+            background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
         }
 
-        /* 🎨 NUEVO DISEÑO PARA LOS EXPANDERS (BOLSA Y FILTROS) */
+        /* 🎨 DISEÑO DE LOS EXPANDERS (BOLSA Y FILTROS) */
         [data-testid="stExpander"] {
-            background-color: white !important;
+            background-color: #ffffff !important;
             border-radius: 15px !important;
-            border: 2px solid #FBCFE8 !important; 
-            box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08) !important;
+            border: 2px solid #e790b3 !important; 
+            box-shadow: 0 4px 12px rgba(220, 73, 144, 0.1) !important;
             margin-bottom: 15px;
         }
         [data-testid="stExpander"] summary {
-            background-color: #FFF1F2 !important; 
+            background-color: #fcf5f7 !important; 
             border-radius: 12px !important;
         }
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important;
             font-weight: 700 !important;
-            color: #E11D48 !important; 
+            color: #dc4990 !important; 
         }
 
-        /* 🎨 TARJETAS DE LIBROS UNIFICADAS (EFECTO GLASS Y TIPOGRAFÍA ELEGANTE) */
+        /* 🎨 TARJETAS DE LIBROS (ESTILO GLASS CON TONOS OFICIALES) */
         .libro-card {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(251, 207, 232, 0.6);
+            border: 1px solid #fcdce8;
             border-radius: 20px; 
             padding: 20px;
             margin-bottom: 15px; 
             text-align: center; 
-            box-shadow: 0 8px 25px rgba(225, 29, 72, 0.06);
+            box-shadow: 0 8px 25px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
         }
         
         .libro-card:hover { 
             transform: translateY(-8px) scale(1.02); 
-            box-shadow: 0 15px 30px rgba(225, 29, 72, 0.15);
+            box-shadow: 0 15px 30px rgba(220, 73, 144, 0.2);
         }
         
         .libro-card img {
@@ -85,18 +88,18 @@ st.markdown("""
         }
         
         .libro-card h4 {
-            font-family: 'Playfair Display', serif !important;
-            color: #4A4D7E;
+            font-family: 'Lato', sans-serif !important;
+            color: #333333;
             font-weight: 700;
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             line-height: 1.3;
             margin-bottom: 5px;
             margin-top: 0;
         }
 
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 1rem; }
-        .precio-oferta { color: #E11D48; font-weight: 700; font-size: 1.5rem; }
-        .precio-normal { color: #4A4D7E; font-weight: 700; font-size: 1.4rem; }
+        .precio-oferta { color: #dc4990; font-weight: 700; font-size: 1.5rem; }
+        .precio-normal { color: #e471a4; font-weight: 700; font-size: 1.4rem; }
         
         /* Botón WhatsApp Flotante */
         .whatsapp-float {
@@ -160,8 +163,8 @@ def quitar_del_carrito(libro_id):
         del st.session_state.carrito_publico[libro_id]
 
 # --- CABECERA ---
-st.markdown("<h1 style='text-align: center; color: #4A4D7E; font-weight: 800; font-size: 3.2rem; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6B7280; font-size: 1.2rem; margin-top: 5px; font-style: italic;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; font-size: 2.8rem; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #e790b3; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 st.write("---")
 
 # --- BANNER DE CAJITA LITERARIA ---
@@ -174,44 +177,44 @@ st.markdown(f"""
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: linear-gradient(135deg, #FFE4E6 0%, #FBCFE8 100%);
+            background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%);
             border-radius: 20px;
             padding: 30px 40px;
             margin-bottom: 30px;
-            box-shadow: 0 10px 25px rgba(244, 114, 182, 0.2);
+            box-shadow: 0 10px 25px rgba(220, 73, 144, 0.15);
         }}
         .banner-texto {{
             flex: 1;
             padding-right: 20px;
         }}
         .banner-titulo {{
-            font-family: 'Playfair Display', serif !important;
-            color: #BE185D;
-            font-weight: 800;
-            font-size: 2.3rem;
+            font-family: 'Playwrite DE SAS Guides', cursive !important;
+            color: #ffffff;
+            font-size: 1.8rem;
             margin-bottom: 10px;
-            line-height: 1.2;
+            line-height: 1.4;
         }}
         .banner-subtitulo {{
-            color: #831843;
+            color: #fcf5f7;
             font-size: 1.1rem;
             margin-bottom: 25px;
             font-weight: 500;
         }}
         .banner-btn {{
-            background-color: #E11D48;
+            background-color: #dc4990;
             color: white !important;
             padding: 12px 30px;
             border-radius: 50px;
             text-decoration: none;
-            font-weight: 800;
+            font-weight: 700;
             font-size: 1.1rem;
-            box-shadow: 0 4px 15px rgba(225, 29, 72, 0.3);
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
             display: inline-block;
             transition: transform 0.2s ease;
         }}
         .banner-btn:hover {{
             transform: scale(1.05);
+            background-color: #e471a4;
         }}
         .banner-img-container {{
             flex: 0.8;
@@ -228,7 +231,7 @@ st.markdown(f"""
         @media (max-width: 768px) {{
             .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
             .banner-texto {{ padding-right: 0; margin-bottom: 25px; }}
-            .banner-titulo {{ font-size: 1.8rem; }}
+            .banner-titulo {{ font-size: 1.4rem; }}
             .banner-img-container {{ text-align: center; }}
             .banner-img {{ transform: rotate(0deg); }}
         }}
@@ -325,7 +328,7 @@ if filtro_autores:
 if filtro_editoriales: 
     df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
-st.markdown(f"<p style='color: #6B7280; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
 # --- CUADRÍCULA UNIFICADA ---
 columnas = st.columns(3)
@@ -343,7 +346,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         <div class="libro-card">
             <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
             <h4>{titulo_seguro}</h4>
-            <p style='color: #9CA3AF; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
+            <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
         """
         
         if precio < precio_orig:
