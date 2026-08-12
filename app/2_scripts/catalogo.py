@@ -412,7 +412,7 @@ for _, row in df_destacados.iterrows():
     """
 html_carrusel += '</div>'
 
-st.markdown(html_carrusel, unsafe_allow_html=True)
+st.st.html(html_carrusel)
 st.write("---")
 
 # =====================================================================
