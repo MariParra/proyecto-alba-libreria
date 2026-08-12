@@ -82,17 +82,17 @@ st.markdown("""
         .carrusel-container::-webkit-scrollbar-track { background: #fcf5f7; border-radius: 10px; }
         .carrusel-container::-webkit-scrollbar-thumb { background-color: #e790b3; border-radius: 10px; }
         .carrusel-item {
-            flex: 0 0 180px; background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #fcdce8; border-radius: 15px; padding: 15px;
-            text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
+            flex: 0 0 200px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #fcdce8;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.2s ease;
         }
         .carrusel-item:hover { transform: translateY(-4px); }
-        .carrusel-item img {
-            width: 100%; height: 160px; object-fit: contain;
-            border-radius: 8px; margin-bottom: 10px;
-        }
-        @media (max-width: 768px) { .carrusel-item { flex: 0 0 140px; } }
+        .carrusel-item img { width: 100%; height: 180px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }
 
         /* 🎨 TARJETAS DE LIBROS UNIFORMES */
         .libro-card {
@@ -320,8 +320,8 @@ st.markdown(f"""
         }}
         .banner-btn:hover {{ transform: scale(1.05); background-color: #e471a4; }}
         .banner-img-container {{ flex: 0.8; text-align: right; }}
-        .banner-img {{ width: 100%; max-width: 112px; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
-        @media (max-width: 768px) {{
+        .banner-img {{ width: 100%; max-width: 150px; ; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
+        @media (max-width: 150px) {{
             .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
             .banner-texto {{ padding-right: 0; margin-bottom: 25px; }}
             .banner-titulo {{ font-size: 1.8rem; }}
@@ -366,8 +366,8 @@ for _, row in df_destacados.iterrows():
     html_carrusel += f"""
     <div class="carrusel-item">
         <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';">
-        <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
-        <p style="color: #dc4990; font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;">${c_precio:,.0f}</p>
+        <p style="font-weight: 700; ...">{c_titulo}</p>
+        <p style="color: #dc4990; ...">${c_precio:,.0f}</p>
     </div>
     """
 html_carrusel += '</div>'
