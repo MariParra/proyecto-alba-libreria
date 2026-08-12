@@ -222,12 +222,30 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (CON TARJETAS Y DESLIZABLE)
+# 🎠 CARRUSEL DE DESTACADOS (SOLUCIÓN DEFINITIVA)
 # =====================================================================
+
+# --- PASO 1: AÑADE ESTA NUEVA CLASE A TU BLOQUE DE CSS PRINCIPAL ---
+# (Puedes ponerla junto a las otras reglas de CSS al inicio de tu app)
+st.markdown("""
+<style>
+    .horizontal-scroll-wrapper {
+        display: flex;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch; /* Para un deslizamiento suave en iOS */
+        scrollbar-width: none; /* Oculta la barra de scroll en Firefox */
+    }
+    .horizontal-scroll-wrapper::-webkit-scrollbar {
+        display: none; /* Oculta la barra de scroll en Chrome, Safari, etc. */
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px;'>Desliza para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-# 1. Filtro seguro de destacados
+# Filtro seguro de destacados (sin cambios)
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
 elif 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
@@ -236,63 +254,51 @@ else:
     df_destacados = df_catalogo.head(8)
 
 if not df_destacados.empty:
-    # 🔴 INICIO DEL TRUCO: Creamos un gran bloque de HTML para el carrusel
-    # que contendrá todas las tarjetas.
+    # --- PASO 2: ENVOLVEMOS TODO EN EL NUEVO CONTENEDOR ---
+    st.markdown('<div class="horizontal-scroll-wrapper">', unsafe_allow_html=True)
     
-    # Creamos un placeholder para cada botón de Streamlit
-    button_placeholders = {str(int(row.get('libro_id', 0))): st.empty() for _, row in df_destacados.iterrows()}
-    
-    # Construimos el HTML de todas las tarjetas
-    cards_html = ""
-    for _, row in df_destacados.iterrows():
-        libro_id = str(int(row.get('libro_id', 0)))
-        titulo = str(row.get('titulo', 'Sin título'))
-        autor = str(row.get('autor', 'Desconocido'))
-        precio = float(row.get('precio', 0))
-        precio_orig = float(row.get('precio_original', precio))
-        c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
-
-        # HTML para la parte superior de la tarjeta (imagen e info)
-        card_content = f"""
-            <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="width: 100%; border-radius: 8px; object-fit: contain; height: 180px; margin-bottom: 15px;">
-            <div class="info-container" style="min-height: 120px;">
-                <h4 style="font-size: 0.9rem; min-height: 2.2em;">{titulo}</h4>
-                <p style='color: #888; font-size: 0.8rem; margin: 0 0 10px 0;'>por {autor}</p>
-        """
-
-        if not pd.isna(precio_orig) and precio < precio_orig:
-            card_content += f"<div><span class='precio-tachado' style='font-size:0.8rem;'>${precio_orig:,.0f}</span> <span class='precio-oferta' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
-        else:
-            card_content += f"<div><span class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
-        
-        card_content += "</div>" # Cierre de info-container
-        
-        # Envolvemos el contenido en el div del carrusel con la clase .libro-card
-        cards_html += f'<div class="libro-card">{card_content}</div>'
-
-    # Mostramos todo el carrusel deslizable
-    st.markdown(f'<div class="carrusel-container">{cards_html}</div>', unsafe_allow_html=True)
-    
-    # 🔴 FINAL DEL TRUCO: Creamos columnas invisibles y renderizamos los botones
+    # Creamos las columnas DENTRO del wrapper
     cols = st.columns(len(df_destacados))
+    
     for i, (_, row) in enumerate(df_destacados.iterrows()):
-        libro_id = str(int(row.get('libro_id', 0)))
-        titulo = str(row.get('titulo', 'Sin título'))
-        precio = float(row.get('precio', 0.0))
-        
-        # Insertamos cada botón en su columna correspondiente
         with cols[i]:
-            st.button(
-                "✨ Lo quiero",
-                key=f"destacado_{libro_id}",
-                on_click=agregar_al_carrito,
-                args=(libro_id, titulo, precio),
-                use_container_width=True
-            )
+            # --- PASO 3: UNA TARJETA MÁS COMPACTA Y ROBUSTA ---
+            # Usamos un st.container() por cada tarjeta para aislar su contenido
+            with st.container(border=False):
+                libro_id = str(int(row.get('libro_id', 0)))
+                titulo = str(row.get('titulo', 'Sin título'))
+                autor = str(row.get('autor', 'Desconocido'))
+                precio = float(row.get('precio', 0))
+                c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
+                
+                # HTML solo para la imagen, título y precio
+                st.markdown(f"""
+                <div class="libro-card" style="width: 180px; min-height: 380px;">
+                    <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 200px;">
+                    <div class="info-container">
+                        <h4 style="font-size: 0.9rem;">{titulo}</h4>
+                        <p style='color: #888; font-size: 0.8rem;'>por {autor}</p>
+                        <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Botón funcional de Streamlit
+                st.button(
+                    "✨ Lo quiero",
+                    key=f"destacado_{libro_id}",
+                    on_click=agregar_al_carrito,
+                    args=(libro_id, titulo, precio),
+                    use_container_width=True
+                )
+
+    # Cerramos el div del wrapper
+    st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
 
 st.write("---")
+
 
 # =====================================================================
 # --- APLICAR FILTROS Y BÚSQUEDA ---
