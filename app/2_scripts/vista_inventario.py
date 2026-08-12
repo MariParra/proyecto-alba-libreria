@@ -646,9 +646,10 @@ def mostrar_inventario():
         # Seleccionamos solo las columnas necesarias para la edición
         columnas_destacados = ['libro_id', 'titulo', 'destacado']
         if 'destacado' not in df_filtrado.columns:
-            st.error("La columna 'destacado' no se pudo cargar. Refresca los datos.")
+            st.error("La columna 'destacado' no se pudo cargar en el catálogo. Intenta refrescar los datos.")
         else:
-            df_para_editar = df_filtrado[columnas_destacados].copy()
+            # Creamos una copia limpia para editar
+            df_para_editar = df_filtrado[columnas_destacados].copy().reset_index(drop=True)
 
             # Usamos st.data_editor para crear la tabla editable
             df_editado = st.data_editor(
@@ -656,31 +657,38 @@ def mostrar_inventario():
                 key="editor_destacados",
                 hide_index=True,
                 use_container_width=True,
-                disabled=['libro_id', 'titulo'], # Solo se puede editar la columna 'destacado'
+                disabled=['libro_id', 'titulo'], # Bloqueamos ID y Título
                 column_config={
+                    "libro_id": st.column_config.NumberColumn("ID", format="%d"),
+                    "titulo": st.column_config.TextColumn("Título"),
                     "destacado": st.column_config.CheckboxColumn(
-                        "¿Destacado?",
+                        "¿Destacado? ⭐",
                         default=False,
                     )
                 }
             )
 
-            # Detectamos si hay cambios para habilitar el botón de guardar
-            hay_cambios = not df_para_editar.equals(df_editado)
+            # --- DETECCIÓN DE CAMBIOS ULTRA SEGURA ---
+            # Comparamos fila por fila la columna 'destacado' para ver qué cambió
+            cambios_detectados = df_para_editar['destacado'] != df_editado['destacado']
+            hay_cambios = cambios_detectados.any()
             
+            # Botón de guardar (se habilita solo si hay cambios reales)
             if st.button("💾 Guardar Cambios en Destacados", type="primary", use_container_width=True, disabled=not hay_cambios):
-                # Filtramos solo las filas que cambiaron para no enviar datos innecesarios
-                cambios = df_para_editar.compare(df_editado)
-                filas_cambiadas_ids = cambios.index
-                df_final_para_actualizar = df_editado.loc[filas_cambiadas_ids]
+                # Filtramos únicamente las filas modificadas
+                df_final_para_actualizar = df_editado[cambios_detectados]
 
-                with st.spinner("Guardando cambios..."):
+                with st.spinner("Guardando en la base de datos de Supabase..."):
+                    # Llamamos a tu función local de actualización batch
                     num_actualizados = actualizar_destacados_batch(df_final_para_actualizar)
                 
-                st.success(f"¡Se actualizó el estado de {num_actualizados} libros!")
-                st.snow()
-                time.sleep(1.5)
-                st.rerun()
+                if num_actualizados > 0:
+                    st.success(f"¡Se actualizó el estado de {num_actualizados} libros correctamente!")
+                    st.balloons()
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.warning("No se pudieron guardar los cambios. Intenta nuevamente.")
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
