@@ -21,58 +21,79 @@ except KeyError:
 # --- CSS AESTHETIC Y CORRECCIONES VISUALES ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Montserrat:wght@300;400;600;700&display=swap');
         
         html, body, [class*="css"] { 
             font-family: 'Montserrat', sans-serif; 
         }
         
+        h1, h2, h3 { 
+            font-family: 'Playfair Display', serif !important; 
+        }
+        
         .stApp { 
-            background-color: #FDF2F8; 
+            background: linear-gradient(180deg, #fefbfc 0%, #FDF2F8 100%); 
         }
 
         /* 🎨 NUEVO DISEÑO PARA LOS EXPANDERS (BOLSA Y FILTROS) */
         [data-testid="stExpander"] {
             background-color: white !important;
             border-radius: 15px !important;
-            border: 2px solid #FBCFE8 !important; /* Borde rosado */
+            border: 2px solid #FBCFE8 !important; 
             box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08) !important;
             margin-bottom: 15px;
         }
         [data-testid="stExpander"] summary {
-            background-color: #FFF1F2 !important; /* Fondo rosa ultra suave al título */
+            background-color: #FFF1F2 !important; 
             border-radius: 12px !important;
         }
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important;
             font-weight: 700 !important;
-            color: #E11D48 !important; /* Texto fucsia brillante */
+            color: #E11D48 !important; 
         }
 
-        /* 🎨 TARJETAS DE LIBROS UNIFICADAS (CORRECCIÓN DEL ZOOM) */
+        /* 🎨 TARJETAS DE LIBROS UNIFICADAS (EFECTO GLASS Y TIPOGRAFÍA ELEGANTE) */
         .libro-card {
-            background-color: white; 
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(251, 207, 232, 0.6);
             border-radius: 20px; 
             padding: 20px;
-            margin-bottom: 15px; /* Espacio para el botón de abajo */
+            margin-bottom: 15px; 
             text-align: center; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            box-shadow: 0 8px 25px rgba(225, 29, 72, 0.06);
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
         }
         
         .libro-card:hover { 
-            transform: translateY(-8px) scale(1.03); 
+            transform: translateY(-8px) scale(1.02); 
             box-shadow: 0 15px 30px rgba(225, 29, 72, 0.15);
         }
         
         .libro-card img {
             width: 100%;
-            border-radius: 10px;
+            border-radius: 12px;
             object-fit: contain;
             max-height: 250px;
             margin-bottom: 15px;
+            transition: transform 0.3s ease;
+        }
+
+        .libro-card:hover img {
+            transform: scale(1.03);
         }
         
+        .libro-card h4 {
+            font-family: 'Playfair Display', serif !important;
+            color: #4A4D7E;
+            font-weight: 700;
+            font-size: 1.2rem;
+            line-height: 1.3;
+            margin-bottom: 5px;
+            margin-top: 0;
+        }
+
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 1rem; }
         .precio-oferta { color: #E11D48; font-weight: 700; font-size: 1.5rem; }
         .precio-normal { color: #4A4D7E; font-weight: 700; font-size: 1.4rem; }
@@ -139,16 +160,12 @@ def quitar_del_carrito(libro_id):
         del st.session_state.carrito_publico[libro_id]
 
 # --- CABECERA ---
-st.markdown("<h1 style='text-align: center; color: #4A4D7E; font-weight: 800; font-size: 3rem; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6B7280; font-size: 1.2rem; margin-top: 5px;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #4A4D7E; font-weight: 800; font-size: 3.2rem; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #6B7280; font-size: 1.2rem; margin-top: 5px; font-style: italic;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 st.write("---")
 
 # --- BANNER DE CAJITA LITERARIA ---
-
-# 🛑 IMPORTANTE: Pega aquí el link de tu Google Forms
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
-
-# (Opcional) Link de una foto de tu cajita. Si no tienes, puedes borrar esta línea y la sección de la imagen en el HTML de abajo.
 URL_FOTO_CAJITA = "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=600&auto=format&fit=crop"
 
 st.markdown(f"""
@@ -168,9 +185,10 @@ st.markdown(f"""
             padding-right: 20px;
         }}
         .banner-titulo {{
+            font-family: 'Playfair Display', serif !important;
             color: #BE185D;
             font-weight: 800;
-            font-size: 2.2rem;
+            font-size: 2.3rem;
             margin-bottom: 10px;
             line-height: 1.2;
         }}
@@ -190,6 +208,10 @@ st.markdown(f"""
             font-size: 1.1rem;
             box-shadow: 0 4px 15px rgba(225, 29, 72, 0.3);
             display: inline-block;
+            transition: transform 0.2s ease;
+        }}
+        .banner-btn:hover {{
+            transform: scale(1.05);
         }}
         .banner-img-container {{
             flex: 0.8;
@@ -225,7 +247,7 @@ st.markdown(f"""
         </div>
     </div>
 """, unsafe_allow_html=True)
-st.write("---") # Separador después del banner
+st.write("---") 
 
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
@@ -240,7 +262,7 @@ if df_catalogo.empty:
     st.stop()
 
 # =====================================================================
-# MENÚS DESPLEGABLES (AHORA LLAMATIVOS)
+# MENÚS DESPLEGABLES
 # =====================================================================
 col_menu1, col_menu2 = st.columns(2)
 
@@ -305,7 +327,7 @@ if filtro_editoriales:
 
 st.markdown(f"<p style='color: #6B7280; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
-# --- CUADRÍCULA UNIFICADA (SOLUCIÓN DEL ZOOM) ---
+# --- CUADRÍCULA UNIFICADA ---
 columnas = st.columns(3)
 for index, row in df_filtrado.reset_index(drop=True).iterrows():
     col = columnas[index % 3]
@@ -317,11 +339,10 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         precio = float(row.get('precio', 0.0))
         precio_orig = float(row.get('precio_original', precio))
 
-        # --- AHORA TODO EL HTML SE GENERA EN UN SOLO BLOQUE ---
         html_card = f"""
         <div class="libro-card">
             <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
-            <h4 style='color: #4A4D7E; font-weight: 700; font-size: 1.1rem; line-height: 1.3; margin-bottom: 5px; margin-top: 0;'>{titulo_seguro}</h4>
+            <h4>{titulo_seguro}</h4>
             <p style='color: #9CA3AF; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
         """
         
@@ -330,12 +351,10 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         else:
             html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
             
-        html_card += "</div>" # Cierre de la tarjeta
+        html_card += "</div>" 
         
-        # Pintamos la tarjeta completa
         st.markdown(html_card, unsafe_allow_html=True)
         
-        # El botón de Streamlit se coloca JUSTO DEBAJO de la tarjeta
         if precio < precio_orig:
             st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
         else:
