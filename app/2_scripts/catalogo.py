@@ -427,7 +427,7 @@ if filtro_autores:
 if filtro_editoriales: 
     df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
-st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=Code := True)
+st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
 # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
 columnas = st.columns(3)
