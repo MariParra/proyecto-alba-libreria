@@ -380,7 +380,7 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS / NOVEDADES (DESLIZABLE HORIZONTAL)
+# 🎠 CARRUSEL DE DESTACADOS / NOVEDADES (PURO HTML SEGURO)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 10px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
@@ -393,7 +393,7 @@ html_carrusel = '<div class="carrusel-container">'
 for _, row in df_destacados.iterrows():
     c_id = str(int(float(row.get('libro_id', 0))))
     c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
-    c_titulo = row.get('titulo', 'Sin título')
+    c_titulo = str(row.get('titulo', 'Sin título'))
     c_precio = float(row.get('precio', 0))
     
     html_carrusel += f"""
@@ -406,16 +406,6 @@ for _, row in df_destacados.iterrows():
 html_carrusel += '</div>'
 
 st.markdown(html_carrusel, unsafe_allow_html=True)
-
-# Botones de añadir para el carrusel (organizados dinámicamente)
-cols_car_btns = st.columns(min(len(df_destacados), 4))
-for idx, (_, row) in enumerate(df_destacados.head(4).iterrows()):
-    with cols_car_btns[idx]:
-        c_id = str(int(float(row.get('libro_id', 0))))
-        c_titulo = row.get('titulo', 'Sin título')
-        c_precio = float(row.get('precio', 0))
-        st.button("✨ Añadir", key=f"dest_btn_{c_id}", use_container_width=True, on_click=agregar_al_carrito, args=(c_id, c_titulo, c_precio))
-
 st.write("---")
 
 # =====================================================================
@@ -437,7 +427,7 @@ if filtro_autores:
 if filtro_editoriales: 
     df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
-st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=Code := True)
 
 # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
 columnas = st.columns(3)
@@ -467,10 +457,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         
         st.markdown(html_card, unsafe_allow_html=True)
         
-        if precio < precio_orig:
-            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
-        else:
-            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, libro_id_limpio, precio)) # Se ajustó de forma limpia
+        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
