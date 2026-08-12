@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import io 
+import base64 # <-- Nueva librería para el truco HTML
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
 
 @st.cache_data(ttl=60)
 def cargar_libros_para_marketing():
-    """Carga todos los libros del catálogo, incluyendo los que no tienen stock."""
     from utilidades import get_db_connection
     conn = get_db_connection()
     try:
@@ -72,7 +72,7 @@ def mostrar_generador_marketing():
             df_final = df_libros[df_libros['libro_id'].isin(ids_seleccionados)].copy()
             st.session_state.hojas_generadas = []
 
-            with st.spinner("Pintando hojas del catálogo..."):
+            with st.spinner("Pintando hojas del catálogo... Aguarda un momento."):
                 if agrupar_por_genero:
                     for genero, df_grupo in df_final.groupby('genero'):
                         titulo_base = str(genero).upper() if pd.notna(genero) else "OTROS"
@@ -93,19 +93,26 @@ def mostrar_generador_marketing():
     if 'hojas_generadas' in st.session_state and st.session_state.hojas_generadas:
         hojas = st.session_state.hojas_generadas
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
+        
         with st.expander("Ver y Descargar las Hojas Generadas", expanded=True):
             columnas_render = st.columns(3)
             for idx, (titulo_hoja, img_obj) in enumerate(hojas):
                 col = columnas_render[idx % 3]
                 with col:
-                    # --- LA SOLUCIÓN MÁGICA: Convertir a bytes ANTES de mostrar ---
+                    # 1. Obtenemos los bytes de la imagen para la descarga
                     buf = io.BytesIO()
                     img_obj.save(buf, format="PNG")
                     img_bytes = buf.getvalue()
                     
-                    # Streamlit recibe bytes (lenguaje universal), no el objeto crudo
-                    st.image(img_bytes, caption=titulo_hoja, use_container_width=True)
+                    # 2. EL TRUCO HTML: Codificamos en Base64 para saltarnos st.image()
+                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                    html_str = f"""
+                    <div style="text-align: center; margin-bottom: 5px; color: #4A4D7E; font-weight: bold;">{titulo_hoja}</div>
+                    <img src="data:image/png;base64,{b64_img}" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 10px;">
+                    """
+                    st.markdown(html_str, unsafe_allow_html=True)
                     
+                    # 3. El botón de descarga usa los bytes crudos (esto siempre funcionó bien)
                     st.download_button(
                         label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
                         file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
