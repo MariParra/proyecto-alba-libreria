@@ -192,72 +192,120 @@ busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor,
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =====================================================================
-# 🎪 MEGA CARRUSEL PRINCIPAL (BANNER + DESTACADOS + OFERTAS)
+# 🎪 ENRUTADOR DE SUBPÁGINAS Y MEGA CARRUSEL DE BANNERS
 # =====================================================================
-from streamlit_carousel import carousel
+# Leemos la URL para saber si el usuario hizo clic en algún banner
+seccion_actual = st.query_params.get("seccion", "inicio")
 
-st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>✨ Novedades y Ofertas Mágicas</h3>", unsafe_allow_html=True)
+if seccion_actual == "inicio":
+    # --- 1. ESTAMOS EN EL INICIO: MOSTRAMOS EL MEGA CARRUSEL ---
+    LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
+    URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
+    URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
-items_carrusel = []
+    html_mega_carrusel = f"""
+    <style>
+        /* Contenedor del scroll nativo y fluido */
+        .mega-carrusel-wrapper {{
+            display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+            gap: 20px; padding-bottom: 20px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+        }}
+        .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
+        
+        /* Diseño base de los 3 Banners */
+        .banner-promo {{
+            flex: 0 0 100%; scroll-snap-align: center; border-radius: 20px; 
+            padding: 25px 30px; box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            display: flex; align-items: center; justify-content: space-between;
+            text-decoration: none !important;
+        }}
+        @media (min-width: 768px) {{
+            /* En PC, hacemos que ocupen un 48% para que se vean 2 a la vez y se intuya el scroll */
+            .banner-promo {{ flex: 0 0 calc(50% - 10px); }} 
+        }}
+        
+        /* Degradados mágicos para cada banner */
+        .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
+        .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
+        .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
+        
+        /* Textos y Botones */
+        .banner-texto {{ flex: 1; padding-right: 15px; }}
+        .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
+        .banner-subtitulo {{ color: #ffffff; font-size: 1rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
+        .banner-btn {{ 
+            background-color: #ffffff; padding: 10px 25px; border-radius: 50px; 
+            font-weight: 700; font-size: 0.95rem; display: inline-block; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
+        }}
+        .banner-btn:hover {{ transform: scale(1.05); }}
+        
+        /* Imágenes */
+        .banner-img-container {{ flex: 0.4; text-align: right; }}
+        .banner-img-container img {{ width: 100%; max-width: 120px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
+        .img-icono {{ transform: rotate(0deg) !important; max-width: 90px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
+    </style>
 
-# --- 1. PRIMERA DIAPOSITIVA: EL BANNER DE LA CAJITA LITERARIA ---
-LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
-URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
+    <div class="mega-carrusel-wrapper">
+        <!-- BANNER 1: CAJITA -->
+        <div class="banner-promo bg-cajita">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Cajita Literaria ✨</h2>
+                <p class="banner-subtitulo">Libro sorpresa, regalitos y magia mensual.</p>
+                <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn" style="color: #dc4990 !important;">📝 SUSCRIBIRME</a>
+            </div>
+            <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
+        </div>
 
-items_carrusel.append({
-    "title": "🎁 Pide hoy tu cajita literaria",
-    "text": "Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta. ¡Haz clic aquí para suscribirte!",
-    "img": URL_FOTO_CAJITA,
-    "link": LINK_FORMULARIO_SUSCRIPCION
-})
+        <!-- BANNER 2: DESTACADOS (El href "?seccion=..." recarga la página filtrando) -->
+        <div class="banner-promo bg-destacados">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Destacados ⭐</h2>
+                <p class="banner-subtitulo">Las mejores historias seleccionadas para ti.</p>
+                <a href="?seccion=destacados" target="_self" class="banner-btn" style="color: #9283e0 !important;">📚 VER LIBROS</a>
+            </div>
+            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
+        </div>
 
-# --- 2. SIGUIENTES DIAPOSITIVAS: LIBROS DESTACADOS ---
-# Verificamos si existe la columna destacado
-ids_destacados = []
-if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
-    df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(5) # Tomamos max 5
+        <!-- BANNER 3: OFERTAS -->
+        <div class="banner-promo bg-ofertas">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Ofertas 🔥</h2>
+                <p class="banner-subtitulo">Descuentos mágicos en nuestro catálogo.</p>
+                <a href="?seccion=ofertas" target="_self" class="banner-btn" style="color: #e88c71 !important;">💸 VER OFERTAS</a>
+            </div>
+            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
+        </div>
+    </div>
+    """
+    st.markdown(html_mega_carrusel, unsafe_allow_html=True)
+    st.write("---")
     
-    for _, row in df_destacados.iterrows():
-        libro_id = str(int(float(row.get('libro_id', 0))))
-        ids_destacados.append(libro_id) # Guardamos el ID para no repetirlo en ofertas
-        titulo = str(row.get('titulo', 'Sin título'))
-        autor = str(row.get('autor', 'Desconocido'))
-        c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
-        
-        items_carrusel.append({
-            "title": f"⭐ DESTACADO: {titulo}",
-            "text": f"por {autor} - ¡Descúbrelo en nuestro catálogo!",
-            "img": c_url,
-            "link": "#" # Puedes dejarlo con "#" si no quieres que el clic haga nada extra
-        })
+    # Como estamos en inicio, la base de datos a mostrar es el catálogo completo
+    df_base = df_catalogo.copy()
 
-# --- 3. ÚLTIMAS DIAPOSITIVAS: LIBROS EN OFERTA ---
-# Filtramos donde precio sea menor a precio_original
-if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
-    # Máscara: Precio menor al original Y que el libro no esté ya en destacados
-    mascara_ofertas = (df_catalogo['precio'] < df_catalogo['precio_original']) & (~df_catalogo['libro_id'].astype(str).isin(ids_destacados))
-    df_ofertas = df_catalogo[mascara_ofertas].head(5) # Tomamos max 5
+elif seccion_actual == "destacados":
+    # --- 2. SUBPÁGINA: DESTACADOS ---
+    st.markdown("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
+    # Botón "Volver" apuntando a "?" que limpia la URL y regresa al inicio
+    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
     
-    for _, row in df_ofertas.iterrows():
-        libro_id = str(int(float(row.get('libro_id', 0))))
-        titulo = str(row.get('titulo', 'Sin título'))
-        precio = float(row.get('precio', 0))
-        precio_orig = float(row.get('precio_original', 0))
-        c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
-        
-        # Calculamos el % de descuento para mostrarlo en el texto
-        dcto = int(((precio_orig - precio) / precio_orig) * 100) if precio_orig > 0 else 0
-        
-        items_carrusel.append({
-            "title": f"🔥 OFERTA -{dcto}%: {titulo}",
-            "text": f"Antes ${precio_orig:,.0f} | AHORA ${precio:,.0f}",
-            "img": c_url,
-            "link": "#"
-        })
+    # Filtramos la base de datos SOLAMENTE para los destacados
+    if 'destacado' in df_catalogo.columns:
+        df_base = df_catalogo[df_catalogo['destacado'] == True]
+    else:
+        df_base = df_catalogo.head(0) # Vacío si no existe la columna
 
-# --- RENDERIZAR EL MEGA CARRUSEL ---
-# width=1 hace que el carrusel ocupe todo el ancho disponible del contenedor central
-carousel(items=items_carrusel, width=1)
+elif seccion_actual == "ofertas":
+    # --- 3. SUBPÁGINA: OFERTAS ---
+    st.markdown("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
+    
+    # Filtramos la base de datos usando tu lógica matemática de precio < precio_original
+    if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
+        df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
+    else:
+        df_base = df_catalogo.head(0)
 
 # =====================================================================
 # --- APLICAR FILTROS Y BÚSQUEDA ---
