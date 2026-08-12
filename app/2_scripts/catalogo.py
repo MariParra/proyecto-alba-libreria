@@ -56,6 +56,33 @@ st.markdown("""
 
         [data-testid="stSidebar"] { display: none !important; }
         
+        /* 1. Contenedor principal: Fondo blanco y borde rosa sutil */
+        [data-testid="stMultiSelect"] {
+            border: 2px solid #e790b3 !important;
+            background-color: #ffffff !important;
+            border-radius: 10px !important;
+            box-shadow: 0 2px 8px rgba(220, 73, 144, 0.05) !important;
+        }
+        
+        /* 2. Estilo del texto "Elige una opción" (Gris suave y cursiva) */
+        [data-testid="stMultiSelect"] .st-d5 {
+            color: #9CA3AF !important;
+            font-style: italic !important;
+        }
+        
+        /* 3. Las etiquetas seleccionadas: Fondo fucsia con letras blancas */
+        [data-testid="stMultiSelect"] .st-c5 {
+            background-color: #dc4990 !important;
+            color: white !important;
+            border-radius: 6px !important;
+            font-weight: bold !important;
+        }
+        
+        /* El icono 'x' para quitar una etiqueta se vuelve blanco */
+        [data-testid="stMultiSelect"] .st-c5 svg {
+            fill: white !important;
+        }
+        
         .navbar-fija {
             position: sticky;
             top: 2.8rem; 
@@ -287,8 +314,8 @@ with col_nav2:
         generos_disp = sorted(df_catalogo['genero'].dropna().unique())
         autores_disp = sorted(df_catalogo['autor'].dropna().unique())
         
-        filtro_generos = st.multiselect("📖 Géneros:", generos_disp)
-        filtro_autores = st.multiselect("✍️ Autores:", autores_disp)
+        filtro_generos = st.multiselect("📖 Géneros:", generos_disp, placeholder="Elige uno o más géneros...")
+        filtro_autores = st.multiselect("✍️ Autores:", autores_disp, placeholder="Elige uno o más autores...")
         
         filtro_editoriales = []
         if 'editorial' in df_catalogo.columns:
