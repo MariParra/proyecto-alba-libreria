@@ -204,64 +204,87 @@ if seccion_actual == "inicio":
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
     html_mega_carrusel = f"""
-        <style>
-            /* Contenedor del scroll nativo y fluido */
-            .mega-carrusel-wrapper {{
-                display: flex;
-                overflow-x: auto;
-                scroll-snap-type: x mandatory;
-                gap: 20px;
-                padding: 20px 10px; /* Añadimos padding para que no se pegue a los bordes */
-                scrollbar-width: none;
-                -webkit-overflow-scrolling: touch;
-            }}
-            .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
-            
-            /* Diseño base de los Banners */
-            .banner-promo {{
-                scroll-snap-align: start; /* Mejor alineación para el scroll */
-                border-radius: 20px; 
-                padding: 25px 30px;
-                box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                text-decoration: none !important;
+    <style>
+        .mega-carrusel-wrapper {{
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            gap: 20px;
+            padding: 20px 10px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }}
+        .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
+        
+        .banner-promo {{
+            scroll-snap-align: start;
+            border-radius: 20px; 
+            padding: 25px 30px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            text-decoration: none !important;
+            width: 380px; 
+            flex-shrink: 0;
+        }}
+        
+        .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
+        .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
+        .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
+        
+        .banner-texto {{ flex: 1; padding-right: 15px; }}
+        .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
+        .banner-subtitulo {{ color: #ffffff; font-size: 1rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
+        .banner-btn {{ 
+            background-color: #ffffff; padding: 10px 25px; border-radius: 50px; 
+            font-weight: 700; font-size: 0.95rem; display: inline-block; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
+        }}
+        .banner-btn:hover {{ transform: scale(1.05); }}
+        
+        .banner-img-container {{ flex: 0.4; text-align: right; }}
+        .banner-img-container img {{ width: 100%; max-width: 120px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
+        .img-icono {{ transform: rotate(0deg) !important; max-width: 90px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
+    </style>
 
-                /* --- AJUSTE CLAVE --- */
-                /* Ancho fijo para cada banner, asegurando que se desborden */
-                width: 380px; 
-                flex-shrink: 0; /* Evita que los banners se encojan */
-            }}
-            
-            /* Degradados y estilos de texto (sin cambios) */
-            .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
-            .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
-            .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
-            .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; }}
-            /* ... resto de tu CSS de texto y botones ... */
-        </style>
-
-        <div class="mega-carrusel-wrapper">
-            
-            <!-- BANNER 1: OFERTAS -->
-            <div class="banner-promo bg-ofertas">
-                <!-- Contenido del banner de ofertas... -->
+    <div class="mega-carrusel-wrapper">
+        
+        <!-- BANNER 1: OFERTAS -->
+        <a href="?seccion=ofertas" target="_self" class="banner-promo bg-ofertas">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Ofertas 🔥</h2>
+                <p class="banner-subtitulo">Descuentos mágicos en nuestro catálogo.</p>
+                <span class="banner-btn" style="color: #e88c71 !important;">💸 VER OFERTAS</span>
             </div>
+            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
+        </a>
 
-            <!-- BANNER 2: CAJITA LITERARIA -->
-            <div class="banner-promo bg-cajita">
-                <!-- Contenido del banner de cajita... -->
+        <!-- BANNER 2: CAJITA LITERARIA -->
+        <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-promo bg-cajita">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Cajita Literaria ✨</h2>
+                <p class="banner-subtitulo">Libro sorpresa, regalitos y magia mensual.</p>
+                <span class="banner-btn" style="color: #dc4990 !important;">📝 SUSCRIBIRME</span>
             </div>
+            <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
+        </a>
 
-            <!-- BANNER 3: DESTACADOS -->
-            <div class="banner-promo bg-destacados">
-                <!-- Contenido del banner de destacados... -->
+        <!-- BANNER 3: DESTACADOS -->
+        <a href="?seccion=destacados" target="_self" class="banner-promo bg-destacados">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Destacados ⭐</h2>
+                <p class="banner-subtitulo">Las mejores historias seleccionadas para ti.</p>
+                <span class="banner-btn" style="color: #9283e0 !important;">📚 VER LIBROS</span>
             </div>
+            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
+        </a>
 
-        </div>
+    </div>
     """
-# (Asegúrate de que el contenido de los banners que omití por brevedad esté completo)
+    st.html(html_mega_carrusel)
+    st.write("---")
+    
 
     
     # NUEVO METODO RECOMENDADO POR STREAMLIT
