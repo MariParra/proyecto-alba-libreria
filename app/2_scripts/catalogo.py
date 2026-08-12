@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # ====================================================
-# ⚙️ CARGA SEGURA DE CONFIGURACIÓN DESDE st.secrets
+# ⚙️ CARGA SEGURA DE CONFIGURACIÓN
 # ====================================================
 try:
     NUMERO_WHATSAPP = st.secrets["catalogo_publico"]["whatsapp_numero"]
@@ -21,169 +21,78 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS CON LA PALETA OFICIAL, NUEVAS FUENTES Y DISEÑO PREMIUM ---
+# --- CSS BASE ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
         
-        html, body, [class*="css"] { 
-            font-family: 'Lato', sans-serif; 
-        }
+        html, body, [class*="css"] { font-family: 'Lato', sans-serif; }
         
-        h1, h2, h3, .banner-titulo { 
-            font-family: 'Dancing Script', cursive !important; 
-            color: #dc4990 !important; 
-        }
+        h1, h2, h3, .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #dc4990 !important; }
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 140px; /* Espacio para que la barra de navegación fija no tape el contenido */
+            padding-top: 180px; /* MUCHO MÁS ESPACIO PARA LA NAVBAR DE 2 FILAS */
         }
 
+        /* DISEÑO EXPANDERS (BOLSA) */
         [data-testid="stExpander"] {
-            background-color: #ffffff !important; 
-            border-radius: 15px !important;
-            border: 2px solid #e790b3 !important; 
-            box-shadow: 0 4px 12px rgba(220, 73, 144, 0.1) !important; 
-            margin-bottom: 15px;
+            background-color: #ffffff !important; border-radius: 15px !important;
+            border: 2px solid #e790b3 !important; box-shadow: 0 4px 12px rgba(220, 73, 144, 0.1) !important; margin-bottom: 10px;
         }
-        [data-testid="stExpander"] summary { 
-            background-color: #fcf5f7 !important; 
-            border-radius: 12px !important; 
-        }
-        [data-testid="stExpander"] summary p { 
-            font-size: 1.15rem !important; 
-            font-weight: 700 !important; 
-            color: #dc4990 !important; 
-        }
+        [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
+        [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
 
-        /* Filtros Multiselect Premium (Fucsia más claro: #F472B6) */
-        [data-testid="stMultiSelect"] { 
-            border: 2px solid #e790b3 !important; 
-            background-color: #ffffff !important; 
-            border-radius: 10px !important; 
-        }
-        [data-testid="stMultiSelect"] .st-d5 { 
-            color: #9CA3AF !important; 
-            font-style: italic !important; 
-        }
+        /* NUEVOS FILTROS FUCSIA CLARO PARA MAYOR CONTRASTE */
+        [data-testid="stMultiSelect"] { border: 2px solid #F472B6 !important; background-color: #ffffff !important; border-radius: 10px !important; }
+        [data-testid="stMultiSelect"] .st-d5 { color: #9CA3AF !important; font-style: italic !important; }
         [data-testid="stMultiSelect"] .st-c5 {
-            background-color: #F472B6 !important; 
-            color: white !important; 
-            border-radius: 6px !important; 
-            font-weight: bold !important;
+            background-color: #F472B6 !important; /* Fucsia más claro */
+            color: white !important; border-radius: 6px !important; font-weight: bold !important;
         }
-        [data-testid="stMultiSelect"] .st-c5 svg { 
-            fill: white !important; 
-        }
+        [data-testid="stMultiSelect"] .st-c5 svg { fill: white !important; }
 
         [data-testid="stSidebar"] { display: none !important; }
 
-        /* MENÚ SUPERIOR FIJO (2 FILAS) */
+        /* NAVBAR SUPERIOR FIJA (NUEVO DISEÑO 2 FILAS) */
         .navbar-fija {
-            position: fixed; 
-            top: 0rem; 
-            z-index: 9999;
-            background: rgba(255, 255, 255, 0.90); 
-            backdrop-filter: blur(10px);
-            padding: 15px 20px 10px 20px; 
-            border-bottom: 2px solid #e790b3;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
-            width: 100%; 
-            left: 0;
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            padding: 15px 20px 15px 20px; border-bottom: 2px solid #e790b3;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
         
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* CARRUSEL DE NOVEDADES */
-        .carrusel-container { 
-            display: flex; 
-            overflow-x: auto; 
-            scroll-behavior: smooth; 
-            gap: 15px; 
-            padding: 10px 5px 20px 5px; 
-            scrollbar-width: thin; 
-            scrollbar-color: #e790b3 #fcf5f7; 
-        }
-        .carrusel-container::-webkit-scrollbar { height: 8px; }
-        .carrusel-container::-webkit-scrollbar-track { background: #fcf5f7; border-radius: 10px; }
-        .carrusel-container::-webkit-scrollbar-thumb { background-color: #e790b3; border-radius: 10px; }
-        .carrusel-item { 
-            flex: 0 0 160px; 
-            background: rgba(255, 255, 255, 0.9); 
-            border: 1px solid #fcdce8; 
-            border-radius: 15px; 
-            padding: 15px; 
-            text-align: center; 
-            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); 
-            transition: transform 0.2s ease; 
-        }
-        .carrusel-item:hover { transform: translateY(-4px); }
-        .carrusel-item img { width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }
-
         /* TARJETAS DE LIBROS UNIFORMES Y COMPACTAS */
         .libro-card {
-            background: rgba(255, 255, 255, 0.9); 
-            border: 1px solid #fcdce8; 
-            border-radius: 20px; 
-            padding: 15px; 
-            margin-bottom: 15px; 
-            text-align: center; 
-            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
-            transition: transform 0.3s ease, box-shadow 0.3s ease; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: space-between;
-            min-height: 430px; 
-            height: 100%;
+            background: rgba(255, 255, 255, 0.9); border: 1px solid #fcdce8; border-radius: 20px; 
+            padding: 15px; margin-bottom: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
+            min-height: 430px; height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
         .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
-            font-family: 'Lato', sans-serif !important; 
-            color: #333333; 
-            font-weight: 700; 
-            font-size: 1.05rem;
-            line-height: 1.3; 
-            margin-top: 10px; 
-            margin-bottom: 5px; 
-            min-height: 2.6em;
+            font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
+            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 2.6em;
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
         .precio-oferta { color: #dc4990; font-weight: 700; font-size: 1.3rem; }
         .precio-normal { color: #e471a4; font-weight: 700; font-size: 1.2rem; }
         
-        /* BOTÓN "LO QUIERO" EN COLOR ROSADO OFICIAL */
+        /* BOTÓN "LO QUIERO" */
         [data-testid="stButton"] button {
-            background-color: #fcdce8 !important; 
-            color: #333333 !important; 
-            border: 1px solid #e790b3 !important; 
-            font-weight: bold !important; 
-            border-radius: 10px !important; 
-            width: 100%;
+            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%;
         }
         [data-testid="stButton"] button:hover { background-color: #e790b3 !important; color: white !important; }
 
         /* Botón WhatsApp Flotante */
         .whatsapp-float {
-            position: fixed; 
-            bottom: 40px; 
-            right: 40px; 
-            background-color: #25D366; 
-            color: white !important; 
-            border-radius: 50px; 
-            padding: 15px 30px;
-            font-size: 18px; 
-            font-weight: 700; 
-            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4); 
-            z-index: 1000; 
-            text-decoration: none; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            transition: background-color 0.3s ease;
+            position: fixed; bottom: 40px; right: 40px; background-color: #25D366; color: white !important; border-radius: 50px; padding: 15px 30px;
+            font-size: 18px; font-weight: 700; box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4); z-index: 1000; text-decoration: none; display: flex; align-items: center; justify-content: center; transition: background-color 0.3s ease;
         }
         .whatsapp-float:hover { background-color: #128C7E; }
         @media (max-width: 768px) { .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; } }
@@ -198,6 +107,17 @@ st.markdown("""
 if 'carrito_publico' not in st.session_state:
     st.session_state.carrito_publico = {}
 
+def agregar_al_carrito(libro_id, titulo, precio):
+    if libro_id in st.session_state.carrito_publico:
+        st.session_state.carrito_publico[libro_id]['cantidad'] += 1
+    else:
+        st.session_state.carrito_publico[libro_id] = {'titulo': titulo, 'precio': precio, 'cantidad': 1}
+    st.toast(f"✅ ¡Añadido a tu bolsa: '{titulo}'!")
+
+def quitar_del_carrito(libro_id):
+    if libro_id in st.session_state.carrito_publico:
+        del st.session_state.carrito_publico[libro_id]
+
 # --- CABECERA PRINCIPAL CON ICONO ---
 st.markdown("""
 <div class="header-container">
@@ -207,7 +127,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
-# Carga de datos aislada
+# CARGA DE DATOS DESDE CACHE_UTILS
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
     st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
@@ -225,33 +145,21 @@ autores_disp = sorted(df_catalogo['autor'].dropna().unique())
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
 # =====================================================================
-# MENÚ SUPERIOR FIJO: FILA 1 (Filtros y Bolsa) | FILA 2 (Buscador)
+# NAVBAR SUPERIOR FIJA: FILA 1 (Filtros y Bolsa) | FILA 2 (Buscador)
 # =====================================================================
-def agregar_al_carrito(libro_id, titulo, precio):
-    if libro_id in st.session_state.carrito_publico:
-        st.session_state.carrito_publico[libro_id]['cantidad'] += 1
-    else:
-        st.session_state.carrito_publico[libro_id] = {'titulo': titulo, 'precio': precio, 'cantidad': 1}
-    st.toast(f"✅ ¡Añadido a tu bolsa: '{titulo}'!")
-
-def quitar_del_carrito(libro_id):
-    if libro_id in st.session_state.carrito_publico:
-        del st.session_state.carrito_publico[libro_id]
-        
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 
-# FILA 1
+# FILA 1: Filtros Expuestos y Bolsa Expandible
 col_filtros, col_bolsa = st.columns([3, 1])
 
 with col_filtros:
-    with st.expander("⚙️ Filtrar Catálogo", expanded=False):
-        cf1, cf2, cf3 = st.columns(3)
-        with cf1:
-            filtro_generos = st.multiselect("📖 Géneros:", generos_disp, placeholder="Géneros...")
-        with cf2:
-            filtro_autores = st.multiselect("✍️ Autores:", autores_disp, placeholder="Autores...")
-        with cf3:
-            filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp, placeholder="Editoriales...") if editoriales_disp else []
+    cf1, cf2, cf3 = st.columns(3)
+    with cf1:
+        filtro_generos = st.multiselect("📖 Géneros:", generos_disp, placeholder="Géneros...")
+    with cf2:
+        filtro_autores = st.multiselect("✍️ Autores:", autores_disp, placeholder="Autores...")
+    with cf3:
+        filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp, placeholder="Editoriales...") if editoriales_disp else []
 
 with col_bolsa:
     total_articulos = sum(item['cantidad'] for item in st.session_state.get('carrito_publico', {}).values())
@@ -280,45 +188,33 @@ with col_bolsa:
             mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n¡Quedo atenta, muchas gracias!"
             
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={urllib.parse.quote(mensaje_wa)}"
-            st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:15px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
-# FILA 2 (Buscador ocupando todo el ancho abajo)
+st.write("") # Pequeño separador visual entre filas
+
+# FILA 2: Buscador
 busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
+
 # =====================================================================
-# 7) BANNER DE CAJITA LITERARIA REDIMENSIONADA (max-width: 120px)
+# BANNER DE CAJITA LITERARIA REDIMENSIONADA
 # =====================================================================
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
 URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
 
 st.markdown(f"""
     <style>
-        .banner-cajita {{
-            display: flex; align-items: center; justify-content: space-between;
-            background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%);
-            border-radius: 20px; padding: 25px 30px; margin-top: 20px; margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(220, 73, 144, 0.15);
-        }}
+        .banner-cajita {{ display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); border-radius: 20px; padding: 25px 30px; margin-top: 10px; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(220, 73, 144, 0.15); }}
         .banner-texto {{ flex: 1; padding-right: 15px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2rem; margin-bottom: 8px; line-height: 1.2; }}
         .banner-subtitulo {{ color: #ffffff; font-size: 1rem; margin-bottom: 20px; font-weight: 500; }}
-        .banner-btn {{
-            background-color: #dc4990; color: white !important; padding: 10px 25px;
-            border-radius: 50px; text-decoration: none; font-weight: 700; font-size: 1rem;
-            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3); display: inline-block; transition: transform 0.2s ease;
-        }}
+        .banner-btn {{ background-color: #dc4990; color: white !important; padding: 10px 25px; border-radius: 50px; text-decoration: none; font-weight: 700; font-size: 1rem; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3); display: inline-block; transition: transform 0.2s ease; }}
         .banner-btn:hover {{ transform: scale(1.05); background-color: #e471a4; }}
         .banner-img-container {{ flex: 0.5; text-align: right; display: flex; justify-content: flex-end; align-items: center; }}
         .banner-img {{ width: 100%; max-width: 120px !important; height: auto; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
-        
-        @media (max-width: 768px) {{
-            .banner-cajita {{ flex-direction: column; text-align: center; padding: 20px 15px; }}
-            .banner-texto {{ padding-right: 0; margin-bottom: 20px; }}
-            .banner-img-container {{ text-align: center; justify-content: center; }}
-            .banner-img {{ transform: rotate(0deg); max-width: 120px !important; }}
-        }}
+        @media (max-width: 768px) {{ .banner-cajita {{ flex-direction: column; text-align: center; padding: 20px 15px; }} .banner-texto {{ padding-right: 0; margin-bottom: 20px; }} .banner-img-container {{ text-align: center; justify-content: center; }} .banner-img {{ transform: rotate(0deg); max-width: 120px !important; }} }}
     </style>
     <div class="banner-cajita">
         <div class="banner-texto">
@@ -326,20 +222,17 @@ st.markdown(f"""
             <p class="banner-subtitulo">Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta.</p>
             <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn">📝 ¡SUSCRIBIRME!</a>
         </div>
-        <div class="banner-img-container">
-            <img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria Alba">
-        </div>
+        <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria"></div>
     </div>
 """, unsafe_allow_html=True)
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (CON LÓGICA DE APP ADMIN)
+# 🎠 CARRUSEL DE DESTACADOS
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-# Lógica de destacados basada en la nueva columna de Supabase
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True]
 elif 'precio_original' in df_catalogo.columns:
@@ -360,20 +253,19 @@ for _, row in df_destacados.iterrows():
     html_carrusel += f"""
     <div class="carrusel-item">
         <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';">
-        <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 5px; line-height: 1.2;">{c_titulo}</p>
+        <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
         <p style="color: #dc4990; font-weight: 700; font-size: 1rem; margin-bottom: 0px;">${c_precio:,.0f}</p>
     </div>
     """
 html_carrusel += '</div>'
 
-# Carrusel seguro inyectando CSS inline directamente
 st.html(f"""
     <style>
         .carrusel-container {{ display: flex; overflow-x: auto; scroll-behavior: smooth; gap: 15px; padding: 10px 5px 20px 5px; scrollbar-width: none; -ms-overflow-style: none; }}
         .carrusel-container::-webkit-scrollbar {{ display: none; }}
-        .carrusel-item {{ flex: 0 0 180px; background: white; border: 1px solid #fcdce8; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); transition: transform 0.2s ease; }}
+        .carrusel-item {{ flex: 0 0 160px; background: white; border: 1px solid #fcdce8; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); transition: transform 0.2s ease; }}
         .carrusel-item:hover {{ transform: translateY(-4px); }}
-        .carrusel-item img {{ width: 100%; height: 160px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }}
+        .carrusel-item img {{ width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }}
         .carrusel-item p {{ margin: 0; line-height: 1.2; }}
     </style>
     {html_carrusel}
@@ -392,11 +284,13 @@ if busqueda_texto:
         df_filtrado['autor'].str.lower().str.contains(texto_limpio, na=False)
     ]
 
-if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
-if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
-if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
+try:
+    if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
+    if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
+    if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
+except NameError:
+    pass 
 
-# El texto descriptivo "Mostrando..." ahora es más grande y llamativo
 st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
 # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
