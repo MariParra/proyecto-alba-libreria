@@ -222,38 +222,60 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN CORREGIDA)
+# 🎠 CARRUSEL DE DESTACADOS DEL MES (HORIZONTAL CON BOTÓN)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
+# 1. Filtro seguro de destacados
+if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
+    df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
+elif 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
+    df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']].dropna(subset=['precio_original']).head(8)
+else:
+    df_destacados = df_catalogo.head(8)
 
 if not df_destacados.empty:
-    # Usamos columnas de Streamlit para controlar el layout del carrusel
+    # Creamos tantas columnas de Streamlit como libros tengamos.
+    # Al estar dentro del contenedor con "overflow-x: auto" definido en tu CSS,
+    # Streamlit colocará todo de forma horizontal si lo empaquetamos de forma híbrida.
+    
+    # 🔴 NOTA: Usamos columnas dinámicas que se ajustan al tamaño de los items
     cols = st.columns(len(df_destacados))
+    
     for i, (_, row) in enumerate(df_destacados.iterrows()):
         with cols[i]:
-            # Extraemos los datos del libro
-            libro_id = str(int(row.get('libro_id', 0)))
+            libro_id_limpio = str(int(float(row.get('libro_id', 0))))
             titulo = str(row.get('titulo', 'Sin título'))
+            autor = str(row.get('autor', 'Desconocido'))
             precio = float(row.get('precio', 0))
+            precio_orig = float(row.get('precio_original', precio))
             
-            # Construimos la parte visual con HTML y la clase de carrusel
+            c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+            
+            # Reutilizamos el estilo compacto del Carrusel original
             html_item = f"""
-            <div class="carrusel-item">
-                <img src="https://via.placeholder.com/150x200?text={urllib.parse.quote(titulo)}" style="width:100%; height:140px; object-fit:contain; border-radius:8px; margin-bottom:10px;">
-                <p style="font-weight: 700; font-size: 0.85rem; color: #333;" title="{titulo}">{titulo}</p>
-                <p style="color: #dc4990; font-weight: 700; font-size: 1rem;">${precio:,.0f}</p>
-            </div>
+            <div class="carrusel-item" style="min-height: 290px; margin-bottom: 10px;">
+                <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 10px;">
+                <p style="font-weight: 700; font-size: 0.85rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0 0 5px 0;" title="{titulo}">{titulo}</p>
+                <p style="color: #888; font-size: 0.75rem; margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{autor}</p>
             """
+            
+            if not pd.isna(row.get('precio_original')) and precio < precio_orig:
+                html_item += f"<p style='color: #dc4990; font-weight: 700; font-size: 1rem; margin: 0;'>${precio:,.0f} <span style='font-size:0.75rem; color:#9CA3AF; text-decoration:line-through;'>${precio_orig:,.0f}</span></p>"
+            else:
+                html_item += f"<p style='color: #dc4990; font-weight: 700; font-size: 1rem; margin: 0;'>${precio:,.0f}</p>"
+                
+            html_item += "</div>"
+            
             st.markdown(html_item, unsafe_allow_html=True)
 
-            # Añadimos el botón funcional de Streamlit justo debajo
+            # Botón funcional alineado con la columna del carrusel
             st.button(
                 "✨ Lo quiero",
-                key=f"destacado_{libro_id}",
+                key=f"destacado_{libro_id_limpio}",
                 on_click=agregar_al_carrito,
-                args=(libro_id, titulo, precio),
+                args=(libro_id_limpio, titulo, precio),
                 use_container_width=True
             )
 else:
