@@ -463,9 +463,8 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         html_card += "</div>" 
         
         st.markdown(html_card, unsafe_allow_html=True)
+        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
         
-        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_command_width=True if "use_command_width" in dir(st) else False, use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
-
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
     url_flotante = st.session_state.get('url_wa_flotante', '#')
