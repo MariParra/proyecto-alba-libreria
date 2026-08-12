@@ -262,7 +262,7 @@ with col_nav2:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.[...](asc_slot://start-slot-1)columns()  
+                col_t, col_b = st.columns([3, 1])
                 with col_t:
                     st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b:
