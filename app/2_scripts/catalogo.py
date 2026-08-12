@@ -6,11 +6,7 @@ import concurrent.futures
 from utilidades import get_db_connection
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="Catálogo | Alba Librería", 
-    page_icon="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png", 
-    layout="wide"
-)
+st.set_page_config(page_title="Catálogo | Alba Librería", page_icon="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png", layout="wide")
 
 # ====================================================
 # ⚙️ CARGA SEGURA DE CONFIGURACIÓN DESDE st.secrets
@@ -22,8 +18,7 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS CON LA PALETA OFICIAL, NUEVAS FUENTES Y NAVBAR SUPERIOR ---
-# NOTA SEGURIDAD PYTHON 3.12: Se reemplazaron algunos ":" por su escape unicode "\x3a" para evitar fallos de compilación en el tokenizer
+# --- CSS CON LA PALETA OFICIAL, NUEVAS FUENTES Y NAVBAR FIJA ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
@@ -126,7 +121,6 @@ st.markdown("""
             font-family: 'Lato', sans-serif !important;
             color: #333333; font-weight: 700; font-size: 1.15rem;
             line-height: 1.3; margin-bottom: 5px; margin-top: 15px;
-            /* SE REEMPLAZA ":" POR SU CORRESPONDIENTE UNICODE "\x3a" PARA SALVAR EL TOKENIZER DE PYTHON 3.12 */
             display\x3a -webkit-box; 
             -webkit-line-clamp\x3a 2; 
             -webkit-box-orient\x3a vertical;
@@ -163,9 +157,11 @@ st.markdown("""
         .whatsapp-float:hover { background-color: #128C7E; }
         @media (max-width: 768px) { .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; } }
         
-        .titulo-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 0; }
+        .titulo-principal-container {
+            display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 0;
+        }
         .icono-alba { width: 60px; height: auto; }
-        .titulo-container h1 { margin: 0; font-size: 3.2rem; }
+        .titulo-principal-container h1 { margin: 0; font-size: 3.2rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -216,15 +212,14 @@ def quitar_del_carrito(libro_id):
     if libro_id in st.session_state.carrito_publico:
         del st.session_state.carrito_publico[libro_id]
 
-# --- CABECERA PRINCIPAL CON ICONO PERSONALIZADO ---
+# --- 6. CABECERA PRINCIPAL CON ICONO PERSONALIZADO ---
 st.markdown("""
-<div class='titulo-container'>
+<div class='titulo-principal-container'>
     <img src='https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png' class='icono-alba' alt='Icono Libro'>
     <h1>Alba Librería</h1>
 </div>
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
-st.write("---")
 
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
@@ -238,8 +233,9 @@ if df_catalogo.empty:
     st.warning("No hay libros con portadas disponibles por el momento.")
     st.stop()
 
+
 # =====================================================================
-# 5) NAVBAR SUPERIOR FIJA (Reemplaza a Sidebar)
+# 5) NAVBAR SUPERIOR FIJA
 # =====================================================================
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 col_nav1, col_nav2 = st.columns(2)
@@ -265,11 +261,11 @@ with col_nav2:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.columns(2)  
+                col_t, col_b = st.columns()  
                 with col_t:
                     st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b:
-                    if st.button("❌", key=f"del_{l_id}", help="Quitar"):
+                    if st.button("❌", key=f"del_nav_{l_id}", help="Quitar"):
                         quitar_del_carrito(l_id)
                         st.rerun()
                         
@@ -283,7 +279,6 @@ with col_nav2:
             mensaje_wa_encoded = urllib.parse.quote(mensaje_wa)
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={mensaje_wa_encoded}"
             
-            # Botón de WhatsApp estilizado
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:15px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
         
         st.markdown("---")
@@ -302,8 +297,9 @@ with col_nav2:
                 filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp)
 st.markdown('</div>', unsafe_allow_html=True)
 
+
 # =====================================================================
-# 7) BANNER DE CAJITA LITERARIA REDIMENSIONADA (max-width: 120px)
+# 7) BANNER DE CAJITA LITERARIA REDIMENSIONADA
 # =====================================================================
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
 URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
@@ -314,7 +310,7 @@ st.markdown(f"""
             display: flex; align-items: center; justify-content: space-between;
             background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%);
             border-radius: 20px; padding: 30px 40px; margin-bottom: 30px;
-            box-shadow: 0 10px 25px rgba(220, 73, 144, 0.15);
+            box-shadow: 0 10px 25px rgba(219, 39, 119, 0.15);
         }}
         .banner-texto {{ flex: 1; padding-right: 20px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 10px; line-height: 1.4; }}
@@ -336,7 +332,7 @@ st.markdown(f"""
     </style>
     <div class="banner-cajita">
         <div class="banner-texto">
-            <h2 class="banner-titulo">Pide hoy tu cajita literaria ✨</h2>
+            <h2 class="banner-titulo" style="color: #ffffff !important; font-size: 2.2rem; margin-bottom: 10px; line-height: 1.4;">Pide hoy tu cajita literaria ✨</h2>
             <p class="banner-subtitulo">Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta.</p>
             <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn">📝 ¡SUSCRIBIRME!</a>
         </div>
@@ -377,7 +373,6 @@ for _, row in df_destacados.iterrows():
     """
 html_carrusel += '</div>'
 
-# Renderizado con markdown para inyectar correctamente las clases de carrusel
 st.markdown(html_carrusel, unsafe_allow_html=True)
 st.write("---")
 
@@ -418,6 +413,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
                 <h4>{titulo_seguro}</h4>
                 <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
         """
+        
         if not pd.isna(row.get('precio_original')) and precio < precio_orig:
             html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
         else:
