@@ -169,7 +169,7 @@ with col_bolsa:
             st.write("Tu bolsa está vacía.")
         else:
             total_carrito = 0
-            mensaje_wa = "¡Hola Alba Librería! 💖 Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
+            mensaje_wa = "¡Hola Alba Librería! Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
             for l_id, item in list(st.session_state.carrito_publico.items()):
                 subtotal = item['precio'] * item['cantidad']
                 total_carrito += subtotal
@@ -257,7 +257,7 @@ if seccion_actual == "inicio":
             <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
         </div>
 
-        <!-- BANNER 2: DESTACADOS (El href "?seccion=..." recarga la página filtrando) -->
+        <!-- BANNER 2: DESTACADOS -->
         <div class="banner-promo bg-destacados">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Destacados ⭐</h2>
@@ -278,39 +278,38 @@ if seccion_actual == "inicio":
         </div>
     </div>
     """
-    st.markdown(html_mega_carrusel, unsafe_allow_html=True)
+    
+    # NUEVO METODO RECOMENDADO POR STREAMLIT
+    st.html(html_mega_carrusel)
     st.write("---")
     
-    # Como estamos en inicio, la base de datos a mostrar es el catálogo completo
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
     # --- 2. SUBPÁGINA: DESTACADOS ---
-    st.markdown("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
-    # Botón "Volver" apuntando a "?" que limpia la URL y regresa al inicio
-    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
+    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>")
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     
-    # Filtramos la base de datos SOLAMENTE para los destacados
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
     else:
-        df_base = df_catalogo.head(0) # Vacío si no existe la columna
+        df_base = df_catalogo.head(0) 
 
 elif seccion_actual == "ofertas":
     # --- 3. SUBPÁGINA: OFERTAS ---
-    st.markdown("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
+    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>")
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     
-    # Filtramos la base de datos usando tu lógica matemática de precio < precio_original
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
     else:
         df_base = df_catalogo.head(0)
 
 # =====================================================================
-# --- APLICAR FILTROS Y BÚSQUEDA ---
+# --- APLICAR FILTROS Y BÚSQUEDA A LA CUADRÍCULA ---
 # =====================================================================
-df_filtrado = df_catalogo.copy()
+df_filtrado = df_base.copy()
+
 
 if busqueda_texto:
     texto_limpio = busqueda_texto.strip().lower()
