@@ -143,6 +143,90 @@ st.markdown("<h1 style='text-align: center; color: #4A4D7E; font-weight: 800; fo
 st.markdown("<p style='text-align: center; color: #6B7280; font-size: 1.2rem; margin-top: 5px;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 st.write("---")
 
+# --- BANNER DE CAJITA LITERARIA ---
+
+# 🛑 IMPORTANTE: Pega aquí el link de tu Google Forms
+LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
+
+# (Opcional) Link de una foto de tu cajita. Si no tienes, puedes borrar esta línea y la sección de la imagen en el HTML de abajo.
+URL_FOTO_CAJITA = "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=600&auto=format&fit=crop"
+
+st.markdown(f"""
+    <style>
+        .banner-cajita {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #FFE4E6 0%, #FBCFE8 100%);
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 25px rgba(244, 114, 182, 0.2);
+        }}
+        .banner-texto {{
+            flex: 1;
+            padding-right: 20px;
+        }}
+        .banner-titulo {{
+            color: #BE185D;
+            font-weight: 800;
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }}
+        .banner-subtitulo {{
+            color: #831843;
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }}
+        .banner-btn {{
+            background-color: #E11D48;
+            color: white !important;
+            padding: 12px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 15px rgba(225, 29, 72, 0.3);
+            display: inline-block;
+        }}
+        .banner-img-container {{
+            flex: 0.8;
+            text-align: right;
+        }}
+        .banner-img {{
+            width: 100%;
+            max-width: 280px;
+            border-radius: 15px;
+            transform: rotate(3deg);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }}
+        
+        @media (max-width: 768px) {{
+            .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
+            .banner-texto {{ padding-right: 0; margin-bottom: 25px; }}
+            .banner-titulo {{ font-size: 1.8rem; }}
+            .banner-img-container {{ text-align: center; }}
+            .banner-img {{ transform: rotate(0deg); }}
+        }}
+    </style>
+
+    <div class="banner-cajita">
+        <div class="banner-texto">
+            <h2 class="banner-titulo">Pide hoy tu cajita literaria ✨</h2>
+            <p class="banner-subtitulo">Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta.</p>
+            <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn">
+                📝 ¡SUSCRIBIRME!
+            </a>
+        </div>
+        <div class="banner-img-container">
+            <img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria Alba">
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+st.write("---") # Separador después del banner
+
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
     st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
