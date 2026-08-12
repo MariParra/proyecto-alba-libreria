@@ -191,75 +191,73 @@ st.write("")
 busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 st.markdown('</div>', unsafe_allow_html=True)
 
+# =====================================================================
+# 🎪 MEGA CARRUSEL PRINCIPAL (BANNER + DESTACADOS + OFERTAS)
+# =====================================================================
+from streamlit_carousel import carousel
 
-# =====================================================================
-# BANNER DE CAJITA LITERARIA 
-# =====================================================================
+st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>✨ Novedades y Ofertas Mágicas</h3>", unsafe_allow_html=True)
+
+items_carrusel = []
+
+# --- 1. PRIMERA DIAPOSITIVA: EL BANNER DE LA CAJITA LITERARIA ---
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
 URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
 
-st.markdown(f"""
-    <style>
-        .banner-cajita {{ display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); border-radius: 20px; padding: 25px 30px; margin-top: 10px; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(220, 73, 144, 0.15); }}
-        .banner-texto {{ flex: 1; padding-right: 15px; }}
-        .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2rem; margin-bottom: 8px; line-height: 1.2; }}
-        .banner-subtitulo {{ color: #ffffff; font-size: 1rem; margin-bottom: 20px; font-weight: 500; }}
-        .banner-btn {{ background-color: #dc4990; color: white !important; padding: 10px 25px; border-radius: 50px; text-decoration: none; font-weight: 700; font-size: 1rem; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3); display: inline-block; transition: transform 0.2s ease; }}
-        .banner-btn:hover {{ transform: scale(1.05); background-color: #e471a4; }}
-        .banner-img-container {{ flex: 0.5; text-align: right; display: flex; justify-content: flex-end; align-items: center; }}
-        .banner-img {{ width: 100%; max-width: 120px !important; height: auto; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
-        @media (max-width: 768px) {{ .banner-cajita {{ flex-direction: column; text-align: center; padding: 20px 15px; }} .banner-texto {{ padding-right: 0; margin-bottom: 20px; }} .banner-img-container {{ text-align: center; justify-content: center; }} .banner-img {{ transform: rotate(0deg); max-width: 120px !important; }} }}
-    </style>
-    <div class="banner-cajita">
-        <div class="banner-texto">
-            <h2 class="banner-titulo">Pide hoy tu cajita literaria ✨</h2>
-            <p class="banner-subtitulo">Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta.</p>
-            <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn">📝 ¡SUSCRIBIRME!</a>
-        </div>
-        <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria"></div>
-    </div>
-""", unsafe_allow_html=True)
-st.write("---") 
+items_carrusel.append({
+    "title": "🎁 Pide hoy tu cajita literaria",
+    "text": "Recibe cada mes un libro sorpresa, regalitos y mucha magia directa a tu puerta. ¡Haz clic aquí para suscribirte!",
+    "img": URL_FOTO_CAJITA,
+    "link": LINK_FORMULARIO_SUSCRIPCION
+})
 
-# =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (CON LIBRERÍA STREAMLIT_CAROUSEL)
-# =====================================================================
-from streamlit_carousel import carousel # <-- IMPORTANTE: Añade esta importación al inicio de tu archivo
-
-st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
-
-# 1. Filtro seguro de destacados (sin cambios)
+# --- 2. SIGUIENTES DIAPOSITIVAS: LIBROS DESTACADOS ---
+# Verificamos si existe la columna destacado
+ids_destacados = []
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
-    df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
-else:
-    df_destacados = df_catalogo.head(8)
-
-if not df_destacados.empty:
+    df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(5) # Tomamos max 5
     
-    # 2. Creamos una lista de diccionarios para el carrusel
-    items_carrusel = []
     for _, row in df_destacados.iterrows():
         libro_id = str(int(float(row.get('libro_id', 0))))
+        ids_destacados.append(libro_id) # Guardamos el ID para no repetirlo en ofertas
         titulo = str(row.get('titulo', 'Sin título'))
         autor = str(row.get('autor', 'Desconocido'))
-        precio = float(row.get('precio', 0))
         c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
         
         items_carrusel.append({
-            "title": titulo,
-            "text": f"por {autor}",
+            "title": f"⭐ DESTACADO: {titulo}",
+            "text": f"por {autor} - ¡Descúbrelo en nuestro catálogo!",
             "img": c_url,
-            "link": f"/?book_id={libro_id}" # Opcional: si quieres que al hacer clic vaya a alguna parte
+            "link": "#" # Puedes dejarlo con "#" si no quieres que el clic haga nada extra
         })
 
-    # 3. Llamamos al componente de carrusel
-    carousel(items=items_carrusel, width=0.4) # width=0.4 muestra aprox. 2.5 items, incitando a deslizar
+# --- 3. ÚLTIMAS DIAPOSITIVAS: LIBROS EN OFERTA ---
+# Filtramos donde precio sea menor a precio_original
+if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
+    # Máscara: Precio menor al original Y que el libro no esté ya en destacados
+    mascara_ofertas = (df_catalogo['precio'] < df_catalogo['precio_original']) & (~df_catalogo['libro_id'].astype(str).isin(ids_destacados))
+    df_ofertas = df_catalogo[mascara_ofertas].head(5) # Tomamos max 5
+    
+    for _, row in df_ofertas.iterrows():
+        libro_id = str(int(float(row.get('libro_id', 0))))
+        titulo = str(row.get('titulo', 'Sin título'))
+        precio = float(row.get('precio', 0))
+        precio_orig = float(row.get('precio_original', 0))
+        c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
+        
+        # Calculamos el % de descuento para mostrarlo en el texto
+        dcto = int(((precio_orig - precio) / precio_orig) * 100) if precio_orig > 0 else 0
+        
+        items_carrusel.append({
+            "title": f"🔥 OFERTA -{dcto}%: {titulo}",
+            "text": f"Antes ${precio_orig:,.0f} | AHORA ${precio:,.0f}",
+            "img": c_url,
+            "link": "#"
+        })
 
-else:
-    st.info("No hay libros destacados este mes.")
-
-st.write("---")
-
+# --- RENDERIZAR EL MEGA CARRUSEL ---
+# width=1 hace que el carrusel ocupe todo el ancho disponible del contenedor central
+carousel(items=items_carrusel, width=1)
 
 # =====================================================================
 # --- APLICAR FILTROS Y BÚSQUEDA ---
