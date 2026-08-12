@@ -68,7 +68,7 @@ def obtener_reporte_asignaciones(ano, lista_meses):
         ids_libros = [int(x) for x in df_asig['libro_suscripcion_id'].dropna().unique() if pd.notna(x)]
         df_libros = pd.DataFrame()
         if ids_libros:
-            res_lib = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros).execute()
+            res_lib = conn.table("libros").select("libro_id, titulo, autor, destacado, visible_catalogo").in_("libro_id", ids_libros).execute()
             if res_lib.data: 
                 df_libros = pd.DataFrame(res_lib.data)
                 df_libros.rename(columns={'libro_id': 'libro_suscripcion_id', 'titulo': 'libro_principal', 'autor': 'autor_libro'}, inplace=True)
@@ -83,13 +83,18 @@ def obtener_reporte_asignaciones(ano, lista_meses):
             'libro_principal': 'Libro Principal Asignado', 'autor_libro': 'Autor',
             'extras': 'Libros Extras', 'estado_envio': 'Estado Logística',
             'pagado': 'Suscripción Pagada', 'monto_total': 'Monto Total ($)',
-            'comentario': 'Comentarios'
+            'comentario': 'Comentarios',
+            'destacado': '¿Libro Destacado?', 'visible_catalogo': '¿Visible en Web?'
         }, inplace=True)
         
         for col in ['Cliente', 'Libro Principal Asignado', 'Estado Logística', 'Suscripción Pagada']:
             df_reporte[col] = df_reporte.get(col, 'N/A').fillna('N/A')
 
-        columnas_ordenadas = ['ID Asignacion', 'Año', 'Mes', 'Cliente', 'RUT', 'Estado Suscripción', 'Libro Principal Asignado', 'Autor', 'Libros Extras', 'Estado Logística', 'Suscripción Pagada', 'Monto Total ($)', 'Comentarios']
+        columnas_ordenadas = [
+            'ID Asignacion', 'Año', 'Mes', 'Cliente', 'RUT', 'Estado Suscripción', 
+            'Libro Principal Asignado', 'Autor', '¿Libro Destacado?', '¿Visible en Web?',
+            'Libros Extras', 'Estado Logística', 'Suscripción Pagada', 'Monto Total ($)', 'Comentarios'
+        ]
         columnas_finales = [c for c in columnas_ordenadas if c in df_reporte.columns]
         
         return df_reporte[columnas_finales]
@@ -194,7 +199,10 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
 def obtener_reporte_bajo_stock(limite=5):
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("titulo, autor, editorial, stock, precio").lte("stock", limite).order("stock").execute()
+        res = conn.table("libros").select(
+            "titulo, autor, editorial, stock, precio, visible_catalogo, destacado"
+        ).lte("stock", limite).order("stock").execute()
+        
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except: 
         return pd.DataFrame()

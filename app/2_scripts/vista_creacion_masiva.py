@@ -83,14 +83,18 @@ def procesar_clientes_masivos(df):
 # --- LÓGICA 2: CREACIÓN DE LIBROS NUEVOS ---
 # ====================================================
 def generar_plantilla_libros():
-    columnas = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 'stock', 'precio', 'precio_original', 'costo', 'apto_cajita']
+    columnas = [
+        'titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 
+        'stock', 'precio', 'precio_original', 'costo', 
+        'apto_cajita', 'destacado', 'visible_catalogo'
+    ]
     df_vacio = pd.DataFrame(columns=columnas)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_vacio.to_excel(writer, index=False, sheet_name='Nuevos Libros')
         worksheet = writer.sheets['Nuevos Libros']
         for i, col in enumerate(columnas):
-            worksheet.set_column(i, i, 15)
+            worksheet.set_column(i, i, 18)
     return output.getvalue()
 
 def procesar_nuevos_libros(df):
@@ -126,15 +130,29 @@ def procesar_nuevos_libros(df):
                 if pd.notna(fila[col]):
                     if col in columnas_texto:
                         nuevo_libro[col] = limpiar_texto_para_busqueda(str(fila[col]))
-                    elif col != 'apto_cajita':
+                    elif col not in ['apto_cajita', 'destacado', 'visible_catalogo']:
                         nuevo_libro[col] = fila[col]
             
-            # --- LÓGICA APTO CAJITA ---
-            encuadernacion = nuevo_libro.get('encuadernacion', '')
+            # --- LÓGICA BOOLEANOS ---
+            encuadernacion = str(nuevo_libro.get('encuadernacion', ''))
+            
+            # 1. apto_cajita
             if pd.notna(fila.get('apto_cajita')):
                 nuevo_libro['apto_cajita'] = bool(fila['apto_cajita'])
             else:
-                nuevo_libro['apto_cajita'] = False if encuadernacion == 'TAPA DURA' else True
+                nuevo_libro['apto_cajita'] = False if encuadernacion.upper() == 'TAPA DURA' else True
+            
+            # 2. destacado
+            if pd.notna(fila.get('destacado')):
+                nuevo_libro['destacado'] = bool(fila['destacado'])
+            else:
+                nuevo_libro['destacado'] = False
+                
+            # 3. visible_catalogo
+            if pd.notna(fila.get('visible_catalogo')):
+                nuevo_libro['visible_catalogo'] = bool(fila['visible_catalogo'])
+            else:
+                nuevo_libro['visible_catalogo'] = True
                     
             conn.table("libros").insert(nuevo_libro).execute()
             exitos += 1
@@ -378,7 +396,9 @@ def mostrar_creacion_masiva():
                 "- **titulo y autor:** (Obligatorios) El sistema los limpiará (mayúsculas, sin tilde) y los usará combinados para detectar si el libro ya existe.\n"
                 "- **genero, editorial, encuadernacion:** (Opcionales) Texto libre.\n"
                 "- **stock, precio, precio_original, costo:** (Obligatorios numéricos) Deben ser números puros. **NO escribas** el signo '$' ni letras. Ej: Escribe '15000', no '$15.000'.\n"
-                "- **apto_cajita:** (Opcional) Escribe TRUE o FALSE. Si lo dejas en blanco, se detectará automáticamente."
+                "- **apto_cajita:** (Opcional) Escribe `TRUE` o `FALSE`. Si lo dejas en blanco, se detectará automáticamente.\n"
+                "- **destacado:** (Opcional) Escribe `TRUE` para que aparezca en el carrusel de destacados. Por defecto es `FALSE`.\n"
+                "- **visible_catalogo:** (Opcional) Escribe `FALSE` para ocultar el libro del catálogo público. Por defecto es `TRUE`."
             )
             st.download_button(
                 label="📥 Descargar Plantilla Libros (.xlsx)",

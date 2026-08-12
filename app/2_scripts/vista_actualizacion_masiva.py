@@ -8,9 +8,16 @@ from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 # ==========================================================
 
 def generar_plantilla_actualizacion_libros():
+    """
+    Genera una plantilla Excel con TODOS los libros y sus datos actuales,
+    incluyendo los nuevos campos booleanos.
+    """
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita").execute()
+        # --- NUEVO: Añadimos 'destacado' y 'visible_catalogo' a la consulta ---
+        res = conn.table("libros").select(
+            "libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo"
+        ).execute()
         df = pd.DataFrame(res.data)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -21,14 +28,12 @@ def generar_plantilla_actualizacion_libros():
         return output.getvalue()
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         log_error(
             vista="vista_actualizacion_masiva", 
             funcion="generar_plantilla_actualizacion_libros",
             error=e,
             email_usuario=email_usuario
         )
-        
         st.error(f"Error generando plantilla de libros: {e}")
         return None
 
@@ -67,7 +72,7 @@ def procesar_actualizacion_libros(df):
     
     columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
     columnas_float = ['precio', 'costo', 'precio_original']
-    columnas_bool = ['apto_cajita']
+    columnas_bool = ['apto_cajita', 'destacado', 'visible_catalogo']
 
     # Cargar datos originales para la lógica de precios
     ids_libros = df['libro_id'].dropna().astype(int).tolist()
