@@ -222,7 +222,7 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN SIMPLE Y ROBUSTA)
+# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN SIMPLE Y ROBUSTA + AUTOR)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza horizontalmente para ver más ➔</p>", unsafe_allow_html=True)
@@ -238,15 +238,13 @@ if not df_destacados.empty:
     # --- PASO 1: Inyectamos el CSS que FORZARÁ el scroll ---
     st.markdown("""
         <style>
-            /* Le damos un ID único a nuestro contenedor de columnas */
             #carrusel-con-botones {
                 display: flex;
-                flex-wrap: nowrap; /* Evita que los elementos se apilen */
-                overflow-x: auto;  /* Permite el scroll horizontal */
+                flex-wrap: nowrap;
+                overflow-x: auto;
                 padding-bottom: 20px;
-                -webkit-overflow-scrolling: touch; /* Deslizamiento suave en móvil */
+                -webkit-overflow-scrolling: touch;
             }
-            /* Ocultamos la barra de scroll */
             #carrusel-con-botones::-webkit-scrollbar { display: none; }
             #carrusel-con-botones { scrollbar-width: none; }
         </style>
@@ -254,7 +252,6 @@ if not df_destacados.empty:
 
     # --- PASO 2: Creamos las columnas dentro de un contenedor con el ID ---
     with st.container():
-        # Este div es el que nuestro CSS va a modificar
         st.markdown('<div id="carrusel-con-botones">', unsafe_allow_html=True)
         
         cols = st.columns(len(df_destacados))
@@ -263,16 +260,19 @@ if not df_destacados.empty:
             with cols[i]:
                 libro_id_limpio = str(int(float(row.get('libro_id', 0))))
                 titulo = str(row.get('titulo', 'Sin título'))
+                # LÍNEA QUE FALTABA
+                autor = str(row.get('autor', 'Desconocido'))
                 precio = float(row.get('precio', 0))
                 c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
 
-                # Usamos un st.container para cada tarjeta, con un ancho fijo
                 with st.container():
+                    # HTML DE LA TARJETA CORREGIDO
                     st.markdown(f"""
-                    <div class="libro-card" style="width: 180px; min-height: 360px; margin: 0 auto;">
+                    <div class="libro-card" style="width: 180px; min-height: 380px; margin: 0 auto;">
                         <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain;">
                         <div class="info-container">
                             <h4 style="font-size: 0.9rem;">{titulo}</h4>
+                            <p style='color: #888; font-size: 0.8rem; margin-bottom: 10px;'>por {autor}</p>
                             <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
                         </div>
                     </div>
@@ -286,12 +286,12 @@ if not df_destacados.empty:
                         use_container_width=True
                     )
         
-        # Cerramos el div
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
 
 st.write("---")
+
 
 
 # =====================================================================
