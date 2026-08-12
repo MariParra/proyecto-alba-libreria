@@ -207,6 +207,7 @@ if seccion_actual == "inicio":
     <style>
         .mega-carrusel-wrapper {{
             display: flex;
+            justify-content: center;
             overflow-x: auto;
             scroll-snap-type: x mandatory;
             gap: 20px;
