@@ -222,12 +222,12 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (CON FLECHAS DE NAVEGACIÓN)
+# 🎠 CARRUSEL DE DESTACADOS (TARJETAS + SCROLL HORIZONTAL + BOTÓN)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px;'>Usa las flechas para ver más novedades ➔</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza horizontalmente para ver más ➔</p>", unsafe_allow_html=True)
 
-# 1. Filtro seguro de destacados (sin cambios)
+# 1. Filtro seguro de destacados
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
 elif 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
@@ -237,89 +237,78 @@ else:
 
 if not df_destacados.empty:
     
-    # 2. Reconstruimos el carrusel de HTML
-    html_items = ""
-    for _, row in df_destacados.iterrows():
-        c_id = str(int(float(row.get('libro_id', 0))))
-        c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
-        c_titulo = str(row.get('titulo', 'Sin título'))
-        
-        html_items += f"""
-        <div class="carrusel-item" style="width: 160px; text-align: center;">
-            <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain; border-radius: 8px; margin-bottom: 10px;">
-            <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin: 0; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
-        </div>
-        """
-
-    # 3. Inyectamos el HTML, el CSS para el estilo, y el JAVASCRIPT para la funcionalidad de las flechas
-    st.markdown(f"""
+    # --- CSS MÁGICO PARA FORZAR EL SCROLL HORIZONTAL EN MÓVIL ---
+    st.markdown("""
         <style>
-            .carrusel-wrapper {{
-                position: relative;
-                width: 100%;
-                margin: auto;
-            }}
-            .carrusel-container {{
-                display: flex;
-                overflow-x: scroll; /* Cambiado a 'scroll' para que JS pueda manipularlo */
-                scroll-behavior: smooth;
-                gap: 15px;
-                padding: 10px 5px 20px 5px;
-                scrollbar-width: none; /* Firefox */
-                -ms-overflow-style: none;  /* IE 10+ */
-            }}
-            .carrusel-container::-webkit-scrollbar {{
-                display: none; /* Chrome, Safari */
-            }}
-            .carrusel-item {{
-                flex: 0 0 auto;
-            }}
-            .nav-arrow {{
-                position: absolute;
-                top: 50%;
-                transform: translateY(-50%);
-                background-color: rgba(255, 255, 255, 0.7);
-                border: 1px solid #ddd;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 24px;
-                color: #333;
-                z-index: 10;
-            }}
-            .nav-arrow:hover {{
-                background-color: white;
-            }}
-            #prevBtn {{ left: -20px; }}
-            #nextBtn {{ right: -20px; }}
+            /* Bloqueamos el apilamiento vertical de Streamlit en móviles para este contenedor específico */
+            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap !important;
+                overflow-x: auto !important;
+                padding-bottom: 15px; /* Espacio para la sombra de las tarjetas */
+                scrollbar-width: thin; /* Barra elegante en Firefox */
+                -webkit-overflow-scrolling: touch; /* Deslizamiento suave en iOS */
+            }
+            /* Damos un ancho fijo a cada tarjeta para que no se aplasten */
+            div[data-testid="stVerticalBlock"]:has(#carrusel-start) div[data-testid="column"] {
+                min-width: 170px !important;
+                max-width: 170px !important;
+                flex: 0 0 auto !important;
+            }
+            /* Barra de scroll estilizada para Chrome/Safari/Edge */
+            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"]::-webkit-scrollbar {
+                height: 8px;
+            }
+            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb {
+                background-color: #fcdce8;
+                border-radius: 4px;
+            }
         </style>
-        
-        <div class="carrusel-wrapper">
-            <div id="prevBtn" class="nav-arrow">‹</div>
-            <div id="carrusel-destacados" class="carrusel-container">
-                {html_items}
-            </div>
-            <div id="nextBtn" class="nav-arrow">›</div>
-        </div>
-
-        <script>
-            const prevBtn = document.getElementById("prevBtn");
-            const nextBtn = document.getElementById("nextBtn");
-            const carrusel = document.getElementById("carrusel-destacados");
-
-            prevBtn.addEventListener("click", function() {{
-                carrusel.scrollLeft -= 300; // Desplaza 300px a la izquierda
-            }});
-
-            nextBtn.addEventListener("click", function() {{
-                carrusel.scrollLeft += 300; // Desplaza 300px a la derecha
-            }});
-        </script>
     """, unsafe_allow_html=True)
+
+    # --- CONTENEDOR DEL CARRUSEL ---
+    with st.container():
+        # Ancla invisible para que el CSS sepa a qué bloque aplicarse sin afectar otras partes de la app
+        st.markdown('<div id="carrusel-start" style="display: none;"></div>', unsafe_allow_html=True)
+        
+        # Usamos columnas nativas para poder incluir botones nativos
+        cols = st.columns(len(df_destacados))
+        
+        for i, (_, row) in enumerate(df_destacados.iterrows()):
+            with cols[i]:
+                libro_id_limpio = str(int(float(row.get('libro_id', 0))))
+                titulo = str(row.get('titulo', 'Sin título'))
+                autor = str(row.get('autor', 'Desconocido'))
+                precio = float(row.get('precio', 0))
+                precio_orig = float(row.get('precio_original', precio))
+                c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+                
+                # Diseño de la Tarjeta (HTML)
+                html_card = f"""
+                <div class="libro-card" style="margin-bottom: 0px; min-height: 350px;">
+                    <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 170px; object-fit: contain; margin-bottom: 10px;">
+                    <div class="info-container">
+                        <h4 style="font-size: 0.9rem; min-height: 2.6em; line-height: 1.2;">{titulo}</h4>
+                        <p style='color: #888; font-size: 0.8rem; margin: 0 0 10px 0;'>por {autor}</p>
+                """
+                
+                if not pd.isna(precio_orig) and precio < precio_orig:
+                    html_card += f"<div><span class='precio-tachado' style='font-size:0.8rem;'>${precio_orig:,.0f}</span><br><span class='precio-oferta' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
+                else:
+                    html_card += f"<div><span class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
+                    
+                html_card += "</div></div>"
+                
+                # Pintamos la tarjeta
+                st.markdown(html_card, unsafe_allow_html=True)
+                
+                # BOTÓN FUNCIONAL
+                st.button(
+                    "✨ Lo quiero",
+                    key=f"destacado_{libro_id_limpio}",
+                    on_click=agregar_al_carrito,
+                    args=(libro_id_limpio, titulo, precio),
+                    use_container_width=True
+                )
 else:
     st.info("No hay libros destacados este mes.")
 
