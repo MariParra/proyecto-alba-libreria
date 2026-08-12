@@ -7,3 +7,4 @@ xlsxwriter==3.2.9
 streamlit-oauth
 python-dotenv
 st-supabase-connection
+streamlit_carousel
