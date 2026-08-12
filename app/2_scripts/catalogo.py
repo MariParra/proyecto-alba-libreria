@@ -285,12 +285,6 @@ if seccion_actual == "inicio":
     st.html(html_mega_carrusel)
     st.write("---")
     
-
-    
-    # NUEVO METODO RECOMENDADO POR STREAMLIT
-    st.html(html_mega_carrusel)
-    st.write("---")
-    
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
