@@ -222,7 +222,7 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN SIMPLE Y ROBUSTA + AUTOR)
+# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN FINAL CON ANCHO FIJO)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza horizontalmente para ver más ➔</p>", unsafe_allow_html=True)
@@ -231,67 +231,78 @@ st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margi
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
 else:
-    df_destacados = df_catalogo.head(4) # Muestra 4 si no hay destacados
+    # Si no hay destacados, muestra 4 libros para que no se vea vacío
+    df_destacados = df_catalogo.head(4) 
 
 if not df_destacados.empty:
     
-    # --- PASO 1: Inyectamos el CSS que FORZARÁ el scroll ---
+    # --- Inyectamos el CSS que FORZARÁ el scroll y fijará el ancho ---
     st.markdown("""
         <style>
+            /* Contenedor principal que centra el carrusel */
+            .carrusel-wrapper {
+                width: 100%;
+                display: flex;
+                justify-content: center; /* Centra el carrusel en la página */
+            }
+            /* El carrusel con el ancho máximo y scroll */
             #carrusel-con-botones {
                 display: flex;
                 flex-wrap: nowrap;
                 overflow-x: auto;
-                padding-bottom: 20px;
                 -webkit-overflow-scrolling: touch;
+                padding-bottom: 20px;
+                
+                /* LA LÍNEA MÁGICA: Ancho máximo para mostrar ~5 tarjetas */
+                max-width: 1000px; 
             }
+            /* Ocultamos la barra de scroll (opcional pero estético) */
             #carrusel-con-botones::-webkit-scrollbar { display: none; }
             #carrusel-con-botones { scrollbar-width: none; }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- PASO 2: Creamos las columnas dentro de un contenedor con el ID ---
-    with st.container():
-        st.markdown('<div id="carrusel-con-botones">', unsafe_allow_html=True)
-        
-        cols = st.columns(len(df_destacados))
-        
-        for i, (_, row) in enumerate(df_destacados.iterrows()):
-            with cols[i]:
-                libro_id_limpio = str(int(float(row.get('libro_id', 0))))
-                titulo = str(row.get('titulo', 'Sin título'))
-                # LÍNEA QUE FALTABA
-                autor = str(row.get('autor', 'Desconocido'))
-                precio = float(row.get('precio', 0))
-                c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+    # --- Creamos la estructura HTML ---
+    # Envolvemos todo en el 'carrusel-wrapper' para centrarlo
+    st.markdown('<div class="carrusel-wrapper"><div id="carrusel-con-botones">', unsafe_allow_html=True)
+    
+    cols = st.columns(len(df_destacados))
+    
+    for i, (_, row) in enumerate(df_destacados.iterrows()):
+        with cols[i]:
+            libro_id_limpio = str(int(float(row.get('libro_id', 0))))
+            titulo = str(row.get('titulo', 'Sin título'))
+            autor = str(row.get('autor', 'Desconocido'))
+            precio = float(row.get('precio', 0))
+            c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
 
-                with st.container():
-                    # HTML DE LA TARJETA CORREGIDO
-                    st.markdown(f"""
-                    <div class="libro-card" style="width: 180px; min-height: 380px; margin: 0 auto;">
-                        <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain;">
-                        <div class="info-container">
-                            <h4 style="font-size: 0.9rem;">{titulo}</h4>
-                            <p style='color: #888; font-size: 0.8rem; margin-bottom: 10px;'>por {autor}</p>
-                            <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
-                        </div>
+            # Tarjeta individual
+            with st.container():
+                st.markdown(f"""
+                <div class="libro-card" style="width: 180px; min-height: 380px; margin: 0 auto;">
+                    <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain;">
+                    <div class="info-container">
+                        <h4 style="font-size: 0.9rem;">{titulo}</h4>
+                        <p style='color: #888; font-size: 0.8rem; margin-bottom: 10px;'>por {autor}</p>
+                        <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
                     </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.button(
-                        "✨ Lo quiero",
-                        key=f"destacado_{libro_id_limpio}",
-                        on_click=agregar_al_carrito,
-                        args=(libro_id_limpio, titulo, precio),
-                        use_container_width=True
-                    )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.button(
+                    "✨ Lo quiero",
+                    key=f"destacado_{libro_id_limpio}",
+                    on_click=agregar_al_carrito,
+                    args=(libro_id_limpio, titulo, precio),
+                    use_container_width=True
+                )
+    
+    # Cerramos los divs
+    st.markdown('</div></div>', unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
 
 st.write("---")
-
 
 
 # =====================================================================
