@@ -222,10 +222,10 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS
+# 🎠 CARRUSEL DE DESTACADOS (CON FLECHAS DE NAVEGACIÓN)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px;'>Desliza para ver más novedades ➔</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px;'>Usa las flechas para ver más novedades ➔</p>", unsafe_allow_html=True)
 
 # 1. Filtro seguro de destacados (sin cambios)
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
@@ -237,42 +237,88 @@ else:
 
 if not df_destacados.empty:
     
-    # 2. Reconstruimos el carrusel de HTML puro, tal como lo tenías
-    html_carrusel = '<div class="carrusel-container">'
+    # 2. Reconstruimos el carrusel de HTML
+    html_items = ""
     for _, row in df_destacados.iterrows():
         c_id = str(int(float(row.get('libro_id', 0))))
         c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
         c_titulo = str(row.get('titulo', 'Sin título'))
         
-        # Le damos un estilo fijo a cada item para que todos se vean iguales
-        html_carrusel += f"""
+        html_items += f"""
         <div class="carrusel-item" style="width: 160px; text-align: center;">
             <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain; border-radius: 8px; margin-bottom: 10px;">
             <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin: 0; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
         </div>
         """
-    html_carrusel += '</div>'
 
-    # 3. Inyectamos el HTML y el CSS que lo hace funcionar
+    # 3. Inyectamos el HTML, el CSS para el estilo, y el JAVASCRIPT para la funcionalidad de las flechas
     st.markdown(f"""
         <style>
+            .carrusel-wrapper {{
+                position: relative;
+                width: 100%;
+                margin: auto;
+            }}
             .carrusel-container {{
                 display: flex;
-                overflow-x: auto;
+                overflow-x: scroll; /* Cambiado a 'scroll' para que JS pueda manipularlo */
                 scroll-behavior: smooth;
                 gap: 15px;
                 padding: 10px 5px 20px 5px;
                 scrollbar-width: none; /* Firefox */
-                -ms-overflow-style: none;  /* Internet Explorer 10+ */
+                -ms-overflow-style: none;  /* IE 10+ */
             }}
             .carrusel-container::-webkit-scrollbar {{
-                display: none; /* Safari and Chrome */
+                display: none; /* Chrome, Safari */
             }}
             .carrusel-item {{
-                flex: 0 0 auto; /* Evita que los items se encojan o crezcan */
+                flex: 0 0 auto;
             }}
+            .nav-arrow {{
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                background-color: rgba(255, 255, 255, 0.7);
+                border: 1px solid #ddd;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+                color: #333;
+                z-index: 10;
+            }}
+            .nav-arrow:hover {{
+                background-color: white;
+            }}
+            #prevBtn {{ left: -20px; }}
+            #nextBtn {{ right: -20px; }}
         </style>
-        {html_carrusel}
+        
+        <div class="carrusel-wrapper">
+            <div id="prevBtn" class="nav-arrow">‹</div>
+            <div id="carrusel-destacados" class="carrusel-container">
+                {html_items}
+            </div>
+            <div id="nextBtn" class="nav-arrow">›</div>
+        </div>
+
+        <script>
+            const prevBtn = document.getElementById("prevBtn");
+            const nextBtn = document.getElementById("nextBtn");
+            const carrusel = document.getElementById("carrusel-destacados");
+
+            prevBtn.addEventListener("click", function() {{
+                carrusel.scrollLeft -= 300; // Desplaza 300px a la izquierda
+            }});
+
+            nextBtn.addEventListener("click", function() {{
+                carrusel.scrollLeft += 300; // Desplaza 300px a la derecha
+            }});
+        </script>
     """, unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
