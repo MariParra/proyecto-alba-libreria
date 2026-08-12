@@ -254,7 +254,7 @@ if not df_destacados.empty:
                 padding-bottom: 20px;
                 
                 /* LA LÍNEA MÁGICA: Ancho máximo para mostrar ~5 tarjetas */
-                max-width: 1000px; 
+                max-width: 800px; 
             }
             /* Ocultamos la barra de scroll (opcional pero estético) */
             #carrusel-con-botones::-webkit-scrollbar { display: none; }
