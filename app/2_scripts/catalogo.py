@@ -32,7 +32,7 @@ st.markdown("""
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 180px; /* MUCHO MÁS ESPACIO PARA LA NAVBAR DE 2 FILAS */
+            padding-top: 180px; /* ESPACIO PARA LA NAVBAR DE 2 FILAS */
         }
 
         /* DISEÑO EXPANDERS (BOLSA) */
@@ -43,7 +43,7 @@ st.markdown("""
         [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
         [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
 
-        /* NUEVOS FILTROS FUCSIA CLARO PARA MAYOR CONTRASTE */
+        /* NUEVOS FILTROS FUCS FUCSIA CLARO PARA MAYOR CONTRASTE */
         [data-testid="stMultiSelect"] { border: 2px solid #F472B6 !important; background-color: #ffffff !important; border-radius: 10px !important; }
         [data-testid="stMultiSelect"] .st-d5 { color: #9CA3AF !important; font-style: italic !important; }
         [data-testid="stMultiSelect"] .st-c5 {
@@ -54,7 +54,7 @@ st.markdown("""
 
         [data-testid="stSidebar"] { display: none !important; }
 
-        /* NAVBAR SUPERIOR FIJA (NUEVO DISEÑO 2 FILAS) */
+        /* NAVBAR SUPERIOR FIJA */
         .navbar-fija {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
@@ -64,15 +64,15 @@ st.markdown("""
         
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* TARJETAS DE LIBROS UNIFORMES Y COMPACTAS */
+        /* TARJETAS DE LIBROS */
         .libro-card {
             background: rgba(255, 255, 255, 0.9); border: 1px solid #fcdce8; border-radius: 20px; 
-            padding: 15px; margin-bottom: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
+            padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
-            min-height: 430px; height: 100%;
+            min-height: 400px; height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
-        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 250px; margin-bottom: 15px; transition: transform 0.3s ease; }
+        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
@@ -85,7 +85,7 @@ st.markdown("""
         
         /* BOTÓN "LO QUIERO" */
         [data-testid="stButton"] button {
-            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%;
+            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%; margin-bottom: 25px;
         }
         [data-testid="stButton"] button:hover { background-color: #e790b3 !important; color: white !important; }
 
@@ -127,7 +127,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
-# CARGA DE DATOS DESDE CACHE_UTILS
+# CARGA DE DATOS
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
     st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
@@ -145,11 +145,10 @@ autores_disp = sorted(df_catalogo['autor'].dropna().unique())
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
 # =====================================================================
-# NAVBAR SUPERIOR FIJA: FILA 1 (Filtros y Bolsa) | FILA 2 (Buscador)
+# NAVBAR SUPERIOR FIJA
 # =====================================================================
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 
-# FILA 1: Filtros Expuestos y Bolsa Expandible
 col_filtros, col_bolsa = st.columns([3, 1])
 
 with col_filtros:
@@ -179,9 +178,7 @@ with col_bolsa:
                 col_t, col_b = st.columns([3, 1])
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b:
-                    if st.button("❌", key=f"del_nav_{l_id}", help="Quitar"):
-                        quitar_del_carrito(l_id)
-                        st.rerun()
+                    st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
                         
             st.markdown("---")
             st.markdown(f"**Total:** ${total_carrito:,.0f}")
@@ -190,16 +187,13 @@ with col_bolsa:
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={urllib.parse.quote(mensaje_wa)}"
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
-st.write("") # Pequeño separador visual entre filas
-
-# FILA 2: Buscador
+st.write("") 
 busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
-
 st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =====================================================================
-# BANNER DE CAJITA LITERARIA REDIMENSIONADA
+# BANNER DE CAJITA LITERARIA 
 # =====================================================================
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
 URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
@@ -291,37 +285,40 @@ try:
 except NameError:
     pass 
 
-st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
+if df_filtrado.empty:
+    st.info("No encontramos libros con esos filtros. ¡Intenta con otra búsqueda! 🪄")
+else:
+    st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
-# --- CUADRÍCULA PRINCIPAL DE LIBROS ---
-columnas = st.columns(3)
-for index, row in df_filtrado.reset_index(drop=True).iterrows():
-    col = columnas[index % 3]
-    with col:
-        libro_id_limpio = str(int(float(row.get('libro_id', 0))))
-        url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
-        titulo_seguro = row.get('titulo', "Sin título")
-        autor_seguro = row.get('autor', 'Desconocido')
-        precio = float(row.get('precio', 0.0))
-        precio_orig = float(row.get('precio_original', precio))
+    # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
+    columnas = st.columns(3)
+    for index, row in df_filtrado.reset_index(drop=True).iterrows():
+        col = columnas[index % 3]
+        with col:
+            libro_id_limpio = str(int(float(row.get('libro_id', 0))))
+            url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+            titulo_seguro = row.get('titulo', "Sin título")
+            autor_seguro = row.get('autor', 'Desconocido')
+            precio = float(row.get('precio', 0.0))
+            precio_orig = float(row.get('precio_original', precio))
 
-        html_card = f"""
-        <div class="libro-card">
-            <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
-            <div class="info-container">
-                <h4>{titulo_seguro}</h4>
-                <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
-        """
-        
-        if not pd.isna(row.get('precio_original')) and precio < precio_orig:
-            html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
-        else:
-            html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
+            html_card = f"""
+            <div class="libro-card">
+                <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
+                <div class="info-container">
+                    <h4>{titulo_seguro}</h4>
+                    <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
+            """
             
-        html_card += "</div></div>" 
-        
-        st.markdown(html_card, unsafe_allow_html=True)
-        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
+            if not pd.isna(row.get('precio_original')) and precio < precio_orig:
+                html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
+            else:
+                html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
+                
+            html_card += "</div></div>" 
+            
+            st.markdown(html_card, unsafe_allow_html=True)
+            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
