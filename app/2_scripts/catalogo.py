@@ -222,30 +222,12 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (SOLUCIÓN DEFINITIVA)
+# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN FINAL CON CARRUSEL REAL)
 # =====================================================================
-
-# --- PASO 1: AÑADE ESTA NUEVA CLASE A TU BLOQUE DE CSS PRINCIPAL ---
-# (Puedes ponerla junto a las otras reglas de CSS al inicio de tu app)
-st.markdown("""
-<style>
-    .horizontal-scroll-wrapper {
-        display: flex;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch; /* Para un deslizamiento suave en iOS */
-        scrollbar-width: none; /* Oculta la barra de scroll en Firefox */
-    }
-    .horizontal-scroll-wrapper::-webkit-scrollbar {
-        display: none; /* Oculta la barra de scroll en Chrome, Safari, etc. */
-    }
-</style>
-""", unsafe_allow_html=True)
-
-
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px;'>Desliza para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-# Filtro seguro de destacados (sin cambios)
+# 1. Filtro seguro de destacados (sin cambios)
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
 elif 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
@@ -254,46 +236,63 @@ else:
     df_destacados = df_catalogo.head(8)
 
 if not df_destacados.empty:
-    # --- PASO 2: ENVOLVEMOS TODO EN EL NUEVO CONTENEDOR ---
-    st.markdown('<div class="horizontal-scroll-wrapper">', unsafe_allow_html=True)
     
-    # Creamos las columnas DENTRO del wrapper
+    # --- CONSTRUIMOS UN CARRUSEL DE HTML PURO ---
+    # Este es el método más robusto y es inmune a los cambios de Streamlit.
+
+    # Paso A: Creamos el contenedor del carrusel y las columnas para los botones (estarán invisibles por ahora)
+    st.markdown('<div class="carrusel-container">', unsafe_allow_html=True)
     cols = st.columns(len(df_destacados))
-    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Paso B: Iteramos sobre los libros y llenamos cada columna
     for i, (_, row) in enumerate(df_destacados.iterrows()):
         with cols[i]:
-            # --- PASO 3: UNA TARJETA MÁS COMPACTA Y ROBUSTA ---
-            # Usamos un st.container() por cada tarjeta para aislar su contenido
-            with st.container(border=False):
-                libro_id = str(int(row.get('libro_id', 0)))
-                titulo = str(row.get('titulo', 'Sin título'))
-                autor = str(row.get('autor', 'Desconocido'))
-                precio = float(row.get('precio', 0))
-                c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
-                
-                # HTML solo para la imagen, título y precio
-                st.markdown(f"""
-                <div class="libro-card" style="width: 180px; min-height: 380px;">
-                    <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 200px;">
-                    <div class="info-container">
-                        <h4 style="font-size: 0.9rem;">{titulo}</h4>
-                        <p style='color: #888; font-size: 0.8rem;'>por {autor}</p>
-                        <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
-                    </div>
+            # Extraemos los datos del libro
+            libro_id = str(int(row.get('libro_id', 0)))
+            titulo = str(row.get('titulo', 'Sin título'))
+            autor = str(row.get('autor', 'Desconocido'))
+            precio = float(row.get('precio', 0))
+            c_url = f"{URL_BASE_SUPABASE}{libro_id}.jpg"
+            
+            # Dibujamos la tarjeta con su estilo original
+            st.markdown(f"""
+            <div class="carrusel-item" style="width: 170px; min-height: 340px;">
+                <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 200px; object-fit: contain;">
+                <div class="info-container">
+                    <h4 style="font-size: 0.9rem; min-height: 2.2em;">{titulo}</h4>
+                    <p style='color: #888; font-size: 0.8rem;'>por {autor}</p>
+                    <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
                 </div>
-                """, unsafe_allow_html=True)
+            </div>
+            """, unsafe_allow_html=True)
 
-                # Botón funcional de Streamlit
-                st.button(
-                    "✨ Lo quiero",
-                    key=f"destacado_{libro_id}",
-                    on_click=agregar_al_carrito,
-                    args=(libro_id, titulo, precio),
-                    use_container_width=True
-                )
+            # Dibujamos el botón funcional de Streamlit
+            st.button(
+                "✨ Lo quiero",
+                key=f"destacado_{libro_id}",
+                on_click=agregar_al_carrito,
+                args=(libro_id, titulo, precio),
+                use_container_width=True
+            )
+            
+    # --- PASO FINAL: INYECTAMOS EL CSS PARA FORZAR EL SCROLL HORIZONTAL ---
+    # Este CSS es el más importante. Sobreescribe el comportamiento móvil de Streamlit.
+    st.markdown("""
+        <style>
+            .carrusel-container > div {
+                display: flex;
+                flex-direction: row;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none; /* Oculta scrollbar en Firefox */
+            }
+            .carrusel-container > div::-webkit-scrollbar {
+                display: none; /* Oculta scrollbar en Chrome/Safari */
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Cerramos el div del wrapper
-    st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
 
