@@ -38,7 +38,10 @@ def cargar_datos_completos():
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
         if 'apto_cajita' in df.columns:
             df['apto_cajita'] = df['apto_cajita'].fillna(True).astype(bool)
-            
+        if 'destacado' in df.columns:
+            df['destacado'] = df['destacado'].fillna(False).astype(bool)
+        else:
+            df['destacado'] = False
         # LÓGICA DE DESCUENTOS SEGURA
         df['Dcto %'] = 0.0
         mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
@@ -52,6 +55,40 @@ def cargar_datos_completos():
         return df
         
     return pd.DataFrame()
+
+def actualizar_destacados_batch(df_con_cambios):
+    """
+    Actualiza el estado 'destacado' de los libros en la base de datos.
+    Recibe un DataFrame con las columnas 'libro_id' y 'destacado'.
+    """
+    conn = get_db_connection()
+    updates_count = 0
+    
+    # Prepara los datos en el formato que Supabase espera para un 'upsert'
+    # Esto es más eficiente que hacer un bucle de updates.
+    datos_para_actualizar = df_con_cambios[['libro_id', 'destacado']].to_dict(orient='records')
+    
+    if not datos_para_actualizar:
+        return 0
+
+    try:
+        # 'upsert' intentará actualizar. Si la fila no existe, la insertaría (aunque aquí siempre existirá)
+        # on_conflict='libro_id' le dice que la columna 'libro_id' es la clave para encontrar el registro.
+        conn.table("libros").upsert(datos_para_actualizar, on_conflict='libro_id').execute()
+        updates_count = len(datos_para_actualizar)
+        cargar_datos_completos.clear() # Limpiamos la caché para que se vean los cambios
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_inventario",
+            funcion="actualizar_destacados_batch",
+            error=f"Error masivo al actualizar destacados. Detalle: {e}",
+            email_usuario=email_usuario
+        )
+        st.error(f"Ocurrió un error al guardar: {e}")
+        return 0
+        
+    return updates_count
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
     conn = get_db_connection()
@@ -331,8 +368,8 @@ def mostrar_inventario():
             df_filtrado = df_filtrado[df_filtrado['apto_cajita'] == True]
 
     # Tabs de navegación
-    tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
-        "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
+    tab_catalogo, tab_editar, tab_crear, tab_desc, tab_destacados, tab_eliminar = st.tabs([
+        "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "⭐ Destacados", "🗑️ Eliminar"
     ])
 
 
@@ -601,6 +638,49 @@ def mostrar_inventario():
                     st.success(mensaje); st.snow()
                     time.sleep(2); st.rerun()
                 else: st.error(f"Error al aplicar descuento: {mensaje}")
+
+    with tab_destacados:
+        st.markdown("#### ⭐ Gestionar Libros Destacados")
+        st.info("Marca los libros que quieres que aparezcan en el carrusel 'Destacados del Mes' del catálogo público.")
+
+        # Seleccionamos solo las columnas necesarias para la edición
+        columnas_destacados = ['libro_id', 'titulo', 'destacado']
+        if 'destacado' not in df_filtrado.columns:
+            st.error("La columna 'destacado' no se pudo cargar. Refresca los datos.")
+        else:
+            df_para_editar = df_filtrado[columnas_destacados].copy()
+
+            # Usamos st.data_editor para crear la tabla editable
+            df_editado = st.data_editor(
+                df_para_editar,
+                key="editor_destacados",
+                hide_index=True,
+                use_container_width=True,
+                disabled=['libro_id', 'titulo'], # Solo se puede editar la columna 'destacado'
+                column_config={
+                    "destacado": st.column_config.CheckboxColumn(
+                        "¿Destacado?",
+                        default=False,
+                    )
+                }
+            )
+
+            # Detectamos si hay cambios para habilitar el botón de guardar
+            hay_cambios = not df_para_editar.equals(df_editado)
+            
+            if st.button("💾 Guardar Cambios en Destacados", type="primary", use_container_width=True, disabled=not hay_cambios):
+                # Filtramos solo las filas que cambiaron para no enviar datos innecesarios
+                cambios = df_para_editar.compare(df_editado)
+                filas_cambiadas_ids = cambios.index
+                df_final_para_actualizar = df_editado.loc[filas_cambiadas_ids]
+
+                with st.spinner("Guardando cambios..."):
+                    num_actualizados = actualizar_destacados_batch(df_final_para_actualizar)
+                
+                st.success(f"¡Se actualizó el estado de {num_actualizados} libros!")
+                st.snow()
+                time.sleep(1.5)
+                st.rerun()
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
