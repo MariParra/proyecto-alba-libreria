@@ -103,7 +103,7 @@ st.markdown("""
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 350px;
+            min-height: 300px;
             height: 100%;
         }
         .libro-card:hover { 
@@ -392,7 +392,7 @@ if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_g
 if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
 if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
-st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 2.5rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
 
 # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
