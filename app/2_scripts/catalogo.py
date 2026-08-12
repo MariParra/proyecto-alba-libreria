@@ -320,7 +320,7 @@ st.markdown(f"""
         }}
         .banner-btn:hover {{ transform: scale(1.05); background-color: #e471a4; }}
         .banner-img-container {{ flex: 0.8; text-align: right; }}
-        .banner-img {{ width: 100%; max-width: 280px; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
+        .banner-img {{ width: 100%; max-width: 112px; border-radius: 15px; transform: rotate(3deg); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }}
         @media (max-width: 768px) {{
             .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
             .banner-texto {{ padding-right: 0; margin-bottom: 25px; }}
