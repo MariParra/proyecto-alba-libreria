@@ -222,7 +222,7 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS (TARJETAS + SCROLL HORIZONTAL + BOTÓN)
+# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN SIMPLE Y ROBUSTA)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza horizontalmente para ver más ➔</p>", unsafe_allow_html=True)
@@ -230,85 +230,64 @@ st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margi
 # 1. Filtro seguro de destacados
 if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
     df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
-elif 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
-    df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']].dropna(subset=['precio_original']).head(8)
 else:
-    df_destacados = df_catalogo.head(8)
+    df_destacados = df_catalogo.head(4) # Muestra 4 si no hay destacados
 
 if not df_destacados.empty:
     
-    # --- CSS MÁGICO PARA FORZAR EL SCROLL HORIZONTAL EN MÓVIL ---
+    # --- PASO 1: Inyectamos el CSS que FORZARÁ el scroll ---
     st.markdown("""
         <style>
-            /* Bloqueamos el apilamiento vertical de Streamlit en móviles para este contenedor específico */
-            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"] {
-                flex-wrap: nowrap !important;
-                overflow-x: auto !important;
-                padding-bottom: 15px; /* Espacio para la sombra de las tarjetas */
-                scrollbar-width: thin; /* Barra elegante en Firefox */
-                -webkit-overflow-scrolling: touch; /* Deslizamiento suave en iOS */
+            /* Le damos un ID único a nuestro contenedor de columnas */
+            #carrusel-con-botones {
+                display: flex;
+                flex-wrap: nowrap; /* Evita que los elementos se apilen */
+                overflow-x: auto;  /* Permite el scroll horizontal */
+                padding-bottom: 20px;
+                -webkit-overflow-scrolling: touch; /* Deslizamiento suave en móvil */
             }
-            /* Damos un ancho fijo a cada tarjeta para que no se aplasten */
-            div[data-testid="stVerticalBlock"]:has(#carrusel-start) div[data-testid="column"] {
-                min-width: 170px !important;
-                max-width: 170px !important;
-                flex: 0 0 auto !important;
-            }
-            /* Barra de scroll estilizada para Chrome/Safari/Edge */
-            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"]::-webkit-scrollbar {
-                height: 8px;
-            }
-            div[data-testid="stVerticalBlock"]:has(#carrusel-start) > div > div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb {
-                background-color: #fcdce8;
-                border-radius: 4px;
-            }
+            /* Ocultamos la barra de scroll */
+            #carrusel-con-botones::-webkit-scrollbar { display: none; }
+            #carrusel-con-botones { scrollbar-width: none; }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- CONTENEDOR DEL CARRUSEL ---
+    # --- PASO 2: Creamos las columnas dentro de un contenedor con el ID ---
     with st.container():
-        # Ancla invisible para que el CSS sepa a qué bloque aplicarse sin afectar otras partes de la app
-        st.markdown('<div id="carrusel-start" style="display: none;"></div>', unsafe_allow_html=True)
+        # Este div es el que nuestro CSS va a modificar
+        st.markdown('<div id="carrusel-con-botones">', unsafe_allow_html=True)
         
-        # Usamos columnas nativas para poder incluir botones nativos
         cols = st.columns(len(df_destacados))
         
         for i, (_, row) in enumerate(df_destacados.iterrows()):
             with cols[i]:
                 libro_id_limpio = str(int(float(row.get('libro_id', 0))))
                 titulo = str(row.get('titulo', 'Sin título'))
-                autor = str(row.get('autor', 'Desconocido'))
                 precio = float(row.get('precio', 0))
-                precio_orig = float(row.get('precio_original', precio))
                 c_url = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
-                
-                # Diseño de la Tarjeta (HTML)
-                html_card = f"""
-                <div class="libro-card" style="margin-bottom: 0px; min-height: 350px;">
-                    <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 170px; object-fit: contain; margin-bottom: 10px;">
-                    <div class="info-container">
-                        <h4 style="font-size: 0.9rem; min-height: 2.6em; line-height: 1.2;">{titulo}</h4>
-                        <p style='color: #888; font-size: 0.8rem; margin: 0 0 10px 0;'>por {autor}</p>
-                """
-                
-                if not pd.isna(precio_orig) and precio < precio_orig:
-                    html_card += f"<div><span class='precio-tachado' style='font-size:0.8rem;'>${precio_orig:,.0f}</span><br><span class='precio-oferta' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
-                else:
-                    html_card += f"<div><span class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</span></div>"
+
+                # Usamos un st.container para cada tarjeta, con un ancho fijo
+                with st.container():
+                    st.markdown(f"""
+                    <div class="libro-card" style="width: 180px; min-height: 360px; margin: 0 auto;">
+                        <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';" style="height: 180px; object-fit: contain;">
+                        <div class="info-container">
+                            <h4 style="font-size: 0.9rem;">{titulo}</h4>
+                            <p class='precio-normal' style='font-size:1.1rem;'>${precio:,.0f}</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                html_card += "</div></div>"
-                
-                # Pintamos la tarjeta
-                st.markdown(html_card, unsafe_allow_html=True)
-                
-                # BOTÓN FUNCIONAL
-                st.button(
-                    "✨ Lo quiero",
-                    key=f"destacado_{libro_id_limpio}",
-                    on_click=agregar_al_carrito,
-                    args=(libro_id_limpio, titulo, precio),
-                    use_container_width=True
-                )
+                    st.button(
+                        "✨ Lo quiero",
+                        key=f"destacado_{libro_id_limpio}",
+                        on_click=agregar_al_carrito,
+                        args=(libro_id_limpio, titulo, precio),
+                        use_container_width=True
+                    )
+        
+        # Cerramos el div
+        st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("No hay libros destacados este mes.")
 
