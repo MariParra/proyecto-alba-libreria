@@ -247,7 +247,18 @@ if seccion_actual == "inicio":
     </style>
 
     <div class="mega-carrusel-wrapper">
-        <!-- BANNER 1: CAJITA -->
+        
+        <!-- BANNER 1: OFERTAS (Ahora está de primero a la izquierda) -->
+        <div class="banner-promo bg-ofertas">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Ofertas 🔥</h2>
+                <p class="banner-subtitulo">Descuentos mágicos en nuestro catálogo.</p>
+                <a href="?seccion=ofertas" target="_self" class="banner-btn" style="color: #e88c71 !important;">💸 VER OFERTAS</a>
+            </div>
+            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
+        </div>
+
+        <!-- BANNER 2: CAJITA LITERARIA -->
         <div class="banner-promo bg-cajita">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Cajita Literaria ✨</h2>
@@ -257,7 +268,7 @@ if seccion_actual == "inicio":
             <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
         </div>
 
-        <!-- BANNER 2: DESTACADOS -->
+        <!-- BANNER 3: DESTACADOS -->
         <div class="banner-promo bg-destacados">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Destacados ⭐</h2>
@@ -267,15 +278,6 @@ if seccion_actual == "inicio":
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </div>
 
-        <!-- BANNER 3: OFERTAS -->
-        <div class="banner-promo bg-ofertas">
-            <div class="banner-texto">
-                <h2 class="banner-titulo">Ofertas 🔥</h2>
-                <p class="banner-subtitulo">Descuentos mágicos en nuestro catálogo.</p>
-                <a href="?seccion=ofertas" target="_self" class="banner-btn" style="color: #e88c71 !important;">💸 VER OFERTAS</a>
-            </div>
-            <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
-        </div>
     </div>
     """
     
