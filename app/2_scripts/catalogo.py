@@ -18,7 +18,7 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS AESTHETIC PREMIUM Y MÓVIL (CON EFECTO ZOOM) ---
+# --- CSS AESTHETIC Y CORRECCIONES VISUALES ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
@@ -31,27 +31,46 @@ st.markdown("""
             background-color: #FDF2F8; 
         }
 
-        /* Diseño de la Tarjeta del Libro */
+        /* 🎨 NUEVO DISEÑO PARA LOS EXPANDERS (BOLSA Y FILTROS) */
+        [data-testid="stExpander"] {
+            background-color: white !important;
+            border-radius: 15px !important;
+            border: 2px solid #FBCFE8 !important; /* Borde rosado */
+            box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08) !important;
+            margin-bottom: 15px;
+        }
+        [data-testid="stExpander"] summary {
+            background-color: #FFF1F2 !important; /* Fondo rosa ultra suave al título */
+            border-radius: 12px !important;
+        }
+        [data-testid="stExpander"] summary p {
+            font-size: 1.15rem !important;
+            font-weight: 700 !important;
+            color: #E11D48 !important; /* Texto fucsia brillante */
+        }
+
+        /* 🎨 TARJETAS DE LIBROS UNIFICADAS (CORRECCIÓN DEL ZOOM) */
         .libro-card {
             background-color: white; 
             border-radius: 20px; 
             padding: 20px;
-            margin-bottom: 25px; 
+            margin-bottom: 15px; /* Espacio para el botón de abajo */
             text-align: center; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
-            height: 100%;
-            display: flex; 
-            flex-direction: column; 
-            justify-content: space-between;
         }
         
-        /* Efecto Zoom al pasar el mouse */
         .libro-card:hover { 
-            transform: translateY(-10px) scale(1.05); 
-            box-shadow: 0 15px 30px rgba(225, 29, 72, 0.18);
-            z-index: 10;
-            position: relative;
+            transform: translateY(-8px) scale(1.03); 
+            box-shadow: 0 15px 30px rgba(225, 29, 72, 0.15);
+        }
+        
+        .libro-card img {
+            width: 100%;
+            border-radius: 10px;
+            object-fit: contain;
+            max-height: 250px;
+            margin-bottom: 15px;
         }
         
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 1rem; }
@@ -60,44 +79,28 @@ st.markdown("""
         
         /* Botón WhatsApp Flotante */
         .whatsapp-float {
-            position: fixed; 
-            bottom: 40px; 
-            right: 40px; 
-            background-color: #25D366;
-            color: white !important; 
-            border-radius: 50px; 
-            padding: 15px 30px;
-            font-size: 18px; 
-            font-weight: 700; 
-            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
-            z-index: 1000; 
-            text-decoration: none; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
+            position: fixed; bottom: 40px; right: 40px; background-color: #25D366;
+            color: white !important; border-radius: 50px; padding: 15px 30px;
+            font-size: 18px; font-weight: 700; box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
+            z-index: 1000; text-decoration: none; display: flex; align-items: center; justify-content: center;
             transition: background-color 0.3s ease;
         }
         .whatsapp-float:hover { background-color: #128C7E; }
         
-        /* Ajuste de botón flotante para celulares */
         @media (max-width: 768px) {
-            .whatsapp-float {
-                bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px;
-            }
+            .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; }
         }
     </style>
 """, unsafe_allow_html=True)
 
-# --- LÓGICA DE DATOS ---
+# --- LÓGICA DE DATOS Y RADAR ---
 @st.cache_data(ttl=120)
 def cargar_catalogo_publico():
     conn = get_db_connection()
     try:
-        # Intentamos traer la editorial también si existe
         res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
-        # Fallback por si la columna 'editorial' no existe
         res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
@@ -109,7 +112,6 @@ def cargar_catalogo_publico():
 
 @st.cache_data(ttl=300)
 def filtrar_solo_con_imagen(df):
-    """Revisa rápidamente en Supabase si la imagen existe."""
     def check_url(row):
         try:
             libro_id = str(int(float(row.get('libro_id', 0))))
@@ -154,19 +156,16 @@ if df_catalogo.empty:
     st.stop()
 
 # =====================================================================
-# MENÚS DESPLEGABLES EN LA PANTALLA PRINCIPAL
+# MENÚS DESPLEGABLES (AHORA LLAMATIVOS)
 # =====================================================================
 col_menu1, col_menu2 = st.columns(2)
 
-# PANEL 1: LA BOLSA DE COMPRAS
 with col_menu1:
-    with st.expander("🛍️ Ver mi Bolsa de Compras", expanded=bool(st.session_state.get('carrito_publico'))):
+    with st.expander("🛍️ VER MI BOLSA DE COMPRAS", expanded=bool(st.session_state.get('carrito_publico'))):
         if not st.session_state.get('carrito_publico'):
             st.write("Aún no has seleccionado ningún libro.")
         else:
             total_carrito = 0
-            
-            # --- NUEVO MENSAJE DE WHATSAPP ---
             mensaje_wa = "¡Hola Alba Librería! 💖 Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
             
             for l_id, item in list(st.session_state.carrito_publico.items()):
@@ -174,7 +173,7 @@ with col_menu1:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_titulo, col_btn = st.columns([4, 1]) 
+                col_titulo, col_btn = st.columns([4, 1])  
                 with col_titulo:
                     st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_btn:
@@ -186,7 +185,6 @@ with col_menu1:
             st.markdown(f"### Total Estimado: ${total_carrito:,.0f}")
             st.caption("Sujeto a confirmación de stock.")
             
-            # --- NOTA DE STOCK Y TOTAL ---
             mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n"
             mensaje_wa += "⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n"
             mensaje_wa += "¡Quedo atenta, muchas gracias!"
@@ -194,12 +192,10 @@ with col_menu1:
             mensaje_wa_encoded = urllib.parse.quote(mensaje_wa)
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={mensaje_wa_encoded}"
             
-            # Botón directo en el expander
             st.link_button("📲 ENVIAR PEDIDO AHORA", st.session_state.url_wa_flotante, type="primary", use_container_width=True)
 
-# PANEL 2: LOS FILTROS
 with col_menu2:
-    with st.expander("🔍 Buscar y Filtrar"):
+    with st.expander("🔍 BUSCAR Y FILTRAR LIBROS"):
         generos_disp = sorted(df_catalogo['genero'].dropna().unique())
         autores_disp = sorted(df_catalogo['autor'].dropna().unique())
         
@@ -214,7 +210,7 @@ with col_menu2:
 
 st.write("---")
 
-# --- APLICAR FILTROS AL CATÁLOGO ---
+# --- APLICAR FILTROS ---
 df_filtrado = df_catalogo.copy()
 if filtro_generos: 
     df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
@@ -225,36 +221,41 @@ if filtro_editoriales:
 
 st.markdown(f"<p style='color: #6B7280; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
-# --- CUADRÍCULA ESTÉTICA DE LIBROS ---
+# --- CUADRÍCULA UNIFICADA (SOLUCIÓN DEL ZOOM) ---
 columnas = st.columns(3)
 for index, row in df_filtrado.reset_index(drop=True).iterrows():
     col = columnas[index % 3]
     with col:
-        with st.container():
-            st.markdown('<div class="libro-card">', unsafe_allow_html=True)
-            
-            # Imagen cargada fluidamente mediante HTML seguro
-            libro_id_limpio = str(int(float(row.get('libro_id', 0))))
-            url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
-            st.markdown(f'<img src="{url_imagen}" style="width:100%; border-radius: 10px; object-fit: contain; max-height: 280px; margin-bottom: 15px;" onerror="this.onerror=null; this.src=\'https://via.placeholder.com/250x350?text=Sin+Portada\';">', unsafe_allow_html=True)
+        libro_id_limpio = str(int(float(row.get('libro_id', 0))))
+        url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+        titulo_seguro = row.get('titulo', "Sin título")
+        autor_seguro = row.get('autor', 'Desconocido')
+        precio = float(row.get('precio', 0.0))
+        precio_orig = float(row.get('precio_original', precio))
 
-            titulo_seguro = row.get('titulo', "Sin título")
-            autor_seguro = row.get('autor', 'Desconocido')
+        # --- AHORA TODO EL HTML SE GENERA EN UN SOLO BLOQUE ---
+        html_card = f"""
+        <div class="libro-card">
+            <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
+            <h4 style='color: #4A4D7E; font-weight: 700; font-size: 1.1rem; line-height: 1.3; margin-bottom: 5px; margin-top: 0;'>{titulo_seguro}</h4>
+            <p style='color: #9CA3AF; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
+        """
+        
+        if precio < precio_orig:
+            html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
+        else:
+            html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
             
-            st.markdown(f"<h4 style='color: #4A4D7E; font-weight: 700; font-size: 1.1rem; line-height: 1.3;'>{titulo_seguro}</h4>", unsafe_allow_html=True)
-            st.markdown(f"<p style='color: #9CA3AF; font-size: 0.9rem; margin-top: -10px;'>por {autor_seguro}</p>", unsafe_allow_html=True)
-            
-            precio = float(row.get('precio', 0.0))
-            precio_orig = float(row.get('precio_original', precio))
-            
-            if precio < precio_orig:
-                st.markdown(f"<span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span>", unsafe_allow_html=True)
-                st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
-            else:
-                st.markdown(f"<br><span class='precio-normal'>${precio:,.0f}</span>", unsafe_allow_html=True)
-                st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+        html_card += "</div>" # Cierre de la tarjeta
+        
+        # Pintamos la tarjeta completa
+        st.markdown(html_card, unsafe_allow_html=True)
+        
+        # El botón de Streamlit se coloca JUSTO DEBAJO de la tarjeta
+        if precio < precio_orig:
+            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
+        else:
+            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
