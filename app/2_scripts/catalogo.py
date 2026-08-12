@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+from utilidades import get_db_connection
 from cache_utils import cargar_catalogo_publico, filtrar_solo_con_imagen
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -19,68 +20,135 @@ try:
 except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
-    
+
 # --- CSS CON LA PALETA OFICIAL, NUEVAS FUENTES Y DISEÑO PREMIUM ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
         
-        html, body, [class*="css"] { font-family: 'Lato', sans-serif; }
+        html, body, [class*="css"] { 
+            font-family: 'Lato', sans-serif; 
+        }
         
-        h1, h2, h3, .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #dc4990 !important; }
+        h1, h2, h3, .banner-titulo { 
+            font-family: 'Dancing Script', cursive !important; 
+            color: #dc4990 !important; 
+        }
         
-        .stApp { background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); padding-top: 140px; /* Más espacio para la navbar doble */ }
+        .stApp { 
+            background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
+            padding-top: 140px; /* Espacio para que la barra de navegación fija no tape el contenido */
+        }
 
         [data-testid="stExpander"] {
-            background-color: #ffffff !important; border-radius: 15px !important;
-            border: 2px solid #e790b3 !important; box-shadow: 0 4px 12px rgba(220, 73, 144, 0.1) !important; margin-bottom: 15px;
+            background-color: #ffffff !important; 
+            border-radius: 15px !important;
+            border: 2px solid #e790b3 !important; 
+            box-shadow: 0 4px 12px rgba(220, 73, 144, 0.1) !important; 
+            margin-bottom: 15px;
         }
-        [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
-        [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
+        [data-testid="stExpander"] summary { 
+            background-color: #fcf5f7 !important; 
+            border-radius: 12px !important; 
+        }
+        [data-testid="stExpander"] summary p { 
+            font-size: 1.15rem !important; 
+            font-weight: 700 !important; 
+            color: #dc4990 !important; 
+        }
 
         /* Filtros Multiselect Premium (Fucsia más claro: #F472B6) */
-        [data-testid="stMultiSelect"] { border: 2px solid #e790b3 !important; background-color: #ffffff !important; border-radius: 10px !important; }
-        [data-testid="stMultiSelect"] .st-d5 { color: #9CA3AF !important; font-style: italic !important; }
-        [data-testid="stMultiSelect"] .st-c5 {
-            background-color: #F472B6 !important; /* <-- FUCSIA MÁS CLARO Y CONTRASTANTE */
-            color: white !important; border-radius: 6px !important; font-weight: bold !important;
+        [data-testid="stMultiSelect"] { 
+            border: 2px solid #e790b3 !important; 
+            background-color: #ffffff !important; 
+            border-radius: 10px !important; 
         }
-        [data-testid="stMultiSelect"] .st-c5 svg { fill: white !important; }
+        [data-testid="stMultiSelect"] .st-d5 { 
+            color: #9CA3AF !important; 
+            font-style: italic !important; 
+        }
+        [data-testid="stMultiSelect"] .st-c5 {
+            background-color: #F472B6 !important; 
+            color: white !important; 
+            border-radius: 6px !important; 
+            font-weight: bold !important;
+        }
+        [data-testid="stMultiSelect"] .st-c5 svg { 
+            fill: white !important; 
+        }
 
         [data-testid="stSidebar"] { display: none !important; }
 
         /* MENÚ SUPERIOR FIJO (2 FILAS) */
         .navbar-fija {
-            position: fixed; top: 0rem; z-index: 9999;
-            background: rgba(255, 255, 255, 0.90); backdrop-filter: blur(10px);
-            padding: 15px 20px 10px 20px; border-bottom: 2px solid #e790b3;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; left: 0;
+            position: fixed; 
+            top: 0rem; 
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.90); 
+            backdrop-filter: blur(10px);
+            padding: 15px 20px 10px 20px; 
+            border-bottom: 2px solid #e790b3;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
+            width: 100%; 
+            left: 0;
         }
         
         .stTextInput { margin-bottom: 0px !important; }
         
         /* CARRUSEL DE NOVEDADES */
-        .carrusel-container { display: flex; overflow-x: auto; scroll-behavior: smooth; gap: 15px; padding: 10px 5px 20px 5px; scrollbar-width: thin; scrollbar-color: #e790b3 #fcf5f7; }
+        .carrusel-container { 
+            display: flex; 
+            overflow-x: auto; 
+            scroll-behavior: smooth; 
+            gap: 15px; 
+            padding: 10px 5px 20px 5px; 
+            scrollbar-width: thin; 
+            scrollbar-color: #e790b3 #fcf5f7; 
+        }
         .carrusel-container::-webkit-scrollbar { height: 8px; }
         .carrusel-container::-webkit-scrollbar-track { background: #fcf5f7; border-radius: 10px; }
         .carrusel-container::-webkit-scrollbar-thumb { background-color: #e790b3; border-radius: 10px; }
-        .carrusel-item { flex: 0 0 160px; background: rgba(255, 255, 255, 0.9); border: 1px solid #fcdce8; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); transition: transform 0.2s ease; }
+        .carrusel-item { 
+            flex: 0 0 160px; 
+            background: rgba(255, 255, 255, 0.9); 
+            border: 1px solid #fcdce8; 
+            border-radius: 15px; 
+            padding: 15px; 
+            text-align: center; 
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); 
+            transition: transform 0.2s ease; 
+        }
         .carrusel-item:hover { transform: translateY(-4px); }
         .carrusel-item img { width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }
 
         /* TARJETAS DE LIBROS UNIFORMES Y COMPACTAS */
         .libro-card {
-            background: rgba(255, 255, 255, 0.9); border: 1px solid #fcdce8; border-radius: 20px; 
-            padding: 15px; margin-bottom: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
-            transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
-            min-height: 430px; height: 100%;
+            background: rgba(255, 255, 255, 0.9); 
+            border: 1px solid #fcdce8; 
+            border-radius: 20px; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            text-align: center; 
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between;
+            min-height: 430px; 
+            height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
         .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
-            font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
-            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 2.6em;
+            font-family: 'Lato', sans-serif !important; 
+            color: #333333; 
+            font-weight: 700; 
+            font-size: 1.05rem;
+            line-height: 1.3; 
+            margin-top: 10px; 
+            margin-bottom: 5px; 
+            min-height: 2.6em;
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
@@ -89,14 +157,33 @@ st.markdown("""
         
         /* BOTÓN "LO QUIERO" EN COLOR ROSADO OFICIAL */
         [data-testid="stButton"] button {
-            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%;
+            background-color: #fcdce8 !important; 
+            color: #333333 !important; 
+            border: 1px solid #e790b3 !important; 
+            font-weight: bold !important; 
+            border-radius: 10px !important; 
+            width: 100%;
         }
         [data-testid="stButton"] button:hover { background-color: #e790b3 !important; color: white !important; }
 
         /* Botón WhatsApp Flotante */
         .whatsapp-float {
-            position: fixed; bottom: 40px; right: 40px; background-color: #25D366; color: white !important; border-radius: 50px; padding: 15px 30px;
-            font-size: 18px; font-weight: 700; box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4); z-index: 1000; text-decoration: none; display: flex; align-items: center; justify-content: center; transition: background-color 0.3s ease;
+            position: fixed; 
+            bottom: 40px; 
+            right: 40px; 
+            background-color: #25D366; 
+            color: white !important; 
+            border-radius: 50px; 
+            padding: 15px 30px;
+            font-size: 18px; 
+            font-weight: 700; 
+            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4); 
+            z-index: 1000; 
+            text-decoration: none; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            transition: background-color 0.3s ease;
         }
         .whatsapp-float:hover { background-color: #128C7E; }
         @media (max-width: 768px) { .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; } }
@@ -120,8 +207,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
-
-# Carga de datos aislada (Paso 1)
+# Carga de datos aislada
 df_bruto = cargar_catalogo_publico()
 if df_bruto.empty:
     st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
@@ -137,6 +223,7 @@ if df_catalogo.empty:
 generos_disp = sorted(df_catalogo['genero'].dropna().unique())
 autores_disp = sorted(df_catalogo['autor'].dropna().unique())
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
+
 # =====================================================================
 # MENÚ SUPERIOR FIJO: FILA 1 (Filtros y Bolsa) | FILA 2 (Buscador)
 # =====================================================================
@@ -154,7 +241,7 @@ def quitar_del_carrito(libro_id):
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 
 # FILA 1
-col_filtros, col_bolsa = st.columns([5, 1])
+col_filtros, col_bolsa = st.columns([3, 1])
 
 with col_filtros:
     with st.expander("⚙️ Filtrar Catálogo", expanded=False):
@@ -193,13 +280,12 @@ with col_bolsa:
             mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n¡Quedo atenta, muchas gracias!"
             
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={urllib.parse.quote(mensaje_wa)}"
-            st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:15px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
 # FILA 2 (Buscador ocupando todo el ancho abajo)
 busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 
 st.markdown('</div>', unsafe_allow_html=True)
-
 
 # =====================================================================
 # 7) BANNER DE CAJITA LITERARIA REDIMENSIONADA (max-width: 120px)
@@ -241,24 +327,27 @@ st.markdown(f"""
             <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-btn">📝 ¡SUSCRIBIRME!</a>
         </div>
         <div class="banner-img-container">
-            <img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria">
+            <img src="{URL_FOTO_CAJITA}" class="banner-img" alt="Cajita Literaria Alba">
         </div>
     </div>
 """, unsafe_allow_html=True)
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS
+# 🎠 CARRUSEL DE DESTACADOS (CON LÓGICA DE APP ADMIN)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-if 'precio_original' in df_catalogo.columns:
+# Lógica de destacados basada en la nueva columna de Supabase
+if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
+    df_destacados = df_catalogo[df_catalogo['destacado'] == True]
+elif 'precio_original' in df_catalogo.columns:
     df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']].dropna(subset=['precio_original'])
 else:
     df_destacados = pd.DataFrame()
 
-if len(df_destacados) < 4:
+if len(df_destacados) == 0:
     df_destacados = df_catalogo.head(8)
 
 html_carrusel = '<div class="carrusel-container">'
@@ -277,7 +366,7 @@ for _, row in df_destacados.iterrows():
     """
 html_carrusel += '</div>'
 
-# Carrusel con CSS inyectado para que funcione en st.html de forma segura
+# Carrusel seguro inyectando CSS inline directamente
 st.html(f"""
     <style>
         .carrusel-container {{ display: flex; overflow-x: auto; scroll-behavior: smooth; gap: 15px; padding: 10px 5px 20px 5px; scrollbar-width: none; -ms-overflow-style: none; }}
@@ -307,7 +396,7 @@ if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_g
 if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
 if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
-# El texto descriptivo "Mostrando..." ahora es más grande y llamativo (Paso 2)
+# El texto descriptivo "Mostrando..." ahora es más grande y llamativo
 st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
 # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
