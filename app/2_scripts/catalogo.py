@@ -18,30 +18,66 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS AESTHETIC Y MÓVIL ---
+# --- CSS AESTHETIC PREMIUM Y MÓVIL (CON EFECTO ZOOM) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
-        html, body, [class*="css"] { font-family: 'Montserrat', sans-serif; }
-        .stApp { background-color: #FDF2F8; }
-
-        .libro-card {
-            background-color: white; border-radius: 20px; padding: 20px;
-            margin-bottom: 25px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            transition: transform 0.3s ease, box-shadow 0.3s ease; height: 100%;
-            display: flex; flex-direction: column; justify-content: space-between;
+        
+        html, body, [class*="css"] { 
+            font-family: 'Montserrat', sans-serif; 
         }
-        .libro-card:hover { transform: translateY(-8px); box-shadow: 0 12px 25px rgba(225, 29, 72, 0.15); }
+        
+        .stApp { 
+            background-color: #FDF2F8; 
+        }
+
+        /* Diseño de la Tarjeta del Libro */
+        .libro-card {
+            background-color: white; 
+            border-radius: 20px; 
+            padding: 20px;
+            margin-bottom: 25px; 
+            text-align: center; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+            height: 100%;
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between;
+        }
+        
+        /* Efecto Zoom al pasar el mouse */
+        .libro-card:hover { 
+            transform: translateY(-10px) scale(1.05); 
+            box-shadow: 0 15px 30px rgba(225, 29, 72, 0.18);
+            z-index: 10;
+            position: relative;
+        }
+        
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 1rem; }
         .precio-oferta { color: #E11D48; font-weight: 700; font-size: 1.5rem; }
         .precio-normal { color: #4A4D7E; font-weight: 700; font-size: 1.4rem; }
         
+        /* Botón WhatsApp Flotante */
         .whatsapp-float {
-            position: fixed; bottom: 40px; right: 40px; background-color: #25D366;
-            color: white !important; border-radius: 50px; padding: 15px 30px;
-            font-size: 18px; font-weight: 700; box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
-            z-index: 1000; text-decoration: none; display: flex; align-items: center; justify-content: center;
+            position: fixed; 
+            bottom: 40px; 
+            right: 40px; 
+            background-color: #25D366;
+            color: white !important; 
+            border-radius: 50px; 
+            padding: 15px 30px;
+            font-size: 18px; 
+            font-weight: 700; 
+            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4);
+            z-index: 1000; 
+            text-decoration: none; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            transition: background-color 0.3s ease;
         }
+        .whatsapp-float:hover { background-color: #128C7E; }
         
         /* Ajuste de botón flotante para celulares */
         @media (max-width: 768px) {
@@ -57,16 +93,15 @@ st.markdown("""
 def cargar_catalogo_publico():
     conn = get_db_connection()
     try:
-        # SOLUCIÓN 1: Filtramos explícitamente stock > 0 Y precio > 0 desde Supabase
+        # Intentamos traer la editorial también si existe
         res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
-        # Fallback sin editorial
+        # Fallback por si la columna 'editorial' no existe
         res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
         df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
         
     if not df.empty:
-        # Doble validación en Pandas por seguridad
         df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
         df.dropna(subset=['libro_id', 'titulo', 'precio'], inplace=True)
         df = df[df['precio'] > 0] 
@@ -74,6 +109,7 @@ def cargar_catalogo_publico():
 
 @st.cache_data(ttl=300)
 def filtrar_solo_con_imagen(df):
+    """Revisa rápidamente en Supabase si la imagen existe."""
     def check_url(row):
         try:
             libro_id = str(int(float(row.get('libro_id', 0))))
@@ -114,41 +150,51 @@ with st.spinner("Acomodando los libros en la vitrina..."):
     df_catalogo = filtrar_solo_con_imagen(df_bruto)
 
 if df_catalogo.empty:
-    st.warning("No hay libros disponibles por el momento.")
+    st.warning("No hay libros con portadas disponibles por el momento.")
     st.stop()
 
 # =====================================================================
-# SOLUCIÓN 2: MENÚS DESPLEGABLES EN LA PANTALLA PRINCIPAL (NO SIDEBAR)
+# MENÚS DESPLEGABLES EN LA PANTALLA PRINCIPAL
 # =====================================================================
 col_menu1, col_menu2 = st.columns(2)
 
 # PANEL 1: LA BOLSA DE COMPRAS
 with col_menu1:
-    with st.expander("🛍️ Ver mi Bolsa de Compras", expanded=bool(st.session_state.carrito_publico)):
-        if not st.session_state.carrito_publico:
+    with st.expander("🛍️ Ver mi Bolsa de Compras", expanded=bool(st.session_state.get('carrito_publico'))):
+        if not st.session_state.get('carrito_publico'):
             st.write("Aún no has seleccionado ningún libro.")
         else:
             total_carrito = 0
-            mensaje_wa = "¡Hola Alba Librería! 💖 Me encantaría pedir estos libros:\n\n"
+            
+            # --- NUEVO MENSAJE DE WHATSAPP ---
+            mensaje_wa = "¡Hola Alba Librería! 💖 Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
+            
             for l_id, item in list(st.session_state.carrito_publico.items()):
                 subtotal = item['precio'] * item['cantidad']
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
                 col_titulo, col_btn = st.columns([4, 1]) 
-                col_titulo.write(f"**{item['cantidad']}x** {item['titulo']}")
-                if col_btn.button("❌", key=f"del_{l_id}", help="Quitar"):
-                    quitar_del_carrito(l_id)
-                    st.rerun()
-                    
+                with col_titulo:
+                    st.write(f"**{item['cantidad']}x** {item['titulo']}")
+                with col_btn:
+                    if st.button("❌", key=f"del_{l_id}", help="Quitar"):
+                        quitar_del_carrito(l_id)
+                        st.rerun()
+                        
             st.markdown("---")
-            st.markdown(f"### Total: ${total_carrito:,.0f}")
-            mensaje_wa += f"\n*Total a pagar: ${total_carrito:,.0f}*\n\n¡Quedo atenta, muchas gracias!"
+            st.markdown(f"### Total Estimado: ${total_carrito:,.0f}")
+            st.caption("Sujeto a confirmación de stock.")
+            
+            # --- NOTA DE STOCK Y TOTAL ---
+            mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n"
+            mensaje_wa += "⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n"
+            mensaje_wa += "¡Quedo atenta, muchas gracias!"
             
             mensaje_wa_encoded = urllib.parse.quote(mensaje_wa)
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={mensaje_wa_encoded}"
             
-            # Botón directo aquí también por comodidad
+            # Botón directo en el expander
             st.link_button("📲 ENVIAR PEDIDO AHORA", st.session_state.url_wa_flotante, type="primary", use_container_width=True)
 
 # PANEL 2: LOS FILTROS
@@ -168,11 +214,14 @@ with col_menu2:
 
 st.write("---")
 
-# --- APLICAR FILTROS ---
+# --- APLICAR FILTROS AL CATÁLOGO ---
 df_filtrado = df_catalogo.copy()
-if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
-if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
-if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
+if filtro_generos: 
+    df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
+if filtro_autores: 
+    df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
+if filtro_editoriales: 
+    df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
 
 st.markdown(f"<p style='color: #6B7280; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
@@ -184,9 +233,10 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         with st.container():
             st.markdown('<div class="libro-card">', unsafe_allow_html=True)
             
+            # Imagen cargada fluidamente mediante HTML seguro
             libro_id_limpio = str(int(float(row.get('libro_id', 0))))
             url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
-            st.markdown(f'<img src="{url_imagen}" style="width:100%; border-radius: 10px; object-fit: contain; max-height: 280px; margin-bottom: 15px;">', unsafe_allow_html=True)
+            st.markdown(f'<img src="{url_imagen}" style="width:100%; border-radius: 10px; object-fit: contain; max-height: 280px; margin-bottom: 15px;" onerror="this.onerror=null; this.src=\'https://via.placeholder.com/250x350?text=Sin+Portada\';">', unsafe_allow_html=True)
 
             titulo_seguro = row.get('titulo', "Sin título")
             autor_seguro = row.get('autor', 'Desconocido')
