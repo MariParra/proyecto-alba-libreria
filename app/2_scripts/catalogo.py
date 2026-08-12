@@ -6,7 +6,7 @@ import concurrent.futures
 from utilidades import get_db_connection
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Catálogo | Alba Librería", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Catálogo | Alba Librería", page_icon="📖", layout="wide")
 
 # ====================================================
 # ⚙️ CARGA SEGURA DE CONFIGURACIÓN DESDE st.secrets
@@ -163,7 +163,7 @@ def quitar_del_carrito(libro_id):
         del st.session_state.carrito_publico[libro_id]
 
 # --- CABECERA ---
-st.markdown("<h1 style='text-align: center; font-size: 2.8rem; margin-bottom: 0;'>📚 Alba Librería</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; font-size: 2.8rem; margin-bottom: 0;'>📖 Alba Librería</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #e790b3; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 st.write("---")
 
@@ -265,12 +265,45 @@ if df_catalogo.empty:
     st.stop()
 
 # =====================================================================
-# MENÚS DESPLEGABLES
+# 🌟 SECCIÓN DE CARRUSEL / DESTACADOS
 # =====================================================================
+st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>✨ Libros Destacados y Ofertas</h3>", unsafe_allow_html=True)
+
+# Filtramos libros en oferta (donde precio < precio_original) o tomamos los primeros
+df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
+if len(df_destacados) < 3:
+    df_destacados = df_catalogo.head(5) # Si hay pocas ofertas, tomamos los primeros
+
+cols_carrusel = st.columns(min(len(df_destacados), 4))
+for idx, (_, row) in enumerate(df_destacados.head(4).iterrows()):
+    with cols_carrusel[idx]:
+        c_id = str(int(float(row.get('libro_id', 0))))
+        c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
+        c_titulo = row.get('titulo', 'Sin título')
+        c_precio = float(row.get('precio', 0))
+        c_orig = float(row.get('precio_original', c_precio))
+        
+        st.markdown(f"""
+        <div style="background: white; border-radius: 15px; padding: 12px; text-align: center; border: 1px solid #fcdce8; box-shadow: 0 4px 10px rgba(220,73,144,0.06); height: 100%;">
+            <img src="{c_url}" style="width: 100%; max-height: 160px; object-fit: contain; border-radius: 8px; margin-bottom: 8px;">
+            <p style="font-weight: 700; font-size: 0.9rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
+            <p style="color: #dc4990; font-weight: 700; font-size: 1rem; margin-bottom: 8px;">${c_precio:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.button("Añadir", key=f"dest_{c_id}", use_container_width=True, on_click=agregar_al_carrito, args=(c_id, c_titulo, c_precio))
+
+st.write("---")
+
+# =====================================================================
+# MENÚS DESPLEGABLES (CON CONTADOR DE ARTÍCULOS EN LA BOLSA)
+# =====================================================================
+total_articulos = sum(item['cantidad'] for item in st.session_state.get('carrito_publico', {}).values())
+titulo_bolsa = f"🛍️ VER MI BOLSA DE COMPRAS ({total_articulos} items)" if total_articulos > 0 else "🛍️ VER MI BOLSA DE COMPRAS"
+
 col_menu1, col_menu2 = st.columns(2)
 
 with col_menu1:
-    with st.expander("🛍️ VER MI BOLSA DE COMPRAS", expanded=bool(st.session_state.get('carrito_publico'))):
+    with st.expander(titulo_bolsa, expanded=bool(st.session_state.get('carrito_publico'))):
         if not st.session_state.get('carrito_publico'):
             st.write("Aún no has seleccionado ningún libro.")
         else:
