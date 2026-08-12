@@ -42,6 +42,11 @@ def cargar_datos_completos():
             df['destacado'] = df['destacado'].fillna(False).astype(bool)
         else:
             df['destacado'] = False
+            
+        if 'visible_catalogo' in df.columns:
+            df['visible_catalogo'] = df['visible_catalogo'].fillna(True).astype(bool)
+        else:
+            df['visible_catalogo'] = True
         # LÓGICA DE DESCUENTOS SEGURA
         df['Dcto %'] = 0.0
         mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
@@ -181,6 +186,8 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
             if 'titulo' in row: datos['titulo'] = limpiar_texto_para_busqueda(str(row['titulo']))
             if 'apto_cajita' in row: datos['apto_cajita'] = bool(row['apto_cajita'])
+            if 'destacado' in row: datos['destacado'] = bool(row['destacado'])
+            if 'visible_catalogo' in row: datos['visible_catalogo'] = bool(row['visible_catalogo'])
             
             # 🔴 LÓGICA DE RECALCULO DE PRECIOS AUTOMÁTICA
             # Si cambiaron el precio_original, recalculamos el precio de oferta (si lo tenía)
@@ -533,10 +540,10 @@ def mostrar_inventario():
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
-            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original", "apto_cajita"]
+            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original", "apto_cajita""destacado","visible_catalogo"]
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
-            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original", "apto_cajita"])
+            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original", "apto_cajita", "destacado","visible_catalogo"])
             
             columnas_finales = columnas_base + columnas_a_mostrar
             
@@ -558,7 +565,9 @@ def mostrar_inventario():
                 "costo": st.column_config.NumberColumn("Costo ($)", format="%.0f"),
                 "precio": st.column_config.NumberColumn("Precio ($)", format="%.0f"),
                 "precio_original": st.column_config.NumberColumn("Precio Original ($)", format="%.0f"),
-                "apto_cajita": st.column_config.CheckboxColumn("¿Apto Cajita? 🎁", default=True)
+                "apto_cajita": st.column_config.CheckboxColumn("¿Apto Cajita? 🎁", default=True),
+                "destacado": st.column_config.CheckboxColumn("¿Destacado? 💫", default=False),
+                "visible_catalogo": st.column_config.CheckboxColumn("¿Visible en Web? 👁️", default=False)
             }
             
             disabled_finales = [c for c in ["libro_id"] if c in df_mostrar.columns]

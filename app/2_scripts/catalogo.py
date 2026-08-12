@@ -136,6 +136,10 @@ if df_bruto.empty:
 with st.spinner("Acomodando los libros en la vitrina..."):
     df_catalogo = filtrar_solo_con_imagen(df_bruto, URL_BASE_SUPABASE)
 
+# Filtrar para que solo se muestren los libros autorizados para la web
+if 'visible_catalogo' in df_catalogo.columns:
+    df_catalogo = df_catalogo[df_catalogo['visible_catalogo'] == True]
+    
 if df_catalogo.empty:
     st.warning("No hay libros con portadas disponibles por el momento.")
     st.stop()
