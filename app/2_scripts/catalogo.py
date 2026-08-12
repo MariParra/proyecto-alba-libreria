@@ -184,6 +184,8 @@ def cargar_catalogo_publico():
         
     if not df.empty:
         df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
+        if 'precio_original' in df.columns:
+            df['precio_original'] = pd.to_numeric(df['precio_original'], errors='coerce')
         df.dropna(subset=['libro_id', 'titulo', 'precio'], inplace=True)
         df = df[df['precio'] > 0] 
     return df
@@ -356,7 +358,7 @@ st.markdown(f"""
         }}
         
         @media (max-width: 768px) {{
-            .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
+            .banner-carrusel-container, .banner-cajita {{ flex-direction: column; text-align: center; padding: 25px 20px; }}
             .banner-texto {{ padding-right: 0; margin-bottom: 25px; }}
             .banner-titulo {{ font-size: 1.4rem; }}
             .banner-img-container {{ text-align: center; }}
@@ -385,7 +387,12 @@ st.write("---")
 st.markdown("<h3 style='text-align: center; margin-bottom: 10px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
+# Filtramos adecuadamente para asegurar que existan ambos campos y evitar errores con NaN
+if 'precio_original' in df_catalogo.columns:
+    df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']].dropna(subset=['precio_original'])
+else:
+    df_destacados = pd.DataFrame()
+
 if len(df_destacados) < 4:
     df_destacados = df_catalogo.head(8)
 
@@ -448,7 +455,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
             <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
         """
         
-        if precio < precio_orig:
+        if not pd.isna(row.get('precio_original')) and precio < precio_orig:
             html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
         else:
             html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
@@ -457,7 +464,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         
         st.markdown(html_card, unsafe_allow_html=True)
         
-        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
+        st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_command_width=True if "use_command_width" in dir(st) else False, use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
