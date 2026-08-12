@@ -222,48 +222,43 @@ st.markdown(f"""
 st.write("---") 
 
 # =====================================================================
-# 🎠 CARRUSEL DE DESTACADOS
+# 🎠 CARRUSEL DE DESTACADOS (VERSIÓN CORREGIDA)
 # =====================================================================
 st.markdown("<h3 style='text-align: center; margin-bottom: 5px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-if 'destacado' in df_catalogo.columns and df_catalogo['destacado'].any():
-    df_destacados = df_catalogo[df_catalogo['destacado'] == True]
-elif 'precio_original' in df_catalogo.columns:
-    df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']].dropna(subset=['precio_original'])
+df_destacados = df_catalogo[df_catalogo['destacado'] == True].head(8)
+
+if not df_destacados.empty:
+    # Usamos columnas de Streamlit para controlar el layout del carrusel
+    cols = st.columns(len(df_destacados))
+    for i, (_, row) in enumerate(df_destacados.iterrows()):
+        with cols[i]:
+            # Extraemos los datos del libro
+            libro_id = str(int(row.get('libro_id', 0)))
+            titulo = str(row.get('titulo', 'Sin título'))
+            precio = float(row.get('precio', 0))
+            
+            # Construimos la parte visual con HTML y la clase de carrusel
+            html_item = f"""
+            <div class="carrusel-item">
+                <img src="https://via.placeholder.com/150x200?text={urllib.parse.quote(titulo)}" style="width:100%; height:140px; object-fit:contain; border-radius:8px; margin-bottom:10px;">
+                <p style="font-weight: 700; font-size: 0.85rem; color: #333;" title="{titulo}">{titulo}</p>
+                <p style="color: #dc4990; font-weight: 700; font-size: 1rem;">${precio:,.0f}</p>
+            </div>
+            """
+            st.markdown(html_item, unsafe_allow_html=True)
+
+            # Añadimos el botón funcional de Streamlit justo debajo
+            st.button(
+                "✨ Lo quiero",
+                key=f"destacado_{libro_id}",
+                on_click=agregar_al_carrito,
+                args=(libro_id, titulo, precio),
+                use_container_width=True
+            )
 else:
-    df_destacados = pd.DataFrame()
+    st.info("No hay libros destacados este mes.")
 
-if len(df_destacados) == 0:
-    df_destacados = df_catalogo.head(8)
-
-html_carrusel = '<div class="carrusel-container">'
-for _, row in df_destacados.iterrows():
-    c_id = str(int(float(row.get('libro_id', 0))))
-    c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
-    c_titulo = str(row.get('titulo', 'Sin título'))
-    c_precio = float(row.get('precio', 0))
-    
-    html_carrusel += f"""
-    <div class="carrusel-item">
-        <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';">
-        <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
-        <p style="color: #dc4990; font-weight: 700; font-size: 1rem; margin-bottom: 0px;">${c_precio:,.0f}</p>
-    </div>
-    """
-html_carrusel += '</div>'
-
-st.html(f"""
-    <style>
-        .carrusel-container {{ display: flex; overflow-x: auto; scroll-behavior: smooth; gap: 15px; padding: 10px 5px 20px 5px; scrollbar-width: none; -ms-overflow-style: none; }}
-        .carrusel-container::-webkit-scrollbar {{ display: none; }}
-        .carrusel-item {{ flex: 0 0 160px; background: white; border: 1px solid #fcdce8; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08); transition: transform 0.2s ease; }}
-        .carrusel-item:hover {{ transform: translateY(-4px); }}
-        .carrusel-item img {{ width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 10px; }}
-        .carrusel-item p {{ margin: 0; line-height: 1.2; }}
-    </style>
-    {html_carrusel}
-""")
 st.write("---")
 
 # =====================================================================
