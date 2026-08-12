@@ -18,7 +18,7 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS CON LA PALETA OFICIAL Y NUEVAS FUENTES ---
+# --- CSS CON LA PALETA OFICIAL, NUEVAS FUENTES Y CARRUSEL / SIDEBAR FIJO ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Playwrite+DE+SAS+Guides&display=swap');
@@ -38,7 +38,7 @@ st.markdown("""
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
         }
 
-        /* 🎨 DISEÑO DE LOS EXPANDERS (BOLSA Y FILTROS) */
+        /* 🎨 DISEÑO DE LOS EXPANDERS / BOLSAS */
         [data-testid="stExpander"] {
             background-color: #ffffff !important;
             border-radius: 15px !important;
@@ -56,7 +56,61 @@ st.markdown("""
             color: #dc4990 !important; 
         }
 
-        /* 🎨 TARJETAS DE LIBROS (ESTILO GLASS CON TONOS OFICIALES) */
+        /* 📌 FIJAR BARRA LATERAL (FILTROS Y BÚSQUEDA) */
+        [data-testid="stSidebar"] {
+            background-color: #fcf5f7;
+            border-right: 2px solid #fcdce8;
+        }
+
+        /* 🎠 ESTILOS PARA EL CARRUSEL DESLIZABLE HORIZONTAL */
+        .carrusel-container {
+            display: flex;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            gap: 15px;
+            padding: 10px 5px 20px 5px;
+            scrollbar-width: thin;
+            scrollbar-color: #e790b3 #fcf5f7;
+        }
+        .carrusel-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        .carrusel-container::-webkit-scrollbar-track {
+            background: #fcf5f7;
+            border-radius: 10px;
+        }
+        .carrusel-container::-webkit-scrollbar-thumb {
+            background-color: #e790b3;
+            border-radius: 10px;
+        }
+        .carrusel-item {
+            flex: 0 0 200px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #fcdce8;
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
+            transition: transform 0.2s ease;
+        }
+        .carrusel-item:hover {
+            transform: translateY(-4px);
+        }
+        .carrusel-item img {
+            width: 100%;
+            height: 180px;
+            object-fit: contain;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .carrusel-item {
+                flex: 0 0 160px;
+            }
+        }
+
+        /* 🎨 TARJETAS DE LIBROS EN CATÁLOGO */
         .libro-card {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(10px);
@@ -162,12 +216,85 @@ def quitar_del_carrito(libro_id):
     if libro_id in st.session_state.carrito_publico:
         del st.session_state.carrito_publico[libro_id]
 
-# --- CABECERA ---
+# --- CABECERA PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; font-size: 2.8rem; margin-bottom: 0;'>📖 Alba Librería</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #e790b3; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 st.write("---")
 
+df_bruto = cargar_catalogo_publico()
+if df_bruto.empty:
+    st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
+    st.stop()
+
+with st.spinner("Acomodando los libros en la vitrina..."):
+    df_catalogo = filtrar_solo_con_imagen(df_bruto)
+
+if df_catalogo.empty:
+    st.warning("No hay libros con portadas disponibles por el momento.")
+    st.stop()
+
+# =====================================================================
+# 📌 BARRA LATERAL (SIDEBAR FIJO): BÚSQUEDA, FILTROS Y BOLSA
+# =====================================================================
+with st.sidebar:
+    st.markdown("<h3 style='text-align: center; margin-top: 0;'>🔎 Filtros y Búsqueda</h3>", unsafe_allow_html=True)
+    
+    # Barra de búsqueda por texto libre
+    busqueda_texto = st.text_input("🔍 Buscar por título o autor:", placeholder="Ej. Fantasía, amor...")
+    
+    generos_disp = sorted(df_catalogo['genero'].dropna().unique())
+    autores_disp = sorted(df_catalogo['autor'].dropna().unique())
+    
+    filtro_generos = st.multiselect("📖 Géneros:", generos_disp)
+    filtro_autores = st.multiselect("✍️ Autores:", autores_disp)
+    
+    filtro_editoriales = []
+    if 'editorial' in df_catalogo.columns:
+        editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique())
+        if editoriales_disp:
+            filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp)
+            
+    st.markdown("---")
+    
+    # BOLSA DE COMPRAS EN EL SIDEBAR (Siempre visible y fija)
+    total_articulos = sum(item['cantidad'] for item in st.session_state.get('carrito_publico', {}).values())
+    titulo_bolsa = f"🛍️ Mi Bolsa ({total_articulos})" if total_articulos > 0 else "🛍️ Mi Bolsa"
+    
+    with st.expander(titulo_bolsa, expanded=bool(st.session_state.get('carrito_publico'))):
+        if not st.session_state.get('carrito_publico'):
+            st.write("Aún no has seleccionado libros.")
+        else:
+            total_carrito = 0
+            mensaje_wa = "¡Hola Alba Librería! 💖 Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
+            
+            for l_id, item in list(st.session_state.carrito_publico.items()):
+                subtotal = item['precio'] * item['cantidad']
+                total_carrito += subtotal
+                mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
+                
+                col_t, col_b = st.columns([3, 1])  
+                with col_t:
+                    st.write(f"**{item['cantidad']}x** {item['titulo']}")
+                with col_b:
+                    if st.button("❌", key=f"del_{l_id}", help="Quitar"):
+                        quitar_del_carrito(l_id)
+                        st.rerun()
+                        
+            st.markdown("---")
+            st.markdown(f"**Total:** ${total_carrito:,.0f}")
+            
+            mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n"
+            mensaje_wa += "⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n"
+            mensaje_wa += "¡Quedo atenta, muchas gracias!"
+            
+            mensaje_wa_encoded = urllib.parse.quote(mensaje_wa)
+            st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={mensaje_wa_encoded}"
+            
+            st.link_button("📲 ENVIAR PEDIDO", st.session_state.url_wa_flotante, type="primary", use_container_width=True)
+
+# =====================================================================
 # --- BANNER DE CAJITA LITERARIA ---
+# =====================================================================
 LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
 URL_FOTO_CAJITA = "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=600&auto=format&fit=crop"
 
@@ -252,108 +379,57 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.write("---") 
 
-df_bruto = cargar_catalogo_publico()
-if df_bruto.empty:
-    st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
-    st.stop()
-
-with st.spinner("Acomodando los libros en la vitrina..."):
-    df_catalogo = filtrar_solo_con_imagen(df_bruto)
-
-if df_catalogo.empty:
-    st.warning("No hay libros con portadas disponibles por el momento.")
-    st.stop()
-
 # =====================================================================
-# 🌟 SECCIÓN DE CARRUSEL / DESTACADOS
+# 🎠 CARRUSEL DE DESTACADOS / NOVEDADES (DESLIZABLE HORIZONTAL)
 # =====================================================================
-st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>✨ Libros Destacados y Ofertas</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-bottom: 10px;'>✨ Destacados del Mes</h3>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 15px;'>Desliza hacia la derecha para ver más novedades ➔</p>", unsafe_allow_html=True)
 
-# Filtramos libros en oferta (donde precio < precio_original) o tomamos los primeros
 df_destacados = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
-if len(df_destacados) < 3:
-    df_destacados = df_catalogo.head(5) # Si hay pocas ofertas, tomamos los primeros
+if len(df_destacados) < 4:
+    df_destacados = df_catalogo.head(8)
 
-cols_carrusel = st.columns(min(len(df_destacados), 4))
+html_carrusel = '<div class="carrusel-container">'
+for _, row in df_destacados.iterrows():
+    c_id = str(int(float(row.get('libro_id', 0))))
+    c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
+    c_titulo = row.get('titulo', 'Sin título')
+    c_precio = float(row.get('precio', 0))
+    
+    html_carrusel += f"""
+    <div class="carrusel-item">
+        <img src="{c_url}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x200?text=Sin+Portada';">
+        <p style="font-weight: 700; font-size: 0.85rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
+        <p style="color: #dc4990; font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;">${c_precio:,.0f}</p>
+    </div>
+    """
+html_carrusel += '</div>'
+
+st.markdown(html_carrusel, unsafe_allow_html=True)
+
+# Botones de añadir para el carrusel (organizados dinámicamente)
+cols_car_btns = st.columns(min(len(df_destacados), 4))
 for idx, (_, row) in enumerate(df_destacados.head(4).iterrows()):
-    with cols_carrusel[idx]:
+    with cols_car_btns[idx]:
         c_id = str(int(float(row.get('libro_id', 0))))
-        c_url = f"{URL_BASE_SUPABASE}{c_id}.jpg"
         c_titulo = row.get('titulo', 'Sin título')
         c_precio = float(row.get('precio', 0))
-        c_orig = float(row.get('precio_original', c_precio))
-        
-        st.markdown(f"""
-        <div style="background: white; border-radius: 15px; padding: 12px; text-align: center; border: 1px solid #fcdce8; box-shadow: 0 4px 10px rgba(220,73,144,0.06); height: 100%;">
-            <img src="{c_url}" style="width: 100%; max-height: 160px; object-fit: contain; border-radius: 8px; margin-bottom: 8px;">
-            <p style="font-weight: 700; font-size: 0.9rem; color: #333; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{c_titulo}">{c_titulo}</p>
-            <p style="color: #dc4990; font-weight: 700; font-size: 1rem; margin-bottom: 8px;">${c_precio:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.button("Añadir", key=f"dest_{c_id}", use_container_width=True, on_click=agregar_al_carrito, args=(c_id, c_titulo, c_precio))
+        st.button("✨ Añadir", key=f"dest_btn_{c_id}", use_container_width=True, on_click=agregar_al_carrito, args=(c_id, c_titulo, c_precio))
 
 st.write("---")
 
 # =====================================================================
-# MENÚS DESPLEGABLES (CON CONTADOR DE ARTÍCULOS EN LA BOLSA)
+# --- APLICAR FILTROS Y BÚSQUEDA ---
 # =====================================================================
-total_articulos = sum(item['cantidad'] for item in st.session_state.get('carrito_publico', {}).values())
-titulo_bolsa = f"🛍️ VER MI BOLSA DE COMPRAS ({total_articulos} items)" if total_articulos > 0 else "🛍️ VER MI BOLSA DE COMPRAS"
-
-col_menu1, col_menu2 = st.columns(2)
-
-with col_menu1:
-    with st.expander(titulo_bolsa, expanded=bool(st.session_state.get('carrito_publico'))):
-        if not st.session_state.get('carrito_publico'):
-            st.write("Aún no has seleccionado ningún libro.")
-        else:
-            total_carrito = 0
-            mensaje_wa = "¡Hola Alba Librería! 💖 Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
-            
-            for l_id, item in list(st.session_state.carrito_publico.items()):
-                subtotal = item['precio'] * item['cantidad']
-                total_carrito += subtotal
-                mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
-                
-                col_titulo, col_btn = st.columns([4, 1])  
-                with col_titulo:
-                    st.write(f"**{item['cantidad']}x** {item['titulo']}")
-                with col_btn:
-                    if st.button("❌", key=f"del_{l_id}", help="Quitar"):
-                        quitar_del_carrito(l_id)
-                        st.rerun()
-                        
-            st.markdown("---")
-            st.markdown(f"### Total Estimado: ${total_carrito:,.0f}")
-            st.caption("Sujeto a confirmación de stock.")
-            
-            mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n"
-            mensaje_wa += "⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n"
-            mensaje_wa += "¡Quedo atenta, muchas gracias!"
-            
-            mensaje_wa_encoded = urllib.parse.quote(mensaje_wa)
-            st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={mensaje_wa_encoded}"
-            
-            st.link_button("📲 ENVIAR PEDIDO AHORA", st.session_state.url_wa_flotante, type="primary", use_container_width=True)
-
-with col_menu2:
-    with st.expander("🔍 BUSCAR Y FILTRAR LIBROS"):
-        generos_disp = sorted(df_catalogo['genero'].dropna().unique())
-        autores_disp = sorted(df_catalogo['autor'].dropna().unique())
-        
-        filtro_generos = st.multiselect("📖 Géneros:", generos_disp)
-        filtro_autores = st.multiselect("✍️ Autores:", autores_disp)
-        
-        filtro_editoriales = []
-        if 'editorial' in df_catalogo.columns:
-            editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique())
-            if editoriales_disp:
-                filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp)
-
-st.write("---")
-
-# --- APLICAR FILTROS ---
 df_filtrado = df_catalogo.copy()
+
+if busqueda_texto:
+    texto_limpio = busqueda_texto.strip().lower()
+    df_filtrado = df_filtrado[
+        df_filtrado['titulo'].str.lower().str.contains(texto_limpio, na=False) | 
+        df_filtrado['autor'].str.lower().str.contains(texto_limpio, na=False)
+    ]
+
 if filtro_generos: 
     df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
 if filtro_autores: 
@@ -363,7 +439,7 @@ if filtro_editoriales:
 
 st.markdown(f"<p style='color: #e790b3; font-weight: 600; text-align: center;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
 
-# --- CUADRÍCULA UNIFICADA ---
+# --- CUADRÍCULA PRINCIPAL DE LIBROS ---
 columnas = st.columns(3)
 for index, row in df_filtrado.reset_index(drop=True).iterrows():
     col = columnas[index % 3]
@@ -394,7 +470,7 @@ for index, row in df_filtrado.reset_index(drop=True).iterrows():
         if precio < precio_orig:
             st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", type="primary", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
         else:
-            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
+            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, libro_id_limpio, precio)) # Se ajustó de forma limpia
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
 if st.session_state.get('carrito_publico'):
