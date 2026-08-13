@@ -746,7 +746,7 @@ def mostrar_caja():
             disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
-            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist, key=clave_dinamica_tabla)
+            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist)
 
             
             if not df_mostrar.equals(df_editado):
