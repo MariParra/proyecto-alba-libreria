@@ -695,16 +695,18 @@ def mostrar_caja():
                 
             df_filtrado_general = df_ventas.copy()
             if mes_en_curso:
-                # --- FILTRO ESTRICTO MES Y AÑO ACTUAL ---
+                # Si el checkbox está activo, este es el ÚNICO filtro de fecha que se aplica.
                 mes_actual = hoy.month
                 ano_actual = hoy.year
-
+                
                 df_fechas_validas = df_filtrado_general.dropna(subset=['fecha_limpia'])
                 
                 df_filtrado_general = df_fechas_validas[
                     (df_fechas_validas['fecha_limpia'].dt.month == mes_actual) & 
                     (df_fechas_validas['fecha_limpia'].dt.year == ano_actual)
                 ]
+            
+            # Si el checkbox NO está activo, entonces aplicamos los otros filtros de fecha.
             elif len(rango_fechas) == 2:
                 df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])]
                 
