@@ -5,7 +5,7 @@ import requests
 import concurrent.futures
 from utilidades import get_db_connection
 
-@st.cache_data(ttl=600) # Guarda el resultado en memoria por 10 minutos
+@st.cache_data(ttl=180) # Guarda el resultado en memoria por 3 minutos
 def obtener_libros_publicables():
     """
     Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket.
