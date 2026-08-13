@@ -108,7 +108,8 @@ def procesar_nuevos_libros(df):
     total_filas = len(df)
     
     columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion']
-    
+    columnas_numericas = ['stock', 'precio', 'precio_original', 'costo']
+
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f"Procesando libro {indice + 1} de {total_filas}...")
         
@@ -126,47 +127,54 @@ def procesar_nuevos_libros(df):
             
         try:
             nuevo_libro = {}
-            for col in df.columns:
-                if pd.notna(fila[col]):
-                    if col in columnas_texto:
-                        nuevo_libro[col] = limpiar_texto_para_busqueda(str(fila[col]))
-                    elif col not in ['apto_cajita', 'destacado', 'visible_catalogo']:
-                        nuevo_libro[col] = fila[col]
+            # Se procesan los datos de forma segura, tipo por tipo
             
-            # --- LÓGICA BOOLEANOS ---
-            encuadernacion = str(nuevo_libro.get('encuadernacion', ''))
+            # 1. Columnas de texto
+            for col in columnas_texto:
+                if col in fila and pd.notna(fila[col]):
+                    nuevo_libro[col] = limpiar_texto_para_busqueda(str(fila[col]))
             
-            # 1. apto_cajita
-            if pd.notna(fila.get('apto_cajita')):
+            # 2. Columnas numéricas
+            for col in columnas_numericas:
+                if col in fila and pd.notna(fila[col]):
+                    try:
+                        # Se fuerza la conversión a float para ser más robusto
+                        nuevo_libro[col] = float(fila[col])
+                    except (ValueError, TypeError):
+                        # Si falla (ej. texto en un campo numérico), se omite
+                        errores.append(f"Fila {indice + 2}: Valor no numérico en columna '{col}'. Se omitió.")
+                        continue
+            
+            encuadernacion = nuevo_libro.get('encuadernacion', '').upper()
+            
+            # apto_cajita
+            if 'apto_cajita' in fila and pd.notna(fila['apto_cajita']):
                 nuevo_libro['apto_cajita'] = bool(fila['apto_cajita'])
             else:
-                nuevo_libro['apto_cajita'] = False if encuadernacion.upper() == 'TAPA DURA' else True
+                nuevo_libro['apto_cajita'] = False if encuadernacion == 'TAPA DURA' else True
             
-            # 2. destacado
-            if pd.notna(fila.get('destacado')):
+            # destacado
+            if 'destacado' in fila and pd.notna(fila['destacado']):
                 nuevo_libro['destacado'] = bool(fila['destacado'])
             else:
                 nuevo_libro['destacado'] = False
-                
-            # 3. visible_catalogo
-            if pd.notna(fila.get('visible_catalogo')):
+            
+            # visible_catalogo
+            if 'visible_catalogo' in fila and pd.notna(fila['visible_catalogo']):
                 nuevo_libro['visible_catalogo'] = bool(fila['visible_catalogo'])
             else:
                 nuevo_libro['visible_catalogo'] = True
-                    
-            conn.table("libros").insert(nuevo_libro).execute()
-            exitos += 1
-            catalogo_actual.append((titulo_limpio, autor_limpio))
+            
+            # Si se recolectó al menos un dato útil, se inserta
+            if 'titulo' in nuevo_libro:
+                conn.table("libros").insert(nuevo_libro).execute()
+                exitos += 1
+                catalogo_actual.append((titulo_limpio, autor_limpio))
+
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             error_detalle = f"Fallo en creación masiva en Fila {indice + 2} ('{titulo_limpio}'). Detalle: {e}"
-            
-            log_error(
-                vista="vista_creacion_masiva",
-                funcion="procesar_nuevos_libros",
-                error=error_detalle,
-                email_usuario=email_usuario
-            )
+            log_error(vista="vista_creacion_masiva", funcion="procesar_nuevos_libros", error=error_detalle, email_usuario=email_usuario)
             errores.append(f"Fila {indice + 2} ('{titulo_limpio}'): Error -> {str(e)}")
             
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
