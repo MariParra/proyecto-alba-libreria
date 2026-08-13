@@ -218,7 +218,7 @@ if seccion_actual == "inicio":
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
-        html_mega_carrusel = f"""
+    html_mega_carrusel = f"""
     <style>
         /* CONTENEDOR PRINCIPAL: Por defecto (móvil) es 1 columna hacia abajo */
         .mega-carrusel-wrapper {{
