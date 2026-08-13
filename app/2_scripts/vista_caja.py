@@ -686,12 +686,14 @@ def mostrar_caja():
                 
                 st.markdown("---")
                 col_chk1, col_chk2 = st.columns(2)
-                def resetear_estado_tabla():
-                # Esta función borra cualquier memoria que tenga el data_editor
+                
+                def resetear_estado_tabla_y_recargar():
+                    # Esta función borra la memoria Y fuerza la recarga de la página.
                     if 'data_editor' in st.session_state:
                         del st.session_state['data_editor']
+                    st.rerun()
 
-                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False, on_change=resetear_estado_tabla)
+                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", key="chk_mes_curso", on_change=resetear_estado_tabla_y_recargar)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 st.markdown("---")
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
