@@ -218,30 +218,26 @@ if seccion_actual == "inicio":
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
-    html_mega_carrusel = f"""
+        html_mega_carrusel = f"""
     <style>
+        /* CONTENEDOR PRINCIPAL: Por defecto (móvil) es 1 columna hacia abajo */
         .mega-carrusel-wrapper {{
-            display: grid; /* ¡Cambiamos flex por grid! */
-            grid-auto-flow: column; /* Le decimos que los elementos fluyan horizontalmente */
-            grid-auto-columns: 85%; /* Cada columna ocupa el 85% del ancho */
-
-            overflow-x: auto; 
-            scroll-snap-type: x mandatory;
-            gap: 20px; 
-            padding: 20px 10px; 
-            scrollbar-width: none; 
-            -webkit-overflow-scrolling: touch;
+            display: grid;
+            grid-template-columns: 1fr; 
+            gap: 20px;
+            padding: 10px 0;
+            width: 100%;
         }}
-        .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
         
+        /* PANTALLAS GRANDES (PC/Tablets): Cambia a 3 columnas iguales */
         @media (min-width: 1024px) {{
             .mega-carrusel-wrapper {{
-                justify-content: center;
+                grid-template-columns: repeat(3, 1fr);
             }}
         }}
         
+        /* DISEÑO DE CADA BANNER */
         .banner-promo {{
-            scroll-snap-align: center;
             border-radius: 20px; 
             padding: 25px 30px; 
             box-shadow: 0 8px 25px rgba(0,0,0,0.15);
@@ -249,12 +245,21 @@ if seccion_actual == "inicio":
             align-items: center; 
             justify-content: space-between;
             text-decoration: none !important;
+            width: 100%; 
+            box-sizing: border-box;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }}
+        .banner-promo:hover {{ 
+            transform: translateY(-5px); 
+            box-shadow: 0 12px 30px rgba(0,0,0,0.2); 
         }}
         
+        /* COLORES Y DEGRADADOS */
         .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
         .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
         .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
         
+        /* TEXTOS Y BOTONES */
         .banner-texto {{ flex: 1; padding-right: 10px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
         .banner-subtitulo {{ color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
@@ -265,12 +270,14 @@ if seccion_actual == "inicio":
         }}
         .banner-btn:hover {{ transform: scale(1.05); }}
         
+        /* IMÁGENES */
         .banner-img-container {{ flex: 0.45; text-align: right; }}
         .banner-img-container img {{ width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
         .img-icono {{ transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
     </style>
 
     <div class="mega-carrusel-wrapper">
+        <!-- BANNER 1: OFERTAS -->
         <a href="?seccion=ofertas" target="_self" class="banner-promo bg-ofertas">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Ofertas 🔥</h2>
@@ -279,6 +286,8 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </a>
+
+        <!-- BANNER 2: CAJITA LITERARIA -->
         <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-promo bg-cajita">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Cajita Literaria ✨</h2>
@@ -287,6 +296,8 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
         </a>
+
+        <!-- BANNER 3: DESTACADOS -->
         <a href="?seccion=destacados" target="_self" class="banner-promo bg-destacados">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Destacados ⭐</h2>
