@@ -20,6 +20,7 @@ from vista_kanban import mostrar_kanban
 from vista_rollback import mostrar_rollback
 from vista_ventas_masivas import mostrar_ventas_masivas
 from vista_marketing import mostrar_generador_marketing
+from vista_portadas import mostrar_gestion_portadas
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -232,6 +233,10 @@ else:
         if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
             st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
             st.rerun()
+        
+        if st.button("🖼️ GESTIÓN DE PORTADAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS" else "secondary"):
+            st.session_state.pagina_actual = "🖼️ GESTIÓN DE PORTADAS"
+            st.rerun()
 
         if st.button("🎨 CATÁLOGO (🏗️)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)" else "secondary"):
             st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
@@ -330,6 +335,8 @@ else:
             mostrar_herramientas()
         elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
             mostrar_importacion_libreros()
+        elif st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS":
+            mostrar_gestion_portadas()
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
         elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA":

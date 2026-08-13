@@ -366,7 +366,18 @@ else:
         col = columnas[index % 3]
         with col:
             libro_id_limpio = str(int(float(row.get('libro_id', 0))))
-            url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg"
+            
+            timestamp_str = row.get('portada_last_updated', '') 
+            version_cache = ""
+            if timestamp_str:
+                # Convertimos la fecha a un número simple (ej: 1691532847)
+                try:
+                    dt_obj = pd.to_datetime(timestamp_str)
+                    version_cache = f"?v={int(dt_obj.timestamp())}"
+                except:
+                    version_cache = "" # Si la fecha es inválida, no añadimos nada
+            
+            url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg{version_cache}"
             titulo_seguro = row.get('titulo', "Sin título")
             autor_seguro = row.get('autor', 'Desconocido')
             precio = float(row.get('precio', 0.0))

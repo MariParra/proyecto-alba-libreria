@@ -167,6 +167,7 @@ def procesar_nuevos_libros(df):
             
             # Si se recolectó al menos un dato útil, se inserta
             if 'titulo' in nuevo_libro:
+                nuevo_libro['portada_last_updated'] = 'now()'
                 conn.table("libros").insert(nuevo_libro).execute()
                 exitos += 1
                 catalogo_actual.append((titulo_limpio, autor_limpio))
