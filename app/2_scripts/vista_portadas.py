@@ -107,11 +107,11 @@ def mostrar_gestion_portadas():
         with col2:
             if libro_id_seleccionado and 'archivo_img' in locals() and archivo_img is not None:
                 st.markdown("### Vista Previa")
-                st.image(archivo_img, caption="Así se verá la nueva portada", use_container_width=True)
+                st.image(archivo_img, caption="Así se verá la nueva portada", use_column_width=True)
             elif libro_id_seleccionado:
                 st.markdown("### Portada Actual en BD")
                 URL_BASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
-                st.image(f"{URL_BASE}{libro_id_seleccionado}.jpg", caption="Portada actual", use_container_width=True)
+                st.image(f"{URL_BASE}{libro_id_seleccionado}.jpg", caption="Portada actual", use_column_width=True)
 
     # ==========================================
     # PESTAÑA 2: MASIVA
