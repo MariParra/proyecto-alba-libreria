@@ -502,9 +502,11 @@ def mostrar_inventario():
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
                         nuevo_precio_original = col7.number_input("Precio Orig. ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                         
-                        # --- APTO CAJITA ---
-                        es_apto_actual = bool(libro.get('apto_cajita', True))
-                        nuevo_apto_cajita = st.checkbox("🎁 Apto para Cajitas de Suscripción", value=es_apto_actual)
+                        check_col1, check_col2, check_col3 = st.columns(3)
+                        nuevo_apto_cajita = check_col1.checkbox("🎁 Apto Cajitas", value=bool(libro.get('apto_cajita', True)))
+                        nuevo_destacado = check_col2.checkbox("⭐ Destacado", value=bool(libro.get('destacado', False)))
+                        nuevo_visible = check_col3.checkbox("👁️ Visible en Web", value=bool(libro.get('visible_catalogo', True)))
+
                         st.write("")
                         
                         if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
@@ -520,7 +522,9 @@ def mostrar_inventario():
                                         "stock": nuevo_stock, 
                                         "costo": nuevo_costo, 
                                         "precio_original": nuevo_precio_original,
-                                        "apto_cajita": nuevo_apto_cajita
+                                        "apto_cajita": nuevo_apto_cajita,
+                                        "destacado": nuevo_destacado,
+                                        "visible_catalogo": nuevo_visible
                                     }
                                 
                                 pct_dcto = float(libro.get('Dcto %', 0))
@@ -540,10 +544,18 @@ def mostrar_inventario():
         else:
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
-            columnas_tabla_pc_todas = ["libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "stock", "costo", "precio", "precio_original", "apto_cajita""destacado","visible_catalogo"]
+            columnas_tabla_pc_todas = [
+                "libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", 
+                "stock", "costo", "precio", "precio_original", 
+                "apto_cajita", "destacado", "visible_catalogo"
+            ]
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
-            columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_opcionales, default=["autor", "editorial", "stock", "costo", "precio", "precio_original", "apto_cajita", "destacado","visible_catalogo"])
+            columnas_a_mostrar = st.multiselect(
+                    "👀 Mostrar / Ocultar Columnas en Tabla", 
+                    columnas_opcionales, 
+                    default=["autor", "stock", "precio", "apto_cajita", "destacado", "visible_catalogo"]
+                )
             
             columnas_finales = columnas_base + columnas_a_mostrar
             
