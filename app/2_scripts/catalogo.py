@@ -221,7 +221,10 @@ if seccion_actual == "inicio":
     html_mega_carrusel = f"""
     <style>
         .mega-carrusel-wrapper {{
-            display: flex; 
+            display: grid; /* ¡Cambiamos flex por grid! */
+            grid-auto-flow: column; /* Le decimos que los elementos fluyan horizontalmente */
+            grid-auto-columns: 85%; /* Cada columna ocupa el 85% del ancho */
+
             overflow-x: auto; 
             scroll-snap-type: x mandatory;
             gap: 20px; 
@@ -246,9 +249,6 @@ if seccion_actual == "inicio":
             align-items: center; 
             justify-content: space-between;
             text-decoration: none !important;
-            width: 85vw; 
-            max-width: 380px; 
-            flex-shrink: 0;
         }}
         
         .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
