@@ -686,7 +686,12 @@ def mostrar_caja():
                 
                 st.markdown("---")
                 col_chk1, col_chk2 = st.columns(2)
-                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
+                def resetear_estado_tabla():
+                # Esta función borra cualquier memoria que tenga el data_editor
+                    if 'data_editor' in st.session_state:
+                        del st.session_state['data_editor']
+
+                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False, on_change=resetear_estado_tabla)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 st.markdown("---")
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
@@ -750,7 +755,7 @@ def mostrar_caja():
             disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
-            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist)
+            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist, key="data_editor")
             
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Historial", type="primary"):
