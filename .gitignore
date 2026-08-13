@@ -14,6 +14,7 @@ app/sql queries
 app/1_input_data
 app/portadas_listas_para_subir
 scripts extras/
+app/2_scripts/limpiar_bucket.py
 # --- Carpetas Deprecadas e Info ---
 info/
 deprecated_app/
