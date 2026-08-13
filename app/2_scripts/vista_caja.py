@@ -354,7 +354,18 @@ def actualizar_historial_caja(df_editado):
             
     return updates
 
-
+def unificar_formatos_fecha(serie_fechas):
+    def parsear_valor(val):
+        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() in ['nan', 'nat']:
+            return pd.NaT
+        val_str = str(val).strip()
+        fecha_parseada = pd.to_datetime(val_str, dayfirst=True, errors='coerce')
+        return fecha_parseada
+    try:
+        return serie_fechas.apply(parsear_valor)
+    except Exception as e:
+        log_error("vista_caja", "unificar_formatos_fecha", f"Error inesperado al parsear fechas. Detalle: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+        return pd.to_datetime(serie_fechas, errors='coerce')
 
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
@@ -666,17 +677,23 @@ def mostrar_caja():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas ilegibles"):
                     st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'cliente_nombre']], hide_index=True)
             with st.expander("🔍 Filtros del Historial"):
-                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
-                hoy = datetime.now().date()
-                primer_dia_mes = hoy.replace(day=1)
+                opciones_mes = ["Ver Todo"]
+                mapa_inverso_mes = {}
                 if not df_fechas_validas.empty:
-                    fecha_min = df_fechas_validas['fecha_limpia'].min().date()
-                    fecha_max = df_fechas_validas['fecha_limpia'].max().date()
-                    limite_min = min(fecha_min, hoy)
-                    limite_max = max(fecha_max, hoy)
-                    rango_fechas = col_f1.date_input("Rango personalizado:", value=(limite_min, limite_max), min_value=limite_min, max_value=limite_max)
-                else: rango_fechas = col_f1.date_input("Rango personalizado:", value=(), disabled=True)
+                    df_fechas_validas['mes_ano_str'] = df_fechas_validas['fecha_limpia'].dt.strftime('%Y-%m')
+                    meses_unicos = sorted(df_fechas_validas['mes_ano_str'].unique(), reverse=True)
+                    
+                    month_map_es = {'01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'}
+                    
+                    for mes_str in meses_unicos:
+                        ano, mes_num = mes_str.split('-')
+                        nombre_amigable = f"{month_map_es.get(mes_num, '')} {ano}"
+                        opciones_mes.append(nombre_amigable)
+                        mapa_inverso_mes[nombre_amigable] = mes_str
+
+                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=opciones_mes)
                 
                 clientes_hist = ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar Cliente:", clientes_hist)
@@ -685,10 +702,8 @@ def mostrar_caja():
                 estado_pago_filtro = col_f4.selectbox("Filtrar Pago:", ["Todos", "PAGADO", "PENDIENTE"])
                 
                 st.markdown("---")
-                col_chk1, col_chk2 = st.columns(2)
-                
-                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
-                solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
+
+                solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 
                 st.markdown("---")
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
@@ -696,24 +711,12 @@ def mostrar_caja():
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
             df_filtrado_general = df_ventas.copy()
-            # --- 1. PRIORIDAD MÁXIMA: FILTRO DE MES ---
-            if mes_en_curso:
-                mes_actual = hoy.month
-                ano_actual = hoy.year
-                # Filtramos valores nulos primero para que no rompa la lógica
-                df_fechas_validas = df_filtrado_general.dropna(subset=['fecha_limpia'])
-                
-                df_filtrado_general = df_fechas_validas[
-                    (df_fechas_validas['fecha_limpia'].dt.month == mes_actual) & 
-                    (df_fechas_validas['fecha_limpia'].dt.year == ano_actual)
-                ]
             
-            # --- 2. SI NO ESTÁ ACTIVO EL MES, USAMOS RANGO PERSONALIZADO ---
-            elif len(rango_fechas) == 2:
-                df_filtrado_general = df_filtrado_general[
-                    (df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & 
-                    (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])
-                ]
+            if mes_seleccionado != "Ver Todo":
+                mes_str_a_buscar = mapa_inverso_mes.get(mes_seleccionado)
+                if mes_str_a_buscar:
+                    df_filtrado_fechas_validas = df_filtrado_general.dropna(subset=['fecha_limpia'])
+                    df_filtrado_general = df_filtrado_fechas_validas[df_filtrado_fechas_validas['fecha_limpia'].dt.strftime('%Y-%m') == mes_str_a_buscar]
                 
             if cliente_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['cliente_nombre'] == cliente_filtro]
             if estado_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado'] == estado_filtro]
