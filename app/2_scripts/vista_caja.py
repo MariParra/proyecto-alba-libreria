@@ -698,9 +698,12 @@ def mostrar_caja():
                 # --- FILTRO ESTRICTO MES Y AÑO ACTUAL ---
                 mes_actual = hoy.month
                 ano_actual = hoy.year
-                df_filtrado_general = df_filtrado_general[
-                    (df_filtrado_general['fecha_limpia'].dt.month == mes_actual) & 
-                    (df_filtrado_general['fecha_limpia'].dt.year == ano_actual)
+
+                df_fechas_validas = df_filtrado_general.dropna(subset=['fecha_limpia'])
+                
+                df_filtrado_general = df_fechas_validas[
+                    (df_fechas_validas['fecha_limpia'].dt.month == mes_actual) & 
+                    (df_fechas_validas['fecha_limpia'].dt.year == ano_actual)
                 ]
             elif len(rango_fechas) == 2:
                 df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])]
