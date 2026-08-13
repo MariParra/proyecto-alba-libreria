@@ -134,77 +134,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
-# # CARGA DE DATOS (Usando tu Filtro Maestro)
-# with st.spinner("Acomodando los libros en la vitrina..."):
-#     df_catalogo = obtener_libros_publicables()
-
 # =====================================================================
-# --- MODO DEPURACIÓN: ANALIZAR FILTRO DE PORTADAS ---
+# CARGA DE DATOS
 # =====================================================================
-st.markdown("---")
-st.subheader("🕵️‍♂️ Módulo de Depuración del Catálogo")
-from utilidades import get_db_connection
-conn = get_db_connection()
+with st.spinner("Acomodando los libros en la vitrina..."):
+    df_catalogo = obtener_libros_publicables()
 
-# 1. Obtenemos los libros de la BD
-with st.spinner("Paso 1: Obteniendo libros visibles y con precio..."):
-    # (El código de consulta no cambia)
-    try:
-        res_libros_bd = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, precio, precio_original, portada_last_updated, destacado").eq("visible_catalogo", True).gt("precio", 0).execute()
-        df_libros_bd = pd.DataFrame(res_libros_bd.data)
-        st.metric("Libros que cumplen condiciones en la BD", len(df_libros_bd))
-    except Exception as e:
-        st.error(f"Error en Paso 1: {e}")
-        st.stop()
+if df_catalogo.empty:
+    st.warning("No hay libros disponibles por el momento. ¡Vuelve pronto!")
+    st.stop()
 
-# 2. Obtenemos las portadas del bucket
-with st.spinner("Paso 2: Obteniendo lista de portadas en Storage..."):
-    try:
-        # (El código de consulta con try-except no cambia)
-        try:
-            archivos_bucket = conn.storage.from_("portadas").list(path="", search_options={"limit": 5000})
-        except TypeError:
-            archivos_bucket = conn.storage.from_("portadas").list(path="", options={"limit": 5000})
-
-        # --- INICIO DE LA CORRECCIÓN CLAVE ---
-        # Limpiamos CADA nombre de archivo de cualquier espacio o carácter invisible
-        portadas_existentes = {archivo['name'].strip() for archivo in archivos_bucket if archivo['name'] is not None}
-        # --- FIN DE LA CORRECCIÓN CLAVE ---
-
-        st.metric("Portadas encontradas en el Bucket", len(portadas_existentes))
-    except Exception as e:
-        st.error(f"Error en Paso 2: {e}")
-        st.stop()
-
-# 3. Hacemos el cruce (con la misma limpieza)
-df_libros_bd['portada_esperada'] = df_libros_bd['libro_id'].apply(lambda id: f"{int(id)}.jpg".strip())
-df_libros_bd['tiene_portada_real'] = df_libros_bd['portada_esperada'].isin(portadas_existentes)
-
-df_catalogo = df_libros_bd[df_libros_bd['tiene_portada_real'] == True].copy()
-st.metric("Libros Finales (con Portada y Datos OK)", len(df_catalogo), delta=len(df_catalogo) - len(df_libros_bd))
-
-# 4. Análisis del libro 2118 (sin cambios)
-st.markdown("---")
-st.write("Buscando el libro con ID 2118:")
-libro_en_bd = df_libros_bd[df_libros_bd['libro_id'] == 2118]
-
-if not libro_en_bd.empty:
-    st.success("✅ El libro 2118 FUE encontrado en la consulta a la BD.")
-    st.dataframe(libro_en_bd) # Usamos dataframe para ver todos los datos
-    
-    if 2118 in df_catalogo['libro_id'].values:
-        st.success("✅ ¡VICTORIA! El libro 2118 pasó el filtro final y ahora debería ser visible.")
-    else:
-        st.error("❌ INCONCEBIBLE: A pesar de la limpieza, el libro 2118 sigue siendo descartado.")
-        st.write("Nombre de archivo esperado (limpio):", libro_en_bd['portada_esperada'].iloc[0])
-        st.write("¿Está ese nombre en la lista del bucket? (Revisar manualmente)")
-        with st.expander("Ver los primeros 100 archivos del bucket (limpios)"):
-            st.write(list(portadas_existentes)[:100])
-else:
-    st.error("❌ El libro 2118 NO fue encontrado en la consulta inicial a la BD.")
-# =====================================================================
-# --- FIN MODO DEPURACIÓN
-# =====================================================================
 st.markdown("---")
 
 if df_catalogo.empty:
