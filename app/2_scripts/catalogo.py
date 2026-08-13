@@ -138,30 +138,46 @@ st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; ma
 # with st.spinner("Acomodando los libros en la vitrina..."):
 #     df_catalogo = obtener_libros_publicables()
 
+# =====================================================================
 # --- MODO DEPURACIÓN: ANALIZAR FILTRO DE PORTADAS ---
+# =====================================================================
 st.markdown("---")
 st.subheader("🕵️‍♂️ Módulo de Depuración del Catálogo")
-
 from utilidades import get_db_connection
 conn = get_db_connection()
 
 # 1. Obtenemos los libros que CUMPLEN con los requisitos de la BD
 with st.spinner("Paso 1: Obteniendo libros visibles y con precio desde la Base de Datos..."):
-    res_libros_bd = conn.table("libros").select("libro_id, titulo").eq("visible_catalogo", True).gt("precio", 0).execute()
-    df_libros_bd = pd.DataFrame(res_libros_bd.data)
-    st.metric("Libros que cumplen condiciones en la BD", len(df_libros_bd))
+    try:
+        res_libros_bd = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, precio, precio_original, portada_last_updated, destacado").eq("visible_catalogo", True).gt("precio", 0).execute()
+        df_libros_bd = pd.DataFrame(res_libros_bd.data)
+        st.metric("Libros que cumplen condiciones en la BD", len(df_libros_bd))
+    except Exception as e:
+        st.error(f"Error en Paso 1: {e}")
+        st.stop()
 
 # 2. Obtenemos la lista de portadas que SÍ EXISTEN en el bucket
 with st.spinner("Paso 2: Obteniendo lista de portadas existentes en el Storage..."):
-    archivos_bucket = conn.storage.from_("portadas").list(path="", search_options={"limit": 5000})
-    portadas_existentes = {archivo['name'] for archivo in archivos_bucket}
-    st.metric("Portadas encontradas en el Bucket", len(portadas_existentes))
+    try:
+        # --- INICIO DE LA CORRECCIÓN ---
+        # Bloque try-except para manejar ambas versiones de la librería
+        try:
+            archivos_bucket = conn.storage.from_("portadas").list(path="", search_options={"limit": 5000})
+        except TypeError:
+            archivos_bucket = conn.storage.from_("portadas").list(path="", options={"limit": 5000})
+        # --- FIN DE LA CORRECCIÓN ---
+            
+        portadas_existentes = {archivo['name'] for archivo in archivos_bucket}
+        st.metric("Portadas encontradas en el Bucket", len(portadas_existentes))
+    except Exception as e:
+        st.error(f"Error en Paso 2: {e}")
+        st.stop()
 
-# 3. Hacemos el cruce (la lógica exacta de tu función `obtener_libros_publicables`)
+# 3. Hacemos el cruce
 df_libros_bd['portada_esperada'] = df_libros_bd['libro_id'].apply(lambda id: f"{int(id)}.jpg")
 df_libros_bd['tiene_portada_real'] = df_libros_bd['portada_esperada'].isin(portadas_existentes)
 
-df_catalogo = df_libros_bd[df_libros_bd['tiene_portada_real'] == True]
+df_catalogo = df_libros_bd[df_libros_bd['tiene_portada_real'] == True].copy()
 st.metric("Libros Finales (con Portada y Datos OK)", len(df_catalogo), delta=len(df_catalogo) - len(df_libros_bd))
 
 # 4. Buscamos nuestro libro problemático
@@ -173,18 +189,21 @@ if not libro_en_bd.empty:
     st.success("✅ ¡Éxito! El libro 2118 FUE encontrado en la consulta a la Base de Datos.")
     st.write(libro_en_bd)
     
-    # Verificamos si pasó el filtro final
     if 2118 in df_catalogo['libro_id'].values:
         st.success("✅ ¡Éxito! El libro 2118 también pasó el filtro final de portadas.")
     else:
         st.error("❌ ¡AQUÍ ESTÁ EL PROBLEMA! El libro 2118 fue descartado por el filtro de portadas.")
-        st.write("Esto significa que el nombre de archivo esperado no se encontró en la lista del bucket.")
-        st.write("Nombre de archivo que se buscó:", libro_en_bd['portada_esperada'].iloc[0])
-        st.write("¿Está ese nombre exacto en la lista de portadas del bucket?")
-
+        st.write("El sistema esperaba encontrar un archivo con el nombre:")
+        st.code(libro_en_bd['portada_esperada'].iloc[0], language="text")
+        st.write("Pero no lo encontró en la lista de archivos del bucket.")
+        with st.expander("Ver los primeros 100 archivos encontrados en el bucket"):
+            st.write(list(portadas_existentes)[:100])
 else:
-    st.error("❌ ¡ERROR GRAVE! El libro 2118 NO fue encontrado en la consulta inicial a la base de datos, a pesar de que los datos parecen correctos.")
+    st.error("❌ ¡ERROR GRAVE! El libro 2118 NO fue encontrado en la consulta inicial a la base de datos (Paso 1).")
 
+# =====================================================================
+# --- FIN MODO DEPURACIÓN
+# =====================================================================
 st.markdown("---")
 
 if df_catalogo.empty:
