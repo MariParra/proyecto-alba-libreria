@@ -43,14 +43,22 @@ st.markdown("""
         [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
         [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
 
-        /* NUEVOS FILTROS FUCS FUCSIA CLARO PARA MAYOR CONTRASTE */
-        [data-testid="stMultiSelect"] { border: 2px solid #F472B6 !important; background-color: #ffffff !important; border-radius: 10px !important; }
-        [data-testid="stMultiSelect"] .st-d5 { color: #9CA3AF !important; font-style: italic !important; }
-        [data-testid="stMultiSelect"] .st-c5 {
-            background-color: #F472B6 !important; /* Fucsia más claro */
-            color: white !important; border-radius: 6px !important; font-weight: bold !important;
+        /* --- INICIO CAMBIO: NUEVOS COLORES PARA FILTROS --- */
+        [data-testid="stMultiSelect"] { 
+            border: 2px solid #FBCFE8 !important; /* Rosa muy suave */
+            background-color: #ffffff !important; 
+            border-radius: 10px !important; 
         }
-        [data-testid="stMultiSelect"] .st-c5 svg { fill: white !important; }
+        [data-testid="stMultiSelect"] .st-d5 { color: #D1D5DB !important; font-style: italic !important; } /* Placeholder */
+        [data-testid="stMultiSelect"] .st-c5 {
+            background-color: #FBCFE8 !important; /* Rosa muy suave */
+            color: #9D174D !important; /* Texto fucsia oscuro para contraste */
+            border: 1px solid #F472B6 !important;
+            border-radius: 6px !important; 
+            font-weight: bold !important;
+        }
+        [data-testid="stMultiSelect"] .st-c5 svg { fill: #9D174D !important; }
+        /* --- FIN CAMBIO --- */
 
         [data-testid="stSidebar"] { display: none !important; }
 
@@ -64,13 +72,16 @@ st.markdown("""
         
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* TARJETAS DE LIBROS */
+        /* --- INICIO CAMBIO: NUEVO COLOR PARA TARJETAS DE LIBROS --- */
         .libro-card {
-            background: rgba(255, 255, 255, 0.9); border: 1px solid #fcdce8; border-radius: 20px; 
+            background: #fdf1f1; /* Tu nuevo color rosa suave */
+            border: 1px solid #fcdce8; border-radius: 20px; 
             padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
             min-height: 400px; height: 100%;
         }
+        /* --- FIN CAMBIO --- */
+
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
         .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
@@ -209,7 +220,7 @@ if seccion_actual == "inicio":
 
     html_mega_carrusel = f"""
     <style>
-        .mega-carrusel-wrapper "{{
+        .mega-carrusel-wrapper {{
             display: flex; 
             overflow-x: auto; 
             scroll-snap-type: x mandatory;
@@ -217,19 +228,17 @@ if seccion_actual == "inicio":
             padding: 20px 10px; 
             scrollbar-width: none; 
             -webkit-overflow-scrolling: touch;
-        }}"
+        }}
         .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
         
-        /* CENTRADO SEGURO: Solo se centra en pantallas de PC o Tablets grandes */
         @media (min-width: 1024px) {{
             .mega-carrusel-wrapper {{
                 justify-content: center;
             }}
         }}
         
-        /* Diseño base de los 3 Banners */
         .banner-promo {{
-            scroll-snap-align: center; /* Hace que la tarjeta se detenga al centro al deslizar */
+            scroll-snap-align: center;
             border-radius: 20px; 
             padding: 25px 30px; 
             box-shadow: 0 8px 25px rgba(0,0,0,0.15);
@@ -237,38 +246,31 @@ if seccion_actual == "inicio":
             align-items: center; 
             justify-content: space-between;
             text-decoration: none !important;
-            
-            /* ANCHO INTELIGENTE: 85% de la pantalla en móvil, maximo 380px en PC */
             width: 85vw; 
             max-width: 380px; 
             flex-shrink: 0;
         }}
         
-        /* Degradados mágicos para cada banner */
         .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
         .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
         .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
         
-        /* Textos y Botones */
         .banner-texto {{ flex: 1; padding-right: 10px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
         .banner-subtitulo {{ color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
-        .banner-btn{{ 
+        .banner-btn {{ 
             background-color: #ffffff; padding: 8px 20px; border-radius: 50px; 
             font-weight: 700; font-size: 0.9rem; display: inline-block; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
         }}
         .banner-btn:hover {{ transform: scale(1.05); }}
         
-        /* Imágenes */
         .banner-img-container {{ flex: 0.45; text-align: right; }}
         .banner-img-container img {{ width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
         .img-icono {{ transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
     </style>
 
     <div class="mega-carrusel-wrapper">
-        
-        <!-- BANNER 1: OFERTAS -->
         <a href="?seccion=ofertas" target="_self" class="banner-promo bg-ofertas">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Ofertas 🔥</h2>
@@ -277,8 +279,6 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </a>
-
-        <!-- BANNER 2: CAJITA LITERARIA -->
         <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-promo bg-cajita">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Cajita Literaria ✨</h2>
@@ -287,8 +287,6 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
         </a>
-
-        <!-- BANNER 3: DESTACADOS -->
         <a href="?seccion=destacados" target="_self" class="banner-promo bg-destacados">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Destacados ⭐</h2>
@@ -297,9 +295,9 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </a>
-
     </div>
     """
+    
     st.html(html_mega_carrusel)
     st.write("---")
     
