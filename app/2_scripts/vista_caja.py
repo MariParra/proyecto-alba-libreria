@@ -201,7 +201,12 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True) )
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
+                
+                # --- EVITAR STOCK NEGATIVO ---
                 nuevo_stock = item['stock_actual'] - item['cantidad']
+                if item['stock_actual'] <= 0 or nuevo_stock < 0:
+                    nuevo_stock = 0  # Lo topamos en 0 para libros de catálogo
+                    
                 conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
             
             if cliente_id and l_id:
@@ -262,8 +267,17 @@ def anular_venta(venta_id, texto_libros_vendidos):
                 except ValueError:
                     continue
                 res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_libro).execute()
+                res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_libro).execute()
                 if res_l.data:
-                    l_id, nuevo_stock = res_l.data[0]['libro_id'], res_l.data[0]['stock'] + cantidad_devuelta
+                    l_id = res_l.data[0]['libro_id']
+                    stock_bd = res_l.data[0]['stock']
+                    
+                    # --- NO DEVOLVER STOCK SI ES LIBRO DE CATÁLOGO ---
+                    if stock_bd <= 0:
+                        nuevo_stock = 0 # Se mantiene en 0
+                    else:
+                        nuevo_stock = stock_bd + cantidad_devuelta
+                        
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
                     
         conn.table("registro_ventas").delete().eq("venta_id", venta_id).execute()
@@ -681,7 +695,13 @@ def mostrar_caja():
                 
             df_filtrado_general = df_ventas.copy()
             if mes_en_curso:
-                df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= primer_dia_mes) & (df_filtrado_general['fecha_limpia'].dt.date <= limite_max)]
+                # --- FILTRO ESTRICTO MES Y AÑO ACTUAL ---
+                mes_actual = hoy.month
+                ano_actual = hoy.year
+                df_filtrado_general = df_filtrado_general[
+                    (df_filtrado_general['fecha_limpia'].dt.month == mes_actual) & 
+                    (df_filtrado_general['fecha_limpia'].dt.year == ano_actual)
+                ]
             elif len(rango_fechas) == 2:
                 df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])]
                 
