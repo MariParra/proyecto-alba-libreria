@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
-from utilidades import get_db_connection
-from cache_utils import cargar_catalogo_publico, filtrar_solo_con_imagen
+from cache_utils import obtener_libros_publicables
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -138,14 +137,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
+# ==========================================
 # CARGA DE DATOS
-df_bruto = cargar_catalogo_publico()
-if df_bruto.empty:
+# ==========================================
+with st.spinner("Acomodando los libros en la vitrina..."):
+    # ¡Llamamos al filtro maestro! Ya nos trae solo lo que se puede vender.
+    df_catalogo = obtener_libros_publicables()
+
+if df_catalogo.empty:
     st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
     st.stop()
-
-with st.spinner("Acomodando los libros en la vitrina..."):
-    df_catalogo = filtrar_solo_con_imagen(df_bruto, URL_BASE_SUPABASE)
 
 # Filtrar para que solo se muestren los libros autorizados para la web
 if 'visible_catalogo' in df_catalogo.columns:

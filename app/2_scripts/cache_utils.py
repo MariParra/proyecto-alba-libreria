@@ -5,39 +5,32 @@ import requests
 import concurrent.futures
 from utilidades import get_db_connection
 
-@st.cache_data(ttl=120)
-def cargar_catalogo_publico():
-    conn = get_db_connection()
-    # Intenta buscar la nueva columna "destacado". Si no existe, usa los fallbacks.
+@st.cache_data(ttl=600) # Guarda el resultado en memoria por 10 minutos
+def obtener_libros_publicables():
+    """
+    Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket.
+    """
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock, destacado").gt("stock", 0).gt("precio", 0).order("titulo").execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-    except Exception:
-        try:
-            res = conn.table("libros").select("libro_id, titulo, autor, editorial, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
-            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        except Exception:
-            res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").gt("stock", 0).gt("precio", 0).order("titulo").execute()
-            df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        conn = get_db_connection()
         
-    if not df.empty:
-        df['precio'] = pd.to_numeric(df['precio'], errors='coerce')
-        if 'precio_original' in df.columns:
-            df['precio_original'] = pd.to_numeric(df['precio_original'], errors='coerce')
-        df.dropna(subset=['libro_id', 'titulo', 'precio'], inplace=True)
-        df = df[df['precio'] > 0] 
-    return df
+        # 1. Libros visibles y con precio
+        res_libros = conn.table("libros").select("*").eq("visible_catalogo", True).gt("precio", 0).execute()
+        if not res_libros.data:
+            return pd.DataFrame()
+            
+        df_libros = pd.DataFrame(res_libros.data)
 
-@st.cache_data(ttl=300)
-def filtrar_solo_con_imagen(df, url_base_supabase):
-    def check_url(row):
-        try:
-            libro_id = str(int(float(row.get('libro_id', 0))))
-            url = f"{url_base_supabase}{libro_id}.jpg"
-            return requests.head(url, timeout=2).status_code == 200
-        except:
-            return False
+        # 2. Portadas en el bucket
+        archivos_bucket = conn.storage.from_("portadas").list()
+        portadas_existentes = {archivo['name'] for archivo in archivos_bucket}
+        
+        # 3. Filtrar
+        df_libros['tiene_portada'] = df_libros['libro_id'].apply(lambda id: f"{id}.jpg" in portadas_existentes)
+        df_final = df_libros[df_libros['tiene_portada'] == True].copy()
+        df_final.drop(columns=['tiene_portada'], inplace=True)
+        
+        return df_final
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        resultados = list(executor.map(check_url, df.to_dict('records')))
-    return df[resultados]
+    except Exception as e:
+        print(f"Error en obtener_libros_publicables: {e}")
+        return pd.DataFrame()
