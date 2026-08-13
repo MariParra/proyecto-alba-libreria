@@ -31,7 +31,7 @@ st.markdown("""
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 180px; /* ESPACIO PARA LA NAVBAR DE 2 FILAS */
+            padding-top: 200px; /* Aumentado ligeramente para dar espacio a la nueva fila del buscador */
         }
 
         /* DISEÑO EXPANDERS (BOLSA) */
@@ -42,22 +42,22 @@ st.markdown("""
         [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
         [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
 
-        /* --- INICIO CAMBIO: NUEVOS COLORES PARA FILTROS --- */
-        [data-testid="stMultiSelect"] { 
-            border: 2px solid #FBCFE8 !important; /* Rosa muy suave */
-            background-color: #ffffff !important; 
-            border-radius: 10px !important; 
-        }
-        [data-testid="stMultiSelect"] .st-d5 { color: #D1D5DB !important; font-style: italic !important; } /* Placeholder */
+        /* NUEVOS FILTROS FUCSIA CLARO PARA MAYOR CONTRASTE */
+        [data-testid="stMultiSelect"] { border: 2px solid #FBCFE8 !important; background-color: #ffffff !important; border-radius: 10px !important; }
+        [data-testid="stMultiSelect"] .st-d5 { color: #D1D5DB !important; font-style: italic !important; }
         [data-testid="stMultiSelect"] .st-c5 {
-            background-color: #FBCFE8 !important; /* Rosa muy suave */
-            color: #9D174D !important; /* Texto fucsia oscuro para contraste */
-            border: 1px solid #F472B6 !important;
-            border-radius: 6px !important; 
-            font-weight: bold !important;
+            background-color: #FBCFE8 !important; 
+            color: #9D174D !important; border: 1px solid #F472B6 !important;
+            border-radius: 6px !important; font-weight: bold !important;
         }
         [data-testid="stMultiSelect"] .st-c5 svg { fill: #9D174D !important; }
-        /* --- FIN CAMBIO --- */
+
+        /* ESTILO PARA EL NUEVO SELECTOR DE ORDENAR */
+        [data-testid="stSelectbox"] > div[data-baseweb="select"] {
+            border: 2px solid #FBCFE8 !important;
+            background-color: #ffffff !important;
+            border-radius: 10px !important;
+        }
 
         [data-testid="stSidebar"] { display: none !important; }
 
@@ -71,16 +71,13 @@ st.markdown("""
         
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* --- INICIO CAMBIO: NUEVO COLOR PARA TARJETAS DE LIBROS --- */
+        /* TARJETAS DE LIBROS */
         .libro-card {
-            background: #fdf1f1; /* Tu nuevo color rosa suave */
-            border: 1px solid #fcdce8; border-radius: 20px; 
+            background: #fdf1f1; border: 1px solid #fcdce8; border-radius: 20px; 
             padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
             min-height: 400px; height: 100%;
         }
-        /* --- FIN CAMBIO --- */
-
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
         .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
@@ -137,27 +134,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
-# ==========================================
-# CARGA DE DATOS
-# ==========================================
+# CARGA DE DATOS (Usando tu Filtro Maestro)
 with st.spinner("Acomodando los libros en la vitrina..."):
-    # ¡Llamamos al filtro maestro! Ya nos trae solo lo que se puede vender.
     df_catalogo = obtener_libros_publicables()
 
 if df_catalogo.empty:
-    st.info("Estamos actualizando las estanterías. ¡Vuelve pronto!")
-    st.stop()
-
-# Filtrar para que solo se muestren los libros autorizados para la web
-if 'visible_catalogo' in df_catalogo.columns:
-    df_catalogo = df_catalogo[df_catalogo['visible_catalogo'] == True]
-    
-if df_catalogo.empty:
-    st.warning("No hay libros con portadas disponibles por el momento.")
+    st.warning("No hay libros disponibles por el momento. ¡Vuelve pronto!")
     st.stop()
     
-generos_disp = sorted(df_catalogo['genero'].dropna().unique())
-autores_disp = sorted(df_catalogo['autor'].dropna().unique())
+generos_disp = sorted(df_catalogo['genero'].dropna().unique()) if 'genero' in df_catalogo.columns else []
+autores_disp = sorted(df_catalogo['autor'].dropna().unique()) if 'autor' in df_catalogo.columns else []
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
 # =====================================================================
@@ -204,24 +190,31 @@ with col_bolsa:
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
 st.write("") 
-busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
+
+# --- NUEVO: BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
+col_busqueda, col_orden = st.columns([3,1])
+with col_busqueda:
+    busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
+with col_orden:
+    orden_seleccionado = st.selectbox(
+        "Ordenar", 
+        ["⭐ Relevancia / Destacados", "🔤 Título: A - Z", "🔤 Título: Z - A", "💸 Precio: Menor a Mayor", "💰 Precio: Mayor a Menor", "✍️ Autor: A - Z", "🏢 Editorial: A - Z"],
+        label_visibility="collapsed"
+    )
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =====================================================================
 # 🎪 ENRUTADOR DE SUBPÁGINAS Y MEGA CARRUSEL DE BANNERS
 # =====================================================================
-# Leemos la URL para saber si el usuario hizo clic en algún banner
 seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "inicio":
-    # --- 1. ESTAMOS EN EL INICIO: MOSTRAMOS EL MEGA CARRUSEL ---
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
     html_mega_carrusel = f"""
     <style>
-        /* CONTENEDOR PRINCIPAL: Por defecto (móvil) es 1 columna hacia abajo */
         .mega-carrusel-wrapper {{
             display: grid;
             grid-template-columns: 1fr; 
@@ -230,14 +223,12 @@ if seccion_actual == "inicio":
             width: 100%;
         }}
         
-        /* PANTALLAS GRANDES (PC/Tablets): Cambia a 3 columnas iguales */
         @media (min-width: 1024px) {{
             .mega-carrusel-wrapper {{
                 grid-template-columns: repeat(3, 1fr);
             }}
         }}
         
-        /* DISEÑO DE CADA BANNER */
         .banner-promo {{
             border-radius: 20px; 
             padding: 25px 30px; 
@@ -255,12 +246,10 @@ if seccion_actual == "inicio":
             box-shadow: 0 12px 30px rgba(0,0,0,0.2); 
         }}
         
-        /* COLORES Y DEGRADADOS */
         .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
         .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
         .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
         
-        /* TEXTOS Y BOTONES */
         .banner-texto {{ flex: 1; padding-right: 10px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
         .banner-subtitulo {{ color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
@@ -271,14 +260,12 @@ if seccion_actual == "inicio":
         }}
         .banner-btn:hover {{ transform: scale(1.05); }}
         
-        /* IMÁGENES */
         .banner-img-container {{ flex: 0.45; text-align: right; }}
         .banner-img-container img {{ width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
         .img-icono {{ transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
     </style>
 
     <div class="mega-carrusel-wrapper">
-        <!-- BANNER 1: OFERTAS -->
         <a href="?seccion=ofertas" target="_self" class="banner-promo bg-ofertas">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Ofertas 🔥</h2>
@@ -288,7 +275,6 @@ if seccion_actual == "inicio":
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </a>
 
-        <!-- BANNER 2: CAJITA LITERARIA -->
         <a href="{LINK_FORMULARIO_SUSCRIPCION}" target="_blank" class="banner-promo bg-cajita">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Cajita Literaria ✨</h2>
@@ -298,7 +284,6 @@ if seccion_actual == "inicio":
             <div class="banner-img-container"><img src="{URL_FOTO_CAJITA}"></div>
         </a>
 
-        <!-- BANNER 3: DESTACADOS -->
         <a href="?seccion=destacados" target="_self" class="banner-promo bg-destacados">
             <div class="banner-texto">
                 <h2 class="banner-titulo">Destacados ⭐</h2>
@@ -309,14 +294,11 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    
     st.html(html_mega_carrusel)
     st.write("---")
-    
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
-    # --- 2. SUBPÁGINA: DESTACADOS ---
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>")
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     
@@ -326,7 +308,6 @@ elif seccion_actual == "destacados":
         df_base = df_catalogo.head(0) 
 
 elif seccion_actual == "ofertas":
-    # --- 3. SUBPÁGINA: OFERTAS ---
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>")
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     
@@ -336,10 +317,9 @@ elif seccion_actual == "ofertas":
         df_base = df_catalogo.head(0)
 
 # =====================================================================
-# --- APLICAR FILTROS Y BÚSQUEDA A LA CUADRÍCULA ---
+# --- APLICAR FILTROS Y BÚSQUEDA ---
 # =====================================================================
 df_filtrado = df_base.copy()
-
 
 if busqueda_texto:
     texto_limpio = busqueda_texto.strip().lower()
@@ -355,6 +335,31 @@ try:
 except NameError:
     pass 
 
+# =====================================================================
+# --- NUEVO: APLICAR ORDENAMIENTO DE LIBROS ---
+# =====================================================================
+if not df_filtrado.empty:
+    if orden_seleccionado == "🔤 Título: A - Z":
+        df_filtrado = df_filtrado.sort_values(by="titulo", ascending=True)
+    elif orden_seleccionado == "🔤 Título: Z - A":
+        df_filtrado = df_filtrado.sort_values(by="titulo", ascending=False)
+    elif orden_seleccionado == "💸 Precio: Menor a Mayor":
+        df_filtrado = df_filtrado.sort_values(by="precio", ascending=True)
+    elif orden_seleccionado == "💰 Precio: Mayor a Menor":
+        df_filtrado = df_filtrado.sort_values(by="precio", ascending=False)
+    elif orden_seleccionado == "✍️ Autor: A - Z":
+        if 'autor' in df_filtrado.columns:
+            df_filtrado = df_filtrado.sort_values(by="autor", ascending=True)
+    elif orden_seleccionado == "🏢 Editorial: A - Z":
+        if 'editorial' in df_filtrado.columns:
+            df_filtrado = df_filtrado.sort_values(by="editorial", ascending=True)
+    else:
+        # Por Defecto (⭐ Relevancia / Destacados): Los destacados salen primero, y luego se ordenan alfabéticamente por título
+        if 'destacado' in df_filtrado.columns:
+            df_filtrado = df_filtrado.sort_values(by=["destacado", "titulo"], ascending=[False, True])
+        else:
+            df_filtrado = df_filtrado.sort_values(by="titulo", ascending=True)
+
 if df_filtrado.empty:
     st.info("No encontramos libros con esos filtros. ¡Intenta con otra búsqueda! 🪄")
 else:
@@ -367,17 +372,18 @@ else:
         with col:
             libro_id_limpio = str(int(float(row.get('libro_id', 0))))
             
+            # --- CACHE BUSTING DE PORTADAS ---
             timestamp_str = row.get('portada_last_updated', '') 
             version_cache = ""
-            if timestamp_str:
-                # Convertimos la fecha a un número simple (ej: 1691532847)
+            if timestamp_str and not pd.isna(timestamp_str):
                 try:
                     dt_obj = pd.to_datetime(timestamp_str)
                     version_cache = f"?v={int(dt_obj.timestamp())}"
                 except:
-                    version_cache = "" # Si la fecha es inválida, no añadimos nada
-            
+                    pass
+
             url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg{version_cache}"
+            
             titulo_seguro = row.get('titulo', "Sin título")
             autor_seguro = row.get('autor', 'Desconocido')
             precio = float(row.get('precio', 0.0))
