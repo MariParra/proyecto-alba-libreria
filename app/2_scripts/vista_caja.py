@@ -687,25 +687,20 @@ def mostrar_caja():
                 st.markdown("---")
                 col_chk1, col_chk2 = st.columns(2)
                 
-                def resetear_estado_tabla_y_recargar():
-                    # Esta función borra la memoria Y fuerza la recarga de la página.
-                    if 'data_editor' in st.session_state:
-                        del st.session_state['data_editor']
-                    st.rerun()
-
-                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", key="chk_mes_curso", on_change=resetear_estado_tabla_y_recargar)
+                mes_en_curso = col_chk1.checkbox("📅 Mostrar rápido: Solo este mes", value=False)
                 solo_costo_cero = col_chk2.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
+                
                 st.markdown("---")
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
                 columnas_por_defecto = ['venta_id', 'fecha_venta', 'cliente_nombre', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
             df_filtrado_general = df_ventas.copy()
+            # --- 1. PRIORIDAD MÁXIMA: FILTRO DE MES ---
             if mes_en_curso:
-                # Si el checkbox está activo, este es el ÚNICO filtro de fecha que se aplica.
                 mes_actual = hoy.month
                 ano_actual = hoy.year
-                
+                # Filtramos valores nulos primero para que no rompa la lógica
                 df_fechas_validas = df_filtrado_general.dropna(subset=['fecha_limpia'])
                 
                 df_filtrado_general = df_fechas_validas[
@@ -713,9 +708,12 @@ def mostrar_caja():
                     (df_fechas_validas['fecha_limpia'].dt.year == ano_actual)
                 ]
             
-            # Si el checkbox NO está activo, entonces aplicamos los otros filtros de fecha.
+            # --- 2. SI NO ESTÁ ACTIVO EL MES, USAMOS RANGO PERSONALIZADO ---
             elif len(rango_fechas) == 2:
-                df_filtrado_general = df_filtrado_general[(df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])]
+                df_filtrado_general = df_filtrado_general[
+                    (df_filtrado_general['fecha_limpia'].dt.date >= rango_fechas[0]) & 
+                    (df_filtrado_general['fecha_limpia'].dt.date <= rango_fechas[1])
+                ]
                 
             if cliente_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['cliente_nombre'] == cliente_filtro]
             if estado_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado'] == estado_filtro]
@@ -757,7 +755,11 @@ def mostrar_caja():
             disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
-            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist, key="data_editor")
+            # Generamos una KEY dinámica: si el checkbox cambia, la tabla se recrea desde cero automáticamente
+            clave_dinamica_tabla = f"tabla_historial_{mes_en_curso}_{solo_costo_cero}"
+            
+            df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist, key=clave_dinamica_tabla)
+
             
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Historial", type="primary"):
