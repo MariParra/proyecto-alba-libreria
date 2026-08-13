@@ -50,7 +50,6 @@ def mostrar_gestion_portadas():
     st.markdown("<h2 style='color: #4A4D7E;'>🖼️ Gestión de Portadas</h2>", unsafe_allow_html=True)
     st.write("Sube imágenes para tus libros. El sistema las optimizará a JPG y forzará a la web pública a mostrar la nueva versión.")
     
-    # Obtenemos la base de datos una sola vez
     conn = get_db_connection()
     try:
         res = conn.table("libros").select("libro_id, titulo").order("titulo").execute()
@@ -62,7 +61,6 @@ def mostrar_gestion_portadas():
         st.error(f"Error al cargar la lista de libros: {e}")
         return
 
-    # Tabs para separar la lógica
     tab_individual, tab_masiva = st.tabs(["🎯 Subida Individual", "🚀 Subida Masiva (Emparejamiento Automático)"])
 
     # ==========================================
@@ -72,7 +70,9 @@ def mostrar_gestion_portadas():
         dict_libros = dict(zip(df_libros['libro_id'], df_libros['titulo']))
         opciones_ids = [None] + list(dict_libros.keys())
         
-        col1, col2 = st.columns()
+        # --- INICIO DE LA CORRECCIÓN ---
+        col1, col2 = st.columns(2) # Se especifica que queremos 2 columnas
+        # --- FIN DE LA CORRECCIÓN ---
         
         with col1:
             st.markdown("### 1. Selecciona el Libro")
@@ -92,7 +92,7 @@ def mostrar_gestion_portadas():
                 )
                 
                 if archivo_img:
-                    if st.button("🚀 Optimizar y Subir Portada", type="primary", use_container_width=True):
+                    if st.button("🚀 Optimizar y Subir Portada", type="primary", use_container_width=True, key="btn_subir_individual"):
                         with st.spinner("Procesando imagen, subiendo a la nube y actualizando caché..."):
                             exito, error = actualizar_portada_individual(libro_id_seleccionado, archivo_img)
                             if exito:
@@ -118,13 +118,12 @@ def mostrar_gestion_portadas():
     # ==========================================
     with tab_masiva:
         st.markdown("### 📦 Subir múltiples portadas a la vez")
-        st.info("💡 **Tip:** Asegúrate de que el nombre de cada archivo coincida con el **título del libro** o sea el **ID exacto**. El sistema ignorará tildes y mayúsculas para hacer el emparejamiento.")
+        st.info("💡 **Tip:** Asegúrate de que el nombre de cada archivo coincida con el **título del libro** o sea el **ID exacto**.")
         
-        # --- NUEVO: OPCIÓN PARA SOBREESCRIBIR ---
         sobreescribir = st.toggle(
             "🔄 Sobreescribir portadas existentes en la nube", 
             value=False, 
-            help="Si está APAGADO, el sistema saltará los libros que ya tengan portada. Si lo ENCIENDES, reemplazará las portadas viejas por las nuevas que estás subiendo."
+            help="Si está APAGADO, el sistema saltará los libros que ya tengan portada. Si lo ENCIENDES, reemplazará las viejas."
         )
         
         archivos_multiples = st.file_uploader(
@@ -137,13 +136,11 @@ def mostrar_gestion_portadas():
         if archivos_multiples:
             st.write(f"Has seleccionado **{len(archivos_multiples)}** imágenes.")
             
-            if st.button("⚡ Procesar Subida Masiva", type="primary", use_container_width=True):
-                # Crear mapas de búsqueda rápida
+            if st.button("⚡ Procesar Subida Masiva", type="primary", use_container_width=True, key="btn_subir_masiva"):
                 mapa_titulos = {normalizar_nombre_para_match(row['titulo']): str(row['libro_id']) for _, row in df_libros.iterrows()}
                 
                 portadas_existentes = set()
                 
-                # Si NO queremos sobreescribir, necesitamos saber qué hay en la nube
                 if not sobreescribir:
                     with st.spinner("Consultando qué portadas ya existen en la nube..."):
                         try:
@@ -178,22 +175,18 @@ def mostrar_gestion_portadas():
                     
                     libro_id_match = None
                     
-                    # 1. Intentar buscar por Título Limpio
                     if nombre_limpio in mapa_titulos:
                         libro_id_match = mapa_titulos[nombre_limpio]
-                    # 2. Intentar buscar por ID directo
                     elif nombre_sin_ext.isdigit() and int(nombre_sin_ext) in df_libros['libro_id'].values:
                         libro_id_match = nombre_sin_ext
                         
                     if libro_id_match:
                         nuevo_nombre_archivo = f"{libro_id_match}.jpg"
                         
-                        # --- LÓGICA DE OMITIR ---
                         if not sobreescribir and nuevo_nombre_archivo in portadas_existentes:
                             omitidos += 1
                             continue
                             
-                        # Subir y romper caché
                         exito, error = actualizar_portada_individual(libro_id_match, archivo)
                         if exito:
                             exitos += 1
@@ -204,7 +197,6 @@ def mostrar_gestion_portadas():
                 
                 barra_progreso.progress(1.0, text="¡Procesamiento finalizado!")
                 
-                # Resumen
                 st.markdown("---")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("✅ Subidas", exitos)
