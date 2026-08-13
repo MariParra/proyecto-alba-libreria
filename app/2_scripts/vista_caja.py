@@ -354,18 +354,6 @@ def actualizar_historial_caja(df_editado):
             
     return updates
 
-def unificar_formatos_fecha(serie_fechas):
-    def parsear_valor(val):
-        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() in ['nan', 'nat']:
-            return pd.NaT
-        val_str = str(val).strip()
-        fecha_parseada = pd.to_datetime(val_str, dayfirst=True, errors='coerce')
-        return fecha_parseada
-    try:
-        return serie_fechas.apply(parsear_valor)
-    except Exception as e:
-        log_error("vista_caja", "unificar_formatos_fecha", f"Error inesperado al parsear fechas. Detalle: {e}", st.session_state.get('email_usuario', 'Desconocido'))
-        return pd.to_datetime(serie_fechas, errors='coerce')
 
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
