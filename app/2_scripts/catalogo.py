@@ -209,48 +209,61 @@ if seccion_actual == "inicio":
 
     html_mega_carrusel = f"""
     <style>
-        .mega-carrusel-wrapper {{
-            display: flex;
-            justify-content: center;
-            overflow-x: auto;
+        .mega-carrusel-wrapper "{{
+            display: flex; 
+            overflow-x: auto; 
             scroll-snap-type: x mandatory;
-            gap: 20px;
-            padding: 20px 10px;
-            scrollbar-width: none;
+            gap: 20px; 
+            padding: 20px 10px; 
+            scrollbar-width: none; 
             -webkit-overflow-scrolling: touch;
-        }}
+        }}"
         .mega-carrusel-wrapper::-webkit-scrollbar {{ display: none; }}
         
+        /* CENTRADO SEGURO: Solo se centra en pantallas de PC o Tablets grandes */
+        @media (min-width: 1024px) {{
+            .mega-carrusel-wrapper {{
+                justify-content: center;
+            }}
+        }}
+        
+        /* Diseño base de los 3 Banners */
         .banner-promo {{
-            scroll-snap-align: start;
+            scroll-snap-align: center; /* Hace que la tarjeta se detenga al centro al deslizar */
             border-radius: 20px; 
-            padding: 25px 30px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            display: flex;
-            align-items: center;
+            padding: 25px 30px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            display: flex; 
+            align-items: center; 
             justify-content: space-between;
             text-decoration: none !important;
-            width: 380px; 
+            
+            /* ANCHO INTELIGENTE: 85% de la pantalla en móvil, maximo 380px en PC */
+            width: 85vw; 
+            max-width: 380px; 
             flex-shrink: 0;
         }}
         
+        /* Degradados mágicos para cada banner */
         .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
         .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
         .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
         
-        .banner-texto {{ flex: 1; padding-right: 15px; }}
+        /* Textos y Botones */
+        .banner-texto {{ flex: 1; padding-right: 10px; }}
         .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
-        .banner-subtitulo {{ color: #ffffff; font-size: 1rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
-        .banner-btn {{ 
-            background-color: #ffffff; padding: 10px 25px; border-radius: 50px; 
-            font-weight: 700; font-size: 0.95rem; display: inline-block; 
+        .banner-subtitulo {{ color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
+        .banner-btn{{ 
+            background-color: #ffffff; padding: 8px 20px; border-radius: 50px; 
+            font-weight: 700; font-size: 0.9rem; display: inline-block; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
         }}
         .banner-btn:hover {{ transform: scale(1.05); }}
         
-        .banner-img-container {{ flex: 0.4; text-align: right; }}
-        .banner-img-container img {{ width: 100%; max-width: 120px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
-        .img-icono {{ transform: rotate(0deg) !important; max-width: 90px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
+        /* Imágenes */
+        .banner-img-container {{ flex: 0.45; text-align: right; }}
+        .banner-img-container img {{ width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
+        .img-icono {{ transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
     </style>
 
     <div class="mega-carrusel-wrapper">
