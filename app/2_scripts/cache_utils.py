@@ -1,11 +1,9 @@
 # cache_utils.py
 import streamlit as st
 import pandas as pd
-import requests
-import concurrent.futures
 from utilidades import get_db_connection
 
-@st.cache_data(ttl=60) 
+@st.cache_data(ttl=1800) 
 def obtener_libros_publicables():
     """
     Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket.
