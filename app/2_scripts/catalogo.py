@@ -28,39 +28,25 @@ st.markdown("""
         html, body, [class*="css"] { font-family: 'Lato', sans-serif; }
         h1, h2, h3, .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #dc4990 !important; }
         
-        /* OCULTAR HEADER DE STREAMLIT PARA QUE NO TAPE LA BARRA LEGAL */
-        [data-testid="stHeader"] { display: none !important; }
+        /* OCULTAR HEADER BLANCO DE STREAMLIT */
+        header[data-testid="stHeader"] { display: none !important; }
+        .block-container { padding-top: 2rem !important; } /* Reduce el espacio arriba */
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 190px; 
         }
 
-        /* --- NAVBAR PARA PÁGINAS LEGALES --- */
+        /* --- NAVBAR PARA PÁGINAS LEGALES (Fluye con la página) --- */
         .navbar-legal {
-            position: absolute; /* Clave: Absolute en lugar de fixed */
-            top: 0; left: 0; width: 100%;
-            height: 30px;
-            background-color: #fcdce8; 
-            display: flex; justify-content: center; align-items: center;
-            z-index: 10001; /* Sobre la barra de filtros */
-            border-bottom: 1px solid #f472b6;
+            width: 100%;
+            text-align: right;
+            padding-bottom: 10px;
         }
         .navbar-legal a {
-            color: #9D174D; text-decoration: none; font-size: 0.85rem;
-            margin: 0 20px; font-weight: 700;
+            color: #b38dac; text-decoration: none; font-size: 0.9rem;
+            margin-left: 25px; font-weight: 700;
         }
-        .navbar-legal a:hover { text-decoration: underline; }
-
-        .navbar-fija {
-            position: fixed; 
-            top: 0; /* Ahora sube al tope de la pantalla */
-            left: 0; width: 100%; z-index: 10000;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            padding: 40px 20px 10px 20px; /* 40px de padding arriba para dejarle su espacio a la barra legal cuando estamos en el tope */
-            border-bottom: 2px solid #e790b3;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        }
+        .navbar-legal a:hover { color: #dc4990; text-decoration: underline; }
 
         /* DISEÑO EXPANDERS (BOLSA) */
         [data-testid="stExpander"] {
@@ -70,7 +56,7 @@ st.markdown("""
         [data-testid="stExpander"] summary { background-color: #fcf5f7 !important; border-radius: 12px !important; }
         [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 700 !important; color: #dc4990 !important; }
 
-        /* NUEVOS FILTROS FUCSIA CLARO PARA MAYOR CONTRASTE */
+        /* NUEVOS FILTROS */
         [data-testid="stMultiSelect"] { border: 2px solid #FBCFE8 !important; background-color: #ffffff !important; border-radius: 10px !important; }
         [data-testid="stMultiSelect"] .st-d5 { color: #D1D5DB !important; font-style: italic !important; }
         [data-testid="stMultiSelect"] .st-c5 {
@@ -80,25 +66,22 @@ st.markdown("""
         [data-testid="stMultiSelect"] .st-c5 svg { fill: #9D174D !important; }
         [data-testid="stSelectbox"] > div[data-baseweb="select"] { border: 2px solid #FBCFE8 !important; background-color: #ffffff !important; border-radius: 10px !important; }
         [data-testid="stSidebar"] { display: none !important; }
-        
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* --- MEJORA: TARJETAS DE LIBROS ALINEADAS PERFECTAMENTE --- */
+        /* --- TARJETAS DE LIBROS ALINEADAS --- */
         .libro-card {
             background: #fdf1f1; border: 1px solid #fcdce8; border-radius: 20px; 
             padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
             display: flex; flex-direction: column; justify-content: space-between;
-            height: 460px !important; /* ALTURA FIJA: El secreto para alinear los botones */
+            min-height: 460px; height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
-        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 190px; margin-bottom: 10px; transition: transform 0.3s ease; }
+        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
-            line-height: 1.2; margin-top: 10px; margin-bottom: 5px; 
-            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; /* Corta si es muy largo */
-            min-height: 3.6em; /* Asegura el espacio de 3 líneas siempre */
+            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 3.9em; 
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
@@ -119,27 +102,18 @@ st.markdown("""
         .whatsapp-float:hover { background-color: #128C7E; }
         @media (max-width: 768px) { .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; } }
         
-        .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 0; }
+        .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; margin-top: 10px; }
         .header-icono { width: 55px; height: auto; }
         .header-container h1 { margin: 0; font-size: 3.2rem; }
         
         /* --- BANNER MEGA CARRUSEL --- */
         .mega-carrusel-wrapper {
-            display: grid;
-            grid-template-columns: 1fr; 
-            gap: 15px;
-            padding: 10px 0;
-            width: 100%;
+            display: grid; grid-template-columns: 1fr; gap: 20px; padding: 10px 0; width: 100%;
         }
-        
-        @media (min-width: 850px) { /* Reducido a 850px para que encajen los 4 en más pantallas */
-            .mega-carrusel-wrapper {
-                grid-template-columns: repeat(4, 1fr) !important;
-            }
-        }
+        @media (min-width: 1024px) { .mega-carrusel-wrapper { grid-template-columns: repeat(4, 1fr) !important; } }
         
         .banner-promo {
-            border-radius: 20px; padding: 20px 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-radius: 20px; padding: 25px 30px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);
             display: flex; align-items: center; justify-content: space-between;
             text-decoration: none !important; width: 100%; box-sizing: border-box;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -149,45 +123,35 @@ st.markdown("""
         .bg-cajita { background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }
         .bg-destacados { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
         .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
-        .bg-tapa-dura { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
         
-        .banner-texto { flex: 1; padding-right: 5px; }
-        .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
-        .banner-subtitulo { color: #ffffff; font-size: 0.85rem; margin-bottom: 12px; font-weight: 500; line-height: 1.2; }
-        .banner-btn { 
-            background-color: #ffffff; padding: 6px 15px; border-radius: 50px; 
-            font-weight: 700; font-size: 0.8rem; display: inline-block; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
-        }
+        /* --- CORRECCIÓN BANNER TAPA DURA: Fondo Azul Oscuro para que resalte la letra blanca --- */
+        .bg-tapa-dura { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+        
+        .banner-texto { flex: 1; padding-right: 10px; }
+        .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }
+        .banner-subtitulo { color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }
+        .banner-btn { background-color: #ffffff; padding: 8px 20px; border-radius: 50px; font-weight: 700; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important; }
         .banner-btn:hover { transform: scale(1.05); }
         
         .banner-img-container { flex: 0.45; text-align: right; }
-        .banner-img-container img { width: 100%; max-width: 90px; height: auto; border-radius: 12px; transform: rotate(5deg); }
-        .img-icono { transform: rotate(0deg) !important; max-width: 75px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
+        .banner-img-container img { width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }
+        .img-icono { transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
         
         /* BANNER TAPA DURA MULTI IMG */
-        .banner-multi-img-container { display: flex; gap: 5px; align-items: center; justify-content: flex-end; flex: 0.7; }
-        .banner-multi-img-container img { width: 48%; max-width: 70px; border-radius: 8px; transform: rotate(0deg); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+        .banner-multi-img-container { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex: 0.6; }
+        .banner-multi-img-container img { width: 48%; max-width: 90px; border-radius: 8px; transform: rotate(0deg); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
         
-        /* ANIMACIÓN SCROLL */
+        /* ANIMACIÓN SCROLL - Ahora fluye con la página */
         .scroll-indicator {
-            display: flex; 
-            justify-content: center; 
-            width: 100%;
-            margin-top: 15px; 
-            margin-bottom: 10px;
+            display: flex; justify-content: center; width: 100%;
+            margin-top: 15px; margin-bottom: 5px;
             animation: bounce 2.5s infinite;
         }
-        .scroll-indicator svg {
-            width: 45px; height: 45px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2));
-        }
+        .scroll-indicator svg { width: 45px; height: 45px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2)); }
         @keyframes bounce {
             0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
             40% { transform: translateY(-15px); }
             60% { transform: translateY(-7px); }
-        }
-        .bg-tapa-dura {
-            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -206,14 +170,14 @@ seccion_actual = st.query_params.get("seccion", "inicio")
 if seccion_actual == "terminos":
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Términos y Condiciones</h2>")
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus términos y condiciones.")
+    st.info("Aquí va el texto completo de tus términos y condiciones. Puedes editar esta sección en tu código cuando lo desees.")
     st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 elif seccion_actual == "envios":
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Condiciones de Envío</h2>")
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus políticas y condiciones de envío.")
+    st.info("Aquí va el texto completo de tus políticas y condiciones de envío. Puedes editar esta sección en tu código cuando lo desees.")
     st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
@@ -256,11 +220,9 @@ autores_disp = sorted(df_catalogo['autor'].dropna().unique()) if 'autor' in df_c
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
 # =====================================================================
-# NAVBAR SUPERIOR FIJA DE FILTROS
+# FILTROS Y CARRITO (Ahora fluyen con la página)
 # =====================================================================
-st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
-
-col_filtros, col_bolsa = st.columns([3,1])
+col_filtros, col_bolsa = st.columns()
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
@@ -286,7 +248,7 @@ with col_bolsa:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.columns([3,1])
+                col_t, col_b = st.columns()
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b: st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
                         
@@ -297,10 +259,8 @@ with col_bolsa:
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={urllib.parse.quote(mensaje_wa)}"
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
-st.write("") 
-
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.columns([3,1])
+col_busqueda, col_orden = st.columns()
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 with col_orden:
@@ -309,7 +269,8 @@ with col_orden:
         ["⭐ Relevancia / Destacados", "🔤 Título: A - Z", "🔤 Título: Z - A", "💸 Precio: Menor a Mayor", "💰 Precio: Mayor a Menor", "✍️ Autor: A - Z", "🏢 Editorial: A - Z"],
         label_visibility="collapsed"
     )
-st.markdown('</div>', unsafe_allow_html=True)
+
+st.write("---")
 
 # =====================================================================
 # 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
@@ -320,8 +281,8 @@ if seccion_actual == "inicio":
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
     
-    URL_TAPA_DURA_1 = "https://via.placeholder.com/150x220/a1c4fd/ffffff?text=Tapa+Dura+1" 
-    URL_TAPA_DURA_2 = "https://via.placeholder.com/150x220/c2e9fb/6a85b6?text=Tapa+Dura+2"
+    URL_TAPA_DURA_1 = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/especial1.png" 
+    URL_TAPA_DURA_2 = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/especial2.png"
 
     html_mega_carrusel = f"""
     <div class="mega-carrusel-wrapper">
@@ -356,7 +317,7 @@ if seccion_actual == "inicio":
             <div class="banner-texto">
                 <h2 class="banner-titulo">Ediciones Únicas</h2>
                 <p class="banner-subtitulo">Libros en Tapa Dura y formatos especiales.</p>
-                <span class="banner-btn" style="color: #6a85b6 !important;">💎 VER JOYITAS</span>
+                <span class="banner-btn" style="color: #1e3c72 !important;">💎 VER JOYITAS</span>
             </div>
             <div class="banner-multi-img-container">
                 <img src="{URL_TAPA_DURA_1}">
@@ -367,9 +328,10 @@ if seccion_actual == "inicio":
     """
     st.html(html_mega_carrusel)
     
+    # INDICADOR DE SCROLL INTEGRADO EN LA PÁGINA
     st.markdown("""
         <div class="scroll-indicator">
-            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                 <path d="M0 0h24v24H0V0z" fill="none"/>
                 <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
             </svg>
