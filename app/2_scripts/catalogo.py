@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+import time
 from cache_utils import obtener_libros_publicables
 
 # --- PUERTA SECRETA PARA ADMINISTRADORES ---
@@ -132,7 +133,9 @@ st.markdown("""
         .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
         
         /* DEGRADADO MORADO PARA TAPA DURA */
-        .bg-tapa-dura { background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); }
+        .bg-tapa-dura {
+            background: linear-gradient(135deg, #b070cb 0%, #6c3483 100%);
+        }
         
         .banner-texto { flex: 1; padding-right: 5px; }
         .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
@@ -310,8 +313,9 @@ if seccion_actual == "inicio":
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
     
-    URL_TAPA_DURA_1 = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/especial1.png" 
-    URL_TAPA_DURA_2 = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/especial2.png"
+    version_banner = int(time.time() / 3600) 
+    URL_TAPA_DURA_1 = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_tapa_dura_1.jpg?v={version_banner}" 
+    URL_TAPA_DURA_2 = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_tapa_dura_2.jpg?v={version_banner}"
 
     html_mega_carrusel = f"""
     <div class="mega-carrusel-wrapper">
