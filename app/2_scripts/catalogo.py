@@ -30,15 +30,6 @@ except KeyError:
 
 # --- CSS BASE Y MEJORADO ---
 
-html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="window.parent.scrollBy({ top: 500, behavior: 'smooth' });" title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M0 0h24v24H0V0z" fill="none"/>
-            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-        </svg>
-    </div>
-"""
-
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
@@ -334,6 +325,12 @@ with col_orden:
         label_visibility="collapsed"
     )
 
+# --- DEFINICIÓN DE COMPONENTES REUTILIZABLES ---
+html_scroll_indicator = """
+    <div class="scroll-indicator" onclick="window.parent.scrollBy({ top: 500, behavior: 'smooth' });" title="Bajar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+    </div>
+"""
 
 # =====================================================================
 # 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
