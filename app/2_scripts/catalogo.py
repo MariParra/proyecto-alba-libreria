@@ -20,7 +20,7 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS BASE ---
+# --- CSS BASE Y MEJORADO ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
@@ -30,26 +30,26 @@ st.markdown("""
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 220px; /* Ajustado para dar espacio a la nueva navbar legal y filtros */
+            padding-top: 220px; 
         }
 
-        /* --- NUEVO: NAVBAR PARA PÁGINAS LEGALES --- */
+        /* --- NAVBAR PARA PÁGINAS LEGALES --- */
         .navbar-legal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             background: #fdf1f1;
-            padding: 5px 20px;
-            text-align: right;
-            z-index: 10000;
+            padding: 8px 20px;
+            text-align: center;
+            z-index: 10001;
             border-bottom: 1px solid #fcdce8;
         }
         .navbar-legal a {
             color: #b38dac;
             text-decoration: none;
-            font-size: 0.85rem;
-            margin-left: 20px;
+            font-size: 0.9rem;
+            margin: 0 15px;
             font-weight: 600;
         }
         .navbar-legal a:hover {
@@ -85,7 +85,7 @@ st.markdown("""
 
         /* NAVBAR SUPERIOR FIJA (Empujada un poco por la barra legal) */
         .navbar-fija {
-            position: fixed; top: 30px; left: 0; width: 100%; z-index: 9999;
+            position: fixed; top: 40px; left: 0; width: 100%; z-index: 10000;
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
             padding: 15px 20px 15px 20px; border-bottom: 2px solid #e790b3;
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
@@ -106,7 +106,7 @@ st.markdown("""
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
-            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 3.9em; /* Asegura 3 líneas de título */
+            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 3.9em;
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
@@ -131,10 +131,58 @@ st.markdown("""
         .header-icono { width: 55px; height: auto; }
         .header-container h1 { margin: 0; font-size: 3.2rem; }
         
-        /* --- NUEVO: BANNER DE TAPA DURA --- */
-        .bg-tapa-dura {
-            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+        /* --- BANNER MEGA CARRUSEL --- */
+        .mega-carrusel-wrapper {
+            display: grid;
+            grid-template-columns: 1fr; 
+            gap: 20px;
+            padding: 10px 0;
+            width: 100%;
         }
+        
+        @media (min-width: 1024px) {
+            .mega-carrusel-wrapper {
+                grid-template-columns: repeat(4, 1fr) !important;
+            }
+        }
+        
+        .banner-promo {
+            border-radius: 20px; 
+            padding: 25px 30px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between;
+            text-decoration: none !important;
+            width: 100%; 
+            box-sizing: border-box;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .banner-promo:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 12px 30px rgba(0,0,0,0.2); 
+        }
+        
+        .bg-cajita { background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }
+        .bg-destacados { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
+        .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
+        .bg-tapa-dura { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); }
+        
+        .banner-texto { flex: 1; padding-right: 10px; }
+        .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }
+        .banner-subtitulo { color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }
+        .banner-btn { 
+            background-color: #ffffff; padding: 8px 20px; border-radius: 50px; 
+            font-weight: 700; font-size: 0.9rem; display: inline-block; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
+        }
+        .banner-btn:hover { transform: scale(1.05); }
+        
+        .banner-img-container { flex: 0.45; text-align: right; }
+        .banner-img-container img { width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }
+        .img-icono { transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
+        
+        /* BANNER TAPA DURA MULTI IMG */
         .banner-multi-img-container {
             display: flex;
             gap: 10px;
@@ -149,6 +197,23 @@ st.markdown("""
             transform: rotate(0deg);
             box-shadow: 0 4px 10px rgba(0,0,0,0.15);
         }
+        
+        /* ANIMACIÓN SCROLL */
+        .scroll-indicator {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%); z-index: 999;
+            animation: bounce 2.5s infinite;
+        }
+        .scroll-indicator svg {
+            width: 45px; height: 45px;
+            fill: #dc4990;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2));
+        }
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translate(-50%, 0); }
+            40% { transform: translate(-50%, -20px); }
+            60% { transform: translate(-50%, -10px); }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -160,7 +225,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- ENRUTADOR DE PÁGINAS LEGALES (ANTES DE CARGAR DATOS) ---
+# --- ENRUTADOR DE PÁGINAS LEGALES ---
 seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "terminos":
@@ -210,23 +275,17 @@ with st.spinner("Acomodando los libros en la vitrina..."):
 if df_catalogo.empty:
     st.warning("No hay libros disponibles por el momento. ¡Vuelve pronto!")
     st.stop()
-
-st.markdown("---")
-
-if df_catalogo.empty:
-    st.warning("No hay libros disponibles por el momento. ¡Vuelve pronto!")
-    st.stop()
     
 generos_disp = sorted(df_catalogo['genero'].dropna().unique()) if 'genero' in df_catalogo.columns else []
 autores_disp = sorted(df_catalogo['autor'].dropna().unique()) if 'autor' in df_catalogo.columns else []
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
 # =====================================================================
-# NAVBAR SUPERIOR FIJA
+# NAVBAR SUPERIOR FIJA DE FILTROS
 # =====================================================================
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 
-col_filtros, col_bolsa = st.columns([3, 1])
+col_filtros, col_bolsa = st.[...](asc_slot://start-slot-1)columns()
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
@@ -252,7 +311,7 @@ with col_bolsa:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.columns([3, 1])
+                col_t, col_b = st.[...](asc_slot://start-slot-3)columns()
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b:
                     st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
@@ -267,7 +326,7 @@ with col_bolsa:
 st.write("") 
 
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.columns([3,1])
+col_busqueda, col_orden = st.[...](asc_slot://start-slot-5)columns()
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 with col_orden:
@@ -279,70 +338,18 @@ with col_orden:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =====================================================================
-# 🎪 ENRUTADOR DE SUBPÁGINAS Y MEGA CARRUSEL DE BANNERS
+# 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
 # =====================================================================
-seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
-
-    URL_TAPA_DURA_1 = "https://via.placeholder.com/150x220?text=Ejemplo+1" 
-    URL_TAPA_DURA_2 = "https://via.placeholder.com/150x220?text=Ejemplo+2"
     
-    html_mega_carrusel = f"""
-    <style>
-        .mega-carrusel-wrapper {{
-            display: grid;
-            grid-template-columns: 1fr; 
-            gap: 20px;
-            padding: 10px 0;
-            width: 100%;
-        }}
-        
-        @media (min-width: 1024px) {{
-            .mega-carrusel-wrapper {{
-                grid-template-columns: repeat(3, 1fr);
-            }}
-        }}
-        
-        .banner-promo {{
-            border-radius: 20px; 
-            padding: 25px 30px; 
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between;
-            text-decoration: none !important;
-            width: 100%; 
-            box-sizing: border-box;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }}
-        .banner-promo:hover {{ 
-            transform: translateY(-5px); 
-            box-shadow: 0 12px 30px rgba(0,0,0,0.2); 
-        }}
-        
-        .bg-cajita {{ background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }}
-        .bg-destacados {{ background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }}
-        .bg-ofertas {{ background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }}
-        
-        .banner-texto {{ flex: 1; padding-right: 10px; }}
-        .banner-titulo {{ font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }}
-        .banner-subtitulo {{ color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }}
-        .banner-btn {{ 
-            background-color: #ffffff; padding: 8px 20px; border-radius: 50px; 
-            font-weight: 700; font-size: 0.9rem; display: inline-block; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important;
-        }}
-        .banner-btn:hover {{ transform: scale(1.05); }}
-        
-        .banner-img-container {{ flex: 0.45; text-align: right; }}
-        .banner-img-container img {{ width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }}
-        .img-icono {{ transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}}
-    </style>
+    URL_TAPA_DURA_1 = "https://via.placeholder.com/150x220/a1c4fd/ffffff?text=Tapa+Dura+1" 
+    URL_TAPA_DURA_2 = "https://via.placeholder.com/150x220/c2e9fb/6a85b6?text=Tapa+Dura+2"
 
+    html_mega_carrusel = f"""
     <div class="mega-carrusel-wrapper">
         <a href="?seccion=ofertas" target="_self" class="banner-promo bg-ofertas">
             <div class="banner-texto">
@@ -385,13 +392,22 @@ if seccion_actual == "inicio":
     </div>
     """
     st.html(html_mega_carrusel)
+    
+    st.markdown("""
+        <div class="scroll-indicator">
+            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px">
+                <path d="M0 0h24v24H0V0z" fill="none"/>
+                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.write("---")
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>")
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
     else:
@@ -400,7 +416,6 @@ elif seccion_actual == "destacados":
 elif seccion_actual == "ofertas":
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>")
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
     else:
@@ -409,11 +424,11 @@ elif seccion_actual == "ofertas":
 elif seccion_actual == "tapa-dura":
     st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>💎 Ediciones en Tapa Dura</h2>")
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    
     if 'encuadernacion' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
     else:
         df_base = df_catalogo.head(0)
+
 # =====================================================================
 # --- APLICAR FILTROS Y BÚSQUEDA ---
 # =====================================================================
@@ -434,7 +449,7 @@ except NameError:
     pass 
 
 # =====================================================================
-# --- NUEVO: APLICAR ORDENAMIENTO DE LIBROS ---
+# --- APLICAR ORDENAMIENTO DE LIBROS ---
 # =====================================================================
 if not df_filtrado.empty:
     if orden_seleccionado == "🔤 Título: A - Z":
@@ -452,7 +467,6 @@ if not df_filtrado.empty:
         if 'editorial' in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by="editorial", ascending=True)
     else:
-        # Por Defecto (⭐ Relevancia / Destacados): Los destacados salen primero, y luego se ordenan alfabéticamente por título
         if 'destacado' in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by=["destacado", "titulo"], ascending=[False, True])
         else:
@@ -470,7 +484,6 @@ else:
         with col:
             libro_id_limpio = str(int(float(row.get('libro_id', 0))))
             
-            # --- CACHE BUSTING DE PORTADAS ---
             timestamp_str = row.get('portada_last_updated', '') 
             version_cache = ""
             if timestamp_str and not pd.isna(timestamp_str):
@@ -484,6 +497,7 @@ else:
             
             titulo_seguro = row.get('titulo', "Sin título")
             autor_seguro = row.get('autor', 'Desconocido')
+            editorial_segura = row.get('editorial', 'No especificada')
             precio = float(row.get('precio', 0.0))
             precio_orig = float(row.get('precio_original', precio))
 
@@ -492,7 +506,8 @@ else:
                 <img src="{url_imagen}" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x350?text=Sin+Portada';">
                 <div class="info-container">
                     <h4>{titulo_seguro}</h4>
-                    <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 15px;'>por {autor_seguro}</p>
+                    <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 2px;'>por {autor_seguro}</p>
+                    <p style='color: #b38dac; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 15px;'>Editorial: {editorial_segura}</p>
             """
             
             if not pd.isna(row.get('precio_original')) and precio < precio_orig:
