@@ -9,15 +9,17 @@ def leer_texto_remoto(nombre_archivo):
     """Descarga el texto actual desde Supabase para poder editarlo."""
     url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{nombre_archivo}"
     try:
+        # Añadimos un timestamp a la URL para saltarnos la caché al editar
         req = urllib.request.urlopen(f"{url}?t={time.time()}")
         return req.read().decode('utf-8')
     except:
-        return ""
+        return "" # Si no existe aún, devuelve vacío
 
 def procesar_y_subir_imagen(conn, uploaded_file, nombre_final):
     """Función reutilizable para procesar y subir una imagen a Supabase."""
     img = Image.open(uploaded_file)
-    # Manejo de fondos transparentes
+    
+    # Manejo de fondos transparentes (RGBA a RGB con fondo blanco)
     if img.mode in ("RGBA", "P"):
         fondo_blanco = Image.new("RGB", img.size, (255, 255, 255))
         fondo_blanco.paste(img, mask=img.convert('RGBA'))
@@ -28,7 +30,7 @@ def procesar_y_subir_imagen(conn, uploaded_file, nombre_final):
     buf = io.BytesIO()
     rgb_im.save(buf, format='JPEG', quality=85)
     
-    # Sube la imagen sobreescribiendo la anterior
+    # Sube la imagen sobreescribiendo la anterior si existe (upsert=true)
     conn.storage.from_("grafica").upload(
         path=nombre_final, 
         file=buf.getvalue(), 
@@ -38,8 +40,12 @@ def procesar_y_subir_imagen(conn, uploaded_file, nombre_final):
 def mostrar_gestion_web():
     st.markdown("## 🎨 Gestión de la Tienda Web")
     
+    # Dividimos en pestañas para mayor orden
     tab_banners, tab_textos = st.tabs(["🖼️ Banners", "📝 Textos Legales"])
     
+    # ==========================================
+    # PESTAÑA 1: BANNERS
+    # ==========================================
     with tab_banners:
         st.info("Sube las imágenes para actualizar los banners promocionales del catálogo.")
         
@@ -58,24 +64,28 @@ def mostrar_gestion_web():
         if st.button("🚀 Actualizar Banners", type="primary", use_container_width=True):
             conn = get_db_connection()
             imagenes_subidas = False
-            with st.spinner("Procesando y subiendo imágenes..."):
+            
+            with st.spinner("Procesando y subiendo imágenes a Supabase..."):
                 try:
-                    # --- LÓGICA CORREGIDA ---
+                    # 1. Subir Banner de Cajita
                     if img_banner_cajita:
                         procesar_y_subir_imagen(conn, img_banner_cajita, "promo_cajita.jpg")
                         st.success("✅ Banner de Cajita Literaria actualizado.")
                         imagenes_subidas = True
 
+                    # 2. Subir Banner Tapa Dura 1
                     if img_banner_1:
                         procesar_y_subir_imagen(conn, img_banner_1, "promo_tapa_dura_1.jpg")
                         st.success("✅ Banner de Tapa Dura 1 actualizado.")
                         imagenes_subidas = True
 
+                    # 3. Subir Banner Tapa Dura 2
                     if img_banner_2:
                         procesar_y_subir_imagen(conn, img_banner_2, "promo_tapa_dura_2.jpg")
                         st.success("✅ Banner de Tapa Dura 2 actualizado.")
                         imagenes_subidas = True
 
+                    # Mensaje final
                     if imagenes_subidas:
                         st.balloons()
                         st.info("💡 ¡Ve a tu catálogo y añade `?admin=limpiar` a la URL para ver los cambios de inmediato!")
@@ -84,7 +94,6 @@ def mostrar_gestion_web():
 
                 except Exception as e:
                     st.error(f"Ocurrió un error al subir los banners: {e}")
-    # ==========================================
     # PESTAÑA 2: TEXTOS LEGALES
     # ==========================================
     with tab_textos:
