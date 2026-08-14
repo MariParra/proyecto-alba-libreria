@@ -26,12 +26,34 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Lato', sans-serif; }
-        
         h1, h2, h3, .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #dc4990 !important; }
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
-            padding-top: 200px; /* Aumentado ligeramente para dar espacio a la nueva fila del buscador */
+            padding-top: 220px; /* Ajustado para dar espacio a la nueva navbar legal y filtros */
+        }
+
+        /* --- NUEVO: NAVBAR PARA PÁGINAS LEGALES --- */
+        .navbar-legal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #fdf1f1;
+            padding: 5px 20px;
+            text-align: right;
+            z-index: 10000;
+            border-bottom: 1px solid #fcdce8;
+        }
+        .navbar-legal a {
+            color: #b38dac;
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-left: 20px;
+            font-weight: 600;
+        }
+        .navbar-legal a:hover {
+            color: #dc4990;
         }
 
         /* DISEÑO EXPANDERS (BOLSA) */
@@ -61,9 +83,9 @@ st.markdown("""
 
         [data-testid="stSidebar"] { display: none !important; }
 
-        /* NAVBAR SUPERIOR FIJA */
+        /* NAVBAR SUPERIOR FIJA (Empujada un poco por la barra legal) */
         .navbar-fija {
-            position: fixed; top: 0; left: 0; width: 100%; z-index: 9999;
+            position: fixed; top: 30px; left: 0; width: 100%; z-index: 9999;
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
             padding: 15px 20px 15px 20px; border-bottom: 2px solid #e790b3;
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
@@ -71,19 +93,20 @@ st.markdown("""
         
         .stTextInput { margin-bottom: 0px !important; }
         
-        /* TARJETAS DE LIBROS */
+        /* --- MEJORA: TARJETAS DE LIBROS ALINEADAS --- */
         .libro-card {
             background: #fdf1f1; border: 1px solid #fcdce8; border-radius: 20px; 
             padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
-            transition: transform 0.3s ease, box-shadow 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
-            min-height: 400px; height: 100%;
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+            display: flex; flex-direction: column; justify-content: space-between;
+            min-height: 440px; height: 100%;
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
         .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
-            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 2.6em;
+            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 3.9em; /* Asegura 3 líneas de título */
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
@@ -107,8 +130,52 @@ st.markdown("""
         .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 0; }
         .header-icono { width: 55px; height: auto; }
         .header-container h1 { margin: 0; font-size: 3.2rem; }
+        
+        /* --- NUEVO: BANNER DE TAPA DURA --- */
+        .bg-tapa-dura {
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+        }
+        .banner-multi-img-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 0.6;
+        }
+        .banner-multi-img-container img {
+            width: 48%;
+            max-width: 90px;
+            border-radius: 8px;
+            transform: rotate(0deg);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
     </style>
 """, unsafe_allow_html=True)
+
+# --- NAVBAR SUPERIOR SUTIL PARA PÁGINAS LEGALES ---
+st.markdown("""
+<div class="navbar-legal">
+    <a href="?seccion=terminos" target="_self">Términos y Condiciones</a>
+    <a href="?seccion=envios" target="_self">Condiciones de Envío</a>
+</div>
+""", unsafe_allow_html=True)
+
+# --- ENRUTADOR DE PÁGINAS LEGALES (ANTES DE CARGAR DATOS) ---
+seccion_actual = st.query_params.get("seccion", "inicio")
+
+if seccion_actual == "terminos":
+    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Términos y Condiciones</h2>")
+    st.markdown("---")
+    st.info("Aquí va el texto completo de tus términos y condiciones. Puedes editar esta sección en tu código cuando lo desees.")
+    st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.stop()
+
+elif seccion_actual == "envios":
+    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Condiciones de Envío</h2>")
+    st.markdown("---")
+    st.info("Aquí va el texto completo de tus políticas y condiciones de envío. Puedes editar esta sección en tu código cuando lo desees.")
+    st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.stop()
 
 # --- INICIALIZAR CARRITO ---
 if 'carrito_publico' not in st.session_state:
@@ -199,7 +266,7 @@ with col_bolsa:
 
 st.write("") 
 
-# --- NUEVO: BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
+# --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
 col_busqueda, col_orden = st.columns([3,1])
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
@@ -221,6 +288,9 @@ if seccion_actual == "inicio":
     URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
 
+    URL_TAPA_DURA_1 = "https://via.placeholder.com/150x220?text=Ejemplo+1" 
+    URL_TAPA_DURA_2 = "https://via.placeholder.com/150x220?text=Ejemplo+2"
+    
     html_mega_carrusel = f"""
     <style>
         .mega-carrusel-wrapper {{
@@ -300,6 +370,18 @@ if seccion_actual == "inicio":
             </div>
             <div class="banner-img-container"><img src="{URL_ICONO}" class="img-icono"></div>
         </a>
+        
+        <a href="?seccion=tapa-dura" target="_self" class="banner-promo bg-tapa-dura">
+            <div class="banner-texto">
+                <h2 class="banner-titulo">Ediciones Únicas</h2>
+                <p class="banner-subtitulo">Libros en Tapa Dura y formatos especiales.</p>
+                <span class="banner-btn" style="color: #6a85b6 !important;">💎 VER JOYITAS</span>
+            </div>
+            <div class="banner-multi-img-container">
+                <img src="{URL_TAPA_DURA_1}">
+                <img src="{URL_TAPA_DURA_2}">
+            </div>
+        </a>
     </div>
     """
     st.html(html_mega_carrusel)
@@ -324,6 +406,14 @@ elif seccion_actual == "ofertas":
     else:
         df_base = df_catalogo.head(0)
 
+elif seccion_actual == "tapa-dura":
+    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>💎 Ediciones en Tapa Dura</h2>")
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    
+    if 'encuadernacion' in df_catalogo.columns:
+        df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
+    else:
+        df_base = df_catalogo.head(0)
 # =====================================================================
 # --- APLICAR FILTROS Y BÚSQUEDA ---
 # =====================================================================
