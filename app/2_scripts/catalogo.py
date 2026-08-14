@@ -133,7 +133,9 @@ st.markdown("""
         .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
         
         /* DEGRADADO MORADO PARA TAPA DURA */
-        background: linear-gradient(135deg, #bb8fce 0%, #9b59b6 50%, #512e5f 100%);
+        .bg-tapa-dura {
+            background: linear-gradient(135deg, #c39bd3 0%, #512e5f 100%);
+        }
         
         .banner-texto { flex: 1; padding-right: 5px; }
         .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
