@@ -341,7 +341,7 @@ with col_orden:
 
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
-    URL_FOTO_CAJITA = URL_FOTO_CAJITA = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_cajita.jpg?v={version_banner}"
+    URL_FOTO_CAJITA = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_cajita.jpg?v={version_banner}"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
     
     version_banner = int(time.time() / 3600) 
