@@ -219,14 +219,14 @@ if seccion_actual == "terminos":
     st.markdown("<h2 class='titulo-seccion'>Términos y Condiciones</h2>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown(obtener_texto_legal("terminos.txt"))
-    st.markdown("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
+    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 elif seccion_actual == "envios":
     st.markdown("<h2 class='titulo-seccion'>Condiciones de Envío</h2>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown(obtener_texto_legal("envios.txt"))
-    st.markdown("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
+    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 
@@ -273,7 +273,7 @@ st.write("---")
 # =====================================================================
 # FILTROS Y CARRITO 
 # =====================================================================
-col_filtros, col_bolsa = st.columns([3,1])
+col_filtros, col_bolsa = st.[...](asc_slot://start-slot-1)columns()
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
@@ -299,7 +299,7 @@ with col_bolsa:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.columns([3,1])
+                col_t, col_b = st.[...](asc_slot://start-slot-3)columns()
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b: st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
                         
@@ -311,7 +311,7 @@ with col_bolsa:
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.columns([3,1])
+col_busqueda, col_orden = st.[...](asc_slot://start-slot-5)columns()
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 with col_orden:
@@ -386,18 +386,17 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    st.html(html_mega_carrusel, unsafe_allow_html=True)
-    
-    # FLECHA DE SCROLL FUNCIONAL
-    st.html(html_scroll_indicator, unsafe_allow_html=True)
+    # 💥 CLAVE DEL ÉXITO: Usamos st.html en lugar de st.markdown para no romper el grid CSS 💥
+    st.html(html_mega_carrusel)
+    st.html(html_scroll_indicator)
     
     st.write("---")
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
     st.markdown("<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.html(html_scroll_indicator)
     
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
@@ -406,8 +405,8 @@ elif seccion_actual == "destacados":
 
 elif seccion_actual == "ofertas":
     st.markdown("<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.html(html_scroll_indicator)
     
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
@@ -416,8 +415,8 @@ elif seccion_actual == "ofertas":
 
 elif seccion_actual == "tapa-dura":
     st.markdown("<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>", unsafe_allow_html=True)
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.html(html_scroll_indicator)
     
     if 'encuadernacion' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
