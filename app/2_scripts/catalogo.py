@@ -38,34 +38,27 @@ st.markdown("""
 
         /* --- NAVBAR PARA PÁGINAS LEGALES --- */
         .navbar-legal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
+            position: absolute; /* Clave: Absolute en lugar de fixed */
+            top: 0; left: 0; width: 100%;
             height: 30px;
-            background-color: #fcdce8; /* Un rosado más fuerte para destacar */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 999999; /* Asegura que esté por encima de todo */
+            background-color: #fcdce8; 
+            display: flex; justify-content: center; align-items: center;
+            z-index: 10001; /* Sobre la barra de filtros */
             border-bottom: 1px solid #f472b6;
         }
         .navbar-legal a {
-            color: #9D174D;
-            text-decoration: none;
-            font-size: 0.85rem;
-            margin: 0 20px;
-            font-weight: 700;
+            color: #9D174D; text-decoration: none; font-size: 0.85rem;
+            margin: 0 20px; font-weight: 700;
         }
-        .navbar-legal a:hover {
-            text-decoration: underline;
-        }
+        .navbar-legal a:hover { text-decoration: underline; }
 
-        /* NAVBAR SUPERIOR FIJA (Empieza justo debajo de la legal) */
         .navbar-fija {
-            position: fixed; top: 30px; left: 0; width: 100%; z-index: 10000;
+            position: fixed; 
+            top: 0; /* Ahora sube al tope de la pantalla */
+            left: 0; width: 100%; z-index: 10000;
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            padding: 15px 20px 10px 20px; border-bottom: 2px solid #e790b3;
+            padding: 40px 20px 10px 20px; /* 40px de padding arriba para dejarle su espacio a la barra legal cuando estamos en el tope */
+            border-bottom: 2px solid #e790b3;
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
 
@@ -178,11 +171,16 @@ st.markdown("""
         
         /* ANIMACIÓN SCROLL */
         .scroll-indicator {
-            position: relative; margin-top: 10px; margin-bottom: -10px;
-            display: flex; justify-content: center; width: 100%;
-            animation: bounce 2s infinite; z-index: 100;
+            display: flex; 
+            justify-content: center; 
+            width: 100%;
+            margin-top: 15px; 
+            margin-bottom: 10px;
+            animation: bounce 2.5s infinite;
         }
-        .scroll-indicator svg { width: 40px; height: 40px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.1)); }
+        .scroll-indicator svg {
+            width: 45px; height: 45px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2));
+        }
         @keyframes bounce {
             0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
             40% { transform: translateY(-15px); }
