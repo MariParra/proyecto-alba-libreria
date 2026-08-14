@@ -6,17 +6,36 @@ import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 def unificar_formatos_fecha(serie_fechas):
+    """
+    Función de parseo de fechas a prueba de balas, capaz de interpretar
+    múltiples formatos (YYYY-MM-DD y DD-MM-YYYY).
+    """
     def parsear_valor(val):
-        if pd.isna(val) or str(val).strip() == '' or str(val).strip().lower() in ['nan', 'nat']:
+        # 1. Descartar valores vacíos o nulos
+        if pd.isna(val) or not str(val).strip() or str(val).strip().lower() in ['nan', 'nat']:
             return pd.NaT
+        
         val_str = str(val).strip()
-        fecha_parseada = pd.to_datetime(val_str, dayfirst=True, errors='coerce')
-        return fecha_parseada
 
+        # 2. Lógica inteligente para detectar el formato
+        try:
+            # Si la fecha empieza con 4 dígitos, es formato ISO (YYYY-MM-DD)
+            # y el día NO va primero.
+            if len(val_str.split('-')[0]) == 4 or len(val_str.split('/')[0]) == 4:
+                return pd.to_datetime(val_str, dayfirst=False, errors='coerce')
+            # Si no, es formato local (DD-MM-YYYY) y el día SÍ va primero.
+            else:
+                return pd.to_datetime(val_str, dayfirst=True, errors='coerce')
+        except:
+            # Si todo lo demás falla, intenta un último parseo genérico.
+            return pd.to_datetime(val_str, errors='coerce')
+
+    # 3. Aplicar la función a toda la columna
     try:
         return serie_fechas.apply(parsear_valor)
     except Exception as e:
         log_error("vista_caja", "unificar_formatos_fecha", f"Error inesperado al parsear fechas. Detalle: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+        # Como último recurso, devuelve la serie original parseada de forma genérica
         return pd.to_datetime(serie_fechas, errors='coerce')
 
 def cargar_libros_caja():
