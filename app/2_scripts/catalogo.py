@@ -412,9 +412,7 @@ if seccion_actual == "inicio":
     st.html(html_mega_carrusel)
     
     # FLECHA DE SCROLL
-    if st.button("⬇️ Bajar al catálogo", key="btn_scroll_nativo", help="Ver libros"):
-    # Esto fuerza una recarga limpia y posiciona la vista
-        st.rerun()
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
     
     st.write("---")
     df_base = df_catalogo.copy()
