@@ -386,10 +386,10 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    st.markdown(html_mega_carrusel, unsafe_allow_html=True)
+    st.html(html_mega_carrusel, unsafe_allow_html=True)
     
     # FLECHA DE SCROLL FUNCIONAL
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.html(html_scroll_indicator, unsafe_allow_html=True)
     
     st.write("---")
     df_base = df_catalogo.copy()
