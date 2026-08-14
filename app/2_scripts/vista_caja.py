@@ -699,8 +699,22 @@ def mostrar_caja():
                         opciones_mes.append(nombre_amigable)
                         mapa_inverso_mes[nombre_amigable] = mes_str
 
+                # 1. Calculamos el nombre amigable del mes actual
+                hoy = datetime.now()
+                nombre_mes_actual = f"{month_map_es.get(hoy.strftime('%m'), '')} {hoy.year}"
+                
+                # 2. Buscamos el índice de ese mes en nuestra lista de opciones
+                default_index = 0 # Por defecto será "Ver Todo"
+                if nombre_mes_actual in opciones_mes:
+                    default_index = opciones_mes.index(nombre_mes_actual)
+
+                # 3. Se lo pasamos como valor inicial al selectbox
                 col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=opciones_mes)
+                mes_seleccionado = col_f1.selectbox(
+                    "Filtrar por Mes:", 
+                    options=opciones_mes,
+                    index=default_index # <-- LA MAGIA OCURRE AQUÍ
+                )
                 
                 clientes_hist = ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist())
                 cliente_filtro = col_f2.selectbox("Filtrar Cliente:", clientes_hist)
