@@ -28,7 +28,7 @@ except KeyError:
     st.error("🚨 Error de configuración: Faltan claves en secrets.toml.")
     st.stop()
 
-# --- CSS BASE Y MEJORADO (Sin 'f' para evitar TokenError con los %) ---
+# --- CSS BASE Y MEJORADO ---
 html_scroll_indicator = """
     <div class="scroll-indicator" onclick="
         const container = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
@@ -44,6 +44,7 @@ html_scroll_indicator = """
         </svg>
     </div>
 """
+
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
@@ -219,7 +220,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- ENRUTADOR DE PÁGINAS LEGALES ---
-@st.cache_data(ttl=1800) # Guarda en caché por media hora
+@st.cache_data(ttl=1800)
 def obtener_texto_legal(archivo):
     url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{archivo}"
     try:
@@ -243,7 +244,6 @@ elif seccion_actual == "envios":
     st.markdown(obtener_texto_legal("envios.txt"))
     st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
-
 
 # --- INICIALIZAR CARRITO ---
 if 'carrito_publico' not in st.session_state:
@@ -336,23 +336,6 @@ with col_orden:
         label_visibility="collapsed"
     )
 
-# --- DEFINICIÓN DE COMPONENTES REUTILIZABLES ---
-html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="
-        const container = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
-        if (container) {
-            container.scrollBy({ top: 600, behavior: 'smooth' });
-        } else {
-            window.parent.scrollBy({ top: 600, behavior: 'smooth' });
-        }
-    " title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M0 0h24v24H0V0z" fill="none"/>
-            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-        </svg>
-    </div>
-"""
-
 # =====================================================================
 # 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
 # =====================================================================
@@ -408,7 +391,6 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    # 💥 CLAVE DEL ÉXITO: Usamos st.html en lugar de st.markdown para no romper el grid CSS 💥
     st.html(html_mega_carrusel)
     st.html(html_scroll_indicator)
     
