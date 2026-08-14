@@ -222,7 +222,7 @@ editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editor
 # =====================================================================
 # FILTROS Y CARRITO (Ahora fluyen con la página)
 # =====================================================================
-col_filtros, col_bolsa = st.columns()
+col_filtros, col_bolsa = st.columns([3,1])
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
@@ -248,7 +248,7 @@ with col_bolsa:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.columns()
+                col_t, col_b = st.columns([3,1])
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b: st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
                         
@@ -260,7 +260,7 @@ with col_bolsa:
             st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
 
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.columns()
+col_busqueda, col_orden = st.columns([3,1])
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 with col_orden:
