@@ -1,6 +1,8 @@
 import streamlit as st
 from PIL import Image
 import io
+from utilidades import get_db_connection
+
 
 st.markdown("### 🖼️ Gestión de Banners del Catálogo")
 st.info("Sube las imágenes para actualizar los libros que se muestran en el banner de 'Ediciones Únicas'.")

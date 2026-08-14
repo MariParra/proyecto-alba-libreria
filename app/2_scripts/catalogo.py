@@ -161,17 +161,26 @@ st.markdown("""
             margin-top: 10px;
         }
 
-        /* ANIMACIÓN SCROLL - FLUYE Y DESAPARECE AL BAJAR */
+        /* ANIMACIÓN SCROLL - FLOTANTE FIJA */
         .scroll-indicator {
-            display: flex; justify-content: center; width: 100%;
-            margin-top: 25px; margin-bottom: 25px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            display: flex;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 8px;
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
             animation: bounce 2.5s infinite;
         }
-        .scroll-indicator svg { width: 40px; height: 40px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
+        .scroll-indicator svg { width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
         @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-15px); }
-            60% { transform: translateY(-7px); }
+            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
+            40% { transform: translateX(-50%) translateY(-10px); }
+            60% { transform: translateX(-50%) translateY(-5px); }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -370,7 +379,6 @@ if seccion_actual == "inicio":
 elif seccion_actual == "destacados":
     st.markdown("<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
     
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
@@ -380,7 +388,6 @@ elif seccion_actual == "destacados":
 elif seccion_actual == "ofertas":
     st.markdown("<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
     
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
@@ -390,7 +397,6 @@ elif seccion_actual == "ofertas":
 elif seccion_actual == "tapa-dura":
     st.markdown("<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
     
     if 'encuadernacion' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
