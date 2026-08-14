@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 import urllib.parse
 import urllib.request
 import time
@@ -390,7 +391,7 @@ if seccion_actual == "inicio":
     </div>
     """
     st.html(html_mega_carrusel)
-    st.html(html_scroll_indicator)
+    components.html(html_scroll_indicator, height=0, width=0)
     
     st.write("---")
     df_base = df_catalogo.copy()
@@ -398,7 +399,7 @@ if seccion_actual == "inicio":
 elif seccion_actual == "destacados":
     st.markdown("<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.html(html_scroll_indicator)
+    components.html(html_scroll_indicator, height=0, width=0)
     
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
@@ -408,7 +409,7 @@ elif seccion_actual == "destacados":
 elif seccion_actual == "ofertas":
     st.markdown("<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.html(html_scroll_indicator)
+    components.html(html_scroll_indicator, height=0, width=0)
     
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
@@ -418,7 +419,7 @@ elif seccion_actual == "ofertas":
 elif seccion_actual == "tapa-dura":
     st.markdown("<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
-    st.html(html_scroll_indicator)
+    components.html(html_scroll_indicator, height=0, width=0)
     
     if 'encuadernacion' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
