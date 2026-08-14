@@ -206,31 +206,6 @@ st.markdown("""
             font-size: 3.5rem;
             margin-top: 10px;
         }
-
-        /* ANIMACIÓN SCROLL - REDONDO Y FUNCIONAL */
-        .scroll-indicator {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1001;
-            width: 55px; 
-            height: 55px;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
-            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            animation: bounce 2.5s infinite;
-        }
-        .scroll-indicator svg { width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
-            40% { transform: translateX(-50%) translateY(-15px); }
-            60% { transform: translateX(-50%) translateY(-5px); }
-        }
     </style>
 """, unsafe_allow_html=True)
 
