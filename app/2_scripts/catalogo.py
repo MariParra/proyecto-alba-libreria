@@ -38,7 +38,7 @@ html_scroll_indicator = """
         } else {
             window.parent.scrollBy(0, 600);
         }
-    })();" title="Bajar" style="
+    })()" title="Bajar" style="
         position: fixed;
         bottom: 30px;
         left: 50%;
