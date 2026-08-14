@@ -244,8 +244,8 @@ else:
             st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
             st.rerun()
             
-        if st.button("🖼️ GESTIÓN DE PORTADAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS" else "secondary"):
-            st.session_state.pagina_actual = "🖼️ GESTIÓN DE PORTADAS"
+        if st.button("🎨 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 GESTIÓN WEB" else "secondary"):
+            st.session_state.pagina_actual = "🎨 GESTIÓN WEB"
             st.rerun()
         st.markdown("---")
         

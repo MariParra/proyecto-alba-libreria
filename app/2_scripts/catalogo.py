@@ -341,7 +341,10 @@ with col_orden:
 
 # Variable que contiene la flecha de scroll, para poder reutilizarla
 html_scroll_indicator = """
-    <div class="scroll-indicator">
+    <div class="scroll-indicator" onclick="
+        const rootElement = window.parent.document.scrollingElement || window.parent.document.body;
+        rootElement.scrollBy({ top: 600, behavior: 'smooth' });
+    ;" title="Bajar">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
