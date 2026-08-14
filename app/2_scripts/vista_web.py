@@ -9,29 +9,45 @@ def leer_texto_remoto(nombre_archivo):
     """Descarga el texto actual desde Supabase para poder editarlo."""
     url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{nombre_archivo}"
     try:
-        # Añadimos un timestamp a la URL para saltarnos la caché al editar
         req = urllib.request.urlopen(f"{url}?t={time.time()}")
         return req.read().decode('utf-8')
     except:
-        return "" # Si no existe aún, devuelve vacío
+        return ""
+
+def procesar_y_subir_imagen(conn, uploaded_file, nombre_final):
+    """Función reutilizable para procesar y subir una imagen a Supabase."""
+    img = Image.open(uploaded_file)
+    # Manejo de fondos transparentes
+    if img.mode in ("RGBA", "P"):
+        fondo_blanco = Image.new("RGB", img.size, (255, 255, 255))
+        fondo_blanco.paste(img, mask=img.convert('RGBA'))
+        rgb_im = fondo_blanco
+    else:
+        rgb_im = img.convert('RGB')
+    
+    buf = io.BytesIO()
+    rgb_im.save(buf, format='JPEG', quality=85)
+    
+    # Sube la imagen sobreescribiendo la anterior
+    conn.storage.from_("grafica").upload(
+        path=nombre_final, 
+        file=buf.getvalue(), 
+        file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
 
 def mostrar_gestion_web():
     st.markdown("## 🎨 Gestión de la Tienda Web")
     
-    # Dividimos en pestañas para mayor orden
     tab_banners, tab_textos = st.tabs(["🖼️ Banners", "📝 Textos Legales"])
     
-    # ==========================================
-    # PESTAÑA 1: BANNERS
-    # ==========================================
     with tab_banners:
-    # --- NUEVO: GESTIÓN BANNER CAJITA ---
+        st.info("Sube las imágenes para actualizar los banners promocionales del catálogo.")
+        
         st.markdown("#### Banner de Suscripción")
         img_banner_cajita = st.file_uploader("Sube la imagen para la 'Cajita Literaria'", type=['png', 'jpg', 'jpeg'], key="banner_cajita")
 
         st.markdown("---")
         
-        # --- GESTIÓN BANNERS TAPA DURA ---
         st.markdown("#### Banner de Ediciones Únicas")
         col_b1, col_b2 = st.columns(2)
         with col_b1:
@@ -41,29 +57,33 @@ def mostrar_gestion_web():
 
         if st.button("🚀 Actualizar Banners", type="primary", use_container_width=True):
             conn = get_db_connection()
-            try:
-                # Procesar Banner Cajita
-                if img_banner_cajita:
-                    # (Lógica para procesar y subir img_banner_cajita como "promo_cajita.jpg")
-                    st.success("✅ Banner de Cajita Literaria actualizado.")
+            imagenes_subidas = False
+            with st.spinner("Procesando y subiendo imágenes..."):
+                try:
+                    # --- LÓGICA CORREGIDA ---
+                    if img_banner_cajita:
+                        procesar_y_subir_imagen(conn, img_banner_cajita, "promo_cajita.jpg")
+                        st.success("✅ Banner de Cajita Literaria actualizado.")
+                        imagenes_subidas = True
 
-                # Procesar Banner Tapa Dura 1
-                if img_banner_1:
-                    # (Lógica para procesar y subir img_banner_1 como "promo_tapa_dura_1.jpg")
-                    st.success("✅ Banner de Tapa Dura 1 actualizado.")
+                    if img_banner_1:
+                        procesar_y_subir_imagen(conn, img_banner_1, "promo_tapa_dura_1.jpg")
+                        st.success("✅ Banner de Tapa Dura 1 actualizado.")
+                        imagenes_subidas = True
 
-                # Procesar Banner Tapa Dura 2
-                if img_banner_2:
-                    # (Lógica para procesar y subir img_banner_2 como "promo_tapa_dura_2.jpg")
-                    st.success("✅ Banner de Tapa Dura 2 actualizado.")
+                    if img_banner_2:
+                        procesar_y_subir_imagen(conn, img_banner_2, "promo_tapa_dura_2.jpg")
+                        st.success("✅ Banner de Tapa Dura 2 actualizado.")
+                        imagenes_subidas = True
 
-                if img_banner_cajita or img_banner_1 or img_banner_2:
-                    st.balloons()
-                    st.info("💡 ¡Ve a tu catálogo y añade `?admin=limpiar` a la URL para ver los cambios de inmediato!")
-                else:
-                    st.warning("⚠️ No subiste ninguna imagen nueva.")
-            except Exception as e:
-                st.error(f"Ocurrió un error al subir los banners: {e}")
+                    if imagenes_subidas:
+                        st.balloons()
+                        st.info("💡 ¡Ve a tu catálogo y añade `?admin=limpiar` a la URL para ver los cambios de inmediato!")
+                    else:
+                        st.warning("⚠️ No seleccionaste ninguna imagen nueva para subir.")
+
+                except Exception as e:
+                    st.error(f"Ocurrió un error al subir los banners: {e}")
     # ==========================================
     # PESTAÑA 2: TEXTOS LEGALES
     # ==========================================
