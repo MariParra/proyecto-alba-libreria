@@ -30,7 +30,14 @@ except KeyError:
 
 # --- CSS BASE Y MEJORADO ---
 html_scroll_indicator = """
-    <div style="
+    <div onclick="(function(){
+        const el = window.parent.document.querySelector('.stMain') || window.parent.document.scrollingElement || window.parent;
+        if(el.scrollTo) {
+            el.scrollBy({top: 600, behavior: 'smooth'});
+        } else {
+            window.parent.scrollBy(0, 600);
+        }
+    })();" title="Bajar" style="
         position: fixed;
         bottom: 30px;
         left: 50%;
@@ -46,15 +53,8 @@ html_scroll_indicator = """
         justify-content: center;
         cursor: pointer;
         animation: bounce 2.5s infinite;
-    " onclick="
-        const container = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
-        if (container) {
-            container.scrollBy({ top: 600, behavior: 'smooth' });
-        } else {
-            window.parent.scrollBy({ top: 600, behavior: 'smooth' });
-        }
-    " title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15);">
+    ">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 35px; height: 35px; fill: #dc4990; pointer-events: none;">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
