@@ -244,8 +244,8 @@ else:
             st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
             st.rerun()
             
-        if st.button("🎨 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 GESTIÓN WEB" else "secondary"):
-            st.session_state.pagina_actual = "🎨 GESTIÓN WEB"
+        if st.button("🌐 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🌐 GESTIÓN WEB" else "secondary"):
+            st.session_state.pagina_actual = "🌐 GESTIÓN WEB"
             st.rerun()
         st.markdown("---")
         
@@ -343,7 +343,7 @@ else:
             mostrar_importacion_libreros()
         elif st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS":
             mostrar_gestion_portadas()
-        elif st.session_state.pagina_actual == "🎨 GESTIÓN WEB":
+        elif st.session_state.pagina_actual == "🌐 GESTIÓN WEB":
             mostrar_gestion_web()
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
