@@ -3,6 +3,12 @@ import pandas as pd
 import urllib.parse
 from cache_utils import obtener_libros_publicables
 
+# --- PUERTA SECRETA PARA ADMINISTRADORES ---
+if st.query_params.get("admin") == "limpiar":
+    st.cache_data.clear()
+    st.toast("🧹 Caché de la tienda limpiada con éxito al instante.")
+    st.query_params.clear() # Limpia la URL para que no se siga borrando en cada clic
+
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="Catálogo | Alba Librería", 
@@ -26,25 +32,24 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Lato', sans-serif; }
-        h1, h2, h3, .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #dc4990 !important; }
+        h1, h2, h3 { color: #dc4990 !important; }
         
-        /* OCULTAR HEADER BLANCO DE STREAMLIT */
+        /* OCULTAR HEADER BLANCO NATIVO DE STREAMLIT */
         header[data-testid="stHeader"] { display: none !important; }
-        .block-container { padding-top: 2rem !important; } /* Reduce el espacio arriba */
+        [data-testid="stToolbar"] { display: none !important; }
+        .block-container { padding-top: 1rem !important; }
         
         .stApp { 
             background: linear-gradient(180deg, #fcf5f7 0%, #fcdce8 100%); 
         }
 
-        /* --- NAVBAR PARA PÁGINAS LEGALES (Fluye con la página) --- */
+        /* --- NAVBAR LEGAL (FLUYE NATURALMENTE, DESAPARECE AL BAJAR) --- */
         .navbar-legal {
-            width: 100%;
-            text-align: right;
-            padding-bottom: 10px;
+            width: 100%; text-align: right; padding: 5px 15px 15px 0px;
         }
         .navbar-legal a {
             color: #b38dac; text-decoration: none; font-size: 0.9rem;
-            margin-left: 25px; font-weight: 700;
+            margin-left: 25px; font-weight: 700; transition: color 0.2s ease;
         }
         .navbar-legal a:hover { color: #dc4990; text-decoration: underline; }
 
@@ -58,14 +63,13 @@ st.markdown("""
 
         /* NUEVOS FILTROS */
         [data-testid="stMultiSelect"] { border: 2px solid #FBCFE8 !important; background-color: #ffffff !important; border-radius: 10px !important; }
-        [data-testid="stMultiSelect"] .st-d5 { color: #D1D5DB !important; font-style: italic !important; }
         [data-testid="stMultiSelect"] .st-c5 {
             background-color: #FBCFE8 !important; color: #9D174D !important; border: 1px solid #F472B6 !important;
             border-radius: 6px !important; font-weight: bold !important;
         }
         [data-testid="stMultiSelect"] .st-c5 svg { fill: #9D174D !important; }
         [data-testid="stSelectbox"] > div[data-baseweb="select"] { border: 2px solid #FBCFE8 !important; background-color: #ffffff !important; border-radius: 10px !important; }
-        [data-testid="stSidebar"] { display: none !important; }
+        
         .stTextInput { margin-bottom: 0px !important; }
         
         /* --- TARJETAS DE LIBROS ALINEADAS --- */
@@ -74,23 +78,26 @@ st.markdown("""
             padding: 15px; margin-bottom: 5px; text-align: center; box-shadow: 0 4px 15px rgba(220, 73, 144, 0.08);
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
             display: flex; flex-direction: column; justify-content: space-between;
-            min-height: 460px; height: 100%;
+            height: 430px; 
         }
         .libro-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(220, 73, 144, 0.2); }
-        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 200px; margin-bottom: 15px; transition: transform 0.3s ease; }
+        .libro-card img { width: 100%; border-radius: 8px; object-fit: contain; height: 180px; margin-bottom: 10px; transition: transform 0.3s ease; }
         .libro-card:hover img { transform: scale(1.03); }
         .libro-card h4 {
             font-family: 'Lato', sans-serif !important; color: #333333; font-weight: 700; font-size: 1.05rem;
-            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; min-height: 3.9em; 
+            line-height: 1.3; margin-top: 10px; margin-bottom: 5px; 
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+            min-height: 3.9em; 
         }
         .info-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-end; }
         .precio-tachado { color: #9CA3AF; text-decoration: line-through; font-size: 0.9rem; }
         .precio-oferta { color: #dc4990; font-weight: 700; font-size: 1.3rem; }
         .precio-normal { color: #e471a4; font-weight: 700; font-size: 1.2rem; }
         
-        /* BOTÓN "LO QUIERO" */
+        /* BOTÓN "LO QUIERO" (Se alinea perfecto debajo del markdown fijo) */
         [data-testid="stButton"] button {
-            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%; margin-bottom: 25px;
+            background-color: #fcdce8 !important; color: #333333 !important; border: 1px solid #e790b3 !important; 
+            font-weight: bold !important; border-radius: 10px !important; width: 100%; margin-top: -10px; margin-bottom: 20px;
         }
         [data-testid="stButton"] button:hover { background-color: #e790b3 !important; color: white !important; }
 
@@ -102,18 +109,18 @@ st.markdown("""
         .whatsapp-float:hover { background-color: #128C7E; }
         @media (max-width: 768px) { .whatsapp-float { bottom: 20px; right: 20px; padding: 12px 20px; font-size: 15px; } }
         
-        .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; margin-top: 10px; }
+        .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px; }
         .header-icono { width: 55px; height: auto; }
-        .header-container h1 { margin: 0; font-size: 3.2rem; }
+        .header-container h1 { margin: 0; font-size: 3.2rem; font-family: 'Dancing Script', cursive; }
         
-        /* --- BANNER MEGA CARRUSEL --- */
+        /* --- BANNERS --- */
         .mega-carrusel-wrapper {
-            display: grid; grid-template-columns: 1fr; gap: 20px; padding: 10px 0; width: 100%;
+            display: grid; grid-template-columns: 1fr; gap: 15px; padding: 20px 0; width: 100%;
         }
-        @media (min-width: 1024px) { .mega-carrusel-wrapper { grid-template-columns: repeat(4, 1fr) !important; } }
+        @media (min-width: 900px) { .mega-carrusel-wrapper { grid-template-columns: repeat(4, 1fr); } }
         
         .banner-promo {
-            border-radius: 20px; padding: 25px 30px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-radius: 20px; padding: 20px 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.15);
             display: flex; align-items: center; justify-content: space-between;
             text-decoration: none !important; width: 100%; box-sizing: border-box;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -124,30 +131,40 @@ st.markdown("""
         .bg-destacados { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
         .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
         
-        /* --- CORRECCIÓN BANNER TAPA DURA: Fondo Azul Oscuro para que resalte la letra blanca --- */
-        .bg-tapa-dura { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+        /* DEGRADADO MORADO PARA TAPA DURA */
+        .bg-tapa-dura { background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); }
         
-        .banner-texto { flex: 1; padding-right: 10px; }
-        .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 2.2rem; margin-bottom: 5px; line-height: 1.1; }
-        .banner-subtitulo { color: #ffffff; font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.2; }
-        .banner-btn { background-color: #ffffff; padding: 8px 20px; border-radius: 50px; font-weight: 700; font-size: 0.9rem; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important; }
+        .banner-texto { flex: 1; padding-right: 5px; }
+        .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
+        .banner-subtitulo { color: #ffffff; font-size: 0.85rem; margin-bottom: 12px; font-weight: 500; line-height: 1.2; }
+        
+        .banner-btn { background-color: #ffffff; padding: 6px 15px; border-radius: 50px; font-weight: 700; font-size: 0.8rem; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.2s ease; text-decoration: none !important; }
         .banner-btn:hover { transform: scale(1.05); }
         
         .banner-img-container { flex: 0.45; text-align: right; }
-        .banner-img-container img { width: 100%; max-width: 110px; height: auto; border-radius: 15px; transform: rotate(5deg); }
-        .img-icono { transform: rotate(0deg) !important; max-width: 85px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
+        .banner-img-container img { width: 100%; max-width: 90px; height: auto; border-radius: 12px; transform: rotate(5deg); }
+        .img-icono { transform: rotate(0deg) !important; max-width: 75px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
         
         /* BANNER TAPA DURA MULTI IMG */
-        .banner-multi-img-container { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex: 0.6; }
-        .banner-multi-img-container img { width: 48%; max-width: 90px; border-radius: 8px; transform: rotate(0deg); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+        .banner-multi-img-container { display: flex; gap: 5px; align-items: center; justify-content: flex-end; flex: 0.7; }
+        .banner-multi-img-container img { width: 48%; max-width: 70px; border-radius: 8px; transform: rotate(0deg); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
         
-        /* ANIMACIÓN SCROLL - Ahora fluye con la página */
+        /* TÍTULOS DE SUBPÁGINAS VISIBLES */
+        .titulo-seccion {
+            font-family: 'Dancing Script', cursive !important;
+            color: #dc4990 !important; 
+            text-align: center;
+            font-size: 3.5rem;
+            margin-top: 10px;
+        }
+
+        /* ANIMACIÓN SCROLL - FLUYE Y DESAPARECE AL BAJAR */
         .scroll-indicator {
             display: flex; justify-content: center; width: 100%;
-            margin-top: 15px; margin-bottom: 5px;
+            margin-top: 25px; margin-bottom: 25px;
             animation: bounce 2.5s infinite;
         }
-        .scroll-indicator svg { width: 45px; height: 45px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.2)); }
+        .scroll-indicator svg { width: 40px; height: 40px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
         @keyframes bounce {
             0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
             40% { transform: translateY(-15px); }
@@ -156,7 +173,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- NAVBAR SUPERIOR SUTIL PARA PÁGINAS LEGALES ---
+# --- NAVBAR SUPERIOR PARA PÁGINAS LEGALES ---
 st.markdown("""
 <div class="navbar-legal">
     <a href="?seccion=terminos" target="_self">Términos y Condiciones</a>
@@ -168,18 +185,19 @@ st.markdown("""
 seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "terminos":
-    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Términos y Condiciones</h2>")
+    st.markdown("<h2 class='titulo-seccion'>Términos y Condiciones</h2>", unsafe_allow_html=True)
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus términos y condiciones. Puedes editar esta sección en tu código cuando lo desees.")
+    st.info("Aquí va el texto completo de tus términos y condiciones.")
     st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 elif seccion_actual == "envios":
-    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem; margin-top: 30px;'>Condiciones de Envío</h2>")
+    st.markdown("<h2 class='titulo-seccion'>Condiciones de Envío</h2>", unsafe_allow_html=True)
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus políticas y condiciones de envío. Puedes editar esta sección en tu código cuando lo desees.")
+    st.info("Aquí va el texto completo de tus políticas y condiciones de envío.")
     st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
+
 
 # --- INICIALIZAR CARRITO ---
 if 'carrito_publico' not in st.session_state:
@@ -202,8 +220,8 @@ st.markdown("""
     <img src="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png" class="header-icono" alt="Icono Librería">
     <h1>Alba Librería</h1>
 </div>
+<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 0px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>
 """, unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 5px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>", unsafe_allow_html=True)
 
 # =====================================================================
 # CARGA DE DATOS
@@ -219,8 +237,10 @@ generos_disp = sorted(df_catalogo['genero'].dropna().unique()) if 'genero' in df
 autores_disp = sorted(df_catalogo['autor'].dropna().unique()) if 'autor' in df_catalogo.columns else []
 editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
 
+st.write("---")
+
 # =====================================================================
-# FILTROS Y CARRITO (Ahora fluyen con la página)
+# FILTROS Y CARRITO (En el flujo normal de la página)
 # =====================================================================
 col_filtros, col_bolsa = st.columns([3,1])
 
@@ -270,11 +290,20 @@ with col_orden:
         label_visibility="collapsed"
     )
 
-st.write("---")
 
 # =====================================================================
 # 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
 # =====================================================================
+
+# Variable que contiene la flecha de scroll, para poder reutilizarla
+html_scroll_indicator = """
+    <div class="scroll-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0V0z" fill="none"/>
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+        </svg>
+    </div>
+"""
 
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
@@ -317,7 +346,7 @@ if seccion_actual == "inicio":
             <div class="banner-texto">
                 <h2 class="banner-titulo">Ediciones Únicas</h2>
                 <p class="banner-subtitulo">Libros en Tapa Dura y formatos especiales.</p>
-                <span class="banner-btn" style="color: #1e3c72 !important;">💎 VER JOYITAS</span>
+                <span class="banner-btn" style="color: #8e44ad !important;">💎 VER JOYITAS</span>
             </div>
             <div class="banner-multi-img-container">
                 <img src="{URL_TAPA_DURA_1}">
@@ -328,38 +357,37 @@ if seccion_actual == "inicio":
     """
     st.html(html_mega_carrusel)
     
-    # INDICADOR DE SCROLL INTEGRADO EN LA PÁGINA
-    st.markdown("""
-        <div class="scroll-indicator">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M0 0h24v24H0V0z" fill="none"/>
-                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-            </svg>
-        </div>
-    """, unsafe_allow_html=True)
+    # FLECHA DE SCROLL
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
     
     st.write("---")
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
-    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>⭐ Libros Destacados</h2>")
+    st.markdown("<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    
     if 'destacado' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['destacado'] == True]
     else:
         df_base = df_catalogo.head(0) 
 
 elif seccion_actual == "ofertas":
-    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>🔥 Libros en Oferta</h2>")
+    st.markdown("<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    
     if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
     else:
         df_base = df_catalogo.head(0)
 
 elif seccion_actual == "tapa-dura":
-    st.html("<h2 class='banner-titulo' style='text-align:center; font-size: 3rem;'>💎 Ediciones en Tapa Dura</h2>")
+    st.markdown("<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>", unsafe_allow_html=True)
     st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    
     if 'encuadernacion' in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
     else:
