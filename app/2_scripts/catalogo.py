@@ -31,14 +31,7 @@ except KeyError:
 # --- CSS BASE Y MEJORADO ---
 
 html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="
-        const container = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
-        if (container) {
-            container.scrollBy({ top: 600, behavior: 'smooth' });
-        } else {
-            window.parent.scrollBy({ top: 600, behavior: 'smooth' });
-        }
-    " title="Bajar">
+    <div class="scroll-indicator" onclick="window.parent.scrollBy({ top: 500, behavior: 'smooth' });" title="Bajar">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -154,7 +147,10 @@ st.markdown("""
         .bg-tapa-dura {
             background: linear-gradient(135deg, #d2b4de 0%, #884ea0 100%);
         }
-        
+        .banner-multi-img-container img {
+            max-width: 100px; /* Un poco más grandes */
+            transform: rotate(8deg); /* Inclinadas */
+        }
         .banner-texto { flex: 1; padding-right: 5px; }
         .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
         .banner-subtitulo { color: #ffffff; font-size: 0.85rem; margin-bottom: 12px; font-weight: 500; line-height: 1.2; }
@@ -195,32 +191,17 @@ st.markdown("""
             animation: bounce 2.5s infinite;
             cursor: pointer;
         }
-        .scroll-indicator svg { width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
+        .scroll-indicator {
+            display: flex; justify-content: center; width: 100%;
+            margin-top: 25px; margin-bottom: 25px;
+            cursor: pointer;
+            animation: bounce 2.5s infinite;
+        }
+        .scroll-indicator svg { width: 45px; height: 45px; fill: #dc4990; }
         @keyframes bounce {
             0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
             40% { transform: translateX(-50%) translateY(-10px); }
             60% { transform: translateX(-50%) translateY(-5px); }
-        }
-        
-        /* Estilo para convertir un botón de Streamlit en un indicador flotante */
-        div.stButton > button.btn-flotante {
-            position: fixed !important;
-            bottom: 30px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            z-index: 999 !important;
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            color: #dc4990 !important;
-            border: 2px solid #e790b3 !important;
-            border-radius: 50px !important;
-            padding: 10px 20px !important;
-            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3) !important;
-            font-weight: bold !important;
-            animation: bounce 2.5s infinite;
-        }
-        div.stButton > button.btn-flotante:hover {
-            background-color: #dc4990 !important;
-            color: white !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -360,7 +341,7 @@ with col_orden:
 
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
-    URL_FOTO_CAJITA = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/caja_referencia.png"
+    URL_FOTO_CAJITA = URL_FOTO_CAJITA = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_cajita.jpg?v={version_banner}"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
     
     version_banner = int(time.time() / 3600) 
