@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+import urllib.request
 import time
 from cache_utils import obtener_libros_publicables
 
@@ -214,20 +215,31 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- ENRUTADOR DE PÁGINAS LEGALES ---
+@st.cache_data(ttl=1800) # Guarda en caché por media hora (igual que los libros)
+def obtener_texto_legal(archivo):
+    url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{archivo}"
+    try:
+        req = urllib.request.urlopen(url)
+        return req.read().decode('utf-8')
+    except:
+        return "El texto aún no ha sido configurado. Visita el panel de administración."
+
 seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "terminos":
     st.markdown("<h2 class='titulo-seccion'>Términos y Condiciones</h2>", unsafe_allow_html=True)
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus términos y condiciones.")
-    st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    # Llama a la nueva función
+    st.markdown(obtener_texto_legal("terminos.txt"))
+    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 elif seccion_actual == "envios":
     st.markdown("<h2 class='titulo-seccion'>Condiciones de Envío</h2>", unsafe_allow_html=True)
     st.markdown("---")
-    st.info("Aquí va el texto completo de tus políticas y condiciones de envío.")
-    st.html("<div style='text-align:center; margin-top: 30px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    # Llama a la nueva función
+    st.markdown(obtener_texto_legal("envios.txt"))
+    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
     st.stop()
 
 
