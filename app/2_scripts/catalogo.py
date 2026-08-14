@@ -4,6 +4,12 @@ import urllib.parse
 import urllib.request
 import time
 from cache_utils import obtener_libros_publicables
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(
+    page_title="Catálogo | Alba Librería", 
+    page_icon="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png", 
+    layout="wide"
+)
 
 # --- PUERTA SECRETA PARA ADMINISTRADORES ---
 if st.query_params.get("admin") == "limpiar":
@@ -11,12 +17,6 @@ if st.query_params.get("admin") == "limpiar":
     st.toast("🧹 Caché de la tienda limpiada con éxito al instante.")
     st.query_params.clear() # Limpia la URL para que no se siga borrando en cada clic
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="Catálogo | Alba Librería", 
-    page_icon="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png", 
-    layout="wide"
-)
 
 # ====================================================
 # ⚙️ CARGA SEGURA DE CONFIGURACIÓN
@@ -155,7 +155,14 @@ st.markdown("""
         
         /* BANNER TAPA DURA MULTI IMG */
         .banner-multi-img-container { display: flex; gap: 5px; align-items: center; justify-content: flex-end; flex: 0.7; }
-        .banner-multi-img-container img { width: 48%; max-width: 70px; border-radius: 8px; transform: rotate(0deg); box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+        .banner-multi-img-container img {
+            width: 48% !important;
+            max-width: 100px !important; /* Más grandes */
+            border-radius: 8px !important;
+            transform: rotate(8deg) !important; /* Inclinadas */
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2) !important;
+        }
+
         
         /* TÍTULOS DE SUBPÁGINAS VISIBLES */
         .titulo-seccion {
@@ -183,16 +190,27 @@ st.markdown("""
             cursor: pointer;
         }
         .scroll-indicator {
-            display: flex; justify-content: center; width: 100%;
-            margin-top: 25px; margin-bottom: 25px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001; /* Por encima del botón de WhatsApp */
+            width: 55px;  /* Ancho fijo */
+            height: 55px; /* Alto fijo */
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 50%; /* Lo hace un círculo */
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             animation: bounce 2.5s infinite;
         }
-        .scroll-indicator svg { width: 45px; height: 45px; fill: #dc4990; }
+        .scroll-indicator svg { width: 35px; height: 35px; fill: #dc4990; }
         @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
-            40% { transform: translateX(-50%) translateY(-10px); }
-            60% { transform: translateX(-50%) translateY(-5px); }
+            0%, 20%, 50%, 80%, 100% { transform: translate(-50%, 0); }
+            40% { transform: translate(-50%, -15px); }
+            60% { transform: translate(-50%, -5px); }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -327,8 +345,11 @@ with col_orden:
 
 # --- DEFINICIÓN DE COMPONENTES REUTILIZABLES ---
 html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="window.parent.scrollBy({ top: 500, behavior: 'smooth' });" title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+    <div class="scroll-indicator" onclick="window.parent.scrollBy({ top: 600, behavior: 'smooth' });" title="Bajar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0V0z" fill="none"/>
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+        </svg>
     </div>
 """
 
