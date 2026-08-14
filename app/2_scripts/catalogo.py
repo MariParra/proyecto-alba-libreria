@@ -30,7 +30,23 @@ except KeyError:
 
 # --- CSS BASE Y MEJORADO ---
 html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="
+    <div style="
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999999;
+        width: 55px;
+        height: 55px;
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 50%;
+        box-shadow: 0 4px 20px rgba(220, 73, 144, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        animation: bounce 2.5s infinite;
+    " onclick="
         const container = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
         if (container) {
             container.scrollBy({ top: 600, behavior: 'smooth' });
@@ -38,11 +54,18 @@ html_scroll_indicator = """
             window.parent.scrollBy({ top: 600, behavior: 'smooth' });
         }
     " title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15);">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
     </div>
+    <style>
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
+            40% { transform: translateX(-50%) translateY(-15px); }
+            60% { transform: translateX(-50%) translateY(-5px); }
+        }
+    </style>
 """
 
 st.markdown("""
