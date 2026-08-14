@@ -201,6 +201,27 @@ st.markdown("""
             40% { transform: translateX(-50%) translateY(-10px); }
             60% { transform: translateX(-50%) translateY(-5px); }
         }
+        
+        /* Estilo para convertir un botón de Streamlit en un indicador flotante */
+        div.stButton > button.btn-flotante {
+            position: fixed !important;
+            bottom: 30px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 999 !important;
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            color: #dc4990 !important;
+            border: 2px solid #e790b3 !important;
+            border-radius: 50px !important;
+            padding: 10px 20px !important;
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3) !important;
+            font-weight: bold !important;
+            animation: bounce 2.5s infinite;
+        }
+        div.stButton > button.btn-flotante:hover {
+            background-color: #dc4990 !important;
+            color: white !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
