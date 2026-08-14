@@ -31,16 +31,10 @@ except KeyError:
 # --- CSS BASE Y MEJORADO ---
 
 html_scroll_indicator = """
-    <div class="scroll-indicator">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M0 0h24v24H0V0z" fill="none"/>
-            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-        </svg>
-    </div>
-"""
-
-html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="window.scrollBy({top: 500, behavior: 'smooth'});" title="Bajar">
+    <div class="scroll-indicator" onclick="
+        const rootElement = window.parent.document.scrollingElement || window.parent.document.body;
+        rootElement.scrollBy({ top: 600, behavior: 'smooth' });
+    ;" title="Bajar">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -338,19 +332,6 @@ with col_orden:
 # =====================================================================
 # 🎪 MEGA CARRUSEL DE BANNERS Y SECCIONES
 # =====================================================================
-
-# Variable que contiene la flecha de scroll, para poder reutilizarla
-html_scroll_indicator = """
-    <div class="scroll-indicator" onclick="
-        const rootElement = window.parent.document.scrollingElement || window.parent.document.body;
-        rootElement.scrollBy({ top: 600, behavior: 'smooth' });
-    ;" title="Bajar">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M0 0h24v24H0V0z" fill="none"/>
-            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-        </svg>
-    </div>
-"""
 
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
