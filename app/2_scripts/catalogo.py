@@ -134,7 +134,7 @@ st.markdown("""
         
         /* DEGRADADO MORADO PARA TAPA DURA */
         .bg-tapa-dura {
-            background: linear-gradient(135deg, #c39bd3 0%, #512e5f 100%);
+            background: linear-gradient(135deg, #d2b4de 0%, #884ea0 100%);
         }
         
         .banner-texto { flex: 1; padding-right: 5px; }
