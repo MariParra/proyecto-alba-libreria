@@ -28,6 +28,25 @@ except KeyError:
     st.stop()
 
 # --- CSS BASE Y MEJORADO ---
+
+html_scroll_indicator = """
+    <div class="scroll-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0V0z" fill="none"/>
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+        </svg>
+    </div>
+"""
+
+html_scroll_indicator = """
+    <div class="scroll-indicator" onclick="window.scrollBy({top: 500, behavior: 'smooth'});" title="Bajar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M0 0h24v24H0V0z" fill="none"/>
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+        </svg>
+    </div>
+"""
+
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
@@ -175,6 +194,7 @@ st.markdown("""
             border-radius: 50%;
             box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
             animation: bounce 2.5s infinite;
+            cursor: pointer;
         }
         .scroll-indicator svg { width: 35px; height: 35px; fill: #dc4990; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15)); }
         @keyframes bounce {
