@@ -285,7 +285,7 @@ editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editor
 # =====================================================================
 st.markdown('<div class="navbar-fija">', unsafe_allow_html=True)
 
-col_filtros, col_bolsa = st.[...](asc_slot://start-slot-1)columns()
+col_filtros, col_bolsa = st.columns(2)
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
@@ -311,7 +311,7 @@ with col_bolsa:
                 total_carrito += subtotal
                 mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
                 
-                col_t, col_b = st.[...](asc_slot://start-slot-3)columns()
+                col_t, col_b = st.columns([3,1])
                 with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
                 with col_b:
                     st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
@@ -326,7 +326,7 @@ with col_bolsa:
 st.write("") 
 
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.[...](asc_slot://start-slot-5)columns()
+col_busqueda, col_orden = st.columns(2)
 with col_busqueda:
     busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
 with col_orden:
