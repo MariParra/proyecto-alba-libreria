@@ -370,7 +370,11 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
 def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, ano, mes, titulo, autor):
     conn = get_db_connection()
     try:
-        conn.table("libros").update({"stock": max(0, int(stock_actual) - 1)}).eq("libro_id", int(libro_id)).execute()
+        # --- MEJORA 1: NUNCA DEJAR STOCK NEGATIVO ---
+        stock_entero = int(stock_actual)
+        nuevo_stock = 0 if stock_entero <= 0 else stock_entero - 1
+        
+        conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", int(libro_id)).execute()
         conn.table("asignaciones").update({
             "libro_suscripcion_id": int(libro_id), 
             "estado_envio": "LIBRO ASIGNADO"
@@ -387,13 +391,7 @@ def asignar_libro_principal(asignacion_id, cliente_id, libro_id, stock_actual, a
             f"Fallo al asignar el libro '{titulo}' (ID: {libro_id}) a la asignación {asignacion_id} "
             f"(Cliente ID: {cliente_id}). Detalle técnico: {e}"
         )
-        
-        log_error(
-            vista="vista_asignaciones",
-            funcion="asignar_libro_principal",
-            error=error_detalle,
-            email_usuario=email_usuario
-        )
+        log_error(vista="vista_asignaciones", funcion="asignar_libro_principal", error=error_detalle, email_usuario=email_usuario)
         return False, str(e)
 
 def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
@@ -459,9 +457,15 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
                 sin_asignar.append({"Cliente": nombre_cliente, "Motivo": f"Sin stock disponible para sus géneros preferidos."})
                 continue
             else:
-                libro_elegido = df_sugeridos.sample(1).iloc[0]
+                # --- PRIORIZAR EL MAYOR STOCK ---
+                df_sugeridos = df_sugeridos.sort_values(by="stock", ascending=False)
+                max_stock = df_sugeridos['stock'].iloc[0]
+                libro_elegido = df_sugeridos[df_sugeridos['stock'] == max_stock].sample(1).iloc[0]
         else:
-            libro_elegido = libros_disponibles.sample(1).iloc[0]
+            # --- PRIORIZAR EL MAYOR STOCK ---
+            libros_disponibles = libros_disponibles.sort_values(by="stock", ascending=False)
+            max_stock = libros_disponibles['stock'].iloc[0]
+            libro_elegido = libros_disponibles[libros_disponibles['stock'] == max_stock].sample(1).iloc[0]
             
         l_id = int(libro_elegido['libro_id'])
         stock_local[l_id] -= 1
@@ -475,7 +479,6 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
             "Género del Libro": str(libro_elegido.get('genero', '')),
             "Preferencias": ", ".join(generos_pref) if generos_pref else "Sin preferencias específicas",
             "Autor": libro_elegido.get('autor', ''),
-            # --- NUEVA COLUMNA EN EL PREVIEW ---
             "Origen Preferencia": origen_preferencia
         })
         
@@ -564,7 +567,11 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
         res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_quitar).execute()
         if res_l.data:
             l_id = res_l.data[0]['libro_id']
-            conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", l_id).execute()
+            # ---NO SUMAR SI EL STOCK ES CERO O MENOR ---
+            stock_bd = int(res_l.data[0]['stock'])
+            nuevo_stock = 0 if stock_bd <= 0 else stock_bd + 1
+            
+            conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
             origen = f"ASIGNACIÓN {mes}/{ano}" if tipo == "PRINCIPAL" else f"ASIGNACIÓN EXTRA {mes}/{ano}"
             conn.table("librero_historico").delete().eq("cliente_id", cliente_id).eq("libro_id", l_id).eq("origen", origen).execute()
             
@@ -596,18 +603,8 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
         return True, ""
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        error_detalle = (
-            f"Fallo al intentar quitar el libro '{titulo_quitar}' (Tipo: {tipo}) de la asignación {asignacion_id} "
-            f"(Cliente ID: {cliente_id}). Detalle técnico: {e}"
-        )
-        
-        log_error(
-            vista="vista_asignaciones",
-            funcion="quitar_un_libro",
-            error=error_detalle,
-            email_usuario=email_usuario
-        )
+        error_detalle = f"Fallo al intentar quitar el libro '{titulo_quitar}' (Tipo: {tipo}) de la asignación {asignacion_id} (Cliente ID: {cliente_id}). Detalle técnico: {e}"
+        log_error(vista="vista_asignaciones", funcion="quitar_un_libro", error=error_detalle, email_usuario=email_usuario)
         return False, str(e)
 
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
@@ -615,7 +612,11 @@ def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_ext
     try:
         if pd.notna(libro_id) and libro_id:
             res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
-            if res_l.data: conn.table("libros").update({"stock": res_l.data[0]['stock'] + 1}).eq("libro_id", int(libro_id)).execute()
+            if res_l.data: 
+                # --- MEJORA 2: NO SUMAR SI EL STOCK ES CERO O MENOR ---
+                stock_bd = int(res_l.data[0]['stock'])
+                nuevo_stock = 0 if stock_bd <= 0 else stock_bd + 1
+                conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", int(libro_id)).execute()
             conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
             
         if texto_extras and "EXTRAS:" in str(texto_extras):
@@ -624,26 +625,18 @@ def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_ext
                 if not t.strip(): continue
                 res_le = conn.table("libros").select("libro_id, stock").eq("titulo", t.strip()).execute()
                 if res_le.data:
-                    le_id, le_stock = res_le.data[0]['libro_id'], res_le.data[0]['stock']
-                    conn.table("libros").update({"stock": le_stock + 1}).eq("libro_id", le_id).execute()
+                    le_id, le_stock = res_le.data[0]['libro_id'], int(res_le.data[0]['stock'])
+                    # ---NO SUMAR SI EL STOCK ES CERO O MENOR ---
+                    nuevo_stock_ext = 0 if le_stock <= 0 else le_stock + 1
+                    conn.table("libros").update({"stock": nuevo_stock_ext}).eq("libro_id", le_id).execute()
                     conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", le_id).eq("origen", f"ASIGNACIÓN EXTRA {mes}/{ano}").execute()
                     
         conn.table("asignaciones").delete().eq("asignacion_id", int(asignacion_id)).execute()
         return True, ""
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        error_detalle = (
-            f"Fallo al ELIMINAR la asignación {asignacion_id} (Cliente ID: {cliente_id}). "
-            f"Libro principal ID: {libro_id}, Extras: '{texto_extras}'. Detalle técnico: {e}"
-        )
-        
-        log_error(
-            vista="vista_asignaciones",
-            funcion="eliminar_asignacion",
-            error=error_detalle,
-            email_usuario=email_usuario
-        )
+        error_detalle = f"Fallo al ELIMINAR la asignación {asignacion_id} (Cliente ID: {cliente_id}). Libro principal ID: {libro_id}, Extras: '{texto_extras}'. Detalle técnico: {e}"
+        log_error(vista="vista_asignaciones", funcion="eliminar_asignacion", error=error_detalle, email_usuario=email_usuario)
         return False, str(e)
 
 def actualizar_asignaciones_batch(df_editado, df_mes_completo):
@@ -1405,124 +1398,134 @@ def mostrar_asignaciones():
                     if df_pendientes.empty:
                         st.success("¡Todos los clientes ya tienen libro asignado para este mes!")
                     else:
-                        with st.container(border=True):
-                            st.markdown("##### 🔽 Filtrar Clientes Pendientes")
-                            df_pendientes['metodo_entrega_limpio'] = df_pendientes['metodo_entrega'].apply(limpiar_texto_para_busqueda)
-                            metodos_disponibles = sorted(df_pendientes['metodo_entrega_limpio'].dropna().unique())
-                            metodos_disponibles = [m for m in metodos_disponibles if m]
-                            metodo_seleccionado = st.multiselect(
-                                "Filtrar por Método de Envío:",
-                                options=metodos_disponibles
-                            )
-                            
-                        # Filtramos la lista de clientes según la selección
+                        df_pendientes['metodo_entrega_limpio'] = df_pendientes['metodo_entrega'].apply(limpiar_texto_para_busqueda)
+                        metodos_disponibles = sorted(df_pendientes['metodo_entrega_limpio'].dropna().unique())
+                        metodos_disponibles = [m for m in metodos_disponibles if m]
+                        
+                        contenedor_selector = st.container()
+                        contenedor_filtro = st.container()
+                        contenedor_resto = st.container()
+                        
+                        # 1. LÓGICA DEL FILTRO (Se mostrará abajo gracias al contenedor_filtro)
+                        with contenedor_filtro:
+                            with st.expander("🔍 Filtrar lista por método de envío (Opcional)", expanded=False):
+                                metodo_seleccionado = st.multiselect(
+                                    "Selecciona uno o más métodos:",
+                                    options=metodos_disponibles,
+                                    label_visibility="collapsed"
+                                )
+                                
+                        # Aplicamos el filtro a los datos
                         df_clientes_a_mostrar = df_pendientes.copy()
                         if metodo_seleccionado:
                             df_clientes_a_mostrar = df_clientes_a_mostrar[df_clientes_a_mostrar['metodo_entrega_limpio'].isin(metodo_seleccionado)]
                             
-                        st.markdown("---")
-                        
-                        if df_clientes_a_mostrar.empty:
-                            st.warning("No hay clientes pendientes que coincidan con ese método de envío.")
-                        else:
-                            dict_clientes = dict(zip(df_clientes_a_mostrar['nombre'], df_clientes_a_mostrar['cliente_id']))
-                            cliente_nom = st.selectbox("Seleccionar Cliente Pendiente:", options=list(dict_clientes.keys()))
+                        # 2. SELECTOR DE CLIENTE (Se mostrará arriba gracias al contenedor_selector)
+                        with contenedor_selector:
+                            if df_clientes_a_mostrar.empty:
+                                st.warning("No hay clientes pendientes que coincidan con ese método de envío.")
+                                cliente_nom = None
+                            else:
+                                dict_clientes = dict(zip(df_clientes_a_mostrar['nombre'], df_clientes_a_mostrar['cliente_id']))
+                                
+                                # --- SELECTOR VACÍO POR DEFECTO ---
+                                cliente_nom = st.selectbox(
+                                    "👤 Seleccionar Cliente Pendiente:", 
+                                    options=list(dict_clientes.keys()),
+                                    index=None,
+                                    placeholder="Busca o selecciona a una clienta..."
+                                )
                             
                             if cliente_nom:
-                                cliente_id = dict_clientes[cliente_nom]
-                                filas_cliente = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id]
-                                
-                                if filas_cliente.empty:
-                                    st.warning("⚠️ No se pudieron cargar los datos de este cliente. Por favor, refresca la página.")
-                                else:
-                                    asig_row = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id].iloc[0]
+                                with contenedor_resto:
+                                    cliente_id = dict_clientes[cliente_nom]
+                                    filas_cliente = df_clientes_a_mostrar[df_clientes_a_mostrar['cliente_id'] == cliente_id]
                                     
-                                    preferencia_del_mes = asig_row.get('preferencia_mensual')
-                                    tiene_pref_mensual = pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip() != ""
-                                    
-                                    st.write("---") # Separador visual
-                                    col_chk1, col_chk2 = st.columns(2)
-                                    ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock", value=False, key=f"chk_stock_{cliente_id}")
-                                    
-                                    # El checkbox "Ignorar pedido del mes" solo aparece si es relevante
-                                    usar_historica_forzada = False
-                                    if tiene_pref_mensual:
-                                        usar_historica_forzada = col_chk1.checkbox("📜 Usar preferencias de siempre", value=False, help="Ignora la preferencia del mes y usa las preferencias de siempre de la clienta.", key=f"chk_hist_{cliente_id}")
-
-                                    # El checkbox "Ignorar preferencias" se deshabilita si "Usar preferencias de siempre" está activo para evitar conflictos
-                                    ignorar_preferencias = col_chk2.checkbox("📚 Ignorar todas las preferencias", value=False, disabled=usar_historica_forzada, key=f"chk_ignorar_{cliente_id}")
-                                    st.write("---")
-                                    # --- FIN DE LA LÓGICA DE CHECKBOXES ---
-
-                                    df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(
-                                        cliente_id, 
-                                        asig_row, 
-                                        incluir_sin_stock=ver_sin_stock, 
-                                        usar_historica=usar_historica_forzada
-                                    )
-                                    
-                                    if ignorar_preferencias:
-                                        st.info("Mostrando todos los libros disponibles (preferencias ignoradas).")
-                                    elif gustos_cliente:
-                                        st.info(f"❤️ Géneros preferidos del cliente: **{', '.join(gustos_cliente)}**")
+                                    if filas_cliente.empty:
+                                        st.warning("⚠️ No se pudieron cargar los datos de este cliente. Por favor, refresca la página.")
                                     else:
-                                        st.caption("ℹ️ El cliente no registra géneros de preferencia específicos.")
+                                        asig_row = filas_cliente.iloc[0]
                                         
-                                    if df_libros_disponibles.empty:
-                                        st.warning("No hay libros disponibles en el catálogo que el cliente no posea ya.")
-                                    else:
-                                        df_libros_a_mostrar = df_libros_disponibles.copy()
+                                        preferencia_del_mes = asig_row.get('preferencia_mensual')
+                                        tiene_pref_mensual = pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip() != ""
                                         
-                                        # Aplicamos el filtro de géneros SOLO si no se pide ignorarlos
-                                        if gustos_cliente and not ignorar_preferencias:
-                                            df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto_para_busqueda(str(x)).upper())
-                                            
-                                            # Creamos la columna 'es_sugerido' para ordenar
-                                            def es_sugerido(row):
-                                                return not set(gustos_cliente).isdisjoint(set(row['genero_limpio'].split()))
-                                            df_libros_a_mostrar['es_sugerido'] = df_libros_a_mostrar.apply(es_sugerido, axis=1)
-                                            
-                                            # Filtramos para mostrar SOLO los sugeridos
-                                            df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido']]
-                                            
-                                            if df_libros_a_mostrar.empty:
-                                                st.warning("⚠️ No hay libros en stock que coincidan con sus gustos. Marca 'Ignorar todas las preferencias' para ver el resto del catálogo.")
+                                        st.write("---") # Separador visual
+                                        col_chk1, col_chk2 = st.columns(2)
+                                        ver_sin_stock = col_chk1.checkbox("📦 Mostrar también libros sin stock", value=False, key=f"chk_stock_{cliente_id}")
+                                        
+                                        usar_historica_forzada = False
+                                        if tiene_pref_mensual:
+                                            usar_historica_forzada = col_chk1.checkbox("📜 Usar preferencias de siempre", value=False, help="Ignora la preferencia del mes y usa las preferencias de siempre de la clienta.", key=f"chk_hist_{cliente_id}")
+                                        
+                                        ignorar_preferencias = col_chk2.checkbox("📚 Ignorar todas las preferencias", value=False, disabled=usar_historica_forzada, key=f"chk_ignorar_{cliente_id}")
+                                        st.write("---")
+                                        
+                                        df_libros_disponibles, gustos_cliente = cargar_libros_filtrados_para_cliente(
+                                            cliente_id, asig_row, incluir_sin_stock=ver_sin_stock, usar_historica=usar_historica_forzada
+                                        )
+                                        
+                                        if ignorar_preferencias:
+                                            st.info("Mostrando todos los libros disponibles (preferencias ignoradas).")
+                                        elif gustos_cliente:
+                                            st.info(f"❤️ Géneros preferidos del cliente: **{', '.join(gustos_cliente)}**")
                                         else:
-                                            df_libros_a_mostrar['es_sugerido'] = False # Si no hay gustos, nada es sugerido
-                                        
-                                        # Ordenamos: sugeridos primero, luego por título
-                                        df_libros_a_mostrar = df_libros_a_mostrar.sort_values(by=['es_sugerido', 'titulo'], ascending=[False, True])
+                                            st.caption("ℹ️ El cliente no registra géneros de preferencia específicos.")
                                             
-                                        if not df_libros_a_mostrar.empty:
-                                            df_libros_a_mostrar = df_libros_a_mostrar.sort_values(by=['es_sugerido', 'stock', 'titulo'], ascending=[False, False, True])
+                                        if df_libros_disponibles.empty:
+                                            st.warning("No hay libros disponibles en el catálogo que el cliente no posea ya.")
+                                        else:
+                                            df_libros_a_mostrar = df_libros_disponibles.copy()
                                             
-                                            df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
-                                                lambda row: f"⭐ {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})",
-                                                axis=1
-                                            )
-                                            
-                                            dict_libros = dict(zip(df_libros_a_mostrar['label_opcion'], df_libros_a_mostrar['libro_id']))
-                                            libro_sel_label = st.selectbox("Seleccionar Libro para Asignar:", options=list(dict_libros.keys()))
-                                            
-                                            if libro_sel_label:
-                                                libro_id_sel = dict_libros[libro_sel_label]
-                                                libro_info = df_libros_a_mostrar[df_libros_a_mostrar['libro_id'] == libro_id_sel].iloc[0]
+                                            if gustos_cliente and not ignorar_preferencias:
+                                                df_libros_a_mostrar['genero_limpio'] = df_libros_a_mostrar['genero'].apply(lambda x: limpiar_texto_para_busqueda(str(x)).upper())
                                                 
-                                                if libro_info['stock'] <= 0:
-                                                    st.warning("⚠️ **Atención:** El libro seleccionado tiene **0 o menos stock**.")
+                                                def es_sugerido(row):
+                                                    return not set(gustos_cliente).isdisjoint(set(row['genero_limpio'].split()))
+                                                df_libros_a_mostrar['es_sugerido'] = df_libros_a_mostrar.apply(es_sugerido, axis=1)
                                                 
-                                                if st.button("📌 Asignar Libro Seleccionado", type="primary", use_container_width=True):
-                                                    ok, err = asignar_libro_principal(
-                                                        asignacion_id=asig_row['asignacion_id'], cliente_id=cliente_id,
-                                                        libro_id=libro_id_sel, stock_actual=libro_info['stock'],
-                                                        ano=ano_sel, mes=mes_num, titulo=libro_info['titulo'], autor=libro_info.get('autor', '')
-                                                    )
-                                                    if ok:
-                                                        st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
-                                                        time.sleep(1.5)
-                                                        st.rerun()
-                                                    else:
-                                                        st.error(f"Error al asignar: {err}")
+                                                df_libros_a_mostrar = df_libros_a_mostrar[df_libros_a_mostrar['es_sugerido']]
+                                                
+                                                if df_libros_a_mostrar.empty:
+                                                    st.warning("⚠️ No hay libros en stock que coincidan con sus gustos. Marca 'Ignorar todas las preferencias' para ver el resto del catálogo.")
+                                            else:
+                                                df_libros_a_mostrar['es_sugerido'] = False 
+                                            
+                                            if not df_libros_a_mostrar.empty:
+                                                df_libros_a_mostrar = df_libros_a_mostrar.sort_values(by=['es_sugerido', 'stock', 'titulo'], ascending=[False, False, True])
+                                                
+                                                df_libros_a_mostrar['label_opcion'] = df_libros_a_mostrar.apply(
+                                                    lambda row: f"⭐ {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})" if row['es_sugerido'] else f"  {row['titulo']} (Género: {row['genero']} | Stock: {row['stock']})",
+                                                    axis=1
+                                                )
+                                                
+                                                dict_libros = dict(zip(df_libros_a_mostrar['label_opcion'], df_libros_a_mostrar['libro_id']))
+                                                
+                                                libro_sel_label = st.selectbox(
+                                                    "Seleccionar Libro para Asignar:", 
+                                                    options=list(dict_libros.keys()),
+                                                    index=None,
+                                                    placeholder="Busca o selecciona un libro..."
+                                                )
+                                                
+                                                if libro_sel_label:
+                                                    libro_id_sel = dict_libros[libro_sel_label]
+                                                    libro_info = df_libros_a_mostrar[df_libros_a_mostrar['libro_id'] == libro_id_sel].iloc[0]
+                                                    
+                                                    if libro_info['stock'] <= 0:
+                                                        st.warning("⚠️ **Atención:** El libro seleccionado tiene **0 o menos stock**.")
+                                                    
+                                                    if st.button("📌 Asignar Libro Seleccionado", type="primary", use_container_width=True):
+                                                        ok, err = asignar_libro_principal(
+                                                            asignacion_id=asig_row['asignacion_id'], cliente_id=cliente_id,
+                                                            libro_id=libro_id_sel, stock_actual=libro_info['stock'],
+                                                            ano=ano_sel, mes=mes_num, titulo=libro_info['titulo'], autor=libro_info.get('autor', '')
+                                                        )
+                                                        if ok:
+                                                            st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
+                                                            time.sleep(1.5)
+                                                            st.rerun()
+                                                        else:
+                                                            st.error(f"Error al asignar: {err}")
 
 
     # ==========================================================
