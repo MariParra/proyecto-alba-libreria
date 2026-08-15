@@ -1,23 +1,23 @@
-import streamlit as st
-import pandas as pd
-import streamlit.components.v1 as components
 import urllib.parse
 import urllib.request
 import time
+import pandas as pd
+import streamlit as st
+import streamlit.components.v1 as components
 from cache_utils import obtener_libros_publicables
 
 # --- 1. CONFIGURACIÓN DE PÁGINA (SIEMPRE PRIMERO) ---
 st.set_page_config(
     page_title="Catálogo | Alba Librería",
     page_icon="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png",
-    layout="wide"
+    layout="wide",
 )
 
 # --- PUERTA SECRETA PARA ADMINISTRADORES ---
 if st.query_params.get("admin") == "limpiar":
     st.cache_data.clear()
     st.toast("🧹 Caché de la tienda limpiada con éxito al instante.")
-    st.query_params.clear() # Limpia la URL para que no se siga borrando en cada clic
+    st.query_params.clear()
 
 # ====================================================
 # ⚙️ CARGA SEGURA DE CONFIGURACIÓN
@@ -69,7 +69,8 @@ html_scroll_indicator = """
     </style>
 """
 
-st.markdown("""
+st.markdown(
+    """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Dancing+Script:wght@400..700&display=swap');
         
@@ -172,11 +173,7 @@ st.markdown("""
         .bg-cajita { background: linear-gradient(135deg, #fcdce8 0%, #e790b3 100%); }
         .bg-destacados { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); }
         .bg-ofertas { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
-        
-        /* DEGRADADO MORADO PARA TAPA DURA */
-        .bg-tapa-dura {
-            background: linear-gradient(135deg, #d2b4de 0%, #884ea0 100%);
-        }
+        .bg-tapa-dura { background: linear-gradient(135deg, #d2b4de 0%, #884ea0 100%); }
         
         .banner-texto { flex: 1; padding-right: 5px; }
         .banner-titulo { font-family: 'Dancing Script', cursive !important; color: #ffffff !important; font-size: 1.8rem; margin-bottom: 5px; line-height: 1.1; }
@@ -189,7 +186,6 @@ st.markdown("""
         .banner-img-container img { width: 100%; max-width: 90px; height: auto; border-radius: 12px; transform: rotate(5deg); }
         .img-icono { transform: rotate(0deg) !important; max-width: 75px !important; box-shadow: none !important; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));}
         
-        /* BANNER TAPA DURA MULTI IMG Y ANIMACION */
         .banner-multi-img-container { display: flex; gap: 5px; align-items: center; justify-content: flex-end; flex: 0.7; }
         .banner-multi-img-container img { 
             width: 48% !important; 
@@ -199,7 +195,6 @@ st.markdown("""
             box-shadow: 0 6px 15px rgba(0,0,0,0.2) !important; 
         }
         
-        /* TÍTULOS DE SUBPÁGINAS VISIBLES */
         .titulo-seccion {
             font-family: 'Dancing Script', cursive !important;
             color: #dc4990 !important; 
@@ -208,15 +203,21 @@ st.markdown("""
             margin-top: 10px;
         }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- NAVBAR SUPERIOR PARA PÁGINAS LEGALES ---
-st.markdown("""
+st.markdown(
+    """
 <div class="navbar-legal">
     <a href="?seccion=terminos" target="_self">Términos y Condiciones</a>
     <a href="?seccion=envios" target="_self">Condiciones de Envío</a>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # --- ENRUTADOR DE PÁGINAS LEGALES ---
 @st.cache_data(ttl=1800)
@@ -224,49 +225,74 @@ def obtener_texto_legal(archivo):
     url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{archivo}"
     try:
         req = urllib.request.urlopen(url)
-        return req.read().decode('utf-8')
+        return req.read().decode("utf-8")
     except:
-        return "El texto aún no ha sido configurado. Visita el panel de administración."
+        return (
+            "El texto aún no ha sido configurado. Visita el panel de administración."
+        )
+
 
 seccion_actual = st.query_params.get("seccion", "inicio")
 
 if seccion_actual == "terminos":
-    st.markdown("<h2 class='titulo-seccion'>Términos y Condiciones</h2>", unsafe_allow_html=True)
+    st.markdown(
+        "<h2 class='titulo-seccion'>Términos y Condiciones</h2>",
+        unsafe_allow_html=True,
+    )
     st.markdown("---")
     st.markdown(obtener_texto_legal("terminos.txt"))
-    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(
+        "<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 elif seccion_actual == "envios":
-    st.markdown("<h2 class='titulo-seccion'>Condiciones de Envío</h2>", unsafe_allow_html=True)
+    st.markdown(
+        "<h2 class='titulo-seccion'>Condiciones de Envío</h2>",
+        unsafe_allow_html=True,
+    )
     st.markdown("---")
     st.markdown(obtener_texto_legal("envios.txt"))
-    st.html("<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(
+        "<div style='text-align:center; margin-top: 50px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 # --- INICIALIZAR CARRITO ---
-if 'carrito_publico' not in st.session_state:
+if "carrito_publico" not in st.session_state:
     st.session_state.carrito_publico = {}
+
 
 def agregar_al_carrito(libro_id, titulo, precio):
     if libro_id in st.session_state.carrito_publico:
-        st.session_state.carrito_publico[libro_id]['cantidad'] += 1
+        st.session_state.carrito_publico[libro_id]["cantidad"] += 1
     else:
-        st.session_state.carrito_publico[libro_id] = {'titulo': titulo, 'precio': precio, 'cantidad': 1}
+        st.session_state.carrito_publico[libro_id] = {
+            "titulo": titulo,
+            "precio": precio,
+            "cantidad": 1,
+        }
     st.toast(f"✅ ¡Añadido a tu bolsa: '{titulo}'!")
+
 
 def quitar_del_carrito(libro_id):
     if libro_id in st.session_state.carrito_publico:
         del st.session_state.carrito_publico[libro_id]
 
+
 # --- CABECERA PRINCIPAL CON ICONO ---
-st.markdown("""
+st.markdown(
+    """
 <div class="header-container">
     <img src="https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png" class="header-icono" alt="Icono Librería">
     <h1>Alba Librería</h1>
 </div>
 <p style='text-align: center; color: #dc4990; font-size: 1.2rem; margin-top: 0px; font-weight: 600;'>Explora nuestro catálogo y haz tu pedido al instante.</p>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # =====================================================================
 # CARGA DE DATOS
@@ -277,62 +303,116 @@ with st.spinner("Acomodando los libros en la vitrina..."):
 if df_catalogo.empty:
     st.warning("No hay libros disponibles por el momento. ¡Vuelve pronto!")
     st.stop()
-    
-generos_disp = sorted(df_catalogo['genero'].dropna().unique()) if 'genero' in df_catalogo.columns else []
-autores_disp = sorted(df_catalogo['autor'].dropna().unique()) if 'autor' in df_catalogo.columns else []
-editoriales_disp = sorted(df_catalogo['editorial'].dropna().unique()) if 'editorial' in df_catalogo.columns else []
+
+generos_disp = (
+    sorted(df_catalogo["genero"].dropna().unique())
+    if "genero" in df_catalogo.columns
+    else []
+)
+autores_disp = (
+    sorted(df_catalogo["autor"].dropna().unique())
+    if "autor" in df_catalogo.columns
+    else []
+)
+editoriales_disp = (
+    sorted(df_catalogo["editorial"].dropna().unique())
+    if "editorial" in df_catalogo.columns
+    else []
+)
 
 st.write("---")
 
 # =====================================================================
-# FILTROS Y CARRITO 
+# FILTROS Y CARRITO
 # =====================================================================
-col_filtros, col_bolsa = st.columns([3,1])
+col_filtros, col_bolsa = st.columns([3, 1])
 
 with col_filtros:
     cf1, cf2, cf3 = st.columns(3)
     with cf1:
-        filtro_generos = st.multiselect("📖 Géneros:", generos_disp, placeholder="Géneros...")
+        filtro_generos = st.multiselect(
+            "📖 Géneros:", generos_disp, placeholder="Géneros..."
+        )
     with cf2:
-        filtro_autores = st.multiselect("✍️ Autores:", autores_disp, placeholder="Autores...")
+        filtro_autores = st.multiselect(
+            "✍️ Autores:", autores_disp, placeholder="Autores..."
+        )
     with cf3:
-        filtro_editoriales = st.multiselect("🏢 Editorial:", editoriales_disp, placeholder="Editoriales...") if editoriales_disp else []
+        filtro_editoriales = (
+            st.multiselect(
+                "🏢 Editorial:", editoriales_disp, placeholder="Editoriales..."
+            )
+            if editoriales_disp
+            else []
+        )
 
 with col_bolsa:
-    total_articulos = sum(item['cantidad'] for item in st.session_state.get('carrito_publico', {}).values())
-    titulo_bolsa = f"🛍️ Mi Bolsa ({total_articulos})" if total_articulos > 0 else "🛍️ Mi Bolsa"
-    
+    total_articulos = sum(
+        item["cantidad"]
+        for item in st.session_state.get("carrito_publico", {}).values()
+    )
+    titulo_bolsa = (
+        f"🛍️ Mi Bolsa ({total_articulos})"
+        if total_articulos > 0
+        else "🛍️ Mi Bolsa"
+    )
+
     with st.expander(titulo_bolsa, expanded=False):
-        if not st.session_state.get('carrito_publico'):
+        if not st.session_state.get("carrito_publico"):
             st.write("Tu bolsa está vacía.")
         else:
             total_carrito = 0
             mensaje_wa = "¡Hola Alba Librería! Mi nombre es [ESCRIBE TU NOMBRE AQUÍ] y me encantaría pedir estos libros:\n\n"
             for l_id, item in list(st.session_state.carrito_publico.items()):
-                subtotal = item['precio'] * item['cantidad']
+                subtotal = item["precio"] * item["cantidad"]
                 total_carrito += subtotal
-                mensaje_wa += f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
-                
-                col_t, col_b = st.columns([3,1])
-                with col_t: st.write(f"**{item['cantidad']}x** {item['titulo']}")
-                with col_b: st.button("❌", key=f"del_nav_{l_id}", help="Quitar", on_click=quitar_del_carrito, args=(l_id,))
-                        
+                mensaje_wa += (
+                    f"📖 {item['cantidad']}x {item['titulo']} - ${subtotal:,.0f}\n"
+                )
+
+                col_t, col_b = st.columns([3, 1])
+                with col_t:
+                    st.write(f"**{item['cantidad']}x** {item['titulo']}")
+                with col_b:
+                    st.button(
+                        "❌",
+                        key=f"del_nav_{l_id}",
+                        help="Quitar",
+                        on_click=quitar_del_carrito,
+                        args=(l_id,),
+                    )
+
             st.markdown("---")
             st.markdown(f"**Total:** ${total_carrito:,.0f}")
             mensaje_wa += f"\n*Total Estimado a pagar: ${total_carrito:,.0f}*\n\n⚠️ _Nota: Entiendo que deben confirmarme el stock disponible y el valor final antes de realizar el pago._\n\n¡Quedo atenta, muchas gracias!"
-            
+
             st.session_state.url_wa_flotante = f"https://wa.me/{NUMERO_WHATSAPP}?text={urllib.parse.quote(mensaje_wa)}"
-            st.markdown(f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>', unsafe_allow_html=True)
+            st.markdown(
+                f'<a href="{st.session_state.url_wa_flotante}" target="_blank" style="display: block; text-align: center; background-color: #25D366; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom:10px;">📲 ENVIAR PEDIDO</a>',
+                unsafe_allow_html=True,
+            )
 
 # --- BARRA DE BÚSQUEDA Y ORDENAMIENTO ---
-col_busqueda, col_orden = st.columns([3,1])
+col_busqueda, col_orden = st.columns([3, 1])
 with col_busqueda:
-    busqueda_texto = st.text_input("🔍 Buscar:", placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...", label_visibility="collapsed")
+    busqueda_texto = st.text_input(
+        "🔍 Buscar:",
+        placeholder="Ej. Fantasía, amor, o el nombre de tu autor favorito...",
+        label_visibility="collapsed",
+    )
 with col_orden:
     orden_seleccionado = st.selectbox(
-        "Ordenar", 
-        ["⭐ Relevancia / Destacados", "🔤 Título: A - Z", "🔤 Título: Z - A", "💸 Precio: Menor a Mayor", "💰 Precio: Mayor a Menor", "✍️ Autor: A - Z", "🏢 Editorial: A - Z"],
-        label_visibility="collapsed"
+        "Ordenar",
+        [
+            "⭐ Relevancia / Destacados",
+            "🔤 Título: A - Z",
+            "🔤 Título: Z - A",
+            "💸 Precio: Menor a Mayor",
+            "💰 Precio: Mayor a Menor",
+            "✍️ Autor: A - Z",
+            "🏢 Editorial: A - Z",
+        ],
+        label_visibility="collapsed",
     )
 
 # =====================================================================
@@ -342,10 +422,10 @@ with col_orden:
 if seccion_actual == "inicio":
     LINK_FORMULARIO_SUSCRIPCION = "https://docs.google.com/forms/d/e/1FAIpQLSc8FpBSwizmcinCdemJo31APqa24fU_Xw837mHJU2VJW2xNNg/viewform"
     URL_ICONO = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/libro-abierto.png"
-    
-    version_banner = int(time.time() / 3600) 
+
+    version_banner = int(time.time() / 3600)
     URL_FOTO_CAJITA = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_cajita.jpg?v={version_banner}"
-    URL_TAPA_DURA_1 = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_tapa_dura_1.jpg?v={version_banner}" 
+    URL_TAPA_DURA_1 = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_tapa_dura_1.jpg?v={version_banner}"
     URL_TAPA_DURA_2 = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/promo_tapa_dura_2.jpg?v={version_banner}"
 
     html_mega_carrusel = f"""
@@ -390,39 +470,62 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    st.html(html_mega_carrusel)
-    components.html(html_scroll_indicator, height=0, width=0)
-    
+    st.markdown(html_mega_carrusel, unsafe_allow_html=True)
+    components.html(html_scroll_indicator, height=100, width=100)
+
     st.write("---")
     df_base = df_catalogo.copy()
 
 elif seccion_actual == "destacados":
-    st.markdown("<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>", unsafe_allow_html=True)
-    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(
+        "<h2 class='titulo-seccion'>⭐ Libros Destacados</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
+        unsafe_allow_html=True,
+    )
     components.html(html_scroll_indicator, height=0, width=0)
-    
-    if 'destacado' in df_catalogo.columns:
-        df_base = df_catalogo[df_catalogo['destacado'] == True]
+
+    if "destacado" in df_catalogo.columns:
+        df_base = df_catalogo[df_catalogo["destacado"] == True]
     else:
-        df_base = df_catalogo.head(0) 
+        df_base = df_catalogo.head(0)
 
 elif seccion_actual == "ofertas":
-    st.markdown("<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>", unsafe_allow_html=True)
-    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(
+        "<h2 class='titulo-seccion'>🔥 Libros en Oferta</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
+        unsafe_allow_html=True,
+    )
     components.html(html_scroll_indicator, height=0, width=0)
-    
-    if 'precio_original' in df_catalogo.columns and 'precio' in df_catalogo.columns:
-        df_base = df_catalogo[df_catalogo['precio'] < df_catalogo['precio_original']]
+
+    if (
+        "precio_original" in df_catalogo.columns
+        and "precio" in df_catalogo.columns
+    ):
+        df_base = df_catalogo[df_catalogo["precio"] < df_catalogo["precio_original"]]
     else:
         df_base = df_catalogo.head(0)
 
 elif seccion_actual == "tapa-dura":
-    st.markdown("<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>", unsafe_allow_html=True)
-    st.html("<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>")
+    st.markdown(
+        "<h2 class='titulo-seccion'>💎 Ediciones en Tapa Dura</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
+        unsafe_allow_html=True,
+    )
     components.html(html_scroll_indicator, height=0, width=0)
-    
-    if 'encuadernacion' in df_catalogo.columns:
-        df_base = df_catalogo[df_catalogo['encuadernacion'].str.upper() == 'TAPA DURA']
+
+    if "encuadernacion" in df_catalogo.columns:
+        df_base = df_catalogo[
+            df_catalogo["encuadernacion"].str.upper() == "TAPA DURA"
+        ]
     else:
         df_base = df_catalogo.head(0)
 
@@ -434,16 +537,21 @@ df_filtrado = df_base.copy()
 if busqueda_texto:
     texto_limpio = busqueda_texto.strip().lower()
     df_filtrado = df_filtrado[
-        df_filtrado['titulo'].str.lower().str.contains(texto_limpio, na=False) | 
-        df_filtrado['autor'].str.lower().str.contains(texto_limpio, na=False)
+        df_filtrado["titulo"].str.lower().str.contains(texto_limpio, na=False)
+        | df_filtrado["autor"].str.lower().str.contains(texto_limpio, na=False)
     ]
 
 try:
-    if filtro_generos: df_filtrado = df_filtrado[df_filtrado['genero'].isin(filtro_generos)]
-    if filtro_autores: df_filtrado = df_filtrado[df_filtrado['autor'].isin(filtro_autores)]
-    if filtro_editoriales: df_filtrado = df_filtrado[df_filtrado['editorial'].isin(filtro_editoriales)]
+    if filtro_generos:
+        df_filtrado = df_filtrado[df_filtrado["genero"].isin(filtro_generos)]
+    if filtro_autores:
+        df_filtrado = df_filtrado[df_filtrado["autor"].isin(filtro_autores)]
+    if filtro_editoriales:
+        df_filtrado = df_filtrado[
+            df_filtrado["editorial"].isin(filtro_editoriales)
+        ]
 except NameError:
-    pass 
+    pass
 
 # =====================================================================
 # --- APLICAR ORDENAMIENTO DE LIBROS ---
@@ -458,30 +566,37 @@ if not df_filtrado.empty:
     elif orden_seleccionado == "💰 Precio: Mayor a Menor":
         df_filtrado = df_filtrado.sort_values(by="precio", ascending=False)
     elif orden_seleccionado == "✍️ Autor: A - Z":
-        if 'autor' in df_filtrado.columns:
+        if "autor" in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by="autor", ascending=True)
     elif orden_seleccionado == "🏢 Editorial: A - Z":
-        if 'editorial' in df_filtrado.columns:
+        if "editorial" in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by="editorial", ascending=True)
     else:
-        if 'destacado' in df_filtrado.columns:
-            df_filtrado = df_filtrado.sort_values(by=["destacado", "titulo"], ascending=[False, True])
+        if "destacado" in df_filtrado.columns:
+            df_filtrado = df_filtrado.sort_values(
+                by=["destacado", "titulo"], ascending=[False, True]
+            )
         else:
             df_filtrado = df_filtrado.sort_values(by="titulo", ascending=True)
 
 if df_filtrado.empty:
-    st.info("No encontramos libros con esos filtros. ¡Intenta con otra búsqueda! 🪄")
+    st.info(
+        "No encontramos libros con esos filtros. ¡Intenta con otra búsqueda! 🪄"
+    )
 else:
-    st.markdown(f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>", unsafe_allow_html=True)
+    st.markdown(
+        f"<p style='color: #dc4990; font-weight: 600; text-align: center; font-size: 1.2rem;'>Mostrando {len(df_filtrado)} libros mágicos ✨</p>",
+        unsafe_allow_html=True,
+    )
 
     # --- CUADRÍCULA PRINCIPAL DE LIBROS ---
     columnas = st.columns(3)
     for index, row in df_filtrado.reset_index(drop=True).iterrows():
         col = columnas[index % 3]
         with col:
-            libro_id_limpio = str(int(float(row.get('libro_id', 0))))
-            
-            timestamp_str = row.get('portada_last_updated', '') 
+            libro_id_limpio = str(int(float(row.get("libro_id", 0))))
+
+            timestamp_str = row.get("portada_last_updated", "")
             version_cache = ""
             if timestamp_str and not pd.isna(timestamp_str):
                 try:
@@ -490,13 +605,15 @@ else:
                 except:
                     pass
 
-            url_imagen = f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg{version_cache}"
-            
-            titulo_seguro = row.get('titulo', "Sin título")
-            autor_seguro = row.get('autor', 'Desconocido')
-            editorial_segura = row.get('editorial', 'No especificada')
-            precio = float(row.get('precio', 0.0))
-            precio_orig = float(row.get('precio_original', precio))
+            url_imagen = (
+                f"{URL_BASE_SUPABASE}{libro_id_limpio}.jpg{version_cache}"
+            )
+
+            titulo_seguro = row.get("titulo", "Sin título")
+            autor_seguro = row.get("autor", "Desconocido")
+            editorial_segura = row.get("editorial", "No especificada")
+            precio = float(row.get("precio", 0.0))
+            precio_orig = float(row.get("precio_original", precio))
 
             html_card = f"""
             <div class="libro-card">
@@ -506,20 +623,31 @@ else:
                     <p style='color: #888888; font-size: 0.9rem; margin-top: 0; margin-bottom: 2px;'>por {autor_seguro}</p>
                     <p style='color: #b38dac; font-size: 0.85rem; font-weight: 600; margin-top: 0; margin-bottom: 15px;'>Editorial: {editorial_segura}</p>
             """
-            
-            if not pd.isna(row.get('precio_original')) and precio < precio_orig:
+
+            if (
+                not pd.isna(row.get("precio_original"))
+                and precio < precio_orig
+            ):
                 html_card += f"<div><span class='precio-tachado'>${precio_orig:,.0f}</span><br><span class='precio-oferta'>${precio:,.0f}</span></div>"
             else:
-                html_card += f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
-                
-            html_card += "</div></div>" 
-            
+                html_card += (
+                    f"<div><span class='precio-normal'>${precio:,.0f}</span></div>"
+                )
+
+            html_card += "</div></div>"
+
             st.markdown(html_card, unsafe_allow_html=True)
-            st.button("✨ Lo quiero", key=f"add_{libro_id_limpio}", use_container_width=True, on_click=agregar_al_carrito, args=(libro_id_limpio, titulo_seguro, precio))
+            st.button(
+                "✨ Lo quiero",
+                key=f"add_{libro_id_limpio}",
+                use_container_width=True,
+                on_click=agregar_al_carrito,
+                args=(libro_id_limpio, titulo_seguro, precio),
+            )
 
 # --- BOTÓN FLOTANTE DE WHATSAPP ---
-if st.session_state.get('carrito_publico'):
-    url_flotante = st.session_state.get('url_wa_flotante', '#')
+if st.session_state.get("carrito_publico"):
+    url_flotante = st.session_state.get("url_wa_flotante", "#")
     btn_html = f"""
     <a href="{url_flotante}" target="_blank" class="whatsapp-float">
         💬 ENVIAR PEDIDO
