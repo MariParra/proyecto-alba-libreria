@@ -459,8 +459,8 @@ if seccion_actual == "inicio":
         </a>
     </div>
     """
-    st.html(html_mega_carrusel, unsafe_allow_html=True)
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.html(html_mega_carrusel)
+    st.markdown(html_scroll_indicator)
 
     st.write("---")
     df_base = df_catalogo.copy()
@@ -474,7 +474,7 @@ elif seccion_actual == "destacados":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.markdown(html_scroll_indicator)
 
     if "destacado" in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo["destacado"] == True]
@@ -490,7 +490,7 @@ elif seccion_actual == "ofertas":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.markdown(html_scroll_indicator)
 
     if (
         "precio_original" in df_catalogo.columns
@@ -509,7 +509,7 @@ elif seccion_actual == "tapa-dura":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
+    st.markdown(html_scroll_indicator)
 
     if "encuadernacion" in df_catalogo.columns:
         df_base = df_catalogo[
@@ -625,7 +625,7 @@ else:
 
             html_card += "</div></div>"
 
-            st.markdown(html_card, unsafe_allow_html=True)
+            st.markdown(html_card)
             st.button(
                 "✨ Lo quiero",
                 key=f"add_{libro_id_limpio}",
@@ -642,4 +642,4 @@ if st.session_state.get("carrito_publico"):
         💬 ENVIAR PEDIDO
     </a>
     """
-    st.markdown(btn_html, unsafe_allow_html=True)
+    st.markdown(btn_html)
