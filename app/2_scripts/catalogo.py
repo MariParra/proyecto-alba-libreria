@@ -31,42 +31,15 @@ except KeyError:
 
 # --- CSS BASE Y MEJORADO ---
 html_scroll_indicator = """
-    <div onclick="(function(){
-        const el = window.parent.document.querySelector('.stMain') || window.parent.document.scrollingElement || window.parent;
-        if(el.scrollTo) {
-            el.scrollBy({top: 600, behavior: 'smooth'});
-        } else {
-            window.parent.scrollBy(0, 600);
-        }
-    })()" title="Bajar" style="
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 999999;
-        width: 55px;
-        height: 55px;
-        background-color: rgba(255, 255, 255, 0.95);
-        border-radius: 50%;
-        box-shadow: 0 4px 20px rgba(220, 73, 144, 0.4);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        animation: bounce 2.5s infinite;
-    ">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 35px; height: 35px; fill: #dc4990; pointer-events: none;">
+    <div class="scroll-indicator" onclick="
+        const el = window.parent.document.querySelector('.stApp') || window.parent.document.scrollingElement;
+        if (el) { el.scrollBy({ top: 600, behavior: 'smooth' }); }
+    " title="Bajar">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="width: 35px; height: 35px; fill: #dc4990;">
             <path d="M0 0h24v24H0V0z" fill="none"/>
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
         </svg>
     </div>
-    <style>
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
-            40% { transform: translateX(-50%) translateY(-15px); }
-            60% { transform: translateX(-50%) translateY(-5px); }
-        }
-    </style>
 """
 
 st.markdown(
@@ -201,6 +174,22 @@ st.markdown(
             text-align: center;
             font-size: 3.5rem;
             margin-top: 10px;
+        }
+        .scroll-indicator {
+            position: fixed; bottom: 30px; left: 50%;
+            transform: translateX(-50%); z-index: 1001;
+            width: 55px; height: 55px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(220, 73, 144, 0.3);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            animation: bounce 2.5s infinite;
+        }
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
+            40% { transform: translateX(-50%) translateY(-15px); }
+            60% { transform: translateX(-50%) translateY(-7px); }
         }
     </style>
     """,
@@ -471,7 +460,7 @@ if seccion_actual == "inicio":
     </div>
     """
     st.markdown(html_mega_carrusel, unsafe_allow_html=True)
-    components.html(html_scroll_indicator, height=100, width=100)
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
 
     st.write("---")
     df_base = df_catalogo.copy()
@@ -485,7 +474,7 @@ elif seccion_actual == "destacados":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    components.html(html_scroll_indicator, height=0, width=0)
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
 
     if "destacado" in df_catalogo.columns:
         df_base = df_catalogo[df_catalogo["destacado"] == True]
@@ -501,7 +490,7 @@ elif seccion_actual == "ofertas":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    components.html(html_scroll_indicator, height=0, width=0)
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
 
     if (
         "precio_original" in df_catalogo.columns
@@ -520,7 +509,7 @@ elif seccion_actual == "tapa-dura":
         "<div style='text-align:center; margin-bottom: 20px;'><a href='?' target='_self' style='padding: 10px 25px; background-color: #fcdce8; border-radius: 50px; text-decoration: none; color: #dc4990; font-weight: bold; border: 1px solid #e790b3; display: inline-block;'>⬅️ Volver al Catálogo Principal</a></div>",
         unsafe_allow_html=True,
     )
-    components.html(html_scroll_indicator, height=0, width=0)
+    st.markdown(html_scroll_indicator, unsafe_allow_html=True)
 
     if "encuadernacion" in df_catalogo.columns:
         df_base = df_catalogo[
