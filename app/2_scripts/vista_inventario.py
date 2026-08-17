@@ -50,13 +50,13 @@ def cargar_datos_completos():
             df['visible_catalogo'] = True
             
         # LÓGICA DE DESCUENTOS SEGURA Y POR FECHA
-        hoy = datetime.now().date()
+        hoy = pd.Timestamp(datetime.now().date())
         df['Dcto %'] = 0.0
         
         # Validamos si existen las columnas de fecha en Supabase y comparamos con el día de hoy
         if 'descuento_inicio' in df.columns and 'descuento_fin' in df.columns:
-            df['f_ini_dt'] = pd.to_datetime(df['descuento_inicio'], errors='coerce').dt.date
-            df['f_fin_dt'] = pd.to_datetime(df['descuento_fin'], errors='coerce').dt.date
+            df['f_ini_dt'] = pd.to_datetime(df['descuento_inicio'], errors='coerce') 
+            df['f_fin_dt'] = pd.to_datetime(df['descuento_fin'], errors='coerce')
             
             mask_dcto = (
                 (df['precio_original'] > df['precio']) & 
