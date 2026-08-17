@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 import time
+from datetime import datetime, timedelta
 
 def obtener_unicos(df, columna):
     """Devuelve una lista ordenada de valores únicos de una columna del DataFrame."""
@@ -47,9 +48,24 @@ def cargar_datos_completos():
             df['visible_catalogo'] = df['visible_catalogo'].fillna(True).astype(bool)
         else:
             df['visible_catalogo'] = True
-        # LÓGICA DE DESCUENTOS SEGURA
+            
+        # LÓGICA DE DESCUENTOS SEGURA Y POR FECHA
+        hoy = datetime.now().date()
         df['Dcto %'] = 0.0
-        mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
+        
+        # Validamos si existen las columnas de fecha en Supabase y comparamos con el día de hoy
+        if 'descuento_inicio' in df.columns and 'descuento_fin' in df.columns:
+            df['f_ini_dt'] = pd.to_datetime(df['descuento_inicio'], errors='coerce').dt.date
+            df['f_fin_dt'] = pd.to_datetime(df['descuento_fin'], errors='coerce').dt.date
+            
+            mask_dcto = (
+                (df['precio_original'] > df['precio']) & 
+                (df['precio_original'] > 0) & 
+                ((df['f_ini_dt'].isna()) | (df['f_ini_dt'] <= hoy)) & 
+                ((df['f_fin_dt'].isna()) | (df['f_fin_dt'] >= hoy))
+            )
+        else:
+            mask_dcto = (df['precio_original'] > df['precio']) & (df['precio_original'] > 0)
         
         calculo_dcto = (((df.loc[mask_dcto, 'precio_original'] - df.loc[mask_dcto, 'precio']) / df.loc[mask_dcto, 'precio_original']) * 100)
         df.loc[mask_dcto, 'Dcto %'] = calculo_dcto
@@ -254,7 +270,7 @@ def eliminar_libro(libro_id):
         )
         return False, str(e)
 
-def aplicar_descuento_masivo(lista_ids, porcentaje):
+def aplicar_descuento_masivo(lista_ids, porcentaje, fecha_inicio=None, fecha_fin=None):
     if not lista_ids: return False, "No hay libros seleccionados para aplicar descuento."
     conn = get_db_connection()
     factor = 1.0 - (porcentaje / 100.0)
@@ -273,7 +289,13 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
             precio_base = float(precio_base)
             nuevo_precio = round(precio_base * factor, 0)
             
-            conn.table("libros").update({"precio": nuevo_precio}).eq("libro_id", row["libro_id"]).execute()
+            datos_update = {"precio": nuevo_precio}
+            if fecha_inicio:
+                datos_update["descuento_inicio"] = fecha_inicio.strftime("%Y-%m-%d")
+            if fecha_fin:
+                datos_update["descuento_fin"] = fecha_fin.strftime("%Y-%m-%d")
+            
+            conn.table("libros").update(datos_update).eq("libro_id", row["libro_id"]).execute()
             actualizados += 1
             
         cargar_datos_completos.clear()
@@ -293,6 +315,22 @@ def aplicar_descuento_masivo(lista_ids, porcentaje):
             email_usuario=email_usuario
         )
         return False, str(e)
+
+def actualizar_visibilidad_batch(df_con_cambios):
+    """
+    Actualiza la visibilidad en catálogo ('visible_catalogo') de los libros en masa.
+    """
+    conn = get_db_connection()
+    datos_para_actualizar = df_con_cambios[['libro_id', 'visible_catalogo']].to_dict(orient='records')
+    if not datos_para_actualizar: return 0
+    try:
+        conn.table("libros").upsert(datos_para_actualizar, on_conflict='libro_id').execute()
+        cargar_datos_completos.clear()
+        return len(datos_para_actualizar)
+    except Exception as e:
+        log_error("vista_inventario", "actualizar_visibilidad_batch", f"Error: {e}", st.session_state.get('email_usuario', 'Desconocido'))
+        st.error(f"Error al guardar visibilidad: {e}")
+        return 0
 
 def mostrar_inventario():
     col_inv1, col_inv2 = st.columns([3, 1])
@@ -374,6 +412,18 @@ def mostrar_inventario():
         if 'apto_cajita' in df_filtrado.columns:
             df_filtrado = df_filtrado[df_filtrado['apto_cajita'] == True]
 
+    # Contadores de Inventario dinámicos en la cabecera
+    st.markdown("### 📊 Métricas del Stock")
+    m1, m2, m3 = st.columns(3)
+    total_titulos_filtrados = len(df_filtrado)
+    total_stock_filtrado = df_filtrado['stock'].sum() if 'stock' in df_filtrado.columns else 0
+    valor_inventario_filtrado = (df_filtrado['stock'] * df_filtrado['precio']).sum() if ('stock' in df_filtrado.columns and 'precio' in df_filtrado.columns) else 0
+    
+    m1.metric("Libros Distintos", f"{total_titulos_filtrados:,}")
+    m2.metric("Unidades en Stock", f"{total_stock_filtrado:,} uds.")
+    m3.metric("Valor del Inventario (P. Venta)", f"${valor_inventario_filtrado:,.0f}")
+    st.markdown("---")
+    
     # Tabs de navegación
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_destacados, tab_eliminar = st.tabs([
         "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "⭐ Destacados", "🗑️ Eliminar"
@@ -502,6 +552,14 @@ def mostrar_inventario():
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
                         nuevo_precio_original = col7.number_input("Precio Orig. ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
                         
+                        st.markdown("📅 **Vigencia del Descuento (Individual)**")
+                        col_ed_f1, col_ed_f2 = st.columns(2)
+                        f_ini_val = pd.to_datetime(libro.get('descuento_inicio')).date() if pd.notna(libro.get('descuento_inicio')) else datetime.now().date()
+                        f_fin_val = pd.to_datetime(libro.get('descuento_fin')).date() if pd.notna(libro.get('descuento_fin')) else datetime.now().date() + timedelta(days=30)
+                        nuevo_f_ini = col_ed_f1.date_input("Fecha Inicio:", value=f_ini_val, key="edit_f_ini")
+                        nuevo_f_fin = col_ed_f2.date_input("Fecha Fin:", value=f_fin_val, key="edit_f_fin")
+
+                        
                         check_col1, check_col2, check_col3 = st.columns(3)
                         nuevo_apto_cajita = check_col1.checkbox("🎁 Apto Cajitas", value=bool(libro.get('apto_cajita', True)))
                         nuevo_destacado = check_col2.checkbox("⭐ Destacado", value=bool(libro.get('destacado', False)))
@@ -522,6 +580,8 @@ def mostrar_inventario():
                                         "stock": nuevo_stock, 
                                         "costo": nuevo_costo, 
                                         "precio_original": nuevo_precio_original,
+                                        "descuento_inicio": nuevo_f_ini.strftime("%Y-%m-%d"),
+                                        "descuento_fin": nuevo_f_fin.strftime("%Y-%m-%d"),
                                         "apto_cajita": nuevo_apto_cajita,
                                         "destacado": nuevo_destacado,
                                         "visible_catalogo": nuevo_visible
@@ -648,68 +708,94 @@ def mostrar_inventario():
         st.info(f"Vas a modificar el precio de **{len(df_filtrado)}** libros listados en tu búsqueda actual.")
         porcentaje = st.slider("Porcentaje de descuento (%):", 0, 100, 10, key="slider_descuento")
         st.caption("Nota: Aplicar un 0% restaura los libros a su Precio Original.")
+        
+        st.markdown("📅 **Vigencia del Descuento Masivo**")
+        col_desc_f1, col_desc_f2 = st.columns(2)
+        fecha_inicio = col_desc_f1.date_input("Fecha de Inicio:", value=datetime.now().date(), key="f_ini_desc")
+        fecha_fin = col_desc_f2.date_input("Fecha de Término:", value=datetime.now().date() + timedelta(days=30), key="f_fin_desc")
+        
         if st.button("🚀 Confirmar y Aplicar Descuento", type="primary", use_container_width=True):
-            if df_filtrado.empty:
+            if fecha_inicio > fecha_fin:
+                st.error("Error: La fecha de inicio no puede ser posterior a la fecha de término.")
+            elif df_filtrado.empty:
                 st.warning("No hay libros visibles o filtrados para aplicar el descuento.")
             else:
                 lista_ids = df_filtrado['libro_id'].tolist()
                 with st.spinner("Aplicando descuento..."):
-                    success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje)
+                    success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje, fecha_inicio, fecha_fin)
                 if success:
                     st.success(mensaje); st.snow()
                     time.sleep(2); st.rerun()
                 else: st.error(f"Error al aplicar descuento: {mensaje}")
 
-    with tab_destacados:
-        st.markdown("#### ⭐ Gestionar Libros Destacados")
-        st.info("Marca los libros que quieres que aparezcan en el carrusel 'Destacados del Mes' del catálogo público.")
-
-        # Seleccionamos solo las columnas necesarias para la edición
-        columnas_destacados = ['libro_id', 'titulo', 'destacado']
-        if 'destacado' not in df_filtrado.columns:
-            st.error("La columna 'destacado' no se pudo cargar en el catálogo. Intenta refrescar los datos.")
-        else:
-            # Creamos una copia limpia para editar
-            df_para_editar = df_filtrado[columnas_destacados].copy().reset_index(drop=True)
-
-            # Usamos st.data_editor para crear la tabla editable
-            df_editado = st.data_editor(
-                df_para_editar,
-                key="editor_destacados",
-                hide_index=True,
-                use_container_width=True,
-                disabled=['libro_id', 'titulo'], # Bloqueamos ID y Título
-                column_config={
-                    "libro_id": st.column_config.NumberColumn("ID", format="%d"),
-                    "titulo": st.column_config.TextColumn("Título"),
-                    "destacado": st.column_config.CheckboxColumn(
-                        "¿Destacado? ⭐",
-                        default=False,
-                    )
-                }
-            )
-
-            # --- DETECCIÓN DE CAMBIOS ULTRA SEGURA ---
-            # Comparamos fila por fila la columna 'destacado' para ver qué cambió
-            cambios_detectados = df_para_editar['destacado'] != df_editado['destacado']
-            hay_cambios = cambios_detectados.any()
+        with tab_destacados:
+            st.markdown("#### ⭐ Visibilidad y Destacados del Catálogo")
             
-            # Botón de guardar (se habilita solo si hay cambios reales)
-            if st.button("💾 Guardar Cambios en Destacados", type="primary", use_container_width=True, disabled=not hay_cambios):
-                # Filtramos únicamente las filas modificadas
-                df_final_para_actualizar = df_editado[cambios_detectados]
-
-                with st.spinner("Guardando en la base de datos de Supabase..."):
-                    # Llamamos a tu función local de actualización batch
-                    num_actualizados = actualizar_destacados_batch(df_final_para_actualizar)
-                
-                if num_actualizados > 0:
-                    st.success(f"¡Se actualizó el estado de {num_actualizados} libros correctamente!")
-                    st.balloons()
-                    time.sleep(1.5)
-                    st.rerun()
+            col_dest1, col_dest2 = st.columns(2)
+            
+            with col_dest1:
+                st.markdown("##### ⭐ Carrusel de Destacados")
+                st.caption("Libros destacados en la página de inicio del catálogo público.")
+                columnas_destacados = ['libro_id', 'titulo', 'destacado']
+                if 'destacado' not in df_filtrado.columns:
+                    st.error("Columna 'destacado' no cargada en el catálogo.")
                 else:
-                    st.warning("No se pudieron guardar los cambios. Intenta nuevamente.")
+                    df_para_editar_dest = df_filtrado[columnas_destacados].copy().reset_index(drop=True)
+                    df_editado_dest = st.data_editor(
+                        df_para_editar_dest,
+                        key="editor_destacados_new",
+                        hide_index=True,
+                        use_container_width=True,
+                        disabled=['libro_id', 'titulo'],
+                        column_config={
+                            "libro_id": st.column_config.NumberColumn("ID", format="%d"),
+                            "titulo": st.column_config.TextColumn("Título"),
+                            "destacado": st.column_config.CheckboxColumn("¿Destacado? ⭐", default=False)
+                        }
+                    )
+                    cambios_dest = df_para_editar_dest['destacado'] != df_editado_dest['destacado']
+                    hay_cambios_dest = cambios_dest.any()
+                    
+                    if st.button("💾 Guardar Destacados", type="primary", use_container_width=True, disabled=not hay_cambios_dest, key="btn_save_dest"):
+                        df_final_dest = df_editado_dest[cambios_dest]
+                        num_act = actualizar_destacados_batch(df_final_dest)
+                        if num_act > 0:
+                            st.success(f"¡Se actualizaron {num_act} destacados!")
+                            st.balloons()
+                            time.sleep(1.5)
+                            st.rerun()
+
+            with col_dest2:
+                st.markdown("##### 👁️ Visibilidad en Catálogo")
+                st.caption("Define qué libros del inventario se muestran al público general.")
+                columnas_visibilidad = ['libro_id', 'titulo', 'visible_catalogo']
+                if 'visible_catalogo' not in df_filtrado.columns:
+                    st.error("Columna 'visible_catalogo' no cargada en el catálogo.")
+                else:
+                    df_para_editar_vis = df_filtrado[columnas_visibilidad].copy().reset_index(drop=True)
+                    df_editado_vis = st.data_editor(
+                        df_para_editar_vis,
+                        key="editor_visibilidad",
+                        hide_index=True,
+                        use_container_width=True,
+                        disabled=['libro_id', 'titulo'],
+                        column_config={
+                            "libro_id": st.column_config.NumberColumn("ID", format="%d"),
+                            "titulo": st.column_config.TextColumn("Título"),
+                            "visible_catalogo": st.column_config.CheckboxColumn("¿Visible? 👁️", default=True)
+                        }
+                    )
+                    cambios_vis = df_para_editar_vis['visible_catalogo'] != df_editado_vis['visible_catalogo']
+                    hay_cambios_vis = cambios_vis.any()
+                    
+                    if st.button("💾 Guardar Visibilidad", type="primary", use_container_width=True, disabled=not hay_cambios_vis, key="btn_save_vis"):
+                        df_final_vis = df_editado_vis[cambios_vis]
+                        num_act = actualizar_visibilidad_batch(df_final_vis)
+                        if num_act > 0:
+                            st.success(f"¡Se actualizó la visibilidad de {num_act} libros!")
+                            st.balloons()
+                            time.sleep(1.5)
+                            st.rerun()
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")

@@ -146,9 +146,10 @@ def cargar_historial_completo():
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
         df_ventas['costo_venta'] = pd.to_numeric(df_ventas.get('costo_venta', 0), errors='coerce').fillna(0)
+        df_ventas['valor_envio'] = pd.to_numeric(df_ventas.get('valor_envio', 0), errors='coerce').fillna(0)
         df_ventas['estado_pago'] = df_ventas.get('estado_pago', 'PENDIENTE').fillna('PENDIENTE')
         df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
-        df_ventas['utilidad'] = df_ventas['monto_final'] - df_ventas['costo_venta']
+        df_ventas['utilidad'] = (df_ventas['monto_final'] - df_ventas['valor_envio']) - df_ventas['costo_venta']
         
         if 'fecha_pago' not in df_ventas.columns:
             df_ventas['fecha_pago'] = pd.NaT
@@ -508,12 +509,23 @@ def mostrar_caja():
                 l_stock_actual = 999  
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
+            
+            # Checkbox para permitir vender más unidades que las disponibles en stock
+            permitir_sin_stock = st.checkbox("🔓 Permitir sobreventa (omitir límite de stock disponible)", value=False)
+            
+            
             col_c1, col_c2 = st.columns(2)
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
-            cantidad = col_c2.number_input("Cantidad:", min_value=1, max_value=max(1, l_stock_actual), step=1)
+            # Lógica dinámica: Si el libro no tiene stock (<= 0) o el checkbox está marcado, no limitamos el máximo
+            limite_maximo = None if (l_stock_actual <= 0 or permitir_sin_stock) else max(1, l_stock_actual)
+            cantidad = col_c2.number_input("Cantidad:", min_value=1, max_value=limite_maximo, step=1)
             
-            if l_stock_actual <= 0 and not es_nuevo:
-                st.warning("⚠️ Atención: Estás vendiendo un libro sin stock físico.")
+            if not es_nuevo:
+                if l_stock_actual <= 0:
+                    st.warning("⚠️ Atención: Estás vendiendo un libro sin stock físico (Stock: 0).")
+                elif cantidad > l_stock_actual:
+                    st.warning(f"⚠️ Atención: Stock insuficiente. Dispones de {l_stock_actual} unidad(es) e intentas vender {cantidad}.")
+
             
             if st.button("➕ AÑADIR AL CARRITO", use_container_width=True):
                 if not l_titulo: st.error("Debes seleccionar un libro.")
@@ -545,6 +557,23 @@ def mostrar_caja():
         subtotal_carrito = 0
         if len(st.session_state.carrito_caja) > 0:
             st.markdown("#### 🛒 Tu Carrito Actual")
+            
+            # --- DETECTOR DE SOBREVENTA EN EL CARRITO ---
+            alertas_sobreventa = []
+            for item in st.session_state.carrito_caja:
+                if not item.get('es_nuevo', False):
+                    stock_f = int(item.get('stock_actual', 0))
+                    cant_v = int(item.get('cantidad', 0))
+                    if stock_f <= 0:
+                        alertas_sobreventa.append(f"• **{item['titulo']}**: Sin stock en catálogo. Se venderán {cant_v} unidades.")
+                    elif cant_v > stock_f:
+                        alertas_sobreventa.append(f"• **{item['titulo']}**: Stock insuficiente. Solicitas {cant_v} de {stock_f} disponibles.")
+            
+            if alertas_sobreventa:
+                with st.expander("⚠️ ADVERTENCIA: DETALLES DE SOBREVENTA", expanded=True):
+                    for alerta in alertas_sobreventa:
+                        st.info(alerta)
+                        
             df_carrito = pd.DataFrame(st.session_state.carrito_caja)
             df_carrito.insert(0, 'Quitar', False)
             
@@ -674,6 +703,16 @@ def mostrar_caja():
                     
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
+        # Nota explicativa de cálculos financieros (Caja con Envío Excluido)
+        st.info("""
+        💡 **¿Cómo se calculan las finanzas en este panel?**
+        * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
+        * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
+        * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
+        
+        ⚠️ *Las celdas con costo de venta igual a **$0** (libros sin costo asignado) se destacan en **color rojo** para advertir que la utilidad estimada podría estar inflada.*
+        """)
+        
         df_ventas = df_ventas_global.copy()
         
         if df_ventas.empty: 
