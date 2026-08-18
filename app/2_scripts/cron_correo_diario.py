@@ -77,9 +77,11 @@ def generar_reporte_empaque():
         return
         
     df = pd.DataFrame(res.data)
-    df['fecha_dt'] = pd.to_datetime(df['fecha_venta'], errors='coerce')
+    # Parsear y remover de forma segura la zona horaria (Timezone Naive)
+    df['fecha_dt'] = pd.to_datetime(df['fecha_venta'], errors='coerce').dt.tz_localize(None)
     hoy = datetime.now()
     df['dias'] = (hoy - df['fecha_dt']).dt.days
+
     
     # Filtrar pedidos con más de 5 días creados sin armar
     df_criticas = df[
