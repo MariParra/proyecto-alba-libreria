@@ -67,79 +67,93 @@ def mostrar_alertas_prioritarias():
     
     df_ventas = cargar_datos_prioritarios()
     
-    if not df_ventas.empty:
-        # Calcular deudas y antigüedad para ver si realmente hay alertas activas
-        df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
-        hoy = datetime.now()
-        df_ventas['dias_antiguedad'] = df_ventas['fecha_limpia'].apply(lambda x: (hoy - x).days if pd.notna(x) else 0)
-        df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0.0)
-        df_ventas['abono'] = pd.to_numeric(df_ventas['abono'], errors='coerce').fillna(0.0)
-        df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
-        
-        hay_envios_limbo = not df_ventas[(df_ventas['dias_antiguedad'] > 5) & (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))].empty
-        hay_cobranzas_criticas = not df_ventas[(df_ventas['deuda'] > 0) & (df_ventas['dias_antiguedad'] > 14)].empty
-        
-        # Si hay cualquier pendiente, molestamos amigablemente a la dueña
-        if hay_envios_limbo or hay_cobranzas_criticas:
-            col_b1, col_b2 = st.columns([1, 2.5])
-            with col_b1:
-                st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
-            with col_b2:
-                st.markdown(
-                    """
-                    <div style="background-color:#ffebee; border:3px solid #ff4b4b; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
-                        <h2 style="color:#c62828; margin:0; font-size:26px;">🐹💤 ¡ALERTA CRÍTICA DE PRODUCTIVIDAD!</h2>
-                        <p style="color:#b71c1c; font-size:20px; font-weight:bold; margin:8px 0 0 0;">
-                            ¡Ivonne, deja de dormir y ponte a trabajar!
-                        </p>
-                        <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
-                            Tienes cajas acumulando polvo y cobros pendientes en bodega. ¡Mueve la rueda del hámster! 🏃‍♀️💨
-                        </p>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-            st.markdown("---")
+    if df_ventas.empty:
+        st.success("🎉 ¡Felicidades! No hay alertas pendientes en el sistema.")
+        return
 
-    # Dividimos la pantalla en dos columnas de alta visibilidad
+    # ================= PASO 1: CÁLCULOS Y PLANCHADO DE DATOS (AL INICIO) =================
+    # A. Unificar fechas y calcular la antigüedad en días
+    df_ventas['fecha_limpia'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
+    hoy = datetime.now()
+    df_ventas['dias_antiguedad'] = df_ventas['fecha_limpia'].apply(
+        lambda x: (hoy - x).days if pd.notna(x) else 0
+    )
+    
+    # B. Cálculos monetarios explícitos
+    df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0.0)
+    df_ventas['abono'] = pd.to_numeric(df_ventas['abono'], errors='coerce').fillna(0.0)
+    df_ventas['deuda'] = df_ventas['monto_final'] - df_ventas['abono']
+    
+    # C. Aplanar nombre del cliente de forma ultra segura
+    if 'cliente' in df_ventas.columns:
+        df_ventas['cliente_nombre'] = df_ventas['cliente'].apply(
+            lambda x: x.get('nombre') if (isinstance(x, dict) and x.get('nombre')) else 'Cliente Desconocido'
+        )
+    else:
+        df_ventas['cliente_nombre'] = 'Cliente Desconocido'
+
+
+    # ================= PASO 2: COMPROBACIÓN DE ALERTAS ACTIVAS =================
+    df_envios_limbo = df_ventas[
+        (df_ventas['dias_antiguedad'] > 5) & 
+        (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+    ].copy()
+    
+    df_deudores_criticos = df_ventas[
+        (df_ventas['deuda'] > 0) & 
+        (df_ventas['dias_antiguedad'] > 14)
+    ].copy()
+
+    hay_envios_limbo = not df_envios_limbo.empty
+    hay_cobranzas_criticas = not df_deudores_criticos.empty
+
+
+    # ================= PASO 3: BANNER CÓMICO DE BIENVENIDA (HÁMSTER) =================
+    if hay_envios_limbo or hay_cobranzas_criticas:
+        col_b1, col_b2 = st.columns([1, 2.5])
+        with col_b1:
+            st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
+        with col_b2:
+            st.markdown(
+                """
+                <div style="background-color:#ffebee; border:3px solid #ff4b4b; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                    <h2 style="color:#c62828; margin:0; font-size:26px;">🐹💤 ¡ALERTA CRÍTICA DE PRODUCTIVIDAD!</h2>
+                    <p style="color:#b71c1c; font-size:20px; font-weight:bold; margin:8px 0 0 0;">
+                        ¡Ivonne, deja de dormir y ponte a trabajar!
+                    </p>
+                    <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
+                        Tienes cajas acumulando polvo y cobros pendientes en bodega. ¡Mueve la rueda del hámster! 🏃‍♀️💨
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        st.markdown("---")
+
+
+    # ================= PASO 4: RENDERIZADO DE COLUMNAS =================
     col_envios, col_cobranzas = st.columns(2)
 
-    # ================= COLUMNA 1: ENVÍOS PENDIENTES (>5 días) =================
+    # COLUMNA 1: ENVÍOS
     with col_envios:
         st.markdown("### 📦 Armado de Paquetes Demorados (>5 días)")
-        
-        # Filtro: Mayor de 5 días y estado NO es "PAQUETE LISTO" ni "FINALIZADO"
-        df_envios_limbo = df_ventas[
-            (df_ventas['dias_antiguedad'] > 5) & 
-            (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
-        ].copy()
-
-        if df_envios_limbo.empty:
+        if not hay_envios_limbo:
             st.success("🟢 Al día: No tienes paquetes pendientes con más de 5 días de retraso.")
         else:
             st.error(f"⚠️ Atención: Tienes **{len(df_envios_limbo)}** órdenes pendientes de armado en bodega.")
             for _, row in df_envios_limbo.iterrows():
                 libros_raw = row.get('libros_vendidos', '')
-                # Aplicamos el nuevo formateador dinámico
                 libros_formateados = formatear_libros_amigable(libros_raw)
                 
                 with st.container(border=True):
                     st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}**")
                     st.markdown(f"⏳ Hace `{row['dias_antiguedad']} días` (Creado el {row['fecha_limpia'].strftime('%d/%m/%Y')})")
-                    st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")  # <-- Cambiado a texto libre sin acento grave (`) para renderizar las negritas
+                    st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")
 
-
-    # ================= COLUMNA 2: COBRANZAS CRÍTICAS (>14 días) =================
+    # COLUMNA 2: COBRANZAS
     with col_cobranzas:
         st.markdown("### 💸 Cuentas con Mora Crítica (>14 días)")
-        
-        # Filtro: Deuda real mayor a cero y antigüedad mayor a 14 días
-        df_deudores_criticos = df_ventas[
-            (df_ventas['deuda'] > 0) & 
-            (df_ventas['dias_antiguedad'] > 14)
-        ].copy()
-
-        if df_deudores_criticos.empty:
+        if not hay_cobranzas_criticas:
             st.success("🟢 Al día: No tienes cuentas críticas de cobranza con más de 2 semanas de mora.")
         else:
             st.error(f"🚨 Alerta: Tienes **{len(df_deudores_criticos)}** deudas críticas acumulando atraso.")
