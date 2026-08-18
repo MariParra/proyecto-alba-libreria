@@ -5,6 +5,9 @@ import base64
 import json
 from dotenv import load_dotenv
 import time
+from utilidades import get_db_connection
+from datetime import datetime     
+
 # --- IMPORTACIÓN DE VISTAS ---
 from vista_inventario import mostrar_inventario
 from vista_caja import mostrar_caja
@@ -323,6 +326,37 @@ else:
     # ================= ÁREA PRINCIPAL =================
     col_izq, col_central, col_der = st.columns([1, 8, 1])
     with col_central:
+        try:
+            conn = get_db_connection()
+            res_alertas_db = conn.table("registro_ventas").select("venta_id, fecha_venta, estado").execute()
+            if res_alertas_db.data:
+                df_alertas_check = pd.DataFrame(res_alertas_db.data)
+                df_alertas_check['fecha_dt'] = pd.to_datetime(df_alertas_check['fecha_venta'], errors='coerce')
+                hoy_check = datetime.now()
+                df_alertas_check['dias_antiguedad'] = (hoy_check - df_alertas_check['fecha_dt']).dt.days
+                
+                # Filtrar órdenes con más de 5 días de retraso sin armar
+                df_limbo = df_alertas_check[
+                    (df_alertas_check['dias_antiguedad'] > 5) & 
+                    (~df_alertas_check['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+                ]
+                
+                if not df_limbo.empty:
+                    st.markdown(
+                        f"""
+                        <div style="background-color:#ffebee; border:2px solid #ef5350; padding:15px; border-radius:8px; margin-bottom:20px;">
+                            <h4 style="color:#c62828; margin:0;">🚨 ¡ALBA, TIENES TRABAJO PENDIENTE EN BODEGA! 🚨</h4>
+                            <p style="color:#b71c1c; margin:5px 0 0 0; font-size:14px;">
+                                Tienes <b>{len(df_limbo)}</b> pedidos que llevan más de 5 días creados sin ser armados ni empaquetados. 
+                                Por favor, dirígete al módulo de <b>🛒 CAJA / VENTAS RÁPIDAS</b> en la pestaña <b>🚨 Alertas (>5 días)</b> para revisarlos y armarlos hoy mismo.
+                            </p>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+        except Exception as e_alert:
+            pass # Falla silenciosa si no hay conexión o no existe la tabla temporalmente
+        
         if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO":
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
