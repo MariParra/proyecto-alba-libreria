@@ -26,6 +26,7 @@ from vista_marketing import mostrar_generador_marketing
 from vista_portadas import mostrar_gestion_portadas
 from vista_web import mostrar_gestion_web
 from vista_alertas_prioritarias import mostrar_alertas_prioritarias
+from vista_pizarra import mostrar_pizarra
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -210,6 +211,10 @@ else:
             st.session_state.pagina_actual = "🚨 ALERTAS PRIORITARIAS"
             st.rerun()
         
+        if st.button("📌 PIZARRA DE NOTAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📌 PIZARRA DE NOTAS" else "secondary"):
+            st.session_state.pagina_actual = "📌 PIZARRA DE NOTAS"
+            st.rerun()
+            
         if st.button("📦 GESTIÓN DE INVENTARIO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO" else "secondary"):
             st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
             st.rerun()
@@ -227,8 +232,8 @@ else:
             st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
             st.rerun()
         
-        if st.button("📦 ASIGNACIONES SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN" else "secondary"):
-            st.session_state.pagina_actual = "📦 ASIGNACIONES SUSCRIPCIÓN"
+        if st.button("📦 GESTIÓN DE SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN" else "secondary"):
+            st.session_state.pagina_actual = "📦 GESTIÓN DE SUSCRIPCIÓN"
             st.rerun()
             
         if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
@@ -333,7 +338,8 @@ else:
     with col_central:
         if st.session_state.pagina_actual == "🚨 ALERTAS PRIORITARIAS":
             mostrar_alertas_prioritarias()
-            
+        elif st.session_state.pagina_actual == "📌 PIZARRA DE NOTAS":
+            mostrar_pizarra()
         if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO":
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
@@ -342,7 +348,7 @@ else:
             mostrar_ventas_masivas()
         elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
             mostrar_clientes()
-        elif st.session_state.pagina_actual == "📦 ASIGNACIONES SUSCRIPCIÓN":
+        elif st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN":
             mostrar_asignaciones()
         elif st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)":
             mostrar_generador_marketing()
