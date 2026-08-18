@@ -108,9 +108,9 @@ def mostrar_alertas_prioritarias():
     hay_cobranzas_criticas = not df_deudores_criticos.empty
 
 
-    # ================= PASO 3: BANNER CÓMICO DE BIENVENIDA (HÁMSTER) =================
+        # ================= PASO 3: BANNER CÓMICO DE BIENVENIDA (HÁMSTER MULTI-ESTADO) =================
+    col_b1, col_b2 = st.columns([1, 2.5])
     if hay_envios_limbo or hay_cobranzas_criticas:
-        col_b1, col_b2 = st.columns([1, 2.5])
         with col_b1:
             st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
         with col_b2:
@@ -128,7 +128,25 @@ def mostrar_alertas_prioritarias():
                 """, 
                 unsafe_allow_html=True
             )
-        st.markdown("---")
+    else:
+        with col_b1:
+            st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamsterfeliz.jpg", width=180)
+        with col_b2:
+            st.markdown(
+                """
+                <div style="background-color:#e8f5e9; border:3px solid #4caf50; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                    <h2 style="color:#2e7d32; margin:0; font-size:26px;">🐹✨ ¡TODO AL DÍA!</h2>
+                    <p style="color:#1b5e20; font-size:18px; font-weight:bold; margin:8px 0 0 0;">
+                        Ivonne, tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco.
+                    </p>
+                    <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
+                        No tienes ninguna alerta pendiente en el sistema. ¡Tu bodega y finanzas están impecables! 🌟
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+    st.markdown("---")
 
 
     # ================= PASO 4: RENDERIZADO DE COLUMNAS =================

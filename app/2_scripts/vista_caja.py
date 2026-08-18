@@ -876,11 +876,12 @@ def mostrar_caja():
         
         df_olvidados = df_alertas_temporal[
             (df_alertas_temporal['dias_antiguedad'] > 5) & 
-            (~df_alertas_temporal['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+            (~df_alertas_temporal['estado'].isin(['FINALIZADO']))
         ].copy()
         
         if not df_olvidados.empty:
-            col_c_b1, col_c_b2 = st.columns([1, 2.5])
+                    col_c_b1, col_c_b2 = st.columns([1, 2.5])
+        if not df_olvidados.empty:
             with col_c_b1:
                 st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
             with col_c_b2:
@@ -898,7 +899,25 @@ def mostrar_caja():
                     """, 
                     unsafe_allow_html=True
                 )
-            st.markdown("---")
+        else:
+            with col_c_b1:
+                st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamsterfeliz.jpg", width=180)
+            with col_c_b2:
+                st.markdown(
+                    """
+                    <div style="background-color:#e8f5e9; border:3px solid #4caf50; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                        <h2 style="color:#2e7d32; margin:0; font-size:26px;">🐹✨ ¡BODEGA DESPEJADA!</h2>
+                        <p style="color:#1b5e20; font-size:18px; font-weight:bold; margin:8px 0 0 0;">
+                            Ivonne, tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco.
+                        </p>
+                        <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
+                            No tienes ningún paquete demorado en bodega. ¡Excelente trabajo de organización! 🌟📦
+                        </p>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+        st.markdown("---")
 
         
         if df_ventas_global.empty:
