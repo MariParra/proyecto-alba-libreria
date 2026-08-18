@@ -43,6 +43,7 @@ def actualizar_nota_db(nota_id, titulo, contenido, fecha_limite):
         "fecha_limite": fecha_limite.strftime("%Y-%m-%d")
     }
     try:
+        conn.table("pizarra_recordatorios").update(datos).eq("nota_id", idx_a_editar).execute() # El idx_a_editar se pasa como nota_id
         conn.table("pizarra_recordatorios").update(datos).eq("nota_id", nota_id).execute()
         st.cache_data.clear()
         return True
@@ -54,7 +55,6 @@ def completar_nota_db(nota_id):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", n_id).execute() # El n_id se pasa como nota_id
         conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", nota_id).execute()
         st.cache_data.clear()
         return True
@@ -80,28 +80,6 @@ def mostrar_pizarra():
     df_notas = cargar_notas_db()
     hoy = datetime.now().date()
 
-    # --- BARRA LATERAL: CREACIÓN DE NOTAS ---
-    with st.sidebar:
-        st.markdown("### ➕ Clavar Nuevo Post-it")
-        with st.container(border=True):
-            n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy", key="new_note_title")
-            n_contenido = st.text_area("Detalles o notas adicionales:", placeholder="Ej: Comprar de 180g...", key="new_note_content")
-            n_fecha = st.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
-            
-            st.write("")
-            if st.button("📌 Clavar Nota", type="primary", use_container_width=True):
-                if not n_titulo:
-                    st.error("Por favor, ingresa el título del recordatorio.")
-                else:
-                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha)
-                    if ok:
-                        st.success("✅ ¡Nota clavada con éxito!")
-                        st.balloons()
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error(f"Error: {err}")
-
     # --- CONTROL DE ALERTAS DE ALTA INTENSIDAD (MOLESTAR) ---
     notas_vencidas = []
     if not df_notas.empty:
@@ -121,11 +99,34 @@ def mostrar_pizarra():
             unsafe_allow_html=True
         )
 
+    # --- SECCIÓN SUPERIOR DE CREACIÓN (Ubicada en la pantalla principal) ---
+    with st.expander("➕ CLAVAR NUEVO POST-IT (CREAR NOTA)", expanded=False):
+        with st.container(border=True):
+            n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy", key="new_note_title")
+            n_contenido = st.text_area("Detalles o notas adicionales:", placeholder="Ej: Comprar de 180g...", key="new_note_content")
+            n_fecha = st.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
+            
+            st.write("")
+            if st.button("📌 Clavar Nota en la Pizarra", type="primary", use_container_width=True):
+                if not n_titulo:
+                    st.error("Por favor, ingresa el título del recordatorio.")
+                else:
+                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha)
+                    if ok:
+                        st.success("✅ ¡Nota clavada con éxito!")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {err}")
+
+    st.markdown("### 📋 Tus Post-its Activos")
+
     # --- TABLERO PRINCIPAL DE POST-ITS (SIN ANIDAR COLUMNAS) ---
     if df_notas.empty:
         st.info("🎉 ¡Pizarra limpia! No tienes recordatorios pendientes por hacer.")
     else:
-        # Usamos columnas a nivel raíz (un solo nivel de columnas, totalmente permitido)
+        # Usamos columnas a nivel raíz (máximo 3 por fila en PC, adaptativo en móviles)
         grid_cols = st.columns(3)
         
         for index, row in df_notas.iterrows():
@@ -180,7 +181,7 @@ def mostrar_pizarra():
                     unsafe_allow_html=True
                 )
                 
-                # --- MENÚ DE CONTROL ÚNICO (Evita el error de anidación) ---
+                # --- MENÚ DE CONTROL ÚNICO ---
                 with st.popover("⚙️ Acciones / Control", use_container_width=True):
                     # 1. Marcar como completada
                     if st.button("✅ Marcar como Hecho", key=f"btn_done_{n_id}", use_container_width=True, type="primary"):
