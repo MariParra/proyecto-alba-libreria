@@ -54,6 +54,7 @@ def completar_nota_db(nota_id):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
+        conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", n_id).execute() # El n_id se pasa como nota_id
         conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", nota_id).execute()
         st.cache_data.clear()
         return True
@@ -124,7 +125,7 @@ def mostrar_pizarra():
     if df_notas.empty:
         st.info("🎉 ¡Pizarra limpia! No tienes recordatorios pendientes por hacer.")
     else:
-        # Usamos columnas a nivel raíz (máximo 3 columnas para PC, se adapta a 1 en celular)
+        # Usamos columnas a nivel raíz (un solo nivel de columnas, totalmente permitido)
         grid_cols = st.columns(3)
         
         for index, row in df_notas.iterrows():
@@ -179,37 +180,37 @@ def mostrar_pizarra():
                     unsafe_allow_html=True
                 )
                 
-                # --- BOTONES DE CONTROL DE LA NOTA ---
-                c_btn1, c_btn2 = st.columns(2)
-                
-                # Completar
-                if c_btn1.button(f"✅ Hecho #{n_id}", use_container_width=True):
-                    if completar_nota_db(n_id):
-                        st.toast("✅ ¡Completado!", icon="👍")
-                        time.sleep(1)
-                        st.rerun()
-                        
-                # Menú de edición/eliminación en acordeón pequeño
-                with c_btn2.expander("⚙️ Opciones"):
-                    # Google Calendar
-                    st.markdown(f'<a href="{g_cal_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#4285F4; color:white; border:none; padding:5px; border-radius:3px; cursor:pointer; font-size:11px; margin-bottom:5px;">📅 Google Calendar</button></a>', unsafe_allow_html=True)
-                    # WhatsApp
-                    st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:5px; border-radius:3px; cursor:pointer; font-size:11px; margin-bottom:10px;">💬 WhatsApp Dueña</button></a>', unsafe_allow_html=True)
+                # --- MENÚ DE CONTROL ÚNICO (Evita el error de anidación) ---
+                with st.popover("⚙️ Acciones / Control", use_container_width=True):
+                    # 1. Marcar como completada
+                    if st.button("✅ Marcar como Hecho", key=f"btn_done_{n_id}", use_container_width=True, type="primary"):
+                        if completar_nota_db(n_id):
+                            st.toast("✅ ¡Completado!", icon="👍")
+                            time.sleep(1)
+                            st.rerun()
+
+                    st.markdown("---")
+                    st.markdown("**🔗 Sincronizaciones**")
+                    # 2. Google Calendar
+                    st.markdown(f'<a href="{g_cal_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#4285F4; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-size:13px; font-weight:bold; margin-bottom:8px;">📅 Google Calendar</button></a>', unsafe_allow_html=True)
+                    # 3. WhatsApp
+                    st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-size:13px; font-weight:bold; margin-bottom:8px;">💬 WhatsApp Dueña</button></a>', unsafe_allow_html=True)
                     
                     st.markdown("---")
-                    # Editar
-                    with st.popover("✏️ Editar Nota", use_container_width=True):
+                    st.markdown("**✏️ Edición e Historial**")
+                    # 4. Formulario de Edición en Expander
+                    with st.expander("✏️ Editar contenido"):
                         e_titulo = st.text_input("Título:", value=titulo_nota, key=f"edit_tit_{n_id}")
                         e_content = st.text_area("Detalles:", value=contenido_nota, key=f"edit_cont_{n_id}")
                         e_fecha = st.date_input("Fecha límite:", value=fecha_lim, key=f"edit_date_{n_id}")
-                        if st.button("💾 Guardar", key=f"btn_save_edit_{n_id}", use_container_width=True):
+                        if st.button("💾 Guardar cambios", key=f"btn_save_edit_{n_id}", use_container_width=True):
                             if actualizar_nota_db(n_id, e_titulo, e_content, e_fecha):
-                                st.success("Guardado.")
+                                st.success("Guardado con éxito.")
                                 time.sleep(1)
                                 st.rerun()
                                 
-                    # Eliminar permanentemente
-                    if st.button("❌ Eliminar Nota", key=f"btn_del_{n_id}", use_container_width=True, type="primary"):
+                    # 5. Eliminar nota permanentemente
+                    if st.button("🗑️ Eliminar Nota", key=f"btn_del_{n_id}", use_container_width=True, type="secondary"):
                         if eliminar_nota_db(n_id):
                             st.toast("Nota eliminada.")
                             time.sleep(1)
