@@ -1,14 +1,16 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import urllib.parse
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def cargar_notas_db():
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
+        # Cargamos las notas que no han sido completadas
         res = conn.table("pizarra_recordatorios").select("*").eq("completada", False).order("fecha_limite", desc=False).execute()
         return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception as e:
@@ -20,7 +22,7 @@ def guardar_nota_db(titulo, contenido, fecha_limite):
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     datos = {
         "titulo": limpiar_texto_para_busqueda(titulo),
-        "contenido": limpiar_texto_para_busqueda(contenido) if contenido else "",
+        "contenido": contenido.strip() if contenido else "",
         "fecha_limite": fecha_limite.strftime("%Y-%m-%d"),
         "completada": False
     }
@@ -31,6 +33,22 @@ def guardar_nota_db(titulo, contenido, fecha_limite):
     except Exception as e:
         log_error("vista_pizarra", "guardar_nota_db", e, email_usuario)
         return False, str(e)
+
+def actualizar_nota_db(nota_id, titulo, contenido, fecha_limite):
+    conn = get_db_connection()
+    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    datos = {
+        "titulo": limpiar_texto_para_busqueda(titulo),
+        "contenido": contenido.strip() if contenido else "",
+        "fecha_limite": fecha_limite.strftime("%Y-%m-%d")
+    }
+    try:
+        conn.table("pizarra_recordatorios").update(datos).eq("nota_id", nota_id).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        log_error("vista_pizarra", "actualizar_nota_db", e, email_usuario)
+        return False
 
 def completar_nota_db(nota_id):
     conn = get_db_connection()
@@ -43,12 +61,45 @@ def completar_nota_db(nota_id):
         log_error("vista_pizarra", "completar_nota_db", e, email_usuario)
         return False
 
+def eliminar_nota_db(nota_id):
+    conn = get_db_connection()
+    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    try:
+        conn.table("pizarra_recordatorios").delete().eq("nota_id", nota_id).execute()
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        log_error("vista_pizarra", "eliminar_nota_db", e, email_usuario)
+        return False
+
 def mostrar_pizarra():
     st.title("📌 Pizarra de Recordatorios")
     st.markdown("---")
 
     df_notas = cargar_notas_db()
     hoy = datetime.now().date()
+
+    # --- BARRA LATERAL: CREACIÓN DE NOTAS ---
+    with st.sidebar:
+        st.markdown("### ➕ Clavar Nuevo Post-it")
+        with st.container(border=True):
+            n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy", key="new_note_title")
+            n_contenido = st.text_area("Detalles o notas adicionales:", placeholder="Ej: Comprar de 180g...", key="new_note_content")
+            n_fecha = st.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
+            
+            st.write("")
+            if st.button("📌 Clavar Nota", type="primary", use_container_width=True):
+                if not n_titulo:
+                    st.error("Por favor, ingresa el título del recordatorio.")
+                else:
+                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha)
+                    if ok:
+                        st.success("✅ ¡Nota clavada con éxito!")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {err}")
 
     # --- CONTROL DE ALERTAS DE ALTA INTENSIDAD (MOLESTAR) ---
     notas_vencidas = []
@@ -62,84 +113,104 @@ def mostrar_pizarra():
             <div style="background-color:#ffebee; border:2px solid #f44336; padding:15px; border-radius:8px; margin-bottom:25px; text-align:center;">
                 <h3 style="color:#c62828; margin:0;">⚠️ ¡ATENCIÓN IVONNE! Tienes {len(notas_vencidas)} recordatorios vencidos ⚠️</h3>
                 <p style="color:#b71c1c; margin:5px 0 0 0; font-weight:bold; font-size:15px;">
-                    ¡Deja de postergar tus tareas! Revisa los Post-its rojos y complétalos ahora mismo.
+                    ¡Deja de postergar tus tareas! Revisa los Post-its rojos y complétalos hoy mismo.
                 </p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    # Distribución en dos columnas: Entrada de notas (Izquierda) y Pizarra (Derecha)
-    col_crear, col_board = st.columns([1, 2])
-
-    with col_crear:
-        st.markdown("### ➕ Clavar Nuevo Post-it")
-        with st.container(border=True):
-            n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy")
-            n_contenido = st.text_area("Detalles o notas adicionales:", placeholder="Ej: Comprar de 180g en la tienda del centro...")
-            n_fecha = st.date_input("¿Para cuándo es?:", value=datetime.now())
+    # --- TABLERO PRINCIPAL DE POST-ITS (SIN ANIDAR COLUMNAS) ---
+    if df_notas.empty:
+        st.info("🎉 ¡Pizarra limpia! No tienes recordatorios pendientes por hacer.")
+    else:
+        # Usamos columnas a nivel raíz (máximo 3 columnas para PC, se adapta a 1 en celular)
+        grid_cols = st.columns(3)
+        
+        for index, row in df_notas.iterrows():
+            col_target = grid_cols[index % 3]
+            n_id = row['nota_id']
+            fecha_lim = row['fecha_dt']
+            titulo_nota = row['titulo']
+            contenido_nota = row['contenido']
             
-            st.write("")
-            if st.button("📌 Clavar Nota", type="primary", use_container_width=True):
-                if not n_titulo:
-                    st.error("Por favor, ingresa el título del recordatorio.")
-                else:
-                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha)
-                    if ok:
-                        st.success("✅ ¡Nota clavada con éxito!")
-                        st.balloons()
-                        time.sleep(1.2)
-                        st.rerun()
-                    else:
-                        st.error(f"Error al guardar: {err}")
+            # Definir color del Post-it según urgencia
+            if fecha_lim < hoy:
+                bg_color = "#ffcdd2"
+                border_color = "#e53935"
+                text_color = "#b71c1c"
+                badge = "⏰ ¡VENCIDO!"
+            elif fecha_lim == hoy:
+                bg_color = "#ffe0b2"
+                border_color = "#fb8c00"
+                text_color = "#e65100"
+                badge = "🔥 ¡PARA HOY!"
+            else:
+                bg_color = "#fff9c4"
+                border_color = "#fdd835"
+                text_color = "#f57f17"
+                badge = f"📅 {fecha_lim.strftime('%d/%m/%Y')}"
 
-    with col_board:
-        st.markdown("### 📋 Tus Post-its Activos")
-        if df_notas.empty:
-            st.info("🎉 ¡Pizarra limpia! No tienes recordatorios pendientes por hacer.")
-        else:
-            # Renderizamos las notas en una grilla de columnas dinámica (2 post-its por fila)
-            grid_cols = st.columns(2)
+            # --- PREPARACIÓN DE ENLACES EXTERNOS ---
+            # 1. Google Calendar URL
+            f_cal_str = fecha_lim.strftime("%Y%m%d")
+            g_cal_url = (
+                f"https://www.google.com/calendar/render?action=TEMPLATE"
+                f"&text={urllib.parse.quote(titulo_nota)}"
+                f"&dates={f_cal_str}/{f_cal_str}"
+                f"&details={urllib.parse.quote(contenido_nota)}"
+                f"&sf=true&output=xml"
+            )
             
-            for index, row in df_notas.iterrows():
-                col_target = grid_cols[index % 2]
-                n_id = row['nota_id']
-                fecha_lim = row['fecha_dt']
+            # 2. WhatsApp Auto-Recordatorio (Número de la dueña de los secrets)
+            dueña_tel = st.secrets.get("catalogo_publico", {}).get("whatsapp_numero", "56963531241")
+            msg_wa = f"📌 RECORDATORIO ALBA: {titulo_nota} - {contenido_nota} (Fecha Límite: {fecha_lim.strftime('%d/%m/%Y')})"
+            wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel}&text={urllib.parse.quote(msg_wa)}"
+
+            with col_target:
+                st.markdown(
+                    f"""
+                    <div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                        <span style="background-color:{border_color}; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">{badge}</span>
+                        <h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:17px;">{titulo_nota}</h4>
+                        <p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{contenido_nota}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
                 
-                # Definir color del Post-it según urgencia
-                if fecha_lim < hoy:
-                    # VENCIDO (Rojo)
-                    bg_color = "#ffcdd2"
-                    border_color = "#e53935"
-                    text_color = "#b71c1c"
-                    badge = "⏰ ¡VENCIDO!"
-                elif fecha_lim == hoy:
-                    # HOY (Naranja)
-                    bg_color = "#ffe0b2"
-                    border_color = "#fb8c00"
-                    text_color = "#e65100"
-                    badge = "🔥 ¡PARA HOY!"
-                else:
-                    # FUTURO (Amarillo tradicional)
-                    bg_color = "#fff9c4"
-                    border_color = "#fdd835"
-                    text_color = "#f57f17"
-                    badge = f"📅 {fecha_lim.strftime('%d/%m/%Y')}"
-
-                with col_target:
-                    st.markdown(
-                        f"""
-                        <div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:15px; min-height:160px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
-                            <span style="background-color:{border_color}; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">{badge}</span>
-                            <h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:18px;">{row['titulo']}</h4>
-                            <p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{row['contenido']}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    # Botón para completar y archivar la nota
-                    if st.button(f"🗑️ Listo / Quitar #{n_id}", key=f"btn_done_{n_id}", use_container_width=True):
-                        if completar_nota_db(n_id):
-                            st.toast("✅ ¡Recordatorio archivado!", icon="👍")
+                # --- BOTONES DE CONTROL DE LA NOTA ---
+                c_btn1, c_btn2 = st.columns(2)
+                
+                # Completar
+                if c_btn1.button(f"✅ Hecho #{n_id}", use_container_width=True):
+                    if completar_nota_db(n_id):
+                        st.toast("✅ ¡Completado!", icon="👍")
+                        time.sleep(1)
+                        st.rerun()
+                        
+                # Menú de edición/eliminación en acordeón pequeño
+                with c_btn2.expander("⚙️ Opciones"):
+                    # Google Calendar
+                    st.markdown(f'<a href="{g_cal_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#4285F4; color:white; border:none; padding:5px; border-radius:3px; cursor:pointer; font-size:11px; margin-bottom:5px;">📅 Google Calendar</button></a>', unsafe_allow_html=True)
+                    # WhatsApp
+                    st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:5px; border-radius:3px; cursor:pointer; font-size:11px; margin-bottom:10px;">💬 WhatsApp Dueña</button></a>', unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    # Editar
+                    with st.popover("✏️ Editar Nota", use_container_width=True):
+                        e_titulo = st.text_input("Título:", value=titulo_nota, key=f"edit_tit_{n_id}")
+                        e_content = st.text_area("Detalles:", value=contenido_nota, key=f"edit_cont_{n_id}")
+                        e_fecha = st.date_input("Fecha límite:", value=fecha_lim, key=f"edit_date_{n_id}")
+                        if st.button("💾 Guardar", key=f"btn_save_edit_{n_id}", use_container_width=True):
+                            if actualizar_nota_db(n_id, e_titulo, e_content, e_fecha):
+                                st.success("Guardado.")
+                                time.sleep(1)
+                                st.rerun()
+                                
+                    # Eliminar permanentemente
+                    if st.button("❌ Eliminar Nota", key=f"btn_del_{n_id}", use_container_width=True, type="primary"):
+                        if eliminar_nota_db(n_id):
+                            st.toast("Nota eliminada.")
                             time.sleep(1)
                             st.rerun()
