@@ -868,19 +868,38 @@ def mostrar_caja():
     with tab_alertas:
         st.markdown("### 🚨 Control de Envíos en Olvido (>5 días)")
         
-        # Alerta visual muy molesta y persistente
-        st.markdown(
-            """
-            <div style="background-color:#ffdde1; border:3px solid #ff4b4b; padding:15px; border-radius:10px; text-align:center; margin-bottom:20px;">
-                <h2 style="color:#ff4b4b; margin:0; font-size:32px;">🔥 ¡BODEGA EN CRISIS! 🔥</h2>
-                <p style="color:#d00000; font-weight:bold; margin:5px 0 0 0; font-size:16px;">
-                    Tienes pedidos creados hace más de 5 días que aún no han sido armados. 
-                    ¡La dueña debe ponerse a embalar hoy mismo!
-                </p>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+        # Comprobar si hay pedidos retrasados antes de pintar el hámster molesto
+        df_alertas_temporal = df_ventas_global.copy()
+        df_alertas_temporal['fecha_dt'] = pd.to_datetime(df_alertas_temporal['fecha_venta'], errors='coerce')
+        hoy_datetime = datetime.now()
+        df_alertas_temporal['dias_antiguedad'] = (hoy_datetime - df_alertas_temporal['fecha_dt']).dt.days
+        
+        df_olvidados = df_alertas_temporal[
+            (df_alertas_temporal['dias_antiguedad'] > 5) & 
+            (~df_alertas_temporal['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+        ].copy()
+        
+        if not df_olvidados.empty:
+            col_c_b1, col_c_b2 = st.columns([1, 2.5])
+            with col_c_b1:
+                st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
+            with col_c_b2:
+                st.markdown(
+                    """
+                    <div style="background-color:#ffdde1; border:3px solid #ff4b4b; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                        <h2 style="color:#ff4b4b; margin:0; font-size:26px;">🐹💤 ¡BODEGA EN CRISIS!</h2>
+                        <p style="color:#d00000; font-size:18px; font-weight:bold; margin:8px 0 0 0;">
+                            ¡Ivonne, deja de dormir y ponte a trabajar!
+                        </p>
+                        <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
+                            Hay pedidos con más de 5 días de retraso esperando que los prepares. ¡A envolver paquetes! 📦📦
+                        </p>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+            st.markdown("---")
+
         
         if df_ventas_global.empty:
             st.success("🎉 ¡Felicidades! Todo el catálogo está al día y armado.")
