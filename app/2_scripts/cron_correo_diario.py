@@ -13,12 +13,10 @@ def cargar_secretos_streamlit():
     secrets_path = Path(".streamlit/secrets.toml")
     if secrets_path.exists():
         try:
-            # Intentamos usar el parser nativo de Python 3.11+
             import tomllib
             with open(secrets_path, "rb") as f:
                 secrets = tomllib.load(f)
         except Exception:
-            # Fallback: Parser manual ultra-liviano para cualquier versión de Python
             with open(secrets_path, "r", encoding="utf-8") as f:
                 section = None
                 for line in f:
@@ -31,7 +29,7 @@ def cargar_secretos_streamlit():
                         k, v = line.split("=", 1)
                         k, v = k.strip(), v.strip().strip('"').strip("'")
                         if section:
-                            if "." in section: # Manejo de conexiones anidadas
+                            if "." in section:
                                 s1, s2 = section.split(".", 1)
                                 if s1 not in secrets: secrets[s1] = {}
                                 if s2 not in secrets[s1]: secrets[s1][s2] = {}
@@ -43,28 +41,48 @@ def cargar_secretos_streamlit():
                             secrets[k] = v
     return secrets
 
+# --- FUNCIÓN DE PARSEO DE FECHAS A PRUEBA DE BALAS ---
+def unificar_formatos_fecha(serie_fechas):
+    def parsear_valor(val):
+        if pd.isna(val) or not str(val).strip() or str(val).strip().lower() in ['nan', 'nat']:
+            return pd.NaT
+        val_str = str(val).strip()
+        try:
+            if 't' in val_str.lower() or '+' in val_str:
+                return pd.to_datetime(val_str).tz_localize(None)
+            if len(val_str.split('-')[0]) == 4 or len(val_str.split('/')[0]) == 4:
+                return pd.to_datetime(val_str, dayfirst=False, errors='coerce').tz_localize(None)
+            else:
+                return pd.to_datetime(val_str, dayfirst=True, errors='coerce').tz_localize(None)
+        except Exception:
+            try:
+                return pd.to_datetime(val_str, errors='coerce').tz_localize(None)
+            except Exception:
+                return pd.NaT
+    try:
+        return serie_fechas.apply(parsear_valor)
+    except Exception:
+        return pd.to_datetime(serie_fechas, errors='coerce').dt.tz_localize(None)
+
 # 1. Cargar secretos e inicializar variables
 st_secrets = cargar_secretos_streamlit()
 
 SUPABASE_URL = st_secrets.get("connections", {}).get("supabase", {}).get("url") or os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = st_secrets.get("connections", {}).get("supabase", {}).get("key") or os.environ.get("SUPABASE_KEY")
 
-# Carga dinámica y confidencial de parámetros (Ningún correo hardcodeado en el código)
 EMAIL_EMISOR = st_secrets.get("email", {}).get("remitente") or os.environ.get("EMAIL_EMISOR")
 EMAIL_RECEPTOR = st_secrets.get("email", {}).get("dest_admin") or os.environ.get("EMAIL_RECEPTOR")
 EMAIL_PASSWORD = st_secrets.get("email", {}).get("password") or os.environ.get("EMAIL_PASSWORD")
 
-
-# Datos del servidor de correo
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
 def generar_reporte_empaque():
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("Error: No se encontraron las credenciales de conexión a Supabase.")
+        print("❌ Error de configuración: No se encontraron las credenciales de Supabase.")
         return
-    if not EMAIL_PASSWORD:
-        print("Error: No se encontró la contraseña del correo emisor (password).")
+    if not EMAIL_EMISOR or not EMAIL_RECEPTOR or not EMAIL_PASSWORD:
+        print("❌ Error de configuración: Faltan las credenciales SMTP o las direcciones de correo.")
         return
 
     # Inicializar cliente de Supabase
@@ -77,11 +95,14 @@ def generar_reporte_empaque():
         return
         
     df = pd.DataFrame(res.data)
-    # Parsear y remover de forma segura la zona horaria (Timezone Naive)
-    df['fecha_dt'] = pd.to_datetime(df['fecha_venta'], errors='coerce').dt.tz_localize(None)
+    
+    # 🌟 CORRECCIÓN: Aplicamos el parseador unificado
+    df['fecha_dt'] = unificar_formatos_fecha(df['fecha_venta'])
     hoy = datetime.now()
-    df['dias'] = (hoy - df['fecha_dt']).dt.days
-
+    
+    df['dias'] = df['fecha_dt'].apply(
+        lambda x: (hoy - x).days if pd.notna(x) else 0
+    )
     
     # Filtrar pedidos con más de 5 días creados sin armar
     df_criticas = df[
@@ -150,9 +171,9 @@ def generar_reporte_empaque():
         server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
         server.sendmail(EMAIL_EMISOR, EMAIL_RECEPTOR, msg.as_string())
         server.quit()
-        print("Reporte de empaque enviado exitosamente por correo.")
+        print(f"✅ ¡Éxito! Reporte enviado con {len(df_criticas)} pedidos pendientes detectados.")
     except Exception as e:
-        print(f"Error crítico al enviar correo por SMTP: {e}")
+        print(f"❌ Error crítico al enviar correo por SMTP: {e}")
 
 if __name__ == "__main__":
     generar_reporte_empaque()
