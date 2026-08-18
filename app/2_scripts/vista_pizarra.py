@@ -125,25 +125,34 @@ def mostrar_pizarra():
         notas_vencidas = df_notas[df_notas['fecha_dt'] < hoy].copy()
 
         if len(notas_vencidas) > 0:
-        # Inyectamos CSS para un parpadeo de alerta extremadamente molesto
+            # Calcular el peor retraso de la pizarra
+            df_notas_vencidas = df_notas[df_notas['fecha_dt'] < hoy].copy()
+            df_notas_vencidas['retraso'] = df_notas_vencidas['fecha_dt'].apply(lambda x: (hoy - x).days)
+            peor_retraso = df_notas_vencidas['retraso'].max()
+            
+            if peor_retraso > 14:
+                drama_msg = f"Hola Ivonne... Veo que ignoras esta tarea desde hace {peor_retraso} días. Está bien, supongo que el papel glossy no era tan importante... El hámster se siente muy decepcionado de ti. 🐹💔"
+            else:
+                drama_msg = "Ivonne, la flojera te está ganando. Tienes cosas pendientes que debías hacer AYER. ¡Muévete antes de que el hámster se enoje de verdad! 🐹💢"
+
             st.markdown(
-            f"""
-            <div style="background-color:#ffebee; border:3px dashed #ef5350; padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; animation: parpadeo 1.5s infinite;">
-                <h3 style="color:#c62828; margin:0; font-size:20px;">🚨 ¡PÁNICO EN LA PIZARRA! Tienes {len(notas_vencidas)} tareas vencidas 🚨</h3>
-                <p style="color:#b71c1c; margin:5px 0 0 0; font-weight:bold; font-size:14px;">
-                    Ivonne, la flojera te está ganando. Tienes cosas pendientes que debías hacer AYER. ¡Muévete antes de que el hámster se enoje de verdad! 🐹💢
-                </p>
-            </div>
-            <style>
-                @keyframes parpadeo {{
-                    0% {{ opacity: 1.0; border-color: #ef5350; }}
-                    50% {{ opacity: 0.5; border-color: transparent; }}
-                    100% {{ opacity: 1.0; border-color: #ef5350; }}
-                }}
-            </style>
-            """, 
-            unsafe_allow_html=True
-        )
+                f"""
+                <div style="background-color:#ffebee; border:2px dashed #ef5350; padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; animation: parpadeo 1.5s infinite;">
+                    <h3 style="color:#c62828; margin:0; font-size:20px;">🚨 ¡PÁNICO EN LA PIZARRA! Tienes {len(notas_vencidas)} tareas vencidas 🚨</h3>
+                    <p style="color:#b71c1c; margin:5px 0 0 0; font-weight:bold; font-size:14px;">
+                        {drama_msg}
+                    </p>
+                </div>
+                <style>
+                    @keyframes parpadeo {{
+                        0% {{ opacity: 1.0; border-color: #ef5350; }}
+                        50% {{ opacity: 0.5; border-color: transparent; }}
+                        100% {{ opacity: 1.0; border-color: #ef5350; }}
+                    }}
+                </style>
+                """, 
+                unsafe_allow_html=True
+            )
 
 
     # --- SECCIÓN SUPERIOR DE CREACIÓN (Ubicada en la pantalla principal) ---

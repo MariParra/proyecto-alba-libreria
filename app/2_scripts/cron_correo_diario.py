@@ -121,14 +121,32 @@ def generar_reporte_empaque():
     # ================= PARTE 3: CONSTRUCCIÓN DEL CORREO EN HTML CON HÁMSTERS DINÁMICOS =================
     total_retrasos = len(df_criticas) + len(df_notas_vencidas)
     
+    # ================= MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
     # Selección de imagen y mensaje según el estado de los pendientes
+    max_dias_retraso = 0
+    if not df_criticas.empty:
+        max_dias_retraso = max(max_dias_retraso, df_criticas['dias'].max())
+    if not df_notas_vencidas.empty:
+        # Calcular días de retraso de la pizarra
+        df_notas_vencidas['dias_vencida'] = df_notas_vencidas['fecha_limite_dt'].apply(lambda x: (hoy.date() - x).days)
+        max_dias_retraso = max(max_dias_retraso, df_notas_vencidas['dias_vencida'].max())
+
     if total_retrasos > 0:
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
         header_color = "#d32f2f"
         border_style = "2px solid #ff4b4b"
         card_bg = "#ffebee"
-        msg_titulo = "🚨 ¡EL HÁMSTER TE VIGILA! 🚨"
-        msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
+        
+        # Nivel de Drama Duolingo según el peor retraso
+        if max_dias_retraso > 14:
+            msg_titulo = "😭 ESTAS ALERTAS NO SIRVEN... NOS RENDIMOS 😭"
+            msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. Hemos decidido dejar de insistir... mentira, ¡PONTE A TRABAJAR YA! El hámster está llorando en un rincón de la bodega. 🐹💔"
+        elif max_dias_retraso > 7:
+            msg_titulo = "👁️ ¿HOLA? ¿HAY ALGUIEN AHÍ? TUS LIBROS TE EXTRAÑAN... 👁️"
+            msg_cuerpo = f"¡Ivonne! Llevas {max_dias_retraso} días ignorando tus deberes. El hámster está preparando sus maletas para irse de Alba Librería. Por favor, completa tus pendientes hoy. 📦🐹"
+        else:
+            msg_titulo = "🚨 RECORDATORIO DIARIO DE PRODUCTIVIDAD 🚨"
+            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
     else:
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamstertrabajando.jpg"
         header_color = "#2e7d32"
@@ -229,7 +247,8 @@ def generar_reporte_empaque():
     
     # Asunto dinámico según el tipo de desastre
     total_retrasos = len(df_criticas) + len(df_notas_vencidas)
-    msg['Subject'] = f"🚨 ALBA BODEGA: Tienes {total_retrasos} Pendientes Críticos - {hoy.strftime('%d/%m/%Y')}"
+    msg['Subject'] = f"{msg_titulo} ({total_retrasos} pendientes) - {hoy.strftime('%d/%m/%Y')}"
+
     msg.attach(MIMEText(html_content, 'html'))
     
     try:
