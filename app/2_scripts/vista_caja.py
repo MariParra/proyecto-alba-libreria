@@ -38,6 +38,7 @@ def unificar_formatos_fecha(serie_fechas):
         # Como último recurso, devuelve la serie original parseada de forma genérica
         return pd.to_datetime(serie_fechas, errors='coerce')
 
+@st.cache_data(ttl=300)
 def cargar_libros_caja():
     conn = get_db_connection()
     try:
@@ -53,6 +54,7 @@ def cargar_libros_caja():
         st.error("Error crítico: No se pudo cargar el catálogo de libros.")
         return pd.DataFrame()
 
+@st.cache_data(ttl=300)
 def cargar_clientes_caja():
     conn = get_db_connection()
     try:
@@ -63,6 +65,7 @@ def cargar_clientes_caja():
         st.error("Error crítico: No se pudo cargar el listado de clientes.")
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
+@st.cache_data(ttl=300)
 def cargar_listas_desplegables_caja():
     """Obtiene Autores y Editoriales únicos para los desplegables de caja."""
     conn = get_db_connection()
@@ -108,6 +111,7 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
         log_error("vista_caja", "gestionar_cliente", f"Error: {e}", st.session_state.get('email_usuario', 'Desconocido'))
         return None, f"No se pudo {'actualizar' if cliente_id_existente else 'crear'} al cliente '{nombre}'. Detalle: {e}"
 
+@st.cache_data(ttl=300)
 def cargar_historial_completo():
     conn = get_db_connection()
     try:

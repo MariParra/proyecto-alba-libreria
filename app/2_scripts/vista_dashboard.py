@@ -5,7 +5,7 @@ import json
 from utilidades import get_db_connection, log_error
 
 # Esta función ya está bien, la mantenemos
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def cargar_datos_base():
     """Carga los datos crudos desde la base de datos."""
     conn = get_db_connection()

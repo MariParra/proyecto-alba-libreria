@@ -144,6 +144,7 @@ def obtener_ids_libros_poseidos_por_cliente(cliente_id):
         print(f"Error crítico al obtener libros poseídos (ID Cliente: {cliente_id}): {e}")
         return set()
     
+@st.cache_data(ttl=120)  
 def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock=False, usar_historica=False):
     """
     Carga los libros disponibles para un cliente, aplicando la jerarquía de preferencias:
@@ -195,6 +196,7 @@ def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock
         return cargar_catalogo_completo_libros(incluir_sin_stock), []
 
 # --- 🚀 CARGA DE ASIGNACIONES OPTIMIZADA EN SEGUNDOS (FILTRADO EN BD) ---
+@st.cache_data(ttl=120)
 def cargar_asignaciones_mes(ano, mes):
     conn = get_db_connection()
     try:

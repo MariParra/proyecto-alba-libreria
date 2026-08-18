@@ -93,7 +93,7 @@ def obtener_historial_completo(cliente_id):
         st.error(f"No se pudo cargar el historial completo del cliente. Error: {e}")
         return pd.DataFrame(columns=columnas_finales) # Devolvemos DF vacío en caso de fallo
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def cargar_todos_los_clientes():
     conn = get_db_connection()
     res = conn.table("clientes").select("*").order("nombre").execute()
