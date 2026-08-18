@@ -969,7 +969,7 @@ def mostrar_caja():
                             # Botón de Oro: Apagar la alarma cambiando el estado a PAQUETE LISTO en Supabase
                             if st.button(f"✅ ¡YA LO ARMÉ! #{v_id}", type="primary", use_container_width=True, key=f"btn_armado_{v_id}"):
                                 try:
-                                    conn.table("registro_ventas").update({"estado": "PAQUETE LISTO"}).eq("venta_id", v_id).execute()
+                                    conn.table("registro_ventas").update({"estado": "FINALIZADO"}).eq("venta_id", v_id).execute()
                                     st.success(f"¡Orden #{v_id} empaquetada!")
                                     st.balloons()
                                     time.sleep(1)
