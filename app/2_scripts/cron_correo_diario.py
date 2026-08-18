@@ -1,7 +1,5 @@
 import os
 import smtplib
-import requests
-import time  # <-- Soportar el retraso de 1 hora
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -9,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from supabase import create_client
 
-# --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS ---
+# --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS (.toml) ---
 def cargar_secretos_streamlit():
     secrets = {}
     secrets_path = Path(".streamlit/secrets.toml")
@@ -76,45 +74,8 @@ EMAIL_EMISOR = st_secrets.get("email", {}).get("remitente") or os.environ.get("E
 EMAIL_RECEPTOR = st_secrets.get("email", {}).get("dest_admin") or os.environ.get("EMAIL_RECEPTOR")
 EMAIL_PASSWORD = st_secrets.get("email", {}).get("password") or os.environ.get("EMAIL_PASSWORD")
 
-WHATSAPP_PHONE_ID = st_secrets.get("whatsapp", {}).get("phone_id") or os.environ.get("WHATSAPP_PHONE_ID")
-WHATSAPP_TOKEN = st_secrets.get("whatsapp", {}).get("token") or os.environ.get("WHATSAPP_TOKEN")
-WHATSAPP_RECEPTOR = st_secrets.get("catalogo_publico", {}).get("whatsapp_numero") or os.environ.get("WHATSAPP_RECEPTOR")
-
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-
-def enviar_whatsapp_api_meta(destinatario, mensaje):
-    """Envía la alerta por la API de WhatsApp de Meta."""
-    if not WHATSAPP_PHONE_ID or not WHATSAPP_TOKEN:
-        print("⚠️ WhatsApp omitido: Credenciales de Meta incompletas.")
-        return False
-
-    url = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": destinatario,
-        "type": "text",
-        "text": {
-            "preview_url": False,
-            "body": mensaje
-        }
-    }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            print("✅ ¡WhatsApp de recordatorio enviado con éxito!")
-            return True
-        else:
-            print(f"❌ Error de la API de Meta: {response.json()}")
-            return False
-    except Exception as e:
-        print(f"❌ Fallo de conexión con Meta: {e}")
-        return False
 
 def generar_reporte_empaque():
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -126,6 +87,7 @@ def generar_reporte_empaque():
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     hoy = datetime.now()
+    hoy_str = hoy.strftime("%Y-%m-%d")
 
     # ================= PARTE 1: CONSULTA DE ENVÍOS PENDIENTES =================
     res_ventas = supabase.table("registro_ventas").select("venta_id, fecha_venta, estado, libros_vendidos, cliente:clientes(nombre)").execute()
@@ -151,62 +113,70 @@ def generar_reporte_empaque():
         df_notas['fecha_limite_dt'] = pd.to_datetime(df_notas['fecha_limite']).dt.date
         df_notas_vencidas = df_notas[df_notas['fecha_limite_dt'] < hoy.date()].copy()
 
-    total_retrasos = len(df_criticas) + len(df_notas_vencidas)
-
-    # Si no hay nada pendiente, no molestamos
-    if total_retrasos == 0:
+    # Si no hay absolutamente nada pendiente, abortamos el envío para no molestar por gusto
+    if df_criticas.empty and df_notas_vencidas.empty:
         print("🟢 Todo al día. No se requiere enviar reporte de alertas hoy.")
         return
 
-    # Calcular peor retraso para la escala de drama Duolingo
+    # ================= PARTE 3: CONSTRUCCIÓN DEL CORREO EN HTML CON HÁMSTERS DINÁMICOS =================
+    total_retrasos = len(df_criticas) + len(df_notas_vencidas)
+    
+    # ================= MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
+    # Selección de imagen y mensaje según el estado de los pendientes
     max_dias_retraso = 0
     if not df_criticas.empty:
         max_dias_retraso = max(max_dias_retraso, df_criticas['dias'].max())
     if not df_notas_vencidas.empty:
+        # Calcular días de retraso de la pizarra
         df_notas_vencidas['dias_vencida'] = df_notas_vencidas['fecha_limite_dt'].apply(lambda x: (hoy.date() - x).days)
         max_dias_retraso = max(max_dias_retraso, df_notas_vencidas['dias_vencida'].max())
 
-    # ================= PARTE 3: DEFINICIÓN DE MENSAJES DUOLINGO =================
-    if max_dias_retraso > 14:
+    if total_retrasos > 0:
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
         header_color = "#d32f2f"
         border_style = "2px solid #ff4b4b"
         card_bg = "#ffebee"
-        msg_titulo = "😭 ESTAS ALERTAS NO SIRVEN... NOS RENDIMOS 😭"
-        msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. Hemos decidido dejar de insistir... mentira, ¡PONTE A TRABAJAR YA! El hámster está llorando en un rincón de la bodega. 🐹💔"
-    elif max_dias_retraso > 7:
-        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
-        header_color = "#d32f2f"
-        border_style = "2px solid #ff4b4b"
-        card_bg = "#ffebee"
-        msg_titulo = "👁️ ¿HOLA? ¿HAY ALGUIEN AHÍ? TUS LIBROS TE EXTRAÑAN... 👁️"
-        msg_cuerpo = f"¡Ivonne! Llevas {max_dias_retraso} días ignorando tus deberes. El hámster está preparando sus maletas para irse de Alba Librería. Por favor, completa tus deudas y empaques hoy. 📦🐹"
+        
+        # Nivel de Drama Duolingo según el peor retraso
+        if max_dias_retraso > 14:
+            msg_titulo = "😭 ESTAS ALERTAS NO SIRVEN... NOS RENDIMOS 😭"
+            msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. Hemos decidido dejar de insistir... mentira, ¡PONTE A TRABAJAR YA! El hámster está llorando en un rincón de la bodega. 🐹💔"
+        elif max_dias_retraso > 7:
+            msg_titulo = "👁️ ¿HOLA? ¿HAY ALGUIEN AHÍ? TUS LIBROS TE EXTRAÑAN... 👁️"
+            msg_cuerpo = f"¡Ivonne! Llevas {max_dias_retraso} días ignorando tus deberes. El hámster está preparando sus maletas para irse de Alba Librería. Por favor, completa tus pendientes hoy. 📦🐹"
+        else:
+            msg_titulo = "🚨 RECORDATORIO DIARIO DE PRODUCTIVIDAD 🚨"
+            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
     else:
-        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
-        header_color = "#d32f2f"
-        border_style = "2px solid #ff4b4b"
-        card_bg = "#ffebee"
-        msg_titulo = "🚨 ALBA BODEGA: Alerta de Pedidos por Armar 🚨"
-        msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁"
+        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamstertrabajando.jpg"
+        header_color = "#2e7d32"
+        border_style = "2px solid #4caf50"
+        card_bg = "#e8f5e9"
+        msg_titulo = "🐹✨ ¡HAZAÑA COMPLETADA!"
+        msg_cuerpo = "¡Pizarra y bodega limpias! Tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco. ¡El hámster te da luz verde para descansar! 🍹🎉"
 
-    # ================= PARTE 4: CONSTRUCCIÓN Y ENVÍO DEL CORREO =================
     html_content = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
             <div style="max-width: 650px; margin: 0 auto; border: {border_style}; border-radius: 8px; padding: 25px; background-color: #fafafa; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                
+                <!-- Encabezado con imagen del hámster dinámica -->
                 <div style="text-align: center; margin-bottom: 25px;">
-                    <img src="{hamster_img_url}" width="150" style="border-radius: 8px;" />
+                    <img src="{hamster_img_url}" width="150" style="border-radius: 8px; box-shadow: 1px 1px 5px rgba(0,0,0,0.15);" />
                     <h2 style="color: {header_color}; margin: 15px 0 0 0;">{msg_titulo}</h2>
                 </div>
                 
+                <!-- Cuadro de humor personalizado -->
                 <div style="background-color: {card_bg}; padding: 15px; border-radius: 6px; text-align: center; margin-bottom: 25px; border: 1px solid {header_color};">
                     <p style="color: {header_color}; font-size: 16px; font-weight: bold; margin: 0;">{msg_cuerpo}</p>
                 </div>
     """
 
+    # Bloque de Envíos Pendientes (si existen)
     if not df_criticas.empty:
         html_content += f"""
                 <h3 style="color: #c62828; border-bottom: 2px solid #ffcdd2; padding-bottom: 5px;">📦 Armado de Paquetes Demorados (>5 días)</h3>
+                <p>Hay <strong>{len(df_criticas)}</strong> órdenes pendientes que no has empaquetado:</p>
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
                     <thead>
                         <tr style="background-color: #ffebee;">
@@ -232,9 +202,11 @@ def generar_reporte_empaque():
                 </table>
         """
 
+    # Bloque de Pizarra de Recordatorios Vencidos (si existen)
     if not df_notas_vencidas.empty:
         html_content += f"""
                 <h3 style="color: #e65100; border-bottom: 2px solid #ffe0b2; padding-bottom: 5px;">📌 Post-its Vencidos en la Pizarra</h3>
+                <p>Tienes <strong>{len(df_notas_vencidas)}</strong> tareas anotadas cuya fecha límite ya venció:</p>
                 <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
                     <thead>
                         <tr style="background-color: #fff3e0;">
@@ -268,11 +240,15 @@ def generar_reporte_empaque():
     </html>
     """
 
-    # Enviar correo
+    # ================= PARTE 4: ENVÍO DEL CORREO =================
     msg = MIMEMultipart()
     msg['From'] = EMAIL_EMISOR
     msg['To'] = EMAIL_RECEPTOR
+    
+    # Asunto dinámico según el tipo de desastre
+    total_retrasos = len(df_criticas) + len(df_notas_vencidas)
     msg['Subject'] = f"{msg_titulo} ({total_retrasos} pendientes) - {hoy.strftime('%d/%m/%Y')}"
+
     msg.attach(MIMEText(html_content, 'html'))
     
     try:
@@ -281,21 +257,9 @@ def generar_reporte_empaque():
         server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
         server.sendmail(EMAIL_EMISOR, EMAIL_RECEPTOR, msg.as_string())
         server.quit()
-        print("✉️ Correo de alerta diaria enviado con éxito.")
+        print(f"✅ ¡Éxito! Reporte consolidado de {total_retrasos} alertas enviado correctamente.")
     except Exception as e:
         print(f"❌ Error al enviar el correo por SMTP: {e}")
-        return
-
-    # ================= PARTE 5: RETRASO DE 1 HORA PARA EL WHATSAPP =================
-    if WHATSAPP_RECEPTOR:
-        print(f"⏳ Iniciando pausa de 1 hora antes de enviar la alerta por WhatsApp...")
-        time.sleep(3600)  # Pausa de 1 hora exacta (3600 segundos)
-        
-        # Enviar WhatsApp
-        numero_destino = "".join(char for char in str(WHATSAPP_RECEPTOR) if char.isdigit())
-        enviar_whatsapp_api_meta(numero_destino, msg_cuerpo)
-    else:
-        print("⚠️ No se envió WhatsApp: Falta configurar el número receptor (WHATSAPP_RECEPTOR).")
 
 if __name__ == "__main__":
     generar_reporte_empaque()
