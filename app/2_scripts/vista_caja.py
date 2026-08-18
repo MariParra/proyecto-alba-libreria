@@ -187,15 +187,15 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         response = conn.table("libros").insert(datos).execute()
         return response.data[0]['libro_id']
 
-def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, asignacion_id=None):
+def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, asignacion_id=None, venta_id_asociada=None):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     
-    libros_para_json = []
+    libros_nuevos_list = []
     costo_total_venta = 0.0
 
     for item in carrito:
-        libros_para_json.append({
+        libros_nuevos_list.append({
             "libro_id": item['libro_id'], "titulo": item['titulo'], "autor": item['autor'],
             "cantidad": item['cantidad'], "precio": item['precio_cobrado']
         })
@@ -204,21 +204,66 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         costo_total_venta += float(costo_unitario) * int(item['cantidad'])
         
     subtotal_libros = sum([item['subtotal'] for item in carrito])
-    monto_final = subtotal_libros + valor_envio
 
     try:
-        datos_venta = {
-            "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
-            "libros_vendidos": json.dumps(libros_para_json, ensure_ascii=False), 
-            "subtotal_libros": float(subtotal_libros), "valor_envio": float(valor_envio), 
-            "monto_final": float(monto_final), "metodo_envio": metodo_envio, 
-            "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
-            "estado_pago": estado_pago, 
-            "fecha_pago": fecha_pago.isoformat() if fecha_pago else None,
-            "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
-        }
-        conn.table("registro_ventas").insert(datos_venta).execute()
-        
+        # --- CASO FUSIÓN DE VENTAS ---
+        if venta_id_asociada:
+            # 1. Recuperamos la venta anterior desde Supabase
+            res_old = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id_asociada)).execute()
+            if not res_old.data:
+                return False, f"No se pudo encontrar la venta de origen #{venta_id_asociada} para fusionar."
+            
+            venta_old = res_old.data[0]
+            
+            # 2. Deserializar libros antiguos y combinar con los nuevos
+            try:
+                libros_old_list = json.loads(venta_old.get('libros_vendidos', '[]'))
+            except:
+                libros_old_list = []
+                
+            # Combinar duplicando o agregando
+            for n_item in libros_nuevos_list:
+                found = False
+                for o_item in libros_old_list:
+                    if o_item.get('libro_id') == n_item['libro_id'] and o_item['titulo'] == n_item['titulo']:
+                        o_item['cantidad'] = int(o_item.get('cantidad', 1)) + int(n_item['cantidad'])
+                        found = True
+                        break
+                if not found:
+                    libros_old_list.append(n_item)
+            
+            # 3. Sumar y acumular los montos financieros de forma matemática
+            nuevo_subtotal_libros = float(venta_old.get('subtotal_libros', 0.0)) + float(subtotal_libros)
+            nuevo_costo_venta = float(venta_old.get('costo_venta', 0.0)) + float(costo_total_venta)
+            nuevo_monto_final = nuevo_subtotal_libros + float(venta_old.get('valor_envio', 0.0))
+            nuevo_abono = float(venta_old.get('abono', 0.0)) + float(abono_venta)
+            
+            # 4. Actualizar la venta de origen
+            datos_fusión = {
+                "libros_vendidos": json.dumps(libros_old_list, ensure_ascii=False),
+                "subtotal_libros": nuevo_subtotal_libros,
+                "costo_venta": nuevo_costo_venta,
+                "monto_final": nuevo_monto_final,
+                "abono": nuevo_abono,
+                "comentario": f"{venta_old.get('comentario', '')} | Fusionada: {comentario}".strip()
+            }
+            conn.table("registro_ventas").update(datos_fusión).eq("venta_id", int(venta_id_asociada)).execute()
+            
+        # --- CASO VENTA NORMAL (No Fusión) ---
+        else:
+            monto_final = subtotal_libros + valor_envio
+            datos_venta = {
+                "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
+                "libros_vendidos": json.dumps(libros_nuevos_list, ensure_ascii=False), 
+                "subtotal_libros": float(subtotal_libros), "valor_envio": float(valor_envio), 
+                "monto_final": float(monto_final), "metodo_envio": metodo_envio, 
+                "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
+                "estado_pago": estado_pago, 
+                "fecha_pago": fecha_pago.isoformat() if fecha_pago else None,
+                "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
+            }
+            conn.table("registro_ventas").insert(datos_venta).execute()
+
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
@@ -646,6 +691,19 @@ def mostrar_caja():
                     v_id_asociada = venta_asociada_str.split("#")[1].split(" ")[0]
                     metodo_envio_final = f"Añadido a Venta #{v_id_asociada}"
                     st.info(f"El envío será gratuito. Esta compra se anexará a la Venta #{v_id_asociada}.")
+                    # 🌟 REQUISITO: Mensaje de Advertencia Altamente Evidente en HTML con colores de alerta
+                    st.markdown(
+                        f"""
+                        <div style="background-color:#fff3cd; border:3px solid #ffc107; padding:15px; border-radius:8px; margin-bottom:15px;">
+                            <h4 style="color:#856404; margin:0; font-size:18px;">⚠️ ¡ALERTA: ESTA VENTA SE FUSIONARÁ!</h4>
+                            <p style="color:#856404; margin:5px 0 0 0; font-size:14px; font-weight:bold;">
+                                Los libros de este carrito se integrarán directamente dentro de la <b>Venta #{v_id_asociada}</b>. 
+                                No se creará una venta nueva, sino que se sumará el stock, el abono y el subtotal en la orden original del historial.
+                            </p>
+                        </div>
+                        """, 
+                        unsafe_allow_html=True
+                    )
                 else:
                     col_e2.warning("No hay compras anteriores abiertas para anexar.")
                     bloquear_venta = True
@@ -693,10 +751,16 @@ def mostrar_caja():
                 if error_cliente:
                     st.error(error_cliente)
                 else:
+                    # Determinamos si hay una ID de venta anterior para fusionar
+                    v_id_fusión = None
+                    if modo_envio == "Añadir a compra anterior" and 'v_id_asociada' in locals():
+                        v_id_fusión = int(v_id_asociada)
+                        
                     exito, err = procesar_venta_carrito(
                         st.session_state.carrito_caja, final_cliente_id, valor_envio, 
                         metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
-                        estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, asignacion_id_target
+                        estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, 
+                        asignacion_id_target, v_id_fusión 
                     )
                     if exito: 
                         st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
