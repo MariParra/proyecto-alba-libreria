@@ -1,7 +1,25 @@
 import streamlit as st
 import pandas as pd
+import json 
 from datetime import datetime
 from utilidades import get_db_connection, log_error
+
+def formatear_libros_amigable(libros_raw):
+    """
+    Toma la cadena técnica JSON de libros vendidos y la convierte 
+    en un texto limpio y elegante para la dueña de la librería.
+    """
+    if not isinstance(libros_raw, str) or not libros_raw.strip():
+        return "Sin Detalle"
+    
+    if libros_raw.strip().startswith('['):
+        try:
+            libros = json.loads(libros_raw)
+            # Retorna en formato amigable: "1 x **Ami** | 1 x **Manual de señoritas...**"
+            return " | ".join([f"{item.get('cantidad', 1)} x **{item.get('titulo', 'N/A')}**" for item in libros])
+        except Exception:
+            return libros_raw
+    return libros_raw
 
 def unificar_formatos_fecha(serie_fechas):
     """
@@ -93,12 +111,15 @@ def mostrar_alertas_prioritarias():
         else:
             st.error(f"⚠️ Atención: Tienes **{len(df_envios_limbo)}** órdenes pendientes de armado en bodega.")
             for _, row in df_envios_limbo.iterrows():
-                # Formatear el texto de libros de manera amigable
                 libros_raw = row.get('libros_vendidos', '')
+                # Aplicamos el nuevo formateador dinámico
+                libros_formateados = formatear_libros_amigable(libros_raw)
+                
                 with st.container(border=True):
                     st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}**")
                     st.markdown(f"⏳ Hace `{row['dias_antiguedad']} días` (Creado el {row['fecha_limpia'].strftime('%d/%m/%Y')})")
-                    st.markdown(f"📚 **Libros:** `{libros_raw}`")
+                    st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")  # <-- Cambiado a texto libre sin acento grave (`) para renderizar las negritas
+
 
     # ================= COLUMNA 2: COBRANZAS CRÍTICAS (>14 días) =================
     with col_cobranzas:
