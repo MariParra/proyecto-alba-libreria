@@ -1,0 +1,39 @@
+name: Despacho Diario de Reporte de Bodega
+
+on:
+  schedule:
+    # Programación automática 3 veces al día (UTC/GMT)
+    - cron: '0 13 * * *'  # 13:00 UTC = 09:00 AM Hora de Chile (UTC-4)
+    - cron: '0 18 * * *'  # 18:00 UTC = 14:00 PM Hora de Chile (UTC-4)
+    - cron: '0 23 * * *'  # 23:00 UTC = 19:00 PM Hora de Chile (UTC-4)
+  
+  # Permite disparar el reporte de forma manual desde el panel de GitHub
+  workflow_dispatch:
+
+jobs:
+  enviar_reporte:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Descargar Código del Repositorio
+      uses: actions/checkout@v3
+
+    - name: Configurar Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Instalar Dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas supabase
+
+    - name: Ejecutar Script de Alertas
+      env:
+        # Vincula tus secretos seguros a las variables de ejecución
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        EMAIL_EMISOR: ${{ secrets.EMAIL_EMISOR }}
+        EMAIL_RECEPTOR: ${{ secrets.EMAIL_RECEPTOR }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      run: python app/2_scripts/cron_correo_diario.py
