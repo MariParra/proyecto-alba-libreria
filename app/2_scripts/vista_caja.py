@@ -407,7 +407,9 @@ def mostrar_caja():
                     st.sidebar.warning(f"👤 **{row['cliente_nombre']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días")
                 st.error(f"🚨 **¡ATENCIÓN!** Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora.")
     
-    tab_venta, tab_historial, tab_cobranza, tab_anular = st.tabs(["🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚫 Anular"])
+    tab_venta, tab_historial, tab_cobranza, tab_alertas, tab_anular = st.tabs([
+        "🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚨 Alertas (>5 días)", "🚫 Anular"
+    ])
     
     with tab_venta:
         st.markdown("### 1️⃣ Datos del Cliente")
@@ -859,6 +861,112 @@ def mostrar_caja():
                     )
         else: st.info("No hay deudas registradas.")
         
+    with tab_alertas:
+        st.markdown("### 🚨 Control de Envíos en Olvido (>5 días)")
+        
+        # Alerta visual muy molesta y persistente
+        st.markdown(
+            """
+            <div style="background-color:#ffdde1; border:3px solid #ff4b4b; padding:15px; border-radius:10px; text-align:center; margin-bottom:20px;">
+                <h2 style="color:#ff4b4b; margin:0; font-size:32px;">🔥 ¡BODEGA EN CRISIS! 🔥</h2>
+                <p style="color:#d00000; font-weight:bold; margin:5px 0 0 0; font-size:16px;">
+                    Tienes pedidos creados hace más de 5 días que aún no han sido armados. 
+                    ¡La dueña debe ponerse a embalar hoy mismo!
+                </p>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        if df_ventas_global.empty:
+            st.success("🎉 ¡Felicidades! Todo el catálogo está al día y armado.")
+        else:
+            # Procesamos las fechas de forma interna
+            df_alertas_temporal = df_ventas_global.copy()
+            df_alertas_temporal['fecha_dt'] = pd.to_datetime(df_alertas_temporal['fecha_venta'], errors='coerce')
+            hoy_datetime = datetime.now()
+            
+            df_alertas_temporal['dias_antiguedad'] = (hoy_datetime - df_alertas_temporal['fecha_dt']).dt.days
+            
+            # Filtro: Ventas mayores a 5 días cuyo estado NO sea "PAQUETE LISTO" ni "FINALIZADO"
+            df_olvidados = df_alertas_temporal[
+                (df_alertas_temporal['dias_antiguedad'] > 5) & 
+                (~df_alertas_temporal['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+            ].copy()
+            
+            if df_olvidados.empty:
+                st.success("🟢 ¡Increíble! No tienes ningún paquete pendiente de armado con más de 5 días de antigüedad. Todo está empaquetado o entregado.")
+            else:
+                st.error(f"⚠️ Alerta: Tienes **{len(df_olvidados)}** órdenes durmiendo en bodega que necesitan ser armadas de inmediato.")
+                
+                import urllib.parse
+                conn = get_db_connection()
+                
+                for _, row in df_olvidados.iterrows():
+                    v_id = row.get('venta_id')
+                    c_nombre = row.get('cliente_nombre', 'Cliente')
+                    c_telefono = str(row.get('cliente_telefono', '')).strip()
+                    c_email = str(row.get('cliente_email', '')).strip()
+                    libros_str = row.get('libros_vendidos', '')
+                    dias = row.get('dias_antiguedad', 5)
+                    monto = float(row.get('monto_final', 0))
+                    estado_v = row.get('estado', 'PENDIENTE')
+                    
+                    with st.container(border=True):
+                        # Usamos columnas para distribuir la información y los disparadores
+                        col_card_info, col_card_btn = st.columns([2, 1])
+                        
+                        with col_card_info:
+                            st.markdown(f"#### 📦 Venta #{v_id} - {c_nombre}")
+                            st.markdown(f"💀 **¡LLeva {dias} días sin prepararse!** *(Creado el {row.get('fecha_venta')})*")
+                            st.markdown(f"📚 **Libros requeridos:** `{libros_str}`")
+                            st.markdown(f"⚙️ **Estado de la Venta actual:** `{estado_v}`")
+                            
+                        with col_card_btn:
+                            st.write("")
+                            # Botón de Oro: Apagar la alarma cambiando el estado a PAQUETE LISTO en Supabase
+                            if st.button(f"✅ ¡YA LO ARMÉ! #{v_id}", type="primary", use_container_width=True, key=f"btn_armado_{v_id}"):
+                                try:
+                                    conn.table("registro_ventas").update({"estado": "PAQUETE LISTO"}).eq("venta_id", v_id).execute()
+                                    st.success(f"¡Orden #{v_id} empaquetada!")
+                                    st.balloons()
+                                    time.sleep(1)
+                                    st.rerun()
+                                except Exception as err_bd:
+                                    st.error(f"Error de base de datos: {err_bd}")
+                            
+                            # 1. Extraemos el número de la dueña desde secrets
+                            dueña_tel = st.secrets.get("catalogo_publico", {}).get("whatsapp_numero", "56963531241")
+                            dueña_tel_limpio = "".join(char for char in str(dueña_tel) if char.isdigit())
+                                
+                            # 2. Redacción del mensaje de autopresión para armar paquetes
+                            msg_recordatorio = (
+                                f"🚨 RECORDATORIO INTERNO ALBA 🚨\n\n"
+                                f"Hola Alba, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\n"
+                                f"⏳ ¡Lleva {dias} días de retraso!\n"
+                                f"📚 Libros a empacar: {libros_str}\n\n"
+                                f"Por favor, prepáralo y luego márcalo como '¡YA LO ARMÉ!' en la app."
+                            )
+                            msg_encoded = urllib.parse.quote(msg_recordatorio)
+                            
+                            # Link de WhatsApp que envía el mensaje directamente a ella misma
+                            wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel_limpio}&text={msg_encoded}"
+                            
+                            # Inyectamos únicamente el botón de WhatsApp interno (sin correos ni mensajes al cliente)
+                            st.markdown(
+                                f'''
+                                <div style="margin-top: 8px;">
+                                    <a href="{wa_url}" target="_blank" style="text-decoration:none;">
+                                        <button style="width:100%; background-color:#ff4b4b; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-weight:bold; font-size:12px;">
+                                            🔥 Auto-Recordar por WhatsApp
+                                        </button>
+                                    </a>
+                                </div>
+                                ''',
+                                unsafe_allow_html=True
+                            )
+
+
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")
         df_ventas_anular = df_ventas_global.copy()
