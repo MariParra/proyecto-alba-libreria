@@ -941,8 +941,8 @@ def mostrar_caja():
                                 
                             # 2. Redacción del mensaje de autopresión para armar paquetes
                             msg_recordatorio = (
-                                f"🚨 RECORDATORIO INTERNO ALBA 🚨\n\n"
-                                f"Hola Alba, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\n"
+                                f"🚨 RECORDATORIO INTERNO ALBA LIBRERÍA 🚨\n\n"
+                                f"Hola Ivonne, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\n"
                                 f"⏳ ¡Lleva {dias} días de retraso!\n"
                                 f"📚 Libros a empacar: {libros_str}\n\n"
                                 f"Por favor, prepáralo y luego márcalo como '¡YA LO ARMÉ!' en la app."
