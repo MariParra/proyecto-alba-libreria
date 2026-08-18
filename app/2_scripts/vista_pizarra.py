@@ -80,24 +80,52 @@ def mostrar_pizarra():
     df_notas = cargar_notas_db()
     hoy = datetime.now().date()
 
-    # --- CONTROL DE ALERTAS DE ALTA INTENSIDAD (MOLESTAR) ---
+    # ================= BANNER DE PRODUCTIVIDAD (HÁMSTER DE LA PIZARRA) =================
+    col_ham1, col_ham2 = st.columns([1, 2.5])
+    
+    if not df_notas.empty:
+        # CASO 1: Hay tareas pendientes en la pizarra (Hámster Vigilante)
+        with col_ham1:
+            st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg", width=180)
+        with col_ham2:
+            st.markdown(
+                """
+                <div style="background-color:#ffebee; border:3px solid #f44336; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                    <h3 style="color:#c62828; margin:0; font-size:24px;">🐹👁️ EL HÁMSTER TE VIGILA...</h3>
+                    <p style="color:#b71c1c; font-size:18px; font-weight:bold; margin:8px 0 0 0; line-height: 1.4;">
+                        IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRAS DORMIR Y TOMAR.
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+    else:
+        # CASO 2: Todo completado y al día (Hámster Trabajador/Celebrando)
+        with col_ham1:
+            st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamstertrabajando.jpg", width=180)
+        with col_ham2:
+            st.markdown(
+                """
+                <div style="background-color:#e8f5e9; border:3px solid #4caf50; padding:20px; border-radius:10px; display:flex; flex-direction:column; justify-content:center; height:100%;">
+                    <h3 style="color:#2e7d32; margin:0; font-size:24px;">🐹🍻 ¡HAZAÑA COMPLETADA!</h3>
+                    <p style="color:#1b5e20; font-size:18px; font-weight:bold; margin:8px 0 0 0; line-height: 1.4;">
+                        ¡Pizarra limpia! Ivonne, ya terminaste tu trabajo del día. ¡El hámster te da permiso para ir a dormir, tomar un copete y descansar bien merecido! 🎉🍹
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            
+    st.markdown("---")
+
+    # --- CONTROL AUXILIAR DE NOTAS VENCIDAS ---
     notas_vencidas = []
     if not df_notas.empty:
         df_notas['fecha_dt'] = pd.to_datetime(df_notas['fecha_limite']).dt.date
         notas_vencidas = df_notas[df_notas['fecha_dt'] < hoy].copy()
 
     if len(notas_vencidas) > 0:
-        st.markdown(
-            f"""
-            <div style="background-color:#ffebee; border:2px solid #f44336; padding:15px; border-radius:8px; margin-bottom:25px; text-align:center;">
-                <h3 style="color:#c62828; margin:0;">⚠️ ¡ATENCIÓN IVONNE! Tienes {len(notas_vencidas)} recordatorios vencidos ⚠️</h3>
-                <p style="color:#b71c1c; margin:5px 0 0 0; font-weight:bold; font-size:15px;">
-                    ¡Deja de postergar tus tareas! Revisa los Post-its rojos y complétalos hoy mismo.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        st.error(f"⚠️ **Atención Extra:** Tienes {len(notas_vencidas)} post-its de color rojo que ya expiraron en su fecha límite. ¡Dale prioridad a esos!")
 
     # --- SECCIÓN SUPERIOR DE CREACIÓN (Ubicada en la pantalla principal) ---
     with st.expander("➕ CLAVAR NUEVO POST-IT (CREAR NOTA)", expanded=False):
