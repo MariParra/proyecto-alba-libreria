@@ -792,35 +792,38 @@ def cargar_historico_asignaciones_completo():
 
 # --- INTERFAZ PRINCIPAL ---
 
-def mostrar_asignaciones():
+ddef mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
+    
+    # Mapeo de meses de trabajo
     meses_dict = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
     
     opciones_menu = [
-            "📋 Gestión (Tabla Editable)", 
-            "📖 Asignar Libro Principal", 
-            "📜 Historial suscripciones",
-            "🚚 Gestionar Envío y Ajuste Manual", 
-            "🚀 Generar / Actualizar Mes", 
-            "🗑️ Eliminar/Quitar Libros", 
-            "🧹 Desasignar Libros del Mes",
-            "🔒 Cierre de Mes"
-        ]
+        "📋 Gestión (Tabla Editable)", 
+        "📖 Asignar Libro Principal", 
+        "📜 Historial suscripciones",
+        "🚚 Gestionar Envío y Ajuste Manual", 
+        "🚀 Generar / Actualizar Mes", 
+        "🗑️ Eliminar/Quitar Libros", 
+        "🧹 Desasignar Libros del Mes",
+        "🔒 Cierre de Mes"
+    ]
     
     opcion_menu = st.selectbox("👉 SELECCIONA LA ACCIÓN QUE DESEAS REALIZAR:", opciones_menu)
     st.markdown("---")
     
     # =========================================================================
-    # 🌟 LÓGICA CONDICIONAL: SI ES HISTORIAL, COMPORTAMIENTO LIMPIO (SIN CABECERAS)
+    # 🌟 PASO 1: CARGA DE DATOS DINÁMICA SEGÚN LA PESTAÑA SELECCIONADA
     # =========================================================================
     if opcion_menu == "📜 Historial suscripciones":
-        # Se inicializan vacíos para evitar NameErrors en llamadas de otras dependencias
+        # En el Historial no se usa mes de trabajo activo, inicializamos valores neutros
         ano_sel = datetime.now().year
         mes_num = datetime.now().month
         df_mes = pd.DataFrame()
         mes_esta_cerrado = False
+        
     else:
-        # Solo si NO es Historial, se renderizan el Mes de Trabajo, los KPI estáticos y la alerta de bloqueo
+        # En las demás pestañas, renderizamos de forma limpia el selector del Mes de Trabajo activo
         with st.container(border=True):
             st.markdown("### 📅 Mes de Trabajo")
             c1, c2 = st.columns(2)
@@ -831,6 +834,7 @@ def mostrar_asignaciones():
     df_mes = cargar_asignaciones_mes(ano_sel, mes_num)
     mes_esta_cerrado = verificar_mes_cerrado(ano_sel, mes_num)
     
+    # Procesamos y normalizamos los datos del mes actual
     if not df_mes.empty:
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
         df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
@@ -842,19 +846,28 @@ def mostrar_asignaciones():
         df_mes['valor_extras'] = pd.to_numeric(df_mes.get('valor_extras', 0), errors='coerce').fillna(0.0)
         df_mes['monto_total'] = pd.to_numeric(df_mes.get('monto_total', 0), errors='coerce').fillna(0.0)
         
-        cajas_pagadas = len(df_mes[df_mes['pagado'] == 'SI'])
-        cajas_pendientes = len(df_mes[df_mes['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])])
-        cajas_listas = len(df_mes[df_mes['estado_envio'].isin(['POR ENVIAR', 'POR RETIRAR'])])
-        
-        c_res1, c_res2, c_res3, c_res4 = st.columns(4)
-        c_res1.metric("📦 Total Cajas", len(df_mes))
-        c_res2.metric("💳 Pagadas", f"{cajas_pagadas} / {len(df_mes)}")
-        c_res3.metric("⏳ Por Preparar", cajas_pendientes)
-        c_res4.metric("✅ Listas para Enviar", cajas_listas)
-        st.markdown("---")
-        
-    if mes_esta_cerrado: st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado.", icon="🔒")
-    
+    # =========================================================================
+        # 🌟 PASO 2: RENDERIZADO EXCLUSIVO DE MÉTRICAS LOGÍSTICAS DE CABECERA
+        # =========================================================================
+        # Solo se muestran las métricas de cajas si estamos en las pestañas operativas del mes actual
+        if opcion_menu in ["📋 Gestión (Tabla Editable)", "📖 Asignar Libro Principal"] and not df_mes.empty:
+            cajas_pagadas = len(df_mes[df_mes['pagado'] == 'SI'])
+            cajas_pendientes = len(df_mes[df_mes['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])])
+            cajas_listas = len(df_mes[df_mes['estado_envio'].isin(['POR ENVIAR', 'POR RETIRAR'])])
+            
+            c_res1, c_res2, c_res3, c_res4 = st.columns(4)
+            c_res1.metric("📦 Total Cajas", len(df_mes))
+            c_res2.metric("💳 Pagadas", f"{cajas_pagadas} / {len(df_mes)}")
+            c_res3.metric("⏳ Por Preparar", cajas_pendientes)
+            c_res4.metric("✅ Listas para Enviar", cajas_listas)
+            st.markdown("---")
+            
+        # =========================================================================
+        # 🌟 PASO 3: RENDERIZADO EXCLUSIVO DEL MENSAJE DE MES BLOQUEADO
+        # =========================================================================
+        # La alerta roja de bloqueo solo aparece si el mes está cerrado y estamos en las pestañas operativas
+        if mes_esta_cerrado and opcion_menu in ["📋 Gestión (Tabla Editable)", "📖 Asignar Libro Principal"]:
+            st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado. Los cambios están deshabilitados.", icon="🔒")
     # ==========================================================
     # 1. TABLA EDITABLE (VERSIÓN FINAL COMPLETA)
     # ==========================================================
