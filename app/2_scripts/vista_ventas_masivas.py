@@ -193,6 +193,32 @@ def anadir_nuevo_libro_carrito():
         if k in st.session_state:
             del st.session_state[k]
 
+def unificar_formatos_fecha(serie_fechas):
+    """
+    Función de parseo de fechas a prueba de balas, capaz de interpretar
+    múltiples formatos y de remover de forma segura zonas horarias (Timezones).
+    """
+    def parsear_valor(val):
+        if pd.isna(val) or not str(val).strip() or str(val).strip().lower() in ['nan', 'nat']:
+            return pd.NaT
+        val_str = str(val).strip()
+        try:
+            if 't' in val_str.lower() or '+' in val_str:
+                return pd.to_datetime(val_str).tz_localize(None)
+            if len(val_str.split('-')[0]) == 4 or len(val_str.split('/')[0]) == 4:
+                return pd.to_datetime(val_str, dayfirst=False, errors='coerce').tz_localize(None)
+            else:
+                return pd.to_datetime(val_str, dayfirst=True, errors='coerce').tz_localize(None)
+        except Exception:
+            try:
+                return pd.to_datetime(val_str, errors='coerce').tz_localize(None)
+            except Exception:
+                return pd.NaT
+    try:
+        return serie_fechas.apply(parsear_valor)
+    except Exception:
+        return pd.to_datetime(serie_fechas, errors='coerce').dt.tz_localize(None)
+
 # --- VISTA PRINCIPAL ---
 
 def mostrar_ventas_masivas():
@@ -405,6 +431,64 @@ def mostrar_ventas_masivas():
         if df_historial.empty:
             st.info("Aún no se han registrado ventas masivas.")
         else:
+            # 1. Procesamiento y normalización de fechas
+            df_historial['fecha_limpia'] = unificar_formatos_fecha(df_historial['fecha_evento'])
+            
+            # 2. Despliegue de Filtros Interactivos (Estilo Caja)
+            with st.expander("🔍 Filtros del Historial"):
+                df_fechas_validas = df_historial.dropna(subset=['fecha_limpia'])
+                opciones_mes = ["Ver Todo"]
+                mapa_inverso_mes = {}
+                
+                if not df_fechas_validas.empty:
+                    df_fechas_validas['mes_ano_str'] = df_fechas_validas['fecha_limpia'].dt.strftime('%Y-%m')
+                    meses_unicos = sorted(df_fechas_validas['mes_ano_str'].unique(), reverse=True)
+                    
+                    month_map_es = {
+                        '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio',
+                        '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+                    }
+                    
+                    for mes_str in meses_unicos:
+                        ano, mes_num = mes_str.split('-')
+                        nombre_amigable = f"{month_map_es.get(mes_num, '')} {ano}"
+                        opciones_mes.append(nombre_amigable)
+                        mapa_inverso_mes[nombre_amigable] = mes_str
+
+                # Seleccionar por defecto el mes actual en el combo
+                hoy = datetime.now()
+                nombre_mes_actual = f"{month_map_es.get(hoy.strftime('%m'), '')} {hoy.year}"
+                default_index = opciones_mes.index(nombre_mes_actual) if nombre_mes_actual in opciones_mes else 0
+
+                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=opciones_mes, index=default_index, key="vm_filtro_mes")
+                
+                tipos_existentes = ["Todos"] + sorted(df_historial['tipo_evento'].unique().tolist())
+                tipo_filtro = col_f2.selectbox("Tipo de Evento:", options=tipos_existentes, key="vm_filtro_tipo")
+                
+                estados_existentes = ["Todos"] + sorted(df_historial['estado_evento'].unique().tolist())
+                estado_filtro = col_f3.selectbox("Estado del Evento:", options=estados_existentes, key="vm_filtro_estado")
+                
+                pagos_existentes = ["Todos"] + sorted(df_historial['estado_pago'].unique().tolist())
+                pago_filtro = col_f4.selectbox("Estado del Pago:", options=pagos_existentes, key="vm_filtro_pago")
+
+            # 3. Aplicar Filtros sobre el DataFrame
+            df_filtrado_vm = df_historial.copy()
+            
+            if mes_seleccionado != "Ver Todo":
+                mes_str_buscar = mapa_inverso_mes.get(mes_seleccionado)
+                if mes_str_buscar:
+                    df_filtrado_fechas_validas = df_filtrado_vm.dropna(subset=['fecha_limpia'])
+                    df_filtrado_vm = df_filtrado_fechas_validas[df_filtrado_fechas_validas['fecha_limpia'].dt.strftime('%Y-%m') == mes_str_buscar]
+
+            if tipo_filtro != "Todos":
+                df_filtrado_vm = df_filtrado_vm[df_filtrado_vm['tipo_evento'] == tipo_filtro]
+            if estado_filtro != "Todos":
+                df_filtrado_vm = df_filtrado_vm[df_filtrado_vm['estado_evento'] == estado_filtro]
+            if pago_filtro != "Todos":
+                df_filtrado_vm = df_filtrado_vm[df_filtrado_vm['estado_pago'] == pago_filtro]
+
+            # 4. Formateador de libros implicados
             def formatear_libros_vm(lista):
                 if not isinstance(lista, str): return "Ninguno"
                 try:
@@ -412,17 +496,38 @@ def mostrar_ventas_masivas():
                     return " | ".join([f"{item.get('cantidad', 1)}x {item.get('titulo', '')}" for item in js])
                 except: return "Error leyendo libros"
                 
-            df_historial['libros_resumen'] = df_historial['libros_implicados'].apply(formatear_libros_vm)
-            
+            df_filtrado_vm['libros_resumen'] = df_filtrado_vm['libros_implicados'].apply(formatear_libros_vm)
+
+            # Convertir campos financieros a numéricos para cálculos de métricas
+            df_filtrado_vm['ingreso_total'] = pd.to_numeric(df_filtrado_vm['ingreso_total'], errors='coerce').fillna(0.0)
+            df_filtrado_vm['costo_total'] = pd.to_numeric(df_filtrado_vm['costo_total'], errors='coerce').fillna(0.0)
+            df_filtrado_vm['utilidad_estimada'] = pd.to_numeric(df_filtrado_vm['utilidad_estimada'], errors='coerce').fillna(0.0)
+
+            # 5. Renderizado de Métricas del período filtrado (Estilo Caja)
+            st.markdown("#### 📊 Resumen Financiero del Período Filtrado")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("💰 Ingresos Totales", f"${df_filtrado_vm['ingreso_total'].sum():,.0f}")
+            m2.metric("📦 Costos de Evento", f"${df_filtrado_vm['costo_total'].sum():,.0f}")
+            m3.metric("📈 Utilidad Estimada", f"${df_filtrado_vm['utilidad_estimada'].sum():,.0f}")
+            st.markdown("---")
+
+            # 6. Despliegue de la Tabla de Datos filtrada
             st.dataframe(
-                df_historial[['evento_id', 'fecha_evento', 'nombre_evento', 'tipo_evento', 'ingreso_total', 'costo_total', 'utilidad_estimada', 'estado_evento', 'estado_pago', 'stock_descontado', 'libros_resumen', 'comentarios']],
+                df_filtrado_vm[['evento_id', 'fecha_evento', 'nombre_evento', 'tipo_evento', 'ingreso_total', 'costo_total', 'utilidad_estimada', 'estado_evento', 'estado_pago', 'stock_descontado', 'libros_resumen', 'comentarios']],
                 use_container_width=True, hide_index=True, 
                 column_config={
+                    "evento_id": "ID",
+                    "nombre_evento": "Nombre Evento",
+                    "tipo_evento": "Tipo",
                     "ingreso_total": st.column_config.NumberColumn("Ingreso ($)", format="$%.0f"), 
                     "costo_total": st.column_config.NumberColumn("Costo ($)", format="$%.0f"), 
                     "utilidad_estimada": st.column_config.NumberColumn("Utilidad ($)", format="$%.0f"), 
                     "fecha_evento": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"), 
-                    "stock_descontado": st.column_config.CheckboxColumn("Stock Descontado", disabled=True)
+                    "stock_descontado": st.column_config.CheckboxColumn("Stock Descontado", disabled=True),
+                    "estado_evento": "Estado Evento",
+                    "estado_pago": "Estado Pago",
+                    "libros_resumen": "Libros implicados",
+                    "comentarios": "Comentarios"
                 }
             )
 
