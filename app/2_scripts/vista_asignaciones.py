@@ -1599,18 +1599,18 @@ def mostrar_asignaciones():
                                                             st.rerun()
                                                         else:
                                                             st.error(f"Error al asignar: {err}")
-    # ==========================================================
+        # ==========================================================
     # 📜 Historial suscripciones (MÉTRICAS REACTIVAS CON COSTO Y UTILIDAD)
     # ==========================================================
     elif opcion_menu == "📜 Historial suscripciones":
         st.markdown("### 📜 Historial de Suscripciones y Envíos")
         
-        # 🌟 NUEVO: Nota explicativa financiera del Historial de Cajas
+        # Nota explicativa de cálculos del historial
         st.info("""
         💡 **¿Cómo se calculan las finanzas en este panel de Historial?**
-        * **Recaudación Bruta:** Suma de los montos de suscripción (`monto_total`) cobrados para todas las cajas listadas (solo recaudación valor suscripción).
+        * **Recaudación Bruta:** Suma de los montos de suscripción (`valor_suscripcion`) cobrados para todas las cajas listadas (excluyendo envíos y extras).
         * **Costos de Producción:** Suma acumulada del costo de armado físico (`costo_caja`) para las cajas del período (estimado en **$10,000** por defecto por caja).
-        * **Utilidad Estimada:** Se obtiene restando `Recaudación Bruta - Costo de Caja` (representa tu ganancia neta real descontando el despacho logístico).
+        * **Utilidad Estimada:** Se obtiene restando `Recaudación Bruta - Costos de Producción` (representa tu ganancia neta real basada puramente en el margen de membresía de libros).
         """)
         
         df_historico_raw = cargar_historico_asignaciones_completo()
@@ -1623,19 +1623,29 @@ def mostrar_asignaciones():
             df_hist_asig['estado_envio'] = df_hist_asig['estado_envio'].apply(lambda x: str(x).upper())
             df_hist_asig['monto_total'] = pd.to_numeric(df_hist_asig['monto_total'], errors='coerce').fillna(0.0)
             
-            df_hist_asig['mes_nombre'] = df_hist_asig['mes'].map(meses_dict).fillna("Desconocido")
+            # 🌟 CORRECCIÓN 1: Coaccionar la columna 'mes' de forma segura a tipo entero para evitar fallos de strings ("1")
+            df_hist_asig['mes_int'] = pd.to_numeric(df_hist_asig['mes'], errors='coerce').fillna(0).astype(int)
+            
+            # 🌟 CORRECCIÓN 2: Mapeamos con el diccionario sobre la nueva columna entera corregida
+            df_hist_asig['mes_nombre'] = df_hist_asig['mes_int'].map(meses_dict).fillna("Desconocido")
             
             with st.expander("🔍 Filtros de Búsqueda del Historial", expanded=True):
                 col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+                
+                # Filtro por Año
                 anios_disponibles = ["Ver Todos"] + sorted(list(set(df_hist_asig['ano'].dropna().astype(int).tolist())), reverse=True)
                 sel_anio_h = col_h1.selectbox("Filtrar por Año:", options=anios_disponibles, key="hist_filter_year")
                 
-                meses_disponibles = ["Ver Todos"] + [meses_dict[m] for m in sorted(df_hist_asig['mes'].dropna().unique()) if m in meses_dict]
-                sel_mes_h = col_h2.selectbox("Filtrar por Mes:", options=meses_disponibles, key="hist_filter_month")
+                # 🌟 CORRECCIÓN 3: Poblar el dropdown de meses dinámicamente y de forma cronológica (Ene-Dic)
+                meses_numericos_presentes = sorted([m for m in df_hist_asig['mes_int'].unique() if m in meses_dict])
+                meses_disponibles = ["Ver Todos"] + [meses_dict[m] for m in meses_numericos_presentes]
                 
+                sel_mes_h = col_h2.selectbox("Filtrar por Mes:", options=meses_disponibles, key="hist_filter_month")
                 sel_pago_h = col_h3.selectbox("Filtrar por Pago:", ["Todos", "SI", "NO", "ABONO"], key="hist_filter_pago")
+                
                 opciones_clientes_h = sorted(df_hist_asig['nombre'].dropna().unique().tolist())
-                sel_clientes_h = col_h4.multiselect("Buscar Cliente(s):", options=opciones_clientes_h, placeholder="Escribe para buscar...", key="hist_filter_clients")
+                sel_clientes_h = col_h4.multiselect("Buscar Cliente(s):", options=opciones_clientes_h, placeholder="", key="hist_filter_clients")
+
 
             df_filtrado_h = df_hist_asig.copy()
             if sel_anio_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
@@ -1726,7 +1736,7 @@ def mostrar_asignaciones():
                             else: 
                                 st.error(err)
 
-        # ==========================================================
+    # ==========================================================
     # 4. COMENZAR MES
     # ==========================================================
     elif opcion_menu == "🚀 Generar / Actualizar Mes":
@@ -1908,7 +1918,7 @@ def mostrar_asignaciones():
                             else: st.error(err)
             else: st.info("No hay registros.")
             
-        # ==========================================================
+    # ==========================================================
     # 6. DESASIGNAR LIBROS DEL MES (SOLO LIBRO PRINCIPAL)
     # ==========================================================
     elif opcion_menu == "🧹 Desasignar Libros del Mes":
