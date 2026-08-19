@@ -793,42 +793,46 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
         log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo CRÍTICO al guardar log de auditoría: {e}", email)
         return False
 @st.cache_data(ttl=120)
-@st.cache_data(ttl=120)
 def cargar_historico_asignaciones_completo():
-    """Carga todo el histórico de asignaciones desde la base de datos de forma segura, burlando el límite de 1.000 filas de Supabase."""
+    """
+    Carga todo el histórico de asignaciones desde la base de datos de forma dinámica
+    desde el año de inicio (2025) hasta el año actual, libre de bucles infinitos y sin mantenimiento.
+    """
     conn = get_db_connection()
     try:
-        # 1. Calculamos los meses transcurridos desde el inicio del proyecto (Octubre 2025) hasta hoy
-        fecha_inicio_proyecto = datetime(2025, 10, 1)
-        hoy = datetime.now()
-        meses_transcurridos = (hoy.year - fecha_inicio_proyecto.year) * 12 + (hoy.month - fecha_inicio_proyecto.month) + 1
-        limite_dinamico_api = max(1000, meses_transcurridos * 180)
+        # 1. 📅 Calcular el rango de años dinámicamente desde el inicio de Alba (2025) hasta el año actual en curso
+        ano_inicio = 2025
+        ano_actual = datetime.now().year
+        rango_anios = list(range(ano_inicio, ano_actual + 1)) # En 2026: [2025, 2026]. En 2027: [2025, 2026, 2027]
         
-        # 2. 🚀 BUCLE DE PAGINACIÓN: Descargamos de 1.000 en 1.000 de forma consecutiva hasta obtener todo el histórico
-        all_data = []
+        datos_totales = []
         chunk_size = 1000
-        start = 0
         
-        while start < limite_dinamico_api:
-            end = start + chunk_size - 1
-            # Solicitamos la tanda de datos actual
-            res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).range(start, end).execute()
-            
-            if not res_asig.data:
-                break
+        # 2. 🚀 Bucle acotado por año para burlar el límite de Supabase
+        for anio in rango_anios:
+            # Limitamos a un máximo de 3 bloques por año (máximo 3.000 filas/año, garantizando que el loop siempre termine)
+            for bloque in range(3):
+                start = bloque * chunk_size
+                end = start + chunk_size - 1
                 
-            all_data.extend(res_asig.data)
-            
-            # Si el servidor devolvió menos de 1.000 filas, significa que ya se descargó TODO
-            if len(res_asig.data) < chunk_size:
-                break
+                # Consultamos el año específico y la tanda correspondiente
+                res_anio = conn.table("asignaciones").select("*")\
+                    .eq("ano", anio)\
+                    .order("fecha_asignacion", desc=True)\
+                    .range(start, end).execute()
                 
-            start += chunk_size
-
-        if not all_data:
+                if res_anio.data:
+                    datos_totales.extend(res_anio.data)
+                    # Si devolvió menos de 1.000, significa que ya no quedan más registros para ese año
+                    if len(res_anio.data) < chunk_size:
+                        break
+                else:
+                    break
+        
+        if not datos_totales:
             return pd.DataFrame()
             
-        df_asig = pd.DataFrame(all_data)
+        df_asig = pd.DataFrame(datos_totales)
         
         # 3. Traemos la tabla de clientes para asociar los nombres
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
@@ -838,7 +842,7 @@ def cargar_historico_asignaciones_completo():
         res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
         
-        # Merges en memoria con Pandas (Fusión robusta)
+        # Merges en memoria con Pandas (Fusión robusta y veloz)
         if not df_clientes.empty:
             df_merged = pd.merge(df_asig, df_clientes, on="cliente_id", how="left")
         else:
@@ -870,6 +874,7 @@ def cargar_historico_asignaciones_completo():
     except Exception as e:
         log_error("vista_asignaciones", "cargar_historico_asignaciones_completo", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
+
 
 
 # --- INTERFAZ PRINCIPAL ---
