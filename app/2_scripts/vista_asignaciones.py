@@ -764,31 +764,56 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
         return False
 @st.cache_data(ttl=120)
 def cargar_historico_asignaciones_completo():
-    """Carga todo el histórico de asignaciones desde la base de datos de forma segura e inmune a fallas."""
+    """Carga todo el histórico de asignaciones desde la base de datos y recalcula montos nulos o en cero."""
     conn = get_db_connection()
     try:
-        # 1. Traemos la tabla de asignaciones completa de Supabase de forma directa
+        # 1. Traemos la tabla de asignaciones completa
         res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).execute()
         if not res_asig.data:
             return pd.DataFrame()
         df_asig = pd.DataFrame(res_asig.data)
         
-        # 2. Traemos la tabla de clientes para asociar los nombres en memoria
+        # 2. Traemos la tabla de clientes para asociar los nombres
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
         
-        # 3. Realizamos la fusión (merge) en memoria mediante Pandas (100% libre de nulos o excepciones)
+        # 3. Traemos la tabla de suscripciones para el valor de suscripcion base
+        res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
+        df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
+        
+        # Merges en memoria con Pandas
         if not df_clientes.empty:
             df_merged = pd.merge(df_asig, df_clientes, on="cliente_id", how="left")
         else:
             df_merged = df_asig
             df_merged['nombre'] = 'Cliente Desconocido'
             
+        if not df_susc.empty:
+            df_merged = pd.merge(df_merged, df_susc, on="cliente_id", how="left")
+        else:
+            df_merged['valor_suscripcion'] = 18500.0 # fallback por defecto
+            
         df_merged['nombre'] = df_merged['nombre'].fillna('Cliente Eliminado')
+        df_merged['valor_suscripcion'] = df_merged['valor_suscripcion'].fillna(18500.0)
+        
+        # 🌟 RECALCULO DE MONTOS ANTIGUOS QUE ESTABAN EN 0 O NULOS
+        df_merged['monto_total'] = pd.to_numeric(df_merged['monto_total'], errors='coerce').fillna(0.0)
+        df_merged['valor_envio'] = pd.to_numeric(df_merged['valor_envio'], errors='coerce').fillna(0.0)
+        df_merged['valor_extras'] = pd.to_numeric(df_merged['valor_extras'], errors='coerce').fillna(0.0)
+        
+        mask_recalc = (df_merged['monto_total'] == 0.0)
+        if mask_recalc.any():
+            df_merged.loc[mask_recalc, 'monto_total'] = (
+                df_merged.loc[mask_recalc, 'valor_suscripcion'] + 
+                df_merged.loc[mask_recalc, 'valor_envio'] + 
+                df_merged.loc[mask_recalc, 'valor_extras']
+            )
+        
         return df_merged
     except Exception as e:
         log_error("vista_asignaciones", "cargar_historico_asignaciones_completo", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
+
 
 # --- INTERFAZ PRINCIPAL ---
 
@@ -1616,12 +1641,11 @@ def mostrar_asignaciones():
 
             df_filtrado_h = df_hist_asig.copy()
             if sel_anio_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
-            # 🌟 CORRECCIÓN DE BUG: Hacemos la comparación de strings de forma homogénea
             if sel_mes_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['mes_nombre'] == sel_mes_h]
             if sel_pago_h != "Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
             if sel_clientes_h: df_filtrado_h = df_filtrado_h[df_filtrado_h['nombre'].isin(sel_clientes_h)]
 
-                        # --- 📊 KPI'S REACTIVAS FINANCIERAS CORREGIDAS (SOLO CAJAS PAGADAS) ---
+            # --- 📊 KPI'S REACTIVAS FINANCIERAS CORREGIDAS (SOLO CAJAS PAGADAS) ---
             total_cajas_h = len(df_filtrado_h)
             
             # Filtramos una copia en memoria solo con las transacciones pagadas para el balance real
@@ -1634,8 +1658,7 @@ def mostrar_asignaciones():
             df_pagadas_h['valor_envio'] = pd.to_numeric(df_pagadas_h['valor_envio'], errors='coerce').fillna(0.0)
             df_pagadas_h['costo_caja'] = pd.to_numeric(df_pagadas_h['costo_caja'], errors='coerce').fillna(10000.0)
             
-            # Recaudación Bruta Real = Sumatoria de montos cobrados en cajas pagadas
-            monto_total_recaudado_h = df_pagadas_h['monto_total'].sum()
+            monto_total_recaudado_h = (df_pagadas_h['monto_total'] - df_pagadas_h['valor_envio']).sum()
             
             # Costo de Producción Real = Sumatoria de costos de armado de cajas que ya se pagaron
             costo_total_cajas_h = df_pagadas_h['costo_caja'].sum()
