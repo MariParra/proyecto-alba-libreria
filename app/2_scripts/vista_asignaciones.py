@@ -813,7 +813,7 @@ def mostrar_asignaciones():
     # =========================================================================
     # 🌟 LÓGICA CONDICIONAL: SI ES HISTORIAL, COMPORTAMIENTO LIMPIO (SIN CABECERAS)
     # =========================================================================
-    if opcion_menu == "📜 Historial de Asignaciones":
+    if opcion_menu == "📜 Historial suscripciones":
         # Se inicializan vacíos para evitar NameErrors en llamadas de otras dependencias
         ano_sel = datetime.now().year
         mes_num = datetime.now().month
