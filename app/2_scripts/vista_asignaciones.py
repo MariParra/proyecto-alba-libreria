@@ -1575,69 +1575,62 @@ def mostrar_asignaciones():
                                                         else:
                                                             st.error(f"Error al asignar: {err}")
     # ==========================================================
-    # 📜 Historial suscripciones (MÉTRICAS REACTIVAS)
+    # 📜 Historial suscripciones (MÉTRICAS REACTIVAS CON COSTO Y UTILIDAD)
     # ==========================================================
     elif opcion_menu == "📜 Historial suscripciones":
         st.markdown("### 📜 Historial de Suscripciones y Envíos")
         
-        # 1. Cargamos el 100% de los datos históricos sin filtros forzados
+        # 🌟 NUEVO: Nota explicativa financiera del Historial de Cajas
+        st.info("""
+        💡 **¿Cómo se calculan las finanzas en este panel de Historial?**
+        * **Recaudación Bruta:** Suma de los montos de suscripción (`monto_total`) cobrados para todas las cajas listadas.
+        * **Costos de Producción:** Suma acumulada del costo de armado físico (`costo_caja`) para las cajas del período (estimado en **$10,000** por defecto por caja).
+        * **Utilidad Estimada:** Se obtiene restando `(Monto Total - Valor Envío) - Costo de Caja` (representa tu ganancia neta real descontando el despacho logístico).
+        """)
+        
         df_historico_raw = cargar_historico_asignaciones_completo()
         
         if df_historico_raw.empty:
             st.info("Aún no registras asignaciones históricas en el sistema.")
         else:
             df_hist_asig = df_historico_raw.copy()
-            
-            # Normalizamos campos para evitar inconsistencias
             df_hist_asig['pagado'] = df_hist_asig['pagado'].apply(mapear_sino)
             df_hist_asig['estado_envio'] = df_hist_asig['estado_envio'].apply(lambda x: str(x).upper())
             df_hist_asig['monto_total'] = pd.to_numeric(df_hist_asig['monto_total'], errors='coerce').fillna(0.0)
-
-            # --- PANEL DE FILTROS INTERACTIVOS TOTALMENTE PERSONALIZABLE ---
+            
+            # 🌟 CORRECCIÓN DE BUG: Mapeamos la columna 'mes' (entero) a su nombre en español de forma segura para cruzar tipos
+            df_hist_asig['mes_nombre'] = df_hist_asig['mes'].map(meses_dict).fillna("Desconocido")
+            
             with st.expander("🔍 Filtros de Búsqueda del Historial", expanded=True):
                 col_h1, col_h2, col_h3, col_h4 = st.columns(4)
-                
-                # A. Filtro por Año (Ej: 2026, 2025, etc.)
                 anios_disponibles = ["Ver Todos"] + sorted(list(set(df_hist_asig['ano'].dropna().astype(int).tolist())), reverse=True)
                 sel_anio_h = col_h1.selectbox("Filtrar por Año:", options=anios_disponibles, key="hist_filter_year")
                 
-                # B. Filtro por Mes
-                meses_disponibles = ["Ver Todos"] + sorted(list(set(df_hist_asig['mes'].dropna().tolist())))
+                # 🌟 CORRECCIÓN DE BUG: Meses disponibles ahora se alimentan de la lista unificada de strings para evitar descalces
+                meses_disponibles = ["Ver Todos"] + [meses_dict[m] for m in sorted(df_hist_asig['mes'].dropna().unique()) if m in meses_dict]
                 sel_mes_h = col_h2.selectbox("Filtrar por Mes:", options=meses_disponibles, key="hist_filter_month")
                 
-                # C. Filtro por Estado de Pago
                 sel_pago_h = col_h3.selectbox("Filtrar por Pago:", ["Todos", "SI", "NO", "ABONO"], key="hist_filter_pago")
-                
-                # D. Buscador de Cliente con multiselección
                 opciones_clientes_h = sorted(df_hist_asig['nombre'].dropna().unique().tolist())
                 sel_clientes_h = col_h4.multiselect("Buscar Cliente(s):", options=opciones_clientes_h, placeholder="Escribe para buscar...", key="hist_filter_clients")
 
-            # --- APLICACIÓN EN CASCADA DE FILTROS ---
             df_filtrado_h = df_hist_asig.copy()
-            
-            if sel_anio_h != "Ver Todos":
-                df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
-            if sel_mes_h != "Ver Todos":
-                df_filtrado_h = df_filtrado_h[df_filtrado_h['mes'] == sel_mes_h]
-            if sel_pago_h != "Todos":
-                df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
-            if sel_clientes_h:
-                df_filtrado_h = df_filtrado_h[df_filtrado_h['nombre'].isin(sel_clientes_h)]
+            if sel_anio_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
+            # 🌟 CORRECCIÓN DE BUG: Hacemos la comparación de strings de forma homogénea
+            if sel_mes_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['mes_nombre'] == sel_mes_h]
+            if sel_pago_h != "Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
+            if sel_clientes_h: df_filtrado_h = df_filtrado_h[df_filtrado_h['nombre'].isin(sel_clientes_h)]
 
-            # --- 📊 CONSTRUCCIÓN DE KPI'S TOTALMENTE REACTIVAS (CON COSTO Y UTILIDAD) ---
+            # --- 📊 KPI'S REACTIVAS FINANCIERAS (ESTILO CAJA) ---
             total_cajas_h = len(df_filtrado_h)
             cajas_pagadas_h = len(df_filtrado_h[df_filtrado_h['pagado'] == 'SI'])
             
-            # Convertimos valores a numéricos de forma segura
             df_filtrado_h['valor_envio'] = pd.to_numeric(df_filtrado_h['valor_envio'], errors='coerce').fillna(0.0)
-            df_filtrado_h['costo_caja'] = pd.to_numeric(df_filtrado_h['costo_caja'], errors='coerce').fillna(10000.0) # $10.000 por defecto
+            df_filtrado_h['costo_caja'] = pd.to_numeric(df_filtrado_h['costo_caja'], errors='coerce').fillna(10000.0)
             
             monto_total_recaudado_h = df_filtrado_h['monto_total'].sum()
-            
-            # Costo total = Sumatoria de (costo_caja) de todas las cajas del período
             costo_total_cajas_h = df_filtrado_h['costo_caja'].sum()
             
-            # Utilidad = (Monto Total Recaudado - Valor Envío) - Costo de Caja
             df_filtrado_h['utilidad_real'] = (df_filtrado_h['monto_total'] - df_filtrado_h['valor_envio']) - df_filtrado_h['costo_caja']
             utilidad_total_h = df_filtrado_h['utilidad_real'].sum()
 
@@ -1650,27 +1643,20 @@ def mostrar_asignaciones():
                 c_h3.metric("📈 Utilidad Estimada", f"${utilidad_total_h:,.0f}", help="Utilidad calculada excluyendo los costos de despacho.")
             else:
                 c_h3.metric("📉 Pérdida Estimada", f"${utilidad_total_h:,.0f}")
-                
             c_h4.metric("💳 Cajas Pagadas", f"{cajas_pagadas_h} / {total_cajas_h}")
-            
             st.markdown("---")
 
-            # --- TABLA DE DATOS DEL HISTORIAL GENERAL ---
+            # Tabla histórica con mes_nombre amigable
             st.dataframe(
-                df_filtrado_h[['asignacion_id', 'nombre', 'ano', 'mes', 'estado_envio', 'pagado', 'monto_total', 'comentario']],
-                use_container_width=True,
-                hide_index=True,
+                df_filtrado_h[['asignacion_id', 'nombre', 'ano', 'mes_nombre', 'estado_envio', 'pagado', 'monto_total', 'comentario']],
+                use_container_width=True, hide_index=True,
                 column_config={
-                    "asignacion_id": "ID",
-                    "nombre": "Cliente",
-                    "ano": "Año",
-                    "mes": "Mes de Trabajo",
-                    "estado_envio": "Estado Despacho",
-                    "pagado": "Estado Pago",
-                    "monto_total": st.column_config.NumberColumn("Monto Cobrado", format="$%.0f"),
-                    "comentario": "Comentarios / Notas"
+                    "asignacion_id": "ID", "nombre": "Cliente", "ano": "Año", "mes_nombre": "Mes de Trabajo",
+                    "estado_envio": "Estado Despacho", "pagado": "Estado Pago",
+                    "monto_total": st.column_config.NumberColumn("Monto Cobrado", format="$%.0f"), "comentario": "Comentarios"
                 }
             )
+
 
 
     # ==========================================================
