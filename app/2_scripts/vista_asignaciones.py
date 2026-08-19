@@ -762,6 +762,21 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
     except Exception as e:
         log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo CRÍTICO al guardar log de auditoría: {e}", email)
         return False
+@st.cache_data(ttl=300)
+def cargar_historico_asignaciones_completo():
+    """Carga todo el histórico de asignaciones desde la base de datos para la pestaña de reportes."""
+    conn = get_db_connection()
+    try:
+        # Traemos todas las asignaciones sin filtro de mes/año
+        res = conn.table("asignaciones").select("*, cliente:clientes(nombre)").order("fecha_asignacion", desc=True).execute()
+        if not res.data:
+            return pd.DataFrame()
+        df = pd.DataFrame(res.data)
+        df['nombre'] = df['cliente'].apply(lambda x: x.get('nombre') if isinstance(x, dict) else 'Cliente Desconocido')
+        return df
+    except Exception as e:
+        log_error("vista_asignaciones", "cargar_historico_asignaciones_completo", e, st.session_state.get('email_usuario', 'Desconocido'))
+        return pd.DataFrame()
 
 # --- INTERFAZ PRINCIPAL ---
 
@@ -806,6 +821,7 @@ def mostrar_asignaciones():
     opciones_menu = [
         "📋 Gestión (Tabla Editable)", 
         "📖 Asignar Libro Principal", 
+        "📜 Historial suscripciones",
         "🚚 Gestionar Envío y Ajuste Manual", 
         "🚀 Generar / Actualizar Mes", 
         "🗑️ Eliminar/Quitar Libros", 
@@ -1528,6 +1544,77 @@ def mostrar_asignaciones():
                                                             st.rerun()
                                                         else:
                                                             st.error(f"Error al asignar: {err}")
+    # ==========================================================
+    # 📜 Historial suscripciones (MÉTRICAS REACTIVAS)
+    # ==========================================================
+    elif opcion_menu == "📜 Historial suscripciones":
+        st.markdown("### 📜 Historial de Suscripciones y Envíos")
+        df_historico_raw = cargar_historico_asignaciones_completo()
+        
+        if df_historico_raw.empty:
+            st.info("Aún no registras asignaciones históricas en el sistema.")
+        else:
+            df_hist_asig = df_historico_raw.copy()
+            df_hist_asig['pagado'] = df_hist_asig['pagado'].apply(mapear_sino)
+            df_hist_asig['estado_envio'] = df_hist_asig['estado_envio'].apply(lambda x: str(x).upper())
+            
+            # --- PANEL DE FILTROS INTERACTIVOS ---
+            with st.expander("🔍 Filtros del Historial"):
+                col_h1, col_h2, col_h3 = st.columns(3)
+                
+                # A. Filtro de Año
+                anios_disponibles = ["Todos"] + sorted(df_hist_asig['ano'].dropna().unique().tolist(), reverse=True)
+                sel_anio_h = col_h1.selectbox("Filtrar por Año:", options=anios_disponibles)
+                
+                # B. Filtro de Mes
+                meses_disponibles = ["Todos"] + sorted(df_hist_asig['mes'].dropna().unique().tolist())
+                sel_mes_h = col_h2.selectbox("Filtrar por Mes:", options=meses_disponibles)
+                
+                # C. Filtro de Pago y Despacho
+                sel_pago_h = col_h3.selectbox("Filtrar por Estado de Pago:", ["Todos", "SI", "NO", "ABONO"])
+
+            # Aplicar filtros dinámicos
+            df_filtrado_h = df_hist_asig.copy()
+            if sel_anio_h != "Todos":
+                df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
+            if sel_mes_h != "Todos":
+                df_filtrado_h = df_filtrado_h[df_filtrado_h['mes'] == int(sel_mes_h)]
+            if sel_pago_h != "Todos":
+                df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
+
+            # Convertir campos financieros
+            df_filtrado_h['monto_total'] = pd.to_numeric(df_filtrado_h['monto_total'], errors='coerce').fillna(0.0)
+
+            # --- METRICAS REACTIVAS (ESTILO CAJA) ---
+            cajas_pagadas_h = len(df_filtrado_h[df_filtrado_h['pagado'] == 'SI'])
+            cajas_pendientes_h = len(df_filtrado_h[df_filtrado_h['estado_envio'].isin(['PENDIENTE PREPARACION', 'EN PREPARACION'])])
+            cajas_listas_h = len(df_filtrado_h[df_filtrado_h['estado_envio'].isin(['POR ENVIAR', 'POR RETIRAR'])])
+            monto_total_recaudado = df_filtrado_h['monto_total'].sum()
+
+            st.markdown("#### 📊 Balance del Período Filtrado")
+            c_h1, c_h2, c_h3, c_h4 = st.columns(4)
+            c_h1.metric("📦 Cajas Procesadas", f"{len(df_filtrado_h):,}")
+            c_h2.metric("💳 Pagadas", f"{cajas_pagadas_h} / {len(df_filtrado_h)}")
+            c_h3.metric("⏳ Por Preparar", f"{cajas_pendientes_h}")
+            c_h4.metric("💰 Recaudación Total", f"${monto_total_recaudado:,.0f}")
+            st.markdown("---")
+
+            # --- DATAFRAME DE HISTORIAL ---
+            st.dataframe(
+                df_filtrado_h[['asignacion_id', 'nombre', 'ano', 'mes', 'estado_envio', 'pagado', 'monto_total', 'comentario']],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "asignacion_id": "ID",
+                    "nombre": "Cliente",
+                    "ano": "Año",
+                    "mes": "Mes",
+                    "estado_envio": "Estado Despacho",
+                    "pagado": "Pagado",
+                    "monto_total": st.column_config.NumberColumn("Monto Cobrado", format="$%.0f"),
+                    "comentario": "Comentarios"
+                }
+            )
 
 
     # ==========================================================
