@@ -792,7 +792,7 @@ def cargar_historico_asignaciones_completo():
 
 # --- INTERFAZ PRINCIPAL ---
 
-ddef mostrar_asignaciones():
+def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
     
     # Mapeo de meses de trabajo
