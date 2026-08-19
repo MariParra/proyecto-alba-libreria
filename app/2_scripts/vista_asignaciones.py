@@ -612,32 +612,62 @@ def quitar_un_libro(asignacion_id, cliente_id, ano, mes, tipo, titulo_quitar, mo
 def eliminar_asignacion(asignacion_id, libro_id, cliente_id, ano, mes, texto_extras):
     conn = get_db_connection()
     try:
-        if pd.notna(libro_id) and libro_id:
-            res_l = conn.table("libros").select("stock").eq("libro_id", int(libro_id)).execute()
+        # 1. Validación de nulidad ultra-segura para el libro principal
+        if pd.notna(libro_id) and str(libro_id).strip() != "" and str(libro_id).lower() != "none":
+            l_id_int = int(float(libro_id))
+            res_l = conn.table("libros").select("stock").eq("libro_id", l_id_int).execute()
             if res_l.data: 
-                # --- MEJORA 2: NO SUMAR SI EL STOCK ES CERO O MENOR ---
+                # Devolvemos stock al catálogo
                 stock_bd = int(res_l.data[0]['stock'])
-                nuevo_stock = 0 if stock_bd <= 0 else stock_bd + 1
-                conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", int(libro_id)).execute()
-            conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", int(libro_id)).eq("origen", f"ASIGNACIÓN {mes}/{ano}").execute()
+                nuevo_stock = stock_bd + 1
+                conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id_int).execute()
             
-        if texto_extras and "EXTRAS:" in str(texto_extras):
-            titulos = str(texto_extras).replace("EXTRAS:", "").split(",")
-            for t in titulos:
-                if not t.strip(): continue
-                res_le = conn.table("libros").select("libro_id, stock").eq("titulo", t.strip()).execute()
+            # Borramos del historial de lectura
+            origen_p = f"ASIGNACIÓN {mes}/{ano}"
+            conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", l_id_int).eq("origen", origen_p).execute()
+            
+        # 2. Parseo inteligente de libros extras soportando delimitadores múltiples (| y ,) y numeraciones (1. Título)
+        if texto_extras and str(texto_extras).strip() != "" and str(texto_extras).lower() != "none":
+            # Limpiamos el prefijo de extras
+            limpio = str(texto_extras).replace("EXTRAS:", "").strip()
+            # Dividimos por plepa | o por coma
+            delimitador = "|" if "|" in limpio else ","
+            items_extras = [x.strip() for x in limpio.split(delimitador) if x.strip()]
+            
+            for item in items_extras:
+                # Limpiamos la numeración si existe (ej: de "1. AMI" a "AMI")
+                titulo_extra = item
+                if '.' in item:
+                    partes_t = item.split('.', 1)
+                    if len(partes_t) == 2 and partes_t[0].strip().isdigit():
+                        titulo_extra = partes_t[1].strip()
+                
+                titulo_extra_limpio = limpiar_texto_para_busqueda(titulo_extra)
+                if not titulo_extra_limpio:
+                    continue
+                
+                # Buscamos en catálogo para restaurar stock de ese extra
+                res_le = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_extra_limpio).execute()
                 if res_le.data:
-                    le_id, le_stock = res_le.data[0]['libro_id'], int(res_le.data[0]['stock'])
-                    # ---NO SUMAR SI EL STOCK ES CERO O MENOR ---
-                    nuevo_stock_ext = 0 if le_stock <= 0 else le_stock + 1
+                    le_id = res_le.data[0]['libro_id']
+                    le_stock = int(res_le.data[0]['stock'])
+                    nuevo_stock_ext = le_stock + 1
                     conn.table("libros").update({"stock": nuevo_stock_ext}).eq("libro_id", le_id).execute()
-                    conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", le_id).eq("origen", f"ASIGNACIÓN EXTRA {mes}/{ano}").execute()
                     
+                    # Eliminamos el extra del librero histórico
+                    origen_e = f"ASIGNACIÓN EXTRA {mes}/{ano}"
+                    conn.table("librero_historico").delete().eq("cliente_id", int(cliente_id)).eq("libro_id", le_id).eq("origen", origen_e).execute()
+
+        # 3. Borrado definitivo de la fila de la asignación en Supabase
         conn.table("asignaciones").delete().eq("asignacion_id", int(asignacion_id)).execute()
+        
+        # 🌟 NUEVO: Limpiamos la caché global de asignaciones al instante para que desaparezca de la pantalla
+        st.cache_data.clear()
         return True, ""
+        
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        error_detalle = f"Fallo al ELIMINAR la asignación {asignacion_id} (Cliente ID: {cliente_id}). Libro principal ID: {libro_id}, Extras: '{texto_extras}'. Detalle técnico: {e}"
+        error_detalle = f"Fallo al ELIMINAR la asignación {asignacion_id} (Cliente ID: {cliente_id}). Detalle técnico: {e}"
         log_error(vista="vista_asignaciones", funcion="eliminar_asignacion", error=error_detalle, email_usuario=email_usuario)
         return False, str(e)
 
