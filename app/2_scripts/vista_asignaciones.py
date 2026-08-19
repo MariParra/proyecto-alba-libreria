@@ -1621,18 +1621,29 @@ def mostrar_asignaciones():
             if sel_pago_h != "Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
             if sel_clientes_h: df_filtrado_h = df_filtrado_h[df_filtrado_h['nombre'].isin(sel_clientes_h)]
 
-            # --- 📊 KPI'S REACTIVAS FINANCIERAS (ESTILO CAJA) ---
+                        # --- 📊 KPI'S REACTIVAS FINANCIERAS CORREGIDAS (SOLO CAJAS PAGADAS) ---
             total_cajas_h = len(df_filtrado_h)
-            cajas_pagadas_h = len(df_filtrado_h[df_filtrado_h['pagado'] == 'SI'])
             
-            df_filtrado_h['valor_envio'] = pd.to_numeric(df_filtrado_h['valor_envio'], errors='coerce').fillna(0.0)
-            df_filtrado_h['costo_caja'] = pd.to_numeric(df_filtrado_h['costo_caja'], errors='coerce').fillna(10000.0)
+            # Filtramos una copia en memoria solo con las transacciones pagadas para el balance real
+            df_pagadas_h = df_filtrado_h[df_filtrado_h['pagado'] == 'SI'].copy()
+            cajas_pagadas_h = len(df_pagadas_h)
             
-            monto_total_recaudado_h = df_filtrado_h['monto_total'].sum()
-            costo_total_cajas_h = df_filtrado_h['costo_caja'].sum()
+            # Convertimos valores a numéricos de forma segura en ambos dataframes
+            df_filtrado_h['monto_total'] = pd.to_numeric(df_filtrado_h['monto_total'], errors='coerce').fillna(0.0)
+            df_pagadas_h['monto_total'] = pd.to_numeric(df_pagadas_h['monto_total'], errors='coerce').fillna(0.0)
+            df_pagadas_h['valor_envio'] = pd.to_numeric(df_pagadas_h['valor_envio'], errors='coerce').fillna(0.0)
+            df_pagadas_h['costo_caja'] = pd.to_numeric(df_pagadas_h['costo_caja'], errors='coerce').fillna(10000.0)
             
-            df_filtrado_h['utilidad_real'] = (df_filtrado_h['monto_total'] - df_filtrado_h['valor_envio']) - df_filtrado_h['costo_caja']
-            utilidad_total_h = df_filtrado_h['utilidad_real'].sum()
+            # Recaudación Bruta Real = Sumatoria de montos cobrados en cajas pagadas
+            monto_total_recaudado_h = df_pagadas_h['monto_total'].sum()
+            
+            # Costo de Producción Real = Sumatoria de costos de armado de cajas que ya se pagaron
+            costo_total_cajas_h = df_pagadas_h['costo_caja'].sum()
+            
+            # Utilidad Real = (Monto Total - Valor Envío) - Costo Caja (Solo de lo cobrado)
+            df_pagadas_h['utilidad_real'] = (df_pagadas_h['monto_total'] - df_pagadas_h['valor_envio']) - df_pagadas_h['costo_caja']
+            utilidad_total_h = df_pagadas_h['utilidad_real'].sum()
+
 
             st.markdown("#### 📊 Balance Financiero del Período Filtrado")
             c_h1, c_h2, c_h3, c_h4 = st.columns(4)
