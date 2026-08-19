@@ -797,8 +797,16 @@ def cargar_historico_asignaciones_completo():
     """Carga todo el histórico de asignaciones desde la base de datos y recalcula montos nulos o en cero."""
     conn = get_db_connection()
     try:
+        # 1. Calculamos los meses transcurridos desde el inicio del proyecto (Octubre 2025) hasta hoy
+        fecha_inicio_proyecto = datetime(2025, 10, 1)
+        hoy = datetime.now()
+        meses_transcurridos = (hoy.year - fecha_inicio_proyecto.year) * 12 + (hoy.month - fecha_inicio_proyecto.month) + 1
+        
+        # Límite dinámico con tasa de crecimiento de 165 cajas por mes transcurrido (Piso mínimo 1.000)
+        limite_dinamico_api = max(1000, meses_transcurridos * 180)
+        
         # 1. Traemos la tabla de asignaciones completa
-        res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).execute()
+        res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).range(0, limite_dinamico_api).execute()
         if not res_asig.data:
             return pd.DataFrame()
         df_asig = pd.DataFrame(res_asig.data)
@@ -849,6 +857,10 @@ def cargar_historico_asignaciones_completo():
 
 def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
+    
+    # Inicialización del límite del pagador del historial (comienza mostrando 200)
+    if 'hist_limit_view' not in st.session_state:
+        st.session_state.hist_limit_view = 200
     
     # Mapeo de meses de trabajo
     meses_dict = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
@@ -1716,10 +1728,17 @@ def mostrar_asignaciones():
                 c_h3.metric("📉 Pérdida Estimada", f"${utilidad_total_h:,.0f}")
             c_h4.metric("💳 Cajas Pagadas", f"{cajas_pagadas_h} / {total_cajas_h}")
             st.markdown("---")
-
-            # Tabla histórica con mes_nombre amigable
+            # --- TABLA DE DATOS DEL HISTORIAL GENERAL CON PAGINACIÓN ---
+            limite_actual = st.session_state.hist_limit_view
+            total_filas_filtradas = len(df_filtrado_h)
+            
+            # Cortamos el DataFrame para mostrar únicamente las filas más recientes según el límite
+            df_paginado = df_filtrado_h.head(limite_actual)
+            
+            st.caption(f"Mostrando los **{len(df_paginado)}** registros más recientes de un total de **{total_filas_filtradas}** encontrados para los filtros activos.")
+            
             st.dataframe(
-                df_filtrado_h[['asignacion_id', 'nombre', 'ano', 'mes_nombre', 'estado_envio', 'pagado', 'monto_total', 'comentario']],
+                df_paginado[['asignacion_id', 'nombre', 'ano', 'mes_nombre', 'estado_envio', 'pagado', 'monto_total', 'comentario']],
                 use_container_width=True, hide_index=True,
                 column_config={
                     "asignacion_id": "ID", "nombre": "Cliente", "ano": "Año", "mes_nombre": "Mes de Trabajo",
@@ -1727,6 +1746,17 @@ def mostrar_asignaciones():
                     "monto_total": st.column_config.NumberColumn("Monto Cobrado", format="$%.0f"), "comentario": "Comentarios"
                 }
             )
+            
+            # Renderizar el botón de paginación diferida solo si quedan filas por mostrar
+            if total_filas_filtradas > limite_actual:
+                col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
+                with col_pag2:
+                    if st.button(f"🔄 Cargar más registros (+100) — Quedan {total_filas_filtradas - limite_actual} por ver", use_container_width=True):
+                        st.session_state.hist_limit_view += 100
+                        st.rerun()
+            else:
+                # Si aplicó filtros y se muestran menos de las filas límite, restablecemos el paginador al valor por defecto
+                st.session_state.hist_limit_view = 100
 
 
 
