@@ -793,33 +793,52 @@ def registrar_cambio_masivo(email, columna, valor, ids_afectados, nombres_afecta
         log_error("vista_asignaciones", "registrar_cambio_masivo", f"Fallo CRÍTICO al guardar log de auditoría: {e}", email)
         return False
 @st.cache_data(ttl=120)
+@st.cache_data(ttl=120)
 def cargar_historico_asignaciones_completo():
-    """Carga todo el histórico de asignaciones desde la base de datos y recalcula montos nulos o en cero."""
+    """Carga todo el histórico de asignaciones desde la base de datos de forma segura, burlando el límite de 1.000 filas de Supabase."""
     conn = get_db_connection()
     try:
         # 1. Calculamos los meses transcurridos desde el inicio del proyecto (Octubre 2025) hasta hoy
         fecha_inicio_proyecto = datetime(2025, 10, 1)
         hoy = datetime.now()
         meses_transcurridos = (hoy.year - fecha_inicio_proyecto.year) * 12 + (hoy.month - fecha_inicio_proyecto.month) + 1
-        
-        # Límite dinámico con tasa de crecimiento de 165 cajas por mes transcurrido (Piso mínimo 1.000)
         limite_dinamico_api = max(1000, meses_transcurridos * 180)
         
-        # 1. Traemos la tabla de asignaciones completa
-        res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).range(0, limite_dinamico_api).execute()
-        if not res_asig.data:
-            return pd.DataFrame()
-        df_asig = pd.DataFrame(res_asig.data)
+        # 2. 🚀 BUCLE DE PAGINACIÓN: Descargamos de 1.000 en 1.000 de forma consecutiva hasta obtener todo el histórico
+        all_data = []
+        chunk_size = 1000
+        start = 0
         
-        # 2. Traemos la tabla de clientes para asociar los nombres
+        while start < limite_dinamico_api:
+            end = start + chunk_size - 1
+            # Solicitamos la tanda de datos actual
+            res_asig = conn.table("asignaciones").select("*").order("fecha_asignacion", desc=True).range(start, end).execute()
+            
+            if not res_asig.data:
+                break
+                
+            all_data.extend(res_asig.data)
+            
+            # Si el servidor devolvió menos de 1.000 filas, significa que ya se descargó TODO
+            if len(res_asig.data) < chunk_size:
+                break
+                
+            start += chunk_size
+
+        if not all_data:
+            return pd.DataFrame()
+            
+        df_asig = pd.DataFrame(all_data)
+        
+        # 3. Traemos la tabla de clientes para asociar los nombres
         res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
         df_clientes = pd.DataFrame(res_clientes.data) if res_clientes.data else pd.DataFrame()
         
-        # 3. Traemos la tabla de suscripciones para el valor de suscripcion base
+        # 4. Traemos la tabla de suscripciones para el valor de suscripcion base
         res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
         df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
         
-        # Merges en memoria con Pandas
+        # Merges en memoria con Pandas (Fusión robusta)
         if not df_clientes.empty:
             df_merged = pd.merge(df_asig, df_clientes, on="cliente_id", how="left")
         else:
@@ -829,12 +848,12 @@ def cargar_historico_asignaciones_completo():
         if not df_susc.empty:
             df_merged = pd.merge(df_merged, df_susc, on="cliente_id", how="left")
         else:
-            df_merged['valor_suscripcion'] = 18500.0 # fallback por defecto
+            df_merged['valor_suscripcion'] = 18500.0
             
         df_merged['nombre'] = df_merged['nombre'].fillna('Cliente Eliminado')
         df_merged['valor_suscripcion'] = df_merged['valor_suscripcion'].fillna(18500.0)
         
-        # 🌟 RECALCULO DE MONTOS ANTIGUOS QUE ESTABAN EN 0 O NULOS
+        # RECALCULO DE MONTOS ANTIGUOS QUE ESTABAN EN 0 O NULOS
         df_merged['monto_total'] = pd.to_numeric(df_merged['monto_total'], errors='coerce').fillna(0.0)
         df_merged['valor_envio'] = pd.to_numeric(df_merged['valor_envio'], errors='coerce').fillna(0.0)
         df_merged['valor_extras'] = pd.to_numeric(df_merged['valor_extras'], errors='coerce').fillna(0.0)
