@@ -900,29 +900,33 @@ def mostrar_caja():
                 "cliente_telefono": st.column_config.TextColumn("Teléfono Cliente")
             }
             
+                        # 🌟 CORRECCIÓN: Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
             limite_actual = st.session_state.caja_limit_view
             total_ventas_filtradas = len(df_mostrar)
             df_paginado = df_mostrar.head(limite_actual)
             
+            # Aplicamos los estilos solo sobre el lote visible (Optimiza rendimiento)
             if 'costo_venta' in df_paginado.columns:
                 df_estilizado = df_paginado.style.apply(lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s], subset=['costo_venta'])
             else: 
                 df_estilizado = df_paginado
-                
+
             disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
             st.caption(f"Mostrando las **{len(df_paginado)}** ventas más recientes de un total de **{total_ventas_filtradas}** encontradas.")
+            
             df_editado = st.data_editor(df_estilizado, disabled=disabled_cols_active, use_container_width=True, hide_index=True, column_config=config_cols_hist)
-
+            
             if not df_mostrar.equals(df_editado):
                 if st.button("💾 Guardar Cambios en Historial", type="primary"):
                     num = actualizar_historial_caja(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
                     
-            # Botón dinámico de paginación diferida para el Historial de ventas
+            # 🌟 NUEVO: Botón dinámico de paginación diferida para el Historial de ventas
             if total_ventas_filtradas > limite_actual:
+                st.write("")
                 col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
                 with col_pag2:
                     if st.button(f"🔄 Cargar más ventas (+100) — Quedan {total_ventas_filtradas - limite_actual} por ver", use_container_width=True, key="btn_load_more_caja"):
@@ -930,6 +934,7 @@ def mostrar_caja():
                         st.rerun()
             else:
                 st.session_state.caja_limit_view = 100
+
                     
     with tab_cobranza:
         st.markdown("### 💸 Cuentas por Cobrar")
