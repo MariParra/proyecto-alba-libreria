@@ -1608,9 +1608,9 @@ def mostrar_asignaciones():
         # 🌟 NUEVO: Nota explicativa financiera del Historial de Cajas
         st.info("""
         💡 **¿Cómo se calculan las finanzas en este panel de Historial?**
-        * **Recaudación Bruta:** Suma de los montos de suscripción (`monto_total`) cobrados para todas las cajas listadas.
+        * **Recaudación Bruta:** Suma de los montos de suscripción (`monto_total`) cobrados para todas las cajas listadas (solo recaudación valor suscripción).
         * **Costos de Producción:** Suma acumulada del costo de armado físico (`costo_caja`) para las cajas del período (estimado en **$10,000** por defecto por caja).
-        * **Utilidad Estimada:** Se obtiene restando `(Monto Total - Valor Envío) - Costo de Caja` (representa tu ganancia neta real descontando el despacho logístico).
+        * **Utilidad Estimada:** Se obtiene restando `Recaudación Bruta - Costo de Caja` (representa tu ganancia neta real descontando el despacho logístico).
         """)
         
         df_historico_raw = cargar_historico_asignaciones_completo()
@@ -1623,7 +1623,6 @@ def mostrar_asignaciones():
             df_hist_asig['estado_envio'] = df_hist_asig['estado_envio'].apply(lambda x: str(x).upper())
             df_hist_asig['monto_total'] = pd.to_numeric(df_hist_asig['monto_total'], errors='coerce').fillna(0.0)
             
-            # 🌟 CORRECCIÓN DE BUG: Mapeamos la columna 'mes' (entero) a su nombre en español de forma segura para cruzar tipos
             df_hist_asig['mes_nombre'] = df_hist_asig['mes'].map(meses_dict).fillna("Desconocido")
             
             with st.expander("🔍 Filtros de Búsqueda del Historial", expanded=True):
@@ -1631,7 +1630,6 @@ def mostrar_asignaciones():
                 anios_disponibles = ["Ver Todos"] + sorted(list(set(df_hist_asig['ano'].dropna().astype(int).tolist())), reverse=True)
                 sel_anio_h = col_h1.selectbox("Filtrar por Año:", options=anios_disponibles, key="hist_filter_year")
                 
-                # 🌟 CORRECCIÓN DE BUG: Meses disponibles ahora se alimentan de la lista unificada de strings para evitar descalces
                 meses_disponibles = ["Ver Todos"] + [meses_dict[m] for m in sorted(df_hist_asig['mes'].dropna().unique()) if m in meses_dict]
                 sel_mes_h = col_h2.selectbox("Filtrar por Mes:", options=meses_disponibles, key="hist_filter_month")
                 
@@ -1645,7 +1643,7 @@ def mostrar_asignaciones():
             if sel_pago_h != "Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['pagado'] == sel_pago_h]
             if sel_clientes_h: df_filtrado_h = df_filtrado_h[df_filtrado_h['nombre'].isin(sel_clientes_h)]
 
-            # --- 📊 KPI'S REACTIVAS FINANCIERAS CORREGIDAS (SOLO CAJAS PAGADAS) ---
+            # --- 📊 KPI'S REACTIVAS FINANCIERAS CORREGIDAS (MARGEN PURO DE MEMBRESÍA) ---
             total_cajas_h = len(df_filtrado_h)
             
             # Filtramos una copia en memoria solo con las transacciones pagadas para el balance real
@@ -1653,18 +1651,17 @@ def mostrar_asignaciones():
             cajas_pagadas_h = len(df_pagadas_h)
             
             # Convertimos valores a numéricos de forma segura en ambos dataframes
-            df_filtrado_h['monto_total'] = pd.to_numeric(df_filtrado_h['monto_total'], errors='coerce').fillna(0.0)
-            df_pagadas_h['monto_total'] = pd.to_numeric(df_pagadas_h['monto_total'], errors='coerce').fillna(0.0)
-            df_pagadas_h['valor_envio'] = pd.to_numeric(df_pagadas_h['valor_envio'], errors='coerce').fillna(0.0)
+            df_pagadas_h['valor_suscripcion'] = pd.to_numeric(df_pagadas_h['valor_suscripcion'], errors='coerce').fillna(18500.0)
             df_pagadas_h['costo_caja'] = pd.to_numeric(df_pagadas_h['costo_caja'], errors='coerce').fillna(10000.0)
             
-            monto_total_recaudado_h = (df_pagadas_h['monto_total'] - df_pagadas_h['valor_envio']).sum()
+            # 🌟 RECAUDACIÓN BRUTA REAL: Suma pura de los cobros de membresía ($17.000 / $18.500)
+            monto_total_recaudado_h = df_pagadas_h['valor_suscripcion'].sum()
             
             # Costo de Producción Real = Sumatoria de costos de armado de cajas que ya se pagaron
             costo_total_cajas_h = df_pagadas_h['costo_caja'].sum()
             
-            # Utilidad Real = (Monto Total - Valor Envío) - Costo Caja (Solo de lo cobrado)
-            df_pagadas_h['utilidad_real'] = (df_pagadas_h['monto_total'] - df_pagadas_h['valor_envio']) - df_pagadas_h['costo_caja']
+            # 🌟 UTILIDAD REAL: Recaudación de Membresías - Costos de Caja (Descontando envíos y extras por completo)
+            df_pagadas_h['utilidad_real'] = df_pagadas_h['valor_suscripcion'] - df_pagadas_h['costo_caja']
             utilidad_total_h = df_pagadas_h['utilidad_real'].sum()
 
 
