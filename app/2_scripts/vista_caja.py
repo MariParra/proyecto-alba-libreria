@@ -932,9 +932,6 @@ def mostrar_caja():
                     if st.button(f"🔄 Cargar más ventas (+100) — Quedan {total_ventas_filtradas - limite_actual} por ver", use_container_width=True, key="btn_load_more_caja"):
                         st.session_state.caja_limit_view += 100
                         st.rerun()
-            else:
-                st.session_state.caja_limit_view = 100
-
                     
     with tab_cobranza:
         st.markdown("### 💸 Cuentas por Cobrar")
