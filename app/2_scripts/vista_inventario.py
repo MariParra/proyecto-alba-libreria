@@ -11,14 +11,42 @@ def obtener_unicos(df, columna):
 @st.cache_data(ttl=300)
 def cargar_datos_completos():
     """
-    Carga todos los datos de la tabla 'libros' desde Supabase
-    y calcula dinámicamente si los libros tienen un descuento activo.
+    Carga todos los datos de la tabla 'libros' desde Supabase en bloques de 1.000,
+    calculando el rango dinámicamente según la fecha de inicio, y calcula dinámicamente 
+    si los libros tienen un descuento activo de forma segura.
     """
     conn = get_db_connection()
-    response = conn.table("libros").select("*").execute()
     
-    if response.data:
-        df = pd.DataFrame(response.data)
+    try:
+        # 1. Calculamos meses transcurridos desde Octubre 2025 hasta hoy
+        fecha_inicio_proyecto = datetime(2025, 10, 1)
+        hoy_dt = datetime.now()
+        meses_transcurridos = (hoy_dt.year - fecha_inicio_proyecto.year) * 12 + (hoy_dt.month - fecha_inicio_proyecto.month) + 1
+        
+        # Límite dinámico (100 libros nuevos/mes, piso mínimo de 1.000)
+        limite_dinamico_libros = max(1000, meses_transcurridos * 100)
+        
+        # 2. 🚀 Bucle acotado de paginación para traer todo el catálogo sin riesgo de truncado
+        all_data = []
+        chunk_size = 1000
+        for bloque in range(3): # Soporta hasta 3.000 títulos en catálogo (Varios años de crecimiento)
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            response = conn.table("libros").select("*").order("libro_id", desc=True).range(start, end).execute()
+            if response.data:
+                all_data.extend(response.data)
+                if len(response.data) < chunk_size:
+                    break
+            else:
+                break
+        
+        if not all_data:
+            return pd.DataFrame()
+            
+        # Creamos el DataFrame definitivo con el 100% de los libros descargados
+        df = pd.DataFrame(all_data)
+    
+        # 🌟 CORRECCIÓN: Procesamos directamente el DataFrame unificado (Sin sobreescrituras destructivas)
         columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
         for col in columnas_texto:
             if col in df.columns:
@@ -75,7 +103,10 @@ def cargar_datos_completos():
         
         return df
         
-    return pd.DataFrame()
+    except Exception as e:
+        log_error("vista_inventario", "cargar_datos_completos", e, st.session_state.get('email_usuario', 'Desconocido'))
+        return pd.DataFrame()
+
 
 def actualizar_destacados_batch(df_con_cambios):
     """
@@ -333,6 +364,9 @@ def actualizar_visibilidad_batch(df_con_cambios):
         return 0
 
 def mostrar_inventario():
+    if 'inventario_limit_view' not in st.session_state:
+        st.session_state.inventario_limit_view = 100
+
     col_inv1, col_inv2 = st.columns([3, 1])
     with col_inv1:
         st.title("📦 Gestión de Inventario")
@@ -471,18 +505,36 @@ def mostrar_inventario():
             
         df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
         
-        if 'Oferta' in df_mostrar_tabla.columns:
-            df_estilizado = df_mostrar_tabla.style.apply(estilizar_catalogo, axis=None)
+        # Paginación visual en catálogo (Cortar el DataFrame para renderizar solo los más recientes)
+        limite_actual = st.session_state.inventario_limit_view
+        total_libros_filtrados = len(df_mostrar_tabla)
+        
+        df_paginado = df_mostrar_tabla.head(limite_actual)
+        
+        if 'Oferta' in df_paginado.columns:
+            df_estilizado = df_paginado.style.apply(estilizar_catalogo, axis=None)
         else:
-            df_estilizado = df_mostrar_tabla
+            df_estilizado = df_paginado
 
         config_cols_catalogo = {
             "precio": st.column_config.NumberColumn("Precio", format="$%.0f"),
             "precio_original": st.column_config.NumberColumn("Precio Original", format="$%.0f"),
             "costo": st.column_config.NumberColumn("Costo", format="$%.0f")
         }
+        
+        st.caption(f"Mostrando los **{len(df_paginado)}** libros más recientes de un total de **{total_libros_filtrados}** encontrados.")
         st.dataframe(df_estilizado, hide_index=True, use_container_width=True, column_config=config_cols_catalogo)
 
+        # Botón dinámico para expandir la tabla de 100 en 100
+        if total_libros_filtrados > limite_actual:
+            col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
+            with col_pag2:
+                if st.button(f"🔄 Cargar más libros (+100) — Quedan {total_libros_filtrados - limite_actual} por ver", use_container_width=True, key="btn_load_more_inv"):
+                    st.session_state.inventario_limit_view += 100
+                    st.rerun()
+        else:
+            # Si se aplicaron filtros y el total es menor al límite, restablecemos el paginador
+            st.session_state.inventario_limit_view = 100
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
         modo_edicion = st.radio("Elige la vista de edición:", ["📱 Vista Móvil (Formulario)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
