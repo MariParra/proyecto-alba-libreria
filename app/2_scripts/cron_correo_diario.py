@@ -2,12 +2,12 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from pathlib import Path
 import pandas as pd
 from supabase import create_client
 
-# --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS (.toml) ---
+# --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS ---
 def cargar_secretos_streamlit():
     secrets = {}
     secrets_path = Path(".streamlit/secrets.toml")
@@ -88,6 +88,8 @@ def generar_reporte_empaque():
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     hoy = datetime.now()
     hoy_str = hoy.strftime("%Y-%m-%d")
+    dia_semana = hoy.weekday() # Monday is 0, Tuesday is 1, Wednesday is 2
+    hora_actual = hoy.hour
 
     # ================= PARTE 1: CONSULTA DE ENVÍOS PENDIENTES =================
     res_ventas = supabase.table("registro_ventas").select("venta_id, fecha_venta, estado, libros_vendidos, cliente:clientes(nombre)").execute()
@@ -113,48 +115,67 @@ def generar_reporte_empaque():
         df_notas['fecha_limite_dt'] = pd.to_datetime(df_notas['fecha_limite']).dt.date
         df_notas_vencidas = df_notas[df_notas['fecha_limite_dt'] < hoy.date()].copy()
 
-    # Si no hay absolutamente nada pendiente, abortamos el envío para no molestar por gusto
-    if df_criticas.empty and df_notas_vencidas.empty:
+    # --- VALIDACIÓN DE FACTURAS VENCIDAS (HÁMSTER FURIOSO OVERRIDE!) ---
+    facturas_vencidas_activas = []
+    if not df_notas.empty:
+        facturas_vencidas_activas = df_notas[
+            (df_notas['titulo'] == "HACER FACTURAS DE LA SEMANA") & 
+            (df_notas['fecha_limite_dt'] < hoy.date())
+        ].copy()
+
+    # Si es un día estándar sin alertas urgentes ni facturación, abortamos para no molestar por gusto
+    if df_criticas.empty and df_notas_vencidas.empty and dia_semana not in [1, 2]:
         print("🟢 Todo al día. No se requiere enviar reporte de alertas hoy.")
         return
 
-    # ================= PARTE 3: CONSTRUCCIÓN DEL CORREO EN HTML CON HÁMSTERS DINÁMICOS =================
-    total_retrasos = len(df_criticas) + len(df_notas_vencidas)
-    
-    # ================= MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
-    # Selección de imagen y mensaje según el estado de los pendientes
-    max_dias_retraso = 0
-    if not df_criticas.empty:
-        max_dias_retraso = max(max_dias_retraso, df_criticas['dias'].max())
-    if not df_notas_vencidas.empty:
-        # Calcular días de retraso de la pizarra
-        df_notas_vencidas['dias_vencida'] = df_notas_vencidas['fecha_limite_dt'].apply(lambda x: (hoy.date() - x).days)
-        max_dias_retraso = max(max_dias_retraso, df_notas_vencidas['dias_vencida'].max())
+    # ================= PARTE 3: MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
+    # A. Comprobación del Hámster Furioso (Facturas Vencidas) - ¡Máxima Prioridad!
+    if not facturas_vencidas_activas.empty:
+        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/angry%20hamster.jpg"
+        header_color = "#d32f2f"
+        border_style = "3px solid #d32f2f"
+        card_bg = "#ffebee"
+        msg_titulo = "🔥 ¡HÁMSTER FURIOSO: FACTURAS VENCIDAS! 🔥"
+        msg_cuerpo = f"¡Ivonne, esto ya es el colmo! Tienes {len(facturas_vencidas_activas)} tarea(s) vieja(s) de facturas pendientes de completar en la pizarra. ¡El hámster está extremadamente enojado y listo para morder! 🐹💢 ¡Ponte a facturar de inmediato!"
 
-    if total_retrasos > 0:
+    # B. Si no hay facturas vencidas, evaluamos el día de la semana
+    elif dia_semana == 1: # Martes
+        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20peace.jpg"
+        header_color = "#0288d1"
+        border_style = "2px solid #0288d1"
+        card_bg = "#e1f5fe"
+        msg_titulo = "🕊️ ¡MAÑANA ES DÍA DE FACTURAS! (PAZ ANTES DE LA TORMENTA)"
+        msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌️"
+
+    elif dia_semana == 2: # Miércoles
+        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20mirando.jpg"
+        header_color = "#ef6c00"
+        border_style = "2px solid #ef6c00"
+        card_bg = "#fff3e0"
+        
+        if hora_actual <= 14: # Mediodía
+            msg_titulo = "👀 ¡MIÉRCOLES DE FACTURAS (MEDIODÍA)! 👀"
+            msg_cuerpo = "Ivonne, ya es mediodía de miércoles. ¿Cómo van esas facturas semanales? El hámster te está observando fijamente... 🐹🔍"
+        else: # Tarde (17:00 en adelante)
+            msg_titulo = "🚨 ¡MIÉRCOLES DE FACTURAS (ÚLTIMO AVISO DE LA TARDE)! 🚨"
+            msg_cuerpo = "¡Ivonne! Son las 5 de la tarde de miércoles. Termina de clavar las facturas de la semana en la pizarra antes de que acabe el día laboral. 🐹📦"
+
+    # C. Días Estándar con deudas o envíos demorados
+    else:
+        max_dias_retraso = df_criticas['dias'].max() if not df_criticas.empty else 0
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
         header_color = "#d32f2f"
         border_style = "2px solid #ff4b4b"
         card_bg = "#ffebee"
         
-        # Nivel de Drama Duolingo según el peor retraso
         if max_dias_retraso > 14:
             msg_titulo = "😭 ESTAS ALERTAS NO SIRVEN... NOS RENDIMOS 😭"
-            msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. Hemos decidido dejar de insistir... mentira, ¡PONTE A TRABAJAR YA! El hámster está llorando en un rincón de la bodega. 🐹💔"
-        elif max_dias_retraso > 7:
-            msg_titulo = "👁️ ¿HOLA? ¿HAY ALGUIEN AHÍ? TUS LIBROS TE EXTRAÑAN... 👁️"
-            msg_cuerpo = f"¡Ivonne! Llevas {max_dias_retraso} días ignorando tus deberes. El hámster está preparando sus maletas para irse de Alba Librería. Por favor, completa tus pendientes hoy. 📦🐹"
+            msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. ¡El hámster está llorando en un rincón de la bodega! 🐹💔"
         else:
             msg_titulo = "🚨 RECORDATORIO DIARIO DE PRODUCTIVIDAD 🚨"
             msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
-    else:
-        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamstertrabajando.jpg"
-        header_color = "#2e7d32"
-        border_style = "2px solid #4caf50"
-        card_bg = "#e8f5e9"
-        msg_titulo = "🐹✨ ¡HAZAÑA COMPLETADA!"
-        msg_cuerpo = "¡Pizarra y bodega limpias! Tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco. ¡El hámster te da luz verde para descansar! 🍹🎉"
 
+    # ================= CONSTRUCCIÓN DEL HTML =================
     html_content = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
@@ -162,7 +183,7 @@ def generar_reporte_empaque():
                 
                 <!-- Encabezado con imagen del hámster dinámica -->
                 <div style="text-align: center; margin-bottom: 25px;">
-                    <img src="{hamster_img_url}" width="150" style="border-radius: 8px; box-shadow: 1px 1px 5px rgba(0,0,0,0.15);" />
+                    <img src="{hamster_img_url}" width="160" style="border-radius: 8px; box-shadow: 1px 1px 5px rgba(0,0,0,0.15);" />
                     <h2 style="color: {header_color}; margin: 15px 0 0 0;">{msg_titulo}</h2>
                 </div>
                 
@@ -172,7 +193,6 @@ def generar_reporte_empaque():
                 </div>
     """
 
-    # Bloque de Envíos Pendientes (si existen)
     if not df_criticas.empty:
         html_content += f"""
                 <h3 style="color: #c62828; border-bottom: 2px solid #ffcdd2; padding-bottom: 5px;">📦 Armado de Paquetes Demorados (>5 días)</h3>
@@ -202,7 +222,6 @@ def generar_reporte_empaque():
                 </table>
         """
 
-    # Bloque de Pizarra de Recordatorios Vencidos (si existen)
     if not df_notas_vencidas.empty:
         html_content += f"""
                 <h3 style="color: #e65100; border-bottom: 2px solid #ffe0b2; padding-bottom: 5px;">📌 Post-its Vencidos en la Pizarra</h3>
@@ -245,7 +264,6 @@ def generar_reporte_empaque():
     msg['From'] = EMAIL_EMISOR
     msg['To'] = EMAIL_RECEPTOR
     
-    # Asunto dinámico según el tipo de desastre
     total_retrasos = len(df_criticas) + len(df_notas_vencidas)
     msg['Subject'] = f"{msg_titulo} ({total_retrasos} pendientes) - {hoy.strftime('%d/%m/%Y')}"
 

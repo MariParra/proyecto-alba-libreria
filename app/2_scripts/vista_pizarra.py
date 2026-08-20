@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import urllib.parse
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
@@ -10,9 +10,45 @@ def cargar_notas_db():
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        # Cargamos las notas que no han sido completadas
-        res = conn.table("pizarra_recordatorios").select("*").eq("completada", False).order("fecha_limite", desc=False).execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        # --- 🚀 LÓGICA AUTOMÁTICA: TAREA RECURRENTE DE FACTURAS ---
+        hoy = datetime.now().date()
+        dias_hasta_miercoles = (2 - hoy.weekday()) % 7
+        proximo_miercoles = hoy + timedelta(days=dias_hasta_miercoles)
+        proximo_miercoles_str = proximo_miercoles.strftime("%Y-%m-%d")
+        
+        # Validamos de forma global para evitar duplicados si ya fue completada o creada
+        res_exist = conn.table("pizarra_recordatorios")\
+            .select("nota_id")\
+            .eq("titulo", "HACER FACTURAS DE LA SEMANA")\
+            .eq("fecha_limite", proximo_miercoles_str).execute()
+            
+        if not res_exist.data:
+            datos_fac = {
+                "titulo": "HACER FACTURAS DE LA SEMANA",
+                "contenido": "Tarea recurrente semanal para la facturación de la librería.",
+                "fecha_limite": proximo_miercoles_str,
+                "completada": False
+            }
+            conn.table("pizarra_recordatorios").insert(datos_fac).execute()
+
+        # Cargamos las notas que no han sido completadas (PAGINADO BYPASS LÍMITE DE 1000)
+        all_notes = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("pizarra_recordatorios")\
+                .select("*")\
+                .eq("completada", False)\
+                .order("fecha_limite", desc=False)\
+                .range(start, end).execute()
+            if res.data:
+                all_notes.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_notes) if all_notes else pd.DataFrame()
     except Exception as e:
         log_error("vista_pizarra", "cargar_notas_db", e, email_usuario)
         return pd.DataFrame()
@@ -43,7 +79,6 @@ def actualizar_nota_db(nota_id, titulo, contenido, fecha_limite):
         "fecha_limite": fecha_limite.strftime("%Y-%m-%d")
     }
     try:
-        conn.table("pizarra_recordatorios").update(datos).eq("nota_id", idx_a_editar).execute() # El idx_a_editar se pasa como nota_id
         conn.table("pizarra_recordatorios").update(datos).eq("nota_id", nota_id).execute()
         st.cache_data.clear()
         return True
@@ -79,6 +114,10 @@ def mostrar_pizarra():
 
     df_notas = cargar_notas_db()
     hoy = datetime.now().date()
+
+    # Inicialización del limitador progresivo (inicia en 3, que es una fila completa)
+    if 'pizarra_limit_view' not in st.session_state:
+        st.session_state.pizarra_limit_view = 3
 
     # ================= BANNER DE PRODUCTIVIDAD (HÁMSTER DE LA PIZARRA) =================
     col_ham1, col_ham2 = st.columns([1, 2.5])
@@ -125,7 +164,6 @@ def mostrar_pizarra():
         notas_vencidas = df_notas[df_notas['fecha_dt'] < hoy].copy()
 
         if len(notas_vencidas) > 0:
-            # Calcular el peor retraso de la pizarra
             df_notas_vencidas = df_notas[df_notas['fecha_dt'] < hoy].copy()
             df_notas_vencidas['retraso'] = df_notas_vencidas['fecha_dt'].apply(lambda x: (hoy - x).days)
             peor_retraso = df_notas_vencidas['retraso'].max()
@@ -133,7 +171,7 @@ def mostrar_pizarra():
             if peor_retraso > 14:
                 drama_msg = f"Hola Ivonne... Veo que ignoras esta tarea desde hace {peor_retraso} días. Está bien, supongo que el papel glossy no era tan importante... El hámster se siente muy decepcionado de ti. 🐹💔"
             else:
-                drama_msg = "Ivonne, la flojera te está ganando. Tienes cosas pendientes que debías hacer AYER. ¡Muévete antes de que el hámster se enoje de verdad! 🐹💢"
+                drama_msg = "Ivonne, la flojera te está ganando. Tienes cosas pendientes que debías hacer AYER. ¡Muévete antes de que el hámster se enoje de verdad! 🐹"
 
             st.markdown(
                 f"""
@@ -153,7 +191,6 @@ def mostrar_pizarra():
                 """, 
                 unsafe_allow_html=True
             )
-
 
     # --- SECCIÓN SUPERIOR DE CREACIÓN (Ubicada en la pantalla principal) ---
     with st.expander("➕ CLAVAR NUEVO POST-IT (CREAR NOTA)", expanded=False):
@@ -178,14 +215,19 @@ def mostrar_pizarra():
 
     st.markdown("### 📋 Tus Post-its Activos")
 
-    # --- TABLERO PRINCIPAL DE POST-ITS (SIN ANIDAR COLUMNAS) ---
+    # --- TABLERO PRINCIPAL DE POST-ITS (CON PAGINACIÓN DE 3 EN 3) ---
     if df_notas.empty:
         st.info("🎉 ¡Pizarra limpia! No tienes recordatorios pendientes por hacer.")
     else:
-        # Usamos columnas a nivel raíz (máximo 3 por fila en PC, adaptativo en móviles)
+        total_notas = len(df_notas)
+        limite_actual = st.session_state.pizarra_limit_view
+        df_paginado = df_notas.head(limite_actual)
+
+        st.caption(f"Mostrando **{len(df_paginado)}** post-its activos de un total de **{total_notas}** pendientes.")
+
         grid_cols = st.columns(3)
         
-        for index, row in df_notas.iterrows():
+        for index, row in df_paginado.reset_index(drop=True).iterrows():
             col_target = grid_cols[index % 3]
             n_id = row['nota_id']
             fecha_lim = row['fecha_dt']
@@ -220,7 +262,7 @@ def mostrar_pizarra():
                 f"&sf=true&output=xml"
             )
             
-            # 2. WhatsApp Auto-Recordatorio (Número de la dueña de los secrets)
+            # 2. WhatsApp Auto-Recordatorio
             dueña_tel = st.secrets.get("catalogo_publico", {}).get("whatsapp_numero", "56963531241")
             msg_wa = f"📌 RECORDATORIO ALBA: {titulo_nota} - {contenido_nota} (Fecha Límite: {fecha_lim.strftime('%d/%m/%Y')})"
             wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel}&text={urllib.parse.quote(msg_wa)}"
@@ -239,7 +281,6 @@ def mostrar_pizarra():
                 
                 # --- MENÚ DE CONTROL ÚNICO ---
                 with st.popover("⚙️ Acciones / Control", use_container_width=True):
-                    # 1. Marcar como completada
                     if st.button("✅ Marcar como Hecho", key=f"btn_done_{n_id}", use_container_width=True, type="primary"):
                         if completar_nota_db(n_id):
                             st.toast("✅ ¡Completado!", icon="👍")
@@ -248,14 +289,11 @@ def mostrar_pizarra():
 
                     st.markdown("---")
                     st.markdown("**🔗 Sincronizaciones**")
-                    # 2. Google Calendar
                     st.markdown(f'<a href="{g_cal_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#4285F4; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-size:13px; font-weight:bold; margin-bottom:8px;">📅 Google Calendar</button></a>', unsafe_allow_html=True)
-                    # 3. WhatsApp
                     st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-size:13px; font-weight:bold; margin-bottom:8px;">💬 WhatsApp Dueña</button></a>', unsafe_allow_html=True)
                     
                     st.markdown("---")
                     st.markdown("**✏️ Edición e Historial**")
-                    # 4. Formulario de Edición en Expander
                     with st.expander("✏️ Editar contenido"):
                         e_titulo = st.text_input("Título:", value=titulo_nota, key=f"edit_tit_{n_id}")
                         e_content = st.text_area("Detalles:", value=contenido_nota, key=f"edit_cont_{n_id}")
@@ -266,9 +304,21 @@ def mostrar_pizarra():
                                 time.sleep(1)
                                 st.rerun()
                                 
-                    # 5. Eliminar nota permanentemente
                     if st.button("🗑️ Eliminar Nota", key=f"btn_del_{n_id}", use_container_width=True, type="secondary"):
                         if eliminar_nota_db(n_id):
                             st.toast("Nota eliminada.")
                             time.sleep(1)
                             st.rerun()
+
+        # Botón dinámico de paginación progresiva (+3)
+        if total_notas > limite_actual:
+            st.write("")
+            col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
+            with col_pag2:
+                remanente = total_notas - limite_actual
+                if st.button(f"🔄 Ver más recordatorios (+3) — Quedan {remanente} por ver", use_container_width=True, key="btn_load_more_pizarra"):
+                    st.session_state.pizarra_limit_view += 3
+                    st.rerun()
+
+if __name__ == '__main__':
+    mostrar_pizarra()
