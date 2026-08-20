@@ -4,12 +4,33 @@ import datetime
 import json
 from utilidades import get_db_connection, log_error
 
+def unificar_formatos_fecha(serie_fechas):
+    """
+    Función de parseo de fechas a prueba de balas, capaz de interpretar
+    múltiples formatos (YYYY-MM-DD y DD-MM-YYYY) de la base de datos.
+    """
+    def parsear_valor(val):
+        if pd.isna(val) or not str(val).strip() or str(val).strip().lower() in ['nan', 'nat']:
+            return pd.NaT
+        val_str = str(val).strip()
+        try:
+            if len(val_str.split('-')[0]) == 4 or len(val_str.split('/')[0]) == 4:
+                return pd.to_datetime(val_str, dayfirst=False, errors='coerce')
+            else:
+                return pd.to_datetime(val_str, dayfirst=True, errors='coerce')
+        except:
+            return pd.to_datetime(val_str, errors='coerce')
+    try:
+        return serie_fechas.apply(parsear_valor)
+    except Exception:
+        return pd.to_datetime(serie_fechas, errors='coerce')
+
 @st.cache_data(ttl=300)
 def cargar_datos_base():
     """Carga de forma dinámica y paginada todos los datos crudos desde la BD superando el límite de 1000."""
     conn = get_db_connection()
     
-    # 1. Registro de Ventas Directas (Paginado)
+    # 1. Registro de Ventas Directas (Paginado con unificación de fechas)
     df_ventas = pd.DataFrame()
     try:
         all_data = []
@@ -29,12 +50,13 @@ def cargar_datos_base():
                 break
         df_ventas = pd.DataFrame(all_data) if all_data else pd.DataFrame()
         if not df_ventas.empty:
-            df_ventas['fecha_venta'] = pd.to_datetime(df_ventas['fecha_venta'], errors='coerce')
+            # Saneamos el parseo de fechas mixtas usando la lógica de la Caja
+            df_ventas['fecha_venta'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
             df_ventas.dropna(subset=['fecha_venta'], inplace=True)
     except Exception as e:
         log_error("vista_dashboard", "cargar_datos_base_ventas", e)
         
-    # 2. Asignaciones de Suscripción (Paginado)
+    # 2. Asignaciones de Suscripción (Paginado con cruce de suscripciones base)
     df_asig = pd.DataFrame()
     try:
         all_data = []
@@ -43,7 +65,7 @@ def cargar_datos_base():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = conn.table("asignaciones")\
-                .select("fecha_asignacion, monto_total, costo_caja, pagado, libro_suscripcion_id")\
+                .select("fecha_asignacion, monto_total, costo_caja, pagado, libro_suscripcion_id, cliente_id, ano, mes")\
                 .order("asignacion_id")\
                 .range(start, end).execute()
             if res.data:
@@ -53,9 +75,17 @@ def cargar_datos_base():
             else:
                 break
         df_asig = pd.DataFrame(all_data) if all_data else pd.DataFrame()
+        
+        # Cruzamos con suscripciones para obtener el valor_suscripcion real (Recaudación Bruta)
         if not df_asig.empty:
+            res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
+            df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
+            if not df_susc.empty:
+                df_asig = pd.merge(df_asig, df_susc, on="cliente_id", how="left")
+            else:
+                df_asig['valor_suscripcion'] = 18500.0
+            df_asig['valor_suscripcion'] = df_asig['valor_suscripcion'].fillna(18500.0)
             df_asig['fecha_asignacion'] = pd.to_datetime(df_asig['fecha_asignacion'], errors='coerce')
-            df_asig.dropna(subset=['fecha_asignacion'], inplace=True)
     except Exception as e:
         log_error("vista_dashboard", "cargar_datos_base_asignaciones", e)
         
@@ -228,7 +258,7 @@ def mostrar_dashboard():
         if todos_anos:
             anos_finales = df_ventas['fecha_venta'].dt.year.dropna().unique().astype(int).tolist() if not df_ventas.empty else [ano_actual]
             if not df_asig.empty:
-                anos_finales.extend(df_asig['fecha_asignacion'].dt.year.dropna().unique().astype(int).tolist())
+                anos_finales.extend(df_asig['ano'].dropna().unique().astype(int).tolist())
             if not df_vm.empty:
                 df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
                 anos_finales.extend(df_vm['fecha_evento_dt'].dt.year.dropna().unique().astype(int).tolist())
@@ -245,7 +275,9 @@ def mostrar_dashboard():
 
     # Filtrar datos de los años y meses seleccionados de forma precisa
     df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year.isin(anos_finales)) & (df_ventas['fecha_venta'].dt.month.isin(meses_numeros_finales))] if not df_ventas.empty else pd.DataFrame()
-    df_a_filt = df_asig[(df_asig['fecha_asignacion'].dt.year.isin(anos_finales)) & (df_asig['fecha_asignacion'].dt.month.isin(meses_numeros_finales))] if not df_asig.empty else pd.DataFrame()
+    
+    # 🌟 MEJORA: Filtramos asignaciones directamente por las columnas int de Supabase 'ano' y 'mes'
+    df_a_filt = df_asig[(df_asig['ano'].isin(anos_finales)) & (df_asig['mes'].isin(meses_numeros_finales))] if not df_asig.empty else pd.DataFrame()
     
     if not df_vm.empty:
         df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
@@ -253,28 +285,28 @@ def mostrar_dashboard():
     else:
         df_vm_filt = pd.DataFrame()
 
-    # --- CÁLCULO DE MÉTRICAS SEGURAS POR CANAL (PAGADOS) ---
+    # --- CÁLCULO DE MÉTRICAS SEGURAS POR CANAL (CONCILIADAS CON HISTORIALES) ---
     df_a_paid = df_a_filt[df_a_filt['pagado'].str.upper() == 'SI'] if not df_a_filt.empty else pd.DataFrame()
-    df_v_paid = df_v_filt[df_v_filt['estado_pago'].str.upper() == 'PAGADO'] if not df_v_filt.empty else pd.DataFrame()
-    df_vm_paid = df_vm_filt[df_vm_filt['estado_pago'].str.upper() == 'PAGADO'] if not df_vm_filt.empty else pd.DataFrame()
+    df_v_paid = df_v_filt.copy() if not df_v_filt.empty else pd.DataFrame() # Sin filtro de pago para Caja
+    df_vm_paid = df_vm_filt.copy() if not df_vm_filt.empty else pd.DataFrame() # Sin filtro de pago para Eventos
 
-    # 1. Métricas Club de Suscripción (Asignaciones)
-    ingreso_asig = pd.to_numeric(df_a_paid['monto_total'], errors='coerce').sum() if not df_a_paid.empty else 0.0
+    # 1. Métricas Club de Suscripción (Recaudación Bruta y Costo de Caja)
+    ingreso_asig = pd.to_numeric(df_a_paid['valor_suscripcion'], errors='coerce').sum() if not df_a_paid.empty else 0.0
     costo_asig = pd.to_numeric(df_a_paid['costo_caja'], errors='coerce').sum() if not df_a_paid.empty else 0.0
     utilidad_asig = ingreso_asig - costo_asig
 
-    # 2. Métricas Caja y Ventas Rápidas (Directas)
+    # 2. Métricas Caja y Ventas Rápidas (Conciliadas con vista_caja.py)
     ingreso_caja = pd.to_numeric(df_v_paid['monto_final'], errors='coerce').sum() if not df_v_paid.empty else 0.0
     costo_caja = pd.to_numeric(df_v_paid['costo_venta'], errors='coerce').sum() if not df_v_paid.empty else 0.0
     envio_caja = pd.to_numeric(df_v_paid['valor_envio'], errors='coerce').sum() if not df_v_paid.empty else 0.0
     utilidad_caja = (ingreso_caja - envio_caja) - costo_caja if not df_v_paid.empty else 0.0
 
-    # 3. Métricas Ventas Masivas (Eventos)
+    # 3. Métricas Ventas Masivas (Eventos conciliados con vista_ventas_masivas.py)
     ingreso_vm = pd.to_numeric(df_vm_paid['ingreso_total'], errors='coerce').sum() if not df_vm_paid.empty else 0.0
     costo_vm = pd.to_numeric(df_vm_paid['costo_total'], errors='coerce').sum() if not df_vm_paid.empty else 0.0
     utilidad_vm = pd.to_numeric(df_vm_paid['utilidad_estimada'], errors='coerce').sum() if not df_vm_paid.empty else 0.0
 
-    # 4. Totales Consolidados
+    # 4. Totales Consolidados de Alba Librería
     ingresos_totales = ingreso_asig + ingreso_caja + ingreso_vm
     costos_totales = costo_asig + costo_caja + costo_vm
     utilidad_total = utilidad_asig + utilidad_caja + utilidad_vm
@@ -353,7 +385,7 @@ def mostrar_dashboard():
                     col_agrupa = 'mes_str'
 
                 v_agrupado = df_v_paid.groupby(col_agrupa)['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(name="Ventas Directas", dtype=float)
-                a_agrupado = df_a_paid.groupby(col_agrupa)['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(name="Suscripciones", dtype=float)
+                a_agrupado = df_a_paid.groupby(col_agrupa)['valor_suscripcion'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(name="Suscripciones", dtype=float)
                 vm_agrupado = df_vm_paid.groupby(col_agrupa)['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Ventas Masivas", dtype=float)
 
                 df_tendencia = pd.concat([v_agrupado, a_agrupado, vm_agrupado], axis=1).fillna(0.0).sort_index()
@@ -413,7 +445,8 @@ def mostrar_dashboard():
                 if es_mes_unico:
                     df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')
                 else:
-                    df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%Y-%m')
+                    # Si no hay fecha_asignacion poblada para históricos, agrupamos por la columna de enteros de la BD
+                    df_a_filt['vol_str'] = df_a_filt['ano'].astype(str) + "-" + df_a_filt['mes'].astype(str).str.zfill(2)
                     
                 conteo_asig = df_a_filt.groupby('vol_str').size().rename("Cantidad")
                 conteo_asig.index = conteo_asig.index.astype(str)
