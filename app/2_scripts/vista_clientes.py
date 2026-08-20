@@ -201,7 +201,9 @@ def mostrar_clientes():
             
             cliente_sel = st.selectbox(
                 f"Selecciona o busca un cliente (mostrando {len(lista_ficha_paginada)} de {len(lista_nombres)}):", 
-                [""] + lista_ficha_paginada, 
+                options=lista_ficha_paginada,
+                index=None,
+                placeholder="🔍 Escribe o busca un cliente...",
                 key="sel_ficha"
             )
             
@@ -427,7 +429,9 @@ def mostrar_clientes():
             
             cliente_editar = st.selectbox(
                 f"Selecciona el cliente a editar (mostrando {len(lista_editar_paginada)} de {len(lista_nombres)}):", 
-                [""] + lista_editar_paginada, 
+                options=lista_editar_paginada,
+                index=None,
+                placeholder="✏️ Escribe o selecciona el cliente a editar...",
                 key="sel_editar"
             )
             
@@ -506,6 +510,13 @@ def mostrar_clientes():
                                 }).execute()
                                 
                             st.success("¡Datos del cliente y valor de suscripción actualizados correctamente!")
+                            
+                            if 'sel_editar' in st.session_state:
+                                del st.session_state.sel_editar
+                            if 'sel_ficha' in st.session_state:
+                                del st.session_state.sel_ficha
+                            st.session_state.clientes_limit_view = 200
+                            
                             cargar_todos_los_clientes.clear()
                             time.sleep(1.5)
                             st.rerun()
@@ -524,7 +535,9 @@ def mostrar_clientes():
             
             cliente_eliminar = st.selectbox(
                 f"Selecciona el cliente a eliminar (mostrando {len(lista_eliminar_paginada)} de {len(lista_nombres)}):", 
-                [""] + lista_eliminar_paginada, 
+                options=lista_eliminar_paginada,
+                index=None,
+                placeholder="🗑️ Escribe o selecciona el cliente a eliminar...",
                 key="sel_eliminar"
             )
             
@@ -542,6 +555,15 @@ def mostrar_clientes():
                     try:
                         conn.table("clientes").delete().eq("cliente_id", id_eliminar).execute()
                         st.success("Cliente eliminado exitosamente.")
+                        
+                        if 'sel_eliminar' in st.session_state:
+                            del st.session_state.sel_eliminar
+                        if 'sel_ficha' in st.session_state:
+                            del st.session_state.sel_ficha
+                        if 'sel_editar' in st.session_state:
+                            del st.session_state.sel_editar
+                        st.session_state.clientes_limit_view = 200
+                        
                         cargar_todos_los_clientes.clear()
                         time.sleep(1.5)
                         st.rerun()

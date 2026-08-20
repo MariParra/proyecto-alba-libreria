@@ -529,7 +529,10 @@ def mostrar_caja():
                 
                 sel_cliente = st.selectbox(
                     f"Buscar cliente (mostrando {len(clientes_filtrados)} de {len(df_clientes)}):", 
-                    [""] + clientes_filtrados['nombre'].tolist()
+                    options=clientes_filtrados['nombre'].tolist(),
+                    index=None,
+                    placeholder="👤 Busca o selecciona un cliente...",
+                    key="sel_cliente_caja"
                 )
                 
                 # Botón UX para expandir la lista de clientes en el buscador de +30 en +30
@@ -575,7 +578,13 @@ def mostrar_caja():
             l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion, l_apto_cajita = None, "", "", "", 0.0, 0, 0.0, False, "", True
             if modo_libro == "📚 Buscar Existente":
                 if not df_libros.empty:
-                    sel_libro = st.selectbox("Buscar libro:", [""] + df_libros['titulo'].tolist())
+                    sel_libro = st.selectbox(
+                        "Buscar libro:", 
+                        options=df_libros['titulo'].tolist(),
+                        index=None,
+                        placeholder="📚 Busca o selecciona un libro...",
+                        key="sel_libro_caja"
+                    )
                     if sel_libro:
                         datos_l = df_libros[df_libros['titulo'] == sel_libro].iloc[0]
                         l_id = int(datos_l['libro_id'])
@@ -670,6 +679,9 @@ def mostrar_caja():
                         'apto_cajita': l_apto_cajita
                     })
                     
+                    if 'sel_libro_caja' in st.session_state:
+                        del st.session_state.sel_libro_caja
+                        
                     st.success(f"{l_titulo} añadido.")
                     st.rerun()
                     
@@ -831,6 +843,12 @@ def mostrar_caja():
                         asignacion_id_target, v_id_fusión 
                     )
                     if exito: 
+                        if 'sel_cliente_caja' in st.session_state:
+                            del st.session_state.sel_cliente_caja
+                        if 'sel_libro_caja' in st.session_state:
+                            del st.session_state.sel_libro_caja
+                        st.session_state.clientes_limit_view = 200
+                        
                         st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
                         st.balloons()
                         time.sleep(2)

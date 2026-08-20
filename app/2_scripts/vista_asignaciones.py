@@ -1000,7 +1000,9 @@ def mostrar_asignaciones():
 
                 cliente_sel = col_a1.selectbox(
                     "1. Selecciona un Cliente:",
-                    options=[""] + list(clientes_disponibles.keys()),
+                    options=list(clientes_disponibles.keys()),
+                    index=None,
+                    placeholder="👤 Busca o selecciona un cliente...",
                     key="cliente_pref_sel"
                 )
 
@@ -1030,6 +1032,9 @@ def mostrar_asignaciones():
                             ).eq("asignacion_id", asignacion_id_sel).execute()
                             
                             st.success(f"¡Preferencia '{preferencia_final_str}' guardada para {cliente_sel}!")
+                            if 'cliente_pref_sel' in st.session_state: del st.session_state.cliente_pref_sel
+                            if 'generos_pref_sel' in st.session_state: del st.session_state.generos_pref_sel
+                            
                             time.sleep(1.5)
                             st.rerun() # Refrescamos para que la tabla principal muestre el cambio
                         except Exception as e:
@@ -1660,6 +1665,8 @@ def mostrar_asignaciones():
                                                             ano=ano_sel, mes=mes_num, titulo=libro_info['titulo'], autor=libro_info.get('autor', '')
                                                         )
                                                         if ok:
+                                                            if 'cliente_manual_asig' in st.session_state: del st.session_state.cliente_manual_asig
+                                                            if 'libro_manual_asig' in st.session_state: del st.session_state.libro_manual_asig
                                                             st.success(f"¡Libro '{libro_info['titulo']}' asignado a {cliente_nom} con éxito!")
                                                             time.sleep(1.5)
                                                             st.rerun()
@@ -1797,7 +1804,13 @@ def mostrar_asignaciones():
                     st.info("💡 **Los libros extras ahora se añaden automáticamente desde la pestaña CAJA** (Ventana de Ventas). Usa esta sección solo para asignar manualmente el Costo de Envío o para hacer correcciones forzosas de texto en los Extras.")
                     
                     lista_clientes = [""] + df_mes.apply(lambda x: f"ID:{x['asignacion_id']} - {x['nombre']}", axis=1).tolist()
-                    cliente_mod_sel = st.selectbox("1. Seleccionar Cliente:", lista_clientes)
+                    cliente_mod_sel = st.selectbox(
+                        "1. Seleccionar Cliente:", 
+                        options=lista_clientes,
+                        index=None,
+                        placeholder="🚚 Selecciona un cliente...",
+                        key="cliente_logistica_sel"
+                    )
                     
                     if cliente_mod_sel:
                         id_asig_tmp = int(cliente_mod_sel.split(" - ")[0].replace("ID:", ""))
@@ -1815,6 +1828,7 @@ def mostrar_asignaciones():
                         if st.button("✅ Guardar Cambios en Logística", type="primary"):
                             ex, err = guardar_ajustes_logistica(id_asig_tmp, row_caja['cliente_id'], cobro_envio_manual, nuevo_extra_txt, nuevo_valor_ext)
                             if ex: 
+                                if 'cliente_logistica_sel' in st.session_state: del st.session_state.cliente_logistica_sel
                                 st.success("¡Datos guardados! El Monto Total se recalculó automáticamente.")
                                 st.rerun()
                             else: 

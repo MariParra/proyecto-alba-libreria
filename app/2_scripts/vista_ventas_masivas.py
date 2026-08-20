@@ -309,7 +309,15 @@ def mostrar_ventas_masivas():
                 if not df_libros_catalogo.empty:
                     df_libros_catalogo['label_busqueda'] = df_libros_catalogo.apply(lambda r: f"{r['titulo']} (Stock actual: {r['stock']})", axis=1)
                     col_b1, col_b2 = st.columns([3, 1])
-                    sel_libro_label = col_b1.selectbox("Busca un libro:", [""] + df_libros_catalogo['label_busqueda'].tolist())
+                    
+                    sel_libro_label = col_b1.selectbox(
+                        "Busca un libro:", 
+                        options=df_libros_catalogo['label_busqueda'].tolist(),
+                        index=None,
+                        placeholder="📚 Busca o selecciona un libro...",
+                        key="sel_libro_vm"
+                    )
+                    
                     cant_descontar = col_b2.number_input("Cantidad implicada:", min_value=1, step=1, value=1)
                     
                     if st.button("➕ Añadir a la lista", type="secondary"):
@@ -320,6 +328,10 @@ def mostrar_ventas_masivas():
                                     "libro_id": int(libro_data['libro_id']), "titulo": libro_data['titulo'], 
                                     "cantidad": cant_descontar, "stock_actual": int(libro_data['stock']), "es_nuevo": False
                                 })
+                                
+                                if 'sel_libro_vm' in st.session_state:
+                                    del st.session_state.sel_libro_vm
+                                
                                 st.success(f"'{libro_data['titulo']}' añadido al carrito.")
                                 time.sleep(1)
                             else:
@@ -588,7 +600,13 @@ def mostrar_ventas_masivas():
         
         if not df_historial_anular.empty:
             opciones_anular = {f"#{row['evento_id']} - {row['nombre_evento']} ({row.get('fecha_evento', 'Sin fecha')})": row for index, row in df_historial_anular.iterrows()}
-            sel_anular_label = st.selectbox("Selecciona el evento a anular:", [""] + list(opciones_anular.keys()))
+            sel_anular_label = st.selectbox(
+                "Selecciona el evento a anular:", 
+                options=list(opciones_anular.keys()),
+                index=None,
+                placeholder="🔍 Selecciona el evento a anular...",
+                key="sel_anular_vm"
+            )
             
             if sel_anular_label:
                 evento_a_anular = opciones_anular[sel_anular_label]
@@ -603,6 +621,8 @@ def mostrar_ventas_masivas():
                     exito, error = anular_venta_masiva(evento_a_anular['evento_id'], evento_a_anular.get('stock_descontado'), evento_a_anular.get('libros_implicados'))
                     if exito:
                         st.success("¡Evento anulado con éxito!")
+                        if 'sel_anular_vm' in st.session_state: 
+                                del st.session_state.sel_anular_vm
                         cargar_historial_ventas_masivas.clear()
                         cargar_catalogo_libros_vm.clear()
                         time.sleep(2)
