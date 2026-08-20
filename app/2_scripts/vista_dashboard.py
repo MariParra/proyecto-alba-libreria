@@ -167,7 +167,7 @@ def obtener_top_libros_populares(df_ventas_filt, df_asig_filt):
             return pd.DataFrame()
         
         ids_libros = list(conteo_libros.keys())
-        res_detalles = conn.table("libros").select("libro_id, titulo").in_("libro_id", ids_libros).execute()
+        res_detalles = conn.table("libros").select("libro_id, titulo").in_(libro_id, ids_libros).execute()
         df_detalles = pd.DataFrame(res_detalles.data) if res_detalles.data else pd.DataFrame()
 
         if not df_detalles.empty:
@@ -288,13 +288,17 @@ def mostrar_dashboard():
         with st.container(border=True):
             st.markdown(f"#### 💵 Tendencia de Ingresos ({texto_freq})")
             if not df_v_paid.empty or not df_a_paid.empty or not df_vm_paid.empty:
-                df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
-                df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
-                df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
+                # 🚀 SEGURIDAD ULTRA: Formatear solo si las dataframes contienen registros reales
+                if not df_v_paid.empty:
+                    df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
+                if not df_a_paid.empty:
+                    df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
+                if not df_vm_paid.empty:
+                    df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
 
-                v_agrupado = df_v_paid.groupby('dia_str')['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(dtype=float)
-                a_agrupado = df_a_paid.groupby('dia_str')['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(dtype=float)
-                vm_agrupado = df_vm_paid.groupby('dia_str')['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(dtype=float)
+                v_agrupado = df_v_paid.groupby('dia_str')['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(name="Ventas Directas", dtype=float)
+                a_agrupado = df_a_paid.groupby('dia_str')['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(name="Suscripciones", dtype=float)
+                vm_agrupado = df_vm_paid.groupby('dia_str')['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Ventas Masivas", dtype=float)
 
                 df_tendencia = pd.concat([v_agrupado, a_agrupado, vm_agrupado], axis=1).fillna(0.0).sort_index()
                 df_tendencia.index = df_tendencia.index.astype(str)
