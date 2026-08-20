@@ -10,15 +10,31 @@ from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 def generar_plantilla_actualizacion_libros():
     """
     Genera una plantilla Excel con TODOS los libros y sus datos actuales,
-    incluyendo los nuevos campos booleanos.
+    incluyendo los nuevos campos booleanos, superando la limitación de 1000.
     """
     conn = get_db_connection()
     try:
-        # --- NUEVO: Añadimos 'destacado' y 'visible_catalogo' a la consulta ---
-        res = conn.table("libros").select(
-            "libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo"
-        ).execute()
-        df = pd.DataFrame(res.data)
+        all_books = []
+        chunk_size = 1000
+        # Bucle dinámico ilimitado (hasta 100.000 libros)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros").select(
+                "libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo"
+            ).order("libro_id").range(start, end).execute()
+            
+            if res.data:
+                all_books.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_books:
+            return None
+            
+        df = pd.DataFrame(all_books)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Actualizar Libros')
@@ -38,10 +54,30 @@ def generar_plantilla_actualizacion_libros():
         return None
 
 def generar_plantilla_actualizacion_clientes():
+    """Genera una plantilla Excel con TODOS los clientes actuales, superando la limitación de 1000."""
     conn = get_db_connection()
     try:
-        res = conn.table("clientes").select("cliente_id, nombre, rut, email, telefono, instagram, direccion, status").execute()
-        df = pd.DataFrame(res.data)
+        all_clients = []
+        chunk_size = 1000
+        # Bucle dinámico ilimitado (hasta 100.000 clientes)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("clientes")\
+                .select("cliente_id, nombre, rut, email, telefono, instagram, direccion, status")\
+                .order("cliente_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_clients.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_clients:
+            return None
+            
+        df = pd.DataFrame(all_clients)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Actualizar Clientes')
@@ -51,14 +87,12 @@ def generar_plantilla_actualizacion_clientes():
         return output.getvalue()
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-                
         log_error(
             vista="vista_actualizacion_masiva", 
             funcion="generar_plantilla_actualizacion_clientes",
             error=e,
             email_usuario=email_usuario
         )
-        
         st.error(f"Error generando plantilla de clientes: {e}")
         return None
 
@@ -78,9 +112,16 @@ def procesar_actualizacion_libros(df):
     ids_libros = df['libro_id'].dropna().astype(int).tolist()
     df_original = pd.DataFrame()
     if ids_libros:
-        res_original = conn.table("libros").select("libro_id, precio, precio_original").in_("libro_id", ids_libros).execute()
-        if res_original.data:
-            df_original = pd.DataFrame(res_original.data).set_index('libro_id')
+        original_data = []
+        # Segmentamos de 1000 en 1000 los IDs a consultar para evitar truncamiento en la base
+        for idx in range(0, len(ids_libros), 1000):
+            chunk = ids_libros[idx:idx + 1000]
+            res_original = conn.table("libros").select("libro_id, precio, precio_original").in_("libro_id", chunk).execute()
+            if res_original.data:
+                original_data.extend(res_original.data)
+                
+        if original_data:
+            df_original = pd.DataFrame(original_data).set_index('libro_id')
             df_original['Dcto %'] = 0.0
             mask_dcto = (df_original['precio_original'] > df_original['precio']) & (df_original['precio_original'] > 0)
             df_original.loc[mask_dcto, 'Dcto %'] = (((df_original.loc[mask_dcto, 'precio_original'] - df_original.loc[mask_dcto, 'precio']) / df_original.loc[mask_dcto, 'precio_original']) * 100)
@@ -224,7 +265,7 @@ def mostrar_actualizacion_masiva():
                             error=e,
                             email_usuario=email_usuario
                         )
-                        st.error(f"Error crítico al procesar el archivo: {e}")
+                        st.error(f"Error al procesar el archivo: {e}")
                         st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
 
     with tab_clientes:
@@ -280,7 +321,7 @@ def mostrar_actualizacion_masiva():
                             error=e,
                             email_usuario=email_usuario
                         )
-                        st.error(f"Error crítico al procesar el archivo de clientes: {e}")
+                        st.error(f"Error al procesar el archivo de clientes: {e}")
                         st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
 
 if __name__ == "__main__":
