@@ -35,14 +35,14 @@ def calcular_siguiente_fecha(fecha_limite_str, recurrencia, hoy):
     return None
 
 @st.cache_data(ttl=30)
+@st.cache_data(ttl=30)
 def cargar_notas_db():
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
         hoy = datetime.now().date()
         
-        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS (SEMANA EN CURSO) ---
-        # Calcula el miércoles de la semana en curso (incluso si ya pasó)
+        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS ---
         miercoles_esta_semana = hoy - timedelta(days=(hoy.weekday() - 2))
         proximo_miercoles_str = miercoles_esta_semana.strftime("%Y-%m-%d")
         
@@ -60,7 +60,8 @@ def cargar_notas_db():
             }
             conn.table("pizarra_recordatorios").insert(datos_fac).execute()
 
-        # --- 2. LÓGICA INTELIGENTE DE AUTO-CLONACIÓN DE TAREAS RECURRENTES COMPLETADAS ---
+        # --- 2. LÓGICA INTELIGENTE DE AUTO-CLONACIÓN CON PASE DE ESTAFETA (CONCILIADO) ---
+        # Buscamos solo las notas completadas que tengan etiquetas de recurrencia ACTIVAS
         res_completadas = conn.table("pizarra_recordatorios")\
             .select("nota_id, titulo, contenido, fecha_limite")\
             .eq("completada", True).execute()
@@ -68,18 +69,22 @@ def cargar_notas_db():
         if res_completadas.data:
             for nota in res_completadas.data:
                 cont_str = str(nota.get('contenido', ''))
+                # Solo procesa si tiene una recurrencia activa y NO procesada previamente
                 recurrencia = "Semanal" if "[Recurrencia: Semanal]" in cont_str else ("Mensual" if "[Recurrencia: Mensual]" in cont_str else None)
                 
                 if recurrencia:
                     prox_fecha = calcular_siguiente_fecha(nota['fecha_limite'], recurrencia, hoy)
                     if prox_fecha:
                         prox_fecha_str = prox_fecha.strftime("%Y-%m-%d")
+                        
+                        # Validamos que no exista ya una copia activa para esa misma fecha límite
                         res_active_exist = conn.table("pizarra_recordatorios")\
                             .select("nota_id")\
                             .eq("titulo", nota['titulo'])\
                             .eq("fecha_limite", prox_fecha_str).execute()
                             
                         if not res_active_exist.data:
+                            # A. Creamos la nueva copia activa herendando el tag de recurrencia
                             nueva_copia = {
                                 "titulo": nota['titulo'],
                                 "contenido": nota['contenido'],
@@ -87,8 +92,15 @@ def cargar_notas_db():
                                 "completada": False
                             }
                             conn.table("pizarra_recordatorios").insert(nueva_copia).execute()
+                            
+                        # B. 🌟 EL BOTÓN DE SEGURIDAD: Cambiamos el tag de la nota completada a 'Procesada' 
+                        # para que nunca más vuelva a intentar clonarse.
+                        nuevo_contenido_viejo = cont_str.replace(f"[Recurrencia: {recurrencia}]", "[Recurrencia: Procesada]")
+                        conn.table("pizarra_recordatorios").update({
+                            "contenido": nuevo_contenido_viejo
+                        }).eq("nota_id", int(nota['nota_id'])).execute()
 
-        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO CON BYPASS DE 1000) ---
+        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO) ---
         all_notes = []
         chunk_size = 1000
         for bloque in range(100):
@@ -109,6 +121,7 @@ def cargar_notas_db():
     except Exception as e:
         log_error("vista_pizarra", "cargar_notas_db", e, email_usuario)
         return pd.DataFrame()
+
 
 def guardar_nota_db(titulo, contenido, fecha_limite, recurrencia="Única vez"):
     conn = get_db_connection()
