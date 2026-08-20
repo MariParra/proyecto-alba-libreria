@@ -10,8 +10,24 @@ def cargar_libros_para_marketing():
     from utilidades import get_db_connection
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, precio, precio_original, genero, stock").order("titulo").execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_books = []
+        chunk_size = 1000
+        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todo el catálogo de libros de forma paginada
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros")\
+                .select("libro_id, titulo, autor, precio, precio_original, genero, stock")\
+                .order("titulo")\
+                .range(start, end).execute()
+            if res.data:
+                all_books.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        df = pd.DataFrame(all_books) if all_books else pd.DataFrame()
         if not df.empty:
             df.dropna(subset=['libro_id', 'titulo'], inplace=True)
             df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0)
@@ -27,7 +43,7 @@ def mostrar_generador_marketing():
     try:
         URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
     except KeyError:
-        st.error("🚨 Falta la clave 'supabase_portadas_url' en secrets.toml.")
+        st.error("🚨 Falta la clave 'supabase_portadas_url' in secrets.toml.")
         st.stop()
 
     df_libros = cargar_libros_para_marketing()
@@ -112,7 +128,7 @@ def mostrar_generador_marketing():
                     """
                     st.markdown(html_str, unsafe_allow_html=True)
                     
-                    # 3. El botón de descarga usa los bytes crudos (esto siempre funcionó bien)
+                    # 3. El botón de descarga usa los bytes crudos
                     st.download_button(
                         label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
                         file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
