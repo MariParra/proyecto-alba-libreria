@@ -31,6 +31,22 @@ def unificar_formatos_fecha(serie_fechas):
     except Exception:
         return pd.to_datetime(serie_fechas, errors='coerce')
 
+def obtener_secuencia_ano_mes(meses_atras):
+    """Genera una lista de enteros en formato YYYYMM retroactivos a partir de hoy."""
+    hoy = datetime.date.today()
+    secuencia = []
+    current_year = hoy.year
+    current_month = hoy.month
+    
+    for _ in range(meses_atras):
+        secuencia.append(current_year * 100 + current_month)
+        current_month -= 1
+        if current_month == 0:
+            current_month = 12
+            current_year -= 1
+            
+    return secuencia
+
 @st.cache_data(ttl=300)
 def cargar_datos_base():
     """Carga de forma dinámica y paginada todos los datos crudos desde la BD superando el límite de 1000."""
@@ -232,64 +248,109 @@ def mostrar_dashboard():
         7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
     }
 
-    # ================= FILTRO TEMPORAL MULTI-SELECCIÓN U "HORIZONTE TOTAL" =================
+    # ================= FILTRO TEMPORAL COMERCIAL CON PERIODOS RÁPIDOS =================
     with st.container(border=True):
         st.markdown("### 📅 Filtro Temporal Comercial")
         
-        anos_disponibles = list(range(2020, 2031))
-        ano_actual = datetime.date.today().year
+        opciones_periodo = [
+            "📅 Mes Actual",
+            "📊 Último Trimestre (3 Meses)",
+            "📈 Último Semestre (6 Meses)",
+            "🏆 Últimos 12 Meses",
+            "⚙️ Personalizado (Selección Manual)"
+        ]
         
-        col_t1, col_t2 = st.columns(2)
+        periodo_sel = st.selectbox(
+            "Selecciona el Periodo de Análisis Rápido:",
+            options=opciones_periodo,
+            index=0
+        )
         
-        with col_t1:
-            todos_anos = st.checkbox("📅 Incluir todos los años disponibles", value=False)
-            anos_seleccionados = st.multiselect(
-                "Años a Analizar:",
-                options=anos_disponibles,
-                default=[ano_actual] if not todos_anos else [],
-                disabled=todos_anos,
-                help="Selecciona uno o más años para consolidar en las métricas."
-            )
+        secuencia_ano_mes = []
+        es_mes_unico = False
+        
+        if periodo_sel == "📅 Mes Actual":
+            hoy = datetime.date.today()
+            secuencia_ano_mes = [hoy.year * 100 + hoy.month]
+            es_mes_unico = True
             
-        with col_t2:
-            todos_meses = st.checkbox("📅 Incluir todos los meses", value=False)
-            mes_actual_nombre = meses_dict[datetime.date.today().month]
-            meses_seleccionados_nombres = st.multiselect(
-                "Meses a Analizar:",
-                options=list(meses_dict.values()),
-                default=[mes_actual_nombre] if not todos_meses else [],
-                disabled=todos_meses,
-                help="Selecciona uno o más meses para consolidar en las métricas."
-            )
+        elif periodo_sel == "📊 Último Trimestre (3 Meses)":
+            secuencia_ano_mes = obtener_secuencia_ano_mes(3)
+            
+        elif periodo_sel == "📈 Último Semestre (6 Meses)":
+            secuencia_ano_mes = obtener_secuencia_ano_mes(6)
+            
+        elif periodo_sel == "🏆 Últimos 12 Meses":
+            secuencia_ano_mes = obtener_secuencia_ano_mes(12)
+            
+        else: # Personalizado
+            st.markdown("#### Configuración Manual del Periodo")
+            anos_disponibles = list(range(2020, 2031))
+            ano_actual = datetime.date.today().year
+            
+            col_t1, col_t2 = st.columns(2)
+            
+            with col_t1:
+                todos_anos = st.checkbox("Incluir todos los años disponibles", value=False)
+                anos_seleccionados = st.multiselect(
+                    "Años a Analizar:",
+                    options=anos_disponibles,
+                    default=[ano_actual] if not todos_anos else [],
+                    disabled=todos_anos
+                )
+                
+            with col_t2:
+                todos_meses = st.checkbox("Incluir todos los meses", value=False)
+                mes_actual_nombre = meses_dict[datetime.date.today().month]
+                meses_seleccionados_nombres = st.multiselect(
+                    "Meses a Analizar:",
+                    options=list(meses_dict.values()),
+                    default=[mes_actual_nombre] if not todos_meses else [],
+                    disabled=todos_meses
+                )
+                
+            # Resolución de años y meses manuales
+            if todos_anos:
+                anos_finales = df_ventas['fecha_venta'].dt.year.dropna().unique().astype(int).tolist() if not df_ventas.empty else [ano_actual]
+                if not df_asig.empty:
+                    anos_finales.extend(df_asig['ano'].dropna().unique().astype(int).tolist())
+                if not df_vm.empty:
+                    df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
+                    anos_finales.extend(df_vm['fecha_evento_dt'].dt.year.dropna().unique().astype(int).tolist())
+                anos_finales = sorted(list(set(anos_finales)))
+            else:
+                anos_finales = anos_seleccionados if anos_seleccionados else [ano_actual]
 
-        # Resolución de variables temporales finales seleccionadas
-        if todos_anos:
-            anos_finales = df_ventas['fecha_venta'].dt.year.dropna().unique().astype(int).tolist() if not df_ventas.empty else [ano_actual]
-            if not df_asig.empty:
-                anos_finales.extend(df_asig['ano'].dropna().unique().astype(int).tolist())
-            if not df_vm.empty:
-                df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
-                anos_finales.extend(df_vm['fecha_evento_dt'].dt.year.dropna().unique().astype(int).tolist())
-            anos_finales = sorted(list(set(anos_finales)))
-        else:
-            anos_finales = anos_seleccionados if anos_seleccionados else [ano_actual]
+            if todos_meses:
+                meses_numeros_finales = list(meses_dict.keys())
+            else:
+                meses_numeros_finales = [k for k, v in meses_dict.items() if v in meses_seleccionados_nombres]
+                if not meses_numeros_finales:
+                    meses_numeros_finales = [datetime.date.today().month]
+                    
+            for y in anos_finales:
+                for m in meses_numeros_finales:
+                    secuencia_ano_mes.append(y * 100 + m)
+            
+            es_mes_unico = (len(anos_finales) == 1 and len(meses_numeros_finales) == 1)
 
-        if todos_meses:
-            meses_numeros_finales = list(meses_dict.keys())
-        else:
-            meses_numeros_finales = [k for k, v in meses_dict.items() if v in meses_seleccionados_nombres]
-            if not meses_numeros_finales:
-                meses_numeros_finales = [datetime.date.today().month]
-
-    # Filtrar datos de los años y meses seleccionados de forma precisa
-    df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year.isin(anos_finales)) & (df_ventas['fecha_venta'].dt.month.isin(meses_numeros_finales))] if not df_ventas.empty else pd.DataFrame()
-    
-    # Filtramos asignaciones directamente por las columnas int de Supabase 'ano' y 'mes'
-    df_a_filt = df_asig[(df_asig['ano'].isin(anos_finales)) & (df_asig['mes'].isin(meses_numeros_finales))] if not df_asig.empty else pd.DataFrame()
-    
+    # Filtrado preciso usando la secuencia de YYYYMM consolidada
+    if not df_ventas.empty:
+        df_ventas['ano_mes_int'] = df_ventas['fecha_venta'].dt.year * 100 + df_ventas['fecha_venta'].dt.month
+        df_v_filt = df_ventas[df_ventas['ano_mes_int'].isin(secuencia_ano_mes)]
+    else:
+        df_v_filt = pd.DataFrame()
+        
+    if not df_asig.empty:
+        df_asig['ano_mes_int'] = df_asig['ano'] * 100 + df_asig['mes']
+        df_a_filt = df_asig[df_asig['ano_mes_int'].isin(secuencia_ano_mes)]
+    else:
+        df_a_filt = pd.DataFrame()
+        
     if not df_vm.empty:
         df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
-        df_vm_filt = df_vm[(df_vm['fecha_evento_dt'].dt.year.isin(anos_finales)) & (df_vm['fecha_evento_dt'].dt.month.isin(meses_numeros_finales))]
+        df_vm['ano_mes_int'] = df_vm['fecha_evento_dt'].dt.year * 100 + df_vm['fecha_evento_dt'].dt.month
+        df_vm_filt = df_vm[df_vm['ano_mes_int'].isin(secuencia_ano_mes)]
     else:
         df_vm_filt = pd.DataFrame()
 
@@ -300,8 +361,8 @@ def mostrar_dashboard():
     else:
         df_a_paid = pd.DataFrame()
         
-    df_v_paid = df_v_filt.copy() if not df_v_filt.empty else pd.DataFrame() # Sin filtro de pago para Caja
-    df_vm_paid = df_vm_filt.copy() if not df_vm_filt.empty else pd.DataFrame() # Sin filtro de pago para Eventos
+    df_v_paid = df_v_filt.copy() if not df_v_filt.empty else pd.DataFrame() 
+    df_vm_paid = df_vm_filt.copy() if not df_vm_filt.empty else pd.DataFrame()
 
     # 1. Métricas Club de Suscripción (Recaudación Bruta y Costo de Caja)
     ingreso_asig = pd.to_numeric(df_a_paid['valor_suscripcion'], errors='coerce').sum() if not df_a_paid.empty else 0.0
@@ -364,8 +425,6 @@ def mostrar_dashboard():
     st.markdown("### 📊 Gráficos de Análisis Comercial")
 
     # Ajuste automático de la frecuencia de gráficos según el rango seleccionado
-    es_mes_unico = (len(anos_finales) == 1 and len(meses_numeros_finales) == 1)
-    
     if es_mes_unico:
         frecuencia = "D"
         texto_freq = "Diario"
