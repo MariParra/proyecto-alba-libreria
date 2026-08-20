@@ -4,6 +4,12 @@ import datetime
 import json
 from utilidades import get_db_connection, log_error
 
+def mapear_sino(val):
+    v = str(val).upper()
+    if v in ["TRUE", "T", "1"]: return "SI"
+    if v in ["FALSE", "F", "0"]: return "NO"
+    return v
+
 def unificar_formatos_fecha(serie_fechas):
     """
     Función de parseo de fechas a prueba de balas, capaz de interpretar
@@ -50,7 +56,6 @@ def cargar_datos_base():
                 break
         df_ventas = pd.DataFrame(all_data) if all_data else pd.DataFrame()
         if not df_ventas.empty:
-            # Saneamos el parseo de fechas mixtas usando la lógica de la Caja
             df_ventas['fecha_venta'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
             df_ventas.dropna(subset=['fecha_venta'], inplace=True)
     except Exception as e:
@@ -84,7 +89,10 @@ def cargar_datos_base():
                 df_asig = pd.merge(df_asig, df_susc, on="cliente_id", how="left")
             else:
                 df_asig['valor_suscripcion'] = 18500.0
-            df_asig['valor_suscripcion'] = df_asig['valor_suscripcion'].fillna(18500.0)
+            
+            # Calibración retrospectiva para datos históricos (Bypass de nulos en BD)
+            df_asig['valor_suscripcion'] = pd.to_numeric(df_asig['valor_suscripcion'], errors='coerce').fillna(18500.0)
+            df_asig['costo_caja'] = pd.to_numeric(df_asig['costo_caja'], errors='coerce').fillna(10000.0)
             df_asig['fecha_asignacion'] = pd.to_datetime(df_asig['fecha_asignacion'], errors='coerce')
     except Exception as e:
         log_error("vista_dashboard", "cargar_datos_base_asignaciones", e)
@@ -276,7 +284,7 @@ def mostrar_dashboard():
     # Filtrar datos de los años y meses seleccionados de forma precisa
     df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year.isin(anos_finales)) & (df_ventas['fecha_venta'].dt.month.isin(meses_numeros_finales))] if not df_ventas.empty else pd.DataFrame()
     
-    # 🌟 MEJORA: Filtramos asignaciones directamente por las columnas int de Supabase 'ano' y 'mes'
+    # Filtramos asignaciones directamente por las columnas int de Supabase 'ano' y 'mes'
     df_a_filt = df_asig[(df_asig['ano'].isin(anos_finales)) & (df_asig['mes'].isin(meses_numeros_finales))] if not df_asig.empty else pd.DataFrame()
     
     if not df_vm.empty:
@@ -286,7 +294,12 @@ def mostrar_dashboard():
         df_vm_filt = pd.DataFrame()
 
     # --- CÁLCULO DE MÉTRICAS SEGURAS POR CANAL (CONCILIADAS CON HISTORIALES) ---
-    df_a_paid = df_a_filt[df_a_filt['pagado'].str.upper() == 'SI'] if not df_a_filt.empty else pd.DataFrame()
+    if not df_a_filt.empty:
+        df_a_filt['pagado_clean'] = df_a_filt['pagado'].apply(mapear_sino)
+        df_a_paid = df_a_filt[df_a_filt['pagado_clean'] == 'SI']
+    else:
+        df_a_paid = pd.DataFrame()
+        
     df_v_paid = df_v_filt.copy() if not df_v_filt.empty else pd.DataFrame() # Sin filtro de pago para Caja
     df_vm_paid = df_vm_filt.copy() if not df_vm_filt.empty else pd.DataFrame() # Sin filtro de pago para Eventos
 
@@ -445,7 +458,6 @@ def mostrar_dashboard():
                 if es_mes_unico:
                     df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')
                 else:
-                    # Si no hay fecha_asignacion poblada para históricos, agrupamos por la columna de enteros de la BD
                     df_a_filt['vol_str'] = df_a_filt['ano'].astype(str) + "-" + df_a_filt['mes'].astype(str).str.zfill(2)
                     
                 conteo_asig = df_a_filt.groupby('vol_str').size().rename("Cantidad")
