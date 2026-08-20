@@ -46,10 +46,10 @@ def cargar_notas_db():
         miercoles_esta_semana = hoy - timedelta(days=(hoy.weekday() - 2))
         proximo_miercoles_str = miercoles_esta_semana.strftime("%Y-%m-%d")
         
-        res_exist = conn.table("pizarra_recordatorios")\
-            .select("nota_id")\
-            .eq("titulo", "HACER FACTURAS DE LA SEMANA")\
-            .eq("fecha_limite", proximo_miercoles_str).execute()
+        res_exist = (conn.table("pizarra_recordatorios")
+        .select("nota_id")
+        .eq("titulo", "HACER FACTURAS DE LA SEMANA")
+        .eq("fecha_limite", proximo_miercoles_str).execute())
             
         if not res_exist.data:
             datos_fac = {
