@@ -81,6 +81,9 @@ def mostrar_alertas_prioritarias():
     st.title("🚨 Centro de Alertas Prioritarias")
     st.markdown("---")
     
+    st.info("💡 **Nota:** Para solucionar o actualizar estas alertas, dirígete a los paneles de **Caja / Ventas Rápidas**.")
+    st.markdown("---")
+    
     # Inicialización de limitadores visuales progresivos en Streamlit
     if 'limite_envios_alertas' not in st.session_state:
         st.session_state.limite_envios_alertas = 5
@@ -228,4 +231,3 @@ def mostrar_alertas_prioritarias():
                     st.rerun()
 
     st.markdown("---")
-    st.info("💡 **Nota:** Para solucionar o actualizar estas alertas, dirígete a los paneles de **Caja / Ventas Rápidas**.")
