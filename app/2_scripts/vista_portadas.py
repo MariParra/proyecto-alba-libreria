@@ -45,18 +45,34 @@ def actualizar_portada_individual(libro_id, archivo_subido):
         log_error(vista="vista_portadas", funcion="actualizar_portada_individual", error=str(e), email_usuario=email_usuario)
         return False, str(e)
 
-
 def mostrar_gestion_portadas():
     st.markdown("<h2 style='color: #4A4D7E;'>🖼️ Gestión de Portadas</h2>", unsafe_allow_html=True)
     st.write("Sube imágenes para tus libros. El sistema las optimizará a JPG y forzará a la web pública a mostrar la nueva versión.")
     
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo").order("titulo").execute()
-        if not res.data:
+        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos el catálogo de libros de forma paginada para match perfecto
+        all_books = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros")\
+                .select("libro_id, titulo")\
+                .order("libro_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_books.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_books:
             st.warning("No hay libros en el catálogo.")
             return
-        df_libros = pd.DataFrame(res.data)
+            
+        df_libros = pd.DataFrame(all_books)
     except Exception as e:
         st.error(f"Error al cargar la lista de libros: {e}")
         return
@@ -70,9 +86,7 @@ def mostrar_gestion_portadas():
         dict_libros = dict(zip(df_libros['libro_id'], df_libros['titulo']))
         opciones_ids = [None] + list(dict_libros.keys())
         
-        # --- INICIO DE LA CORRECCIÓN ---
-        col1, col2 = st.columns(2) # Se especifica que queremos 2 columnas
-        # --- FIN DE LA CORRECCIÓN ---
+        col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("### 1. Selecciona el Libro")
