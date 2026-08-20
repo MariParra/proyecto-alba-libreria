@@ -7,17 +7,34 @@ from utilidades import get_db_connection
 def obtener_libros_publicables():
     """
     Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket.
-    Versión blindada contra caracteres invisibles y errores de tipo.
+    Versión blindada contra el límite de 1000 registros y caracteres invisibles.
     """
     try:
         conn = get_db_connection()
         
-        # 1. Libros visibles y con precio
-        res_libros = conn.table("libros").select("*").eq("visible_catalogo", True).gt("precio", 0).execute()
-        if not res_libros.data:
+        # 1. Libros visibles y con precio (PAGINADO PARA EVITAR LÍMITE DE 1000)
+        all_books = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros")\
+                .select("*")\
+                .eq("visible_catalogo", True)\
+                .gt("precio", 0)\
+                .order("libro_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_books.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_books:
             return pd.DataFrame()
             
-        df_libros = pd.DataFrame(res_libros.data)
+        df_libros = pd.DataFrame(all_books)
 
         # 2. Portadas en el bucket (con paginación y limpieza .strip())
         portadas_existentes = set()
