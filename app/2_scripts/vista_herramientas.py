@@ -6,20 +6,30 @@ import base64
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error, normalizar_nombre_para_duplicados
 
-
 # --- FUNCIÓN: RESUMEN DE CLIENTES ---
 def obtener_resumen_clientes():
     conn = get_db_connection()
     try:
-        res = conn.table("clientes").select("status").execute()
-        df = pd.DataFrame(res.data)
+        all_statuses = []
+        chunk_size = 1000
+        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todos los estados de forma paginada
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("clientes").select("status").order("cliente_id").range(start, end).execute()
+            if res.data:
+                all_statuses.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        df = pd.DataFrame(all_statuses) if all_statuses else pd.DataFrame()
         if df.empty: return 0, 0, 0
         total, activos, inactivos = len(df), len(df[df['status'] == 'ACTIVA']), len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        # 1. Registramos el error silenciosamente en la "caja negra"
         log_error(
             vista="vista_herramientas",
             funcion="obtener_resumen_clientes",
@@ -122,9 +132,24 @@ def sync_google_sheets():
                 nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
                 rut_normalizado_sync = limpiar_rut(rut_sync)
                 
-                # 2. Descargamos la lista actual de clientes de Supabase para comparar en memoria
-                todos_clientes_db = conn.table("clientes").select("cliente_id, nombre, email, rut").execute().data
-                
+                # 2. 🚀 BYPASS DE 1000 REGISTROS: Descargamos la lista COMPLETA de clientes para comparar en memoria
+                all_clients_db = []
+                chunk_size = 1000
+                for bloque in range(100):
+                    start = bloque * chunk_size
+                    end = start + chunk_size - 1
+                    res_clients = conn.table("clientes")\
+                        .select("cliente_id, nombre, email, rut")\
+                        .order("cliente_id")\
+                        .range(start, end).execute()
+                    if res_clients.data:
+                        all_clients_db.extend(res_clients.data)
+                        if len(res_clients.data) < chunk_size:
+                            break
+                    else:
+                        break
+                        
+                todos_clientes_db = all_clients_db
                 cliente_existente = None
                 
                 # A. Buscar coincidencia prioritaria por RUT
@@ -177,6 +202,7 @@ def sync_google_sheets():
                 else:
                     datos_sub.update({"cliente_id": c_id, "valor_suscripcion": 0.0})
                     conn.table("suscripciones").insert(datos_sub).execute()
+                procesas_totales = procesados + 1
                 procesados += 1
                 
         st.success(f"🎉 Sincronización Finalizada. Filas procesadas: {procesados} | Clientes nuevos: {clientes_nuevos}")
@@ -219,4 +245,3 @@ def mostrar_herramientas():
                 st.rerun()
     
     st.markdown("---")
-                
