@@ -118,7 +118,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 texto_badge = " DISPONIBLE "
                 try:
                     bbox_badge = draw.textbbox((0, 0), texto_badge, font=font_badge)
-                    ancho_badge = bbox_badge - bbox_badge[0]
+                    # 🌟 CORRECCIÓN DE TUPLA: Extraemos ancho restando coordenadas
+                    ancho_badge = bbox_badge[2] - bbox_badge[0]
                     alto_badge = 32
                     
                     x_badge = x_card + (cell_w - ancho_badge) / 2
@@ -147,7 +148,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 try:
                     draw.text((x_card + cell_w/2, y_texto), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
-                    ancho_orig = bbox_orig - bbox_orig[0]
+                    # 🌟 CORRECCIÓN DE TUPLA: Ancho correcto
+                    ancho_orig = bbox_orig[2] - bbox_orig[0]
                     draw.line((x_card + cell_w/2 - ancho_orig/2, y_texto - 10, x_card + cell_w/2 + ancho_orig/2, y_texto - 10), fill=MUTED_COLOR, width=4)
                 except ValueError:
                     pass
