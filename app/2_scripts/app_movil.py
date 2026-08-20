@@ -240,8 +240,8 @@ else:
             st.session_state.pagina_actual = "📊 DASHBOARD"
             st.rerun()
             
-        if st.button("🛠️ HERRAMIENTAS Y SYNC", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC" else "secondary"):
-            st.session_state.pagina_actual = "🛠️ HERRAMIENTAS Y SYNC"
+        if st.button("🛠️ SINCRONIZACIÓN GOOGLE SHEET", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ SINCRONIZACIÓN GOOGLE SHEET" else "secondary"):
+            st.session_state.pagina_actual = "🛠️ SINCRONIZACIÓN GOOGLE SHEET"
             st.rerun()
             
         if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
@@ -354,7 +354,7 @@ else:
             mostrar_generador_marketing()
         elif st.session_state.pagina_actual == "📊 DASHBOARD":
             mostrar_dashboard()
-        elif st.session_state.pagina_actual == "🛠️ HERRAMIENTAS Y SYNC":
+        elif st.session_state.pagina_actual == "🛠️ SINCRONIZACIÓN GOOGLE SHEET":
             mostrar_herramientas()
         elif st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS":
             mostrar_importacion_libreros()

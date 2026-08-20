@@ -222,7 +222,7 @@ def sync_google_sheets():
         return False
 
 def mostrar_herramientas():
-    st.title("🛠️ Herramientas Administrativas")
+    st.title("🛠️ Sincronización con Google Sheet Inscripción Suscripción")
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
