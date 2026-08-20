@@ -167,7 +167,7 @@ def obtener_top_libros_populares(df_ventas_filt, df_asig_filt):
             return pd.DataFrame()
         
         ids_libros = list(conteo_libros.keys())
-        res_detalles = conn.table("libros").select("libro_id, titulo").in_(libro_id, ids_libros).execute()
+        res_detalles = conn.table("libros").select("libro_id, titulo").in_("libro_id", ids_libros).execute()
         df_detalles = pd.DataFrame(res_detalles.data) if res_detalles.data else pd.DataFrame()
 
         if not df_detalles.empty:
@@ -188,27 +188,68 @@ def mostrar_dashboard():
     mostrar_alertas_proactivas()
     df_ventas, df_asig, df_vm, df_clientes = cargar_datos_base()
     
-    # Mapeo de meses de trabajo (Idéntico a vista_asignaciones.py)
+    # Mapeo de meses de trabajo
     meses_dict = {
         1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
         7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
     }
 
-    # Widget de selección de Mes y Año de Trabajo (Default: Mes y Año Actuales)
+    # ================= FILTRO TEMPORAL MULTI-SELECCIÓN U "HORIZONTE TOTAL" =================
     with st.container(border=True):
-        st.markdown("### 📅 Mes de Trabajo")
-        c1, c2 = st.columns(2)
-        mes_sel = c1.selectbox("Mes:", list(meses_dict.values()), index=datetime.date.today().month - 1)
-        ano_sel = c2.number_input("Año:", min_value=2020, max_value=2050, value=datetime.date.today().year, step=1)
-        mes_num = list(meses_dict.keys())[list(meses_dict.values()).index(mes_sel)]
+        st.markdown("### 📅 Filtro Temporal Comercial")
+        
+        anos_disponibles = list(range(2020, 2031))
+        ano_actual = datetime.date.today().year
+        
+        col_t1, col_t2 = st.columns(2)
+        
+        with col_t1:
+            todos_anos = st.checkbox("📅 Incluir todos los años disponibles", value=False)
+            anos_seleccionados = st.multiselect(
+                "Años a Analizar:",
+                options=anos_disponibles,
+                default=[ano_actual] if not todos_anos else [],
+                disabled=todos_anos,
+                help="Selecciona uno o más años para consolidar en las métricas."
+            )
+            
+        with col_t2:
+            todos_meses = st.checkbox("📅 Incluir todos los meses", value=False)
+            mes_actual_nombre = meses_dict[datetime.date.today().month]
+            meses_seleccionados_nombres = st.multiselect(
+                "Meses a Analizar:",
+                options=list(meses_dict.values()),
+                default=[mes_actual_nombre] if not todos_meses else [],
+                disabled=todos_meses,
+                help="Selecciona uno o más meses para consolidar en las métricas."
+            )
 
-    # Filtrar datos del año y mes seleccionados de forma precisa
-    df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year == ano_sel) & (df_ventas['fecha_venta'].dt.month == mes_num)] if not df_ventas.empty else pd.DataFrame()
-    df_a_filt = df_asig[(df_asig['fecha_asignacion'].dt.year == ano_sel) & (df_asig['fecha_asignacion'].dt.month == mes_num)] if not df_asig.empty else pd.DataFrame()
+        # Resolución de variables temporales finales seleccionadas
+        if todos_anos:
+            anos_finales = df_ventas['fecha_venta'].dt.year.dropna().unique().astype(int).tolist() if not df_ventas.empty else [ano_actual]
+            if not df_asig.empty:
+                anos_finales.extend(df_asig['fecha_asignacion'].dt.year.dropna().unique().astype(int).tolist())
+            if not df_vm.empty:
+                df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
+                anos_finales.extend(df_vm['fecha_evento_dt'].dt.year.dropna().unique().astype(int).tolist())
+            anos_finales = sorted(list(set(anos_finales)))
+        else:
+            anos_finales = anos_seleccionados if anos_seleccionados else [ano_actual]
+
+        if todos_meses:
+            meses_numeros_finales = list(meses_dict.keys())
+        else:
+            meses_numeros_finales = [k for k, v in meses_dict.items() if v in meses_seleccionados_nombres]
+            if not meses_numeros_finales:
+                meses_numeros_finales = [datetime.date.today().month]
+
+    # Filtrar datos de los años y meses seleccionados de forma precisa
+    df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year.isin(anos_finales)) & (df_ventas['fecha_venta'].dt.month.isin(meses_numeros_finales))] if not df_ventas.empty else pd.DataFrame()
+    df_a_filt = df_asig[(df_asig['fecha_asignacion'].dt.year.isin(anos_finales)) & (df_asig['fecha_asignacion'].dt.month.isin(meses_numeros_finales))] if not df_asig.empty else pd.DataFrame()
     
     if not df_vm.empty:
         df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
-        df_vm_filt = df_vm[(df_vm['fecha_evento_dt'].dt.year == ano_sel) & (df_vm['fecha_evento_dt'].dt.month == mes_num)]
+        df_vm_filt = df_vm[(df_vm['fecha_evento_dt'].dt.year.isin(anos_finales)) & (df_vm['fecha_evento_dt'].dt.month.isin(meses_numeros_finales))]
     else:
         df_vm_filt = pd.DataFrame()
 
@@ -277,9 +318,15 @@ def mostrar_dashboard():
     st.markdown("---")
     st.markdown("### 📊 Gráficos de Análisis Comercial")
 
-    # Cambio de Frecuencia: De Mensual ("M") a Diario ("D") al analizar un mes específico
-    frecuencia = "D"
-    texto_freq = "Diario"
+    # Ajuste automático de la frecuencia de gráficos según el rango seleccionado
+    es_mes_unico = (len(anos_finales) == 1 and len(meses_numeros_finales) == 1)
+    
+    if es_mes_unico:
+        frecuencia = "D"
+        texto_freq = "Diario"
+    else:
+        frecuencia = "M"
+        texto_freq = "Mensual"
 
     # Fila 1: Línea Temporal de Evolución y Comparativa de Canales
     col_g1, col_g2 = st.columns(2)
@@ -288,17 +335,26 @@ def mostrar_dashboard():
         with st.container(border=True):
             st.markdown(f"#### 💵 Tendencia de Ingresos ({texto_freq})")
             if not df_v_paid.empty or not df_a_paid.empty or not df_vm_paid.empty:
-                # 🚀 SEGURIDAD ULTRA: Formatear solo si las dataframes contienen registros reales
-                if not df_v_paid.empty:
-                    df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
-                if not df_a_paid.empty:
-                    df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
-                if not df_vm_paid.empty:
-                    df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
+                if es_mes_unico:
+                    if not df_v_paid.empty:
+                        df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
+                    if not df_a_paid.empty:
+                        df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
+                    if not df_vm_paid.empty:
+                        df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
+                    col_agrupa = 'dia_str'
+                else:
+                    if not df_v_paid.empty:
+                        df_v_paid['mes_str'] = df_v_paid['fecha_venta'].dt.strftime('%Y-%m')
+                    if not df_a_paid.empty:
+                        df_a_paid['mes_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%Y-%m')
+                    if not df_vm_paid.empty:
+                        df_vm_paid['mes_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%Y-%m')
+                    col_agrupa = 'mes_str'
 
-                v_agrupado = df_v_paid.groupby('dia_str')['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(name="Ventas Directas", dtype=float)
-                a_agrupado = df_a_paid.groupby('dia_str')['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(name="Suscripciones", dtype=float)
-                vm_agrupado = df_vm_paid.groupby('dia_str')['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Ventas Masivas", dtype=float)
+                v_agrupado = df_v_paid.groupby(col_agrupa)['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(name="Ventas Directas", dtype=float)
+                a_agrupado = df_a_paid.groupby(col_agrupa)['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(name="Suscripciones", dtype=float)
+                vm_agrupado = df_vm_paid.groupby(col_agrupa)['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Ventas Masivas", dtype=float)
 
                 df_tendencia = pd.concat([v_agrupado, a_agrupado, vm_agrupado], axis=1).fillna(0.0).sort_index()
                 df_tendencia.index = df_tendencia.index.astype(str)
@@ -354,8 +410,12 @@ def mostrar_dashboard():
         with st.container(border=True):
             st.markdown(f"#### 📊 Volumen de Suscripciones del Período ({texto_freq})")
             if not df_a_filt.empty:
-                # Agrupación por día en formato dd/mm para mayor detalle visual
-                conteo_asig = df_a_filt.groupby(df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')).size().rename("Cantidad")
+                if es_mes_unico:
+                    df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')
+                else:
+                    df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%Y-%m')
+                    
+                conteo_asig = df_a_filt.groupby('vol_str').size().rename("Cantidad")
                 conteo_asig.index = conteo_asig.index.astype(str)
                 st.bar_chart(conteo_asig, use_container_width=True, color="#E91E63")
             else:
