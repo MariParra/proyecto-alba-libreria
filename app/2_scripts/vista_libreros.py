@@ -10,13 +10,40 @@ def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
     
-    # 1. Obtener clientes con su RUT
-    res_clientes = conn.table("clientes").select("cliente_id, nombre, rut").execute()
-    clientes_db = res_clientes.data if res_clientes.data else []
+    # 1. Obtener clientes con su RUT (PAGINADO PARA BYPASS LÍMITE DE 1000)
+    all_clients = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_clientes = conn.table("clientes")\
+            .select("cliente_id, nombre, rut")\
+            .order("cliente_id")\
+            .range(start, end).execute()
+        if res_clientes.data:
+            all_clients.extend(res_clientes.data)
+            if len(res_clientes.data) < chunk_size:
+                break
+        else:
+            break
+    clientes_db = all_clients if all_clients else []
 
-    # 2. Precargar catálogo de libros
-    res_libros = conn.table("libros").select("libro_id, titulo").execute()
-    inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in res_libros.data} if res_libros.data else {}
+    # 2. Precargar catálogo de libros (PAGINADO PARA BYPASS LÍMITE DE 1000)
+    all_books = []
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_libros = conn.table("libros")\
+            .select("libro_id, titulo")\
+            .order("libro_id")\
+            .range(start, end).execute()
+        if res_libros.data:
+            all_books.extend(res_libros.data)
+            if len(res_libros.data) < chunk_size:
+                break
+        else:
+            break
+    inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in all_books} if all_books else {}
 
     for archivo in archivos:
         nombre_archivo_original = os.path.splitext(archivo.name)[0]
