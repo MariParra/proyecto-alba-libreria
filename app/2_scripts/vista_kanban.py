@@ -52,7 +52,7 @@ def enviar_correo(titulo, tipo, prioridad, fecha_comprometida, es_alerta_vencimi
             vista="Sistema de Notificaciones",
             funcion="enviar_correo",
             error=error_detalle,
-            email_usuario="Sistema" # Es una acción automática del sistema
+            email_usuario="Sistema"
         )
         print(f"Error enviando correo: {e}")
         return False
@@ -87,7 +87,6 @@ def verificar_alertas_vencimiento(df_tareas):
                         error=error_detalle,
                         email_usuario=email_usuario
                     )
-                    
                     st.warning(f"Alerta enviada para '{tarea['titulo']}', pero no se pudo marcar como registrada. ¡Podría enviarse de nuevo!")
 
 # --- FUNCIONES DE BASE DE DATOS KANBAN ---
@@ -103,12 +102,9 @@ def mover_tarea(tarea_id, nuevo_estado):
         st.rerun()
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         error_detalle = (
-            f"Fallo al mover la tarea ID {tarea_id} al estado '{nuevo_estado}'. "
-            f"Detalle: {e}"
+            f"Fallo al mover la tarea ID {tarea_id} al estado '{nuevo_estado}'. Detalle: {e}"
         )
-        
         log_error(
             vista="vista_kanban",
             funcion="mover_tarea",
@@ -124,9 +120,7 @@ def eliminar_tarea(tarea_id):
         st.rerun()
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         error_detalle = f"Fallo al ELIMINAR la tarea ID {tarea_id}. Detalle: {e}"
-        
         log_error(
             vista="vista_kanban",
             funcion="eliminar_tarea",
@@ -135,7 +129,7 @@ def eliminar_tarea(tarea_id):
         )
         st.error(f"Error al eliminar tarea: {e}")
 
-def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, dep_id):
+def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, estado, f_ini, f_fin, dep_id):
     if not titulo:
         st.warning("⚠️ El título es obligatorio.")
         return
@@ -145,7 +139,7 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, 
         nueva_tarea = {
             "titulo": titulo, "descripcion": descripcion, "tipo": tipo, 
             "prioridad": prioridad, "dificultad": dificultad,
-            "estado": "POR HACER", "alerta_enviada": False,
+            "estado": estado, "alerta_enviada": False,
             "fecha_inicio": f_ini.isoformat() if f_ini else None,
             "fecha_fin": f_fin.isoformat() if f_fin else None,
             "depende_de_id": id_dependencia,
@@ -157,12 +151,9 @@ def crear_tarea(titulo, descripcion, tipo, prioridad, dificultad, f_ini, f_fin, 
         st.rerun()
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         error_detalle = (
-            f"Fallo al crear la tarea '{titulo}'. "
-            f"Datos intentados: {str(nueva_tarea)}. Detalle: {e}"
+            f"Fallo al crear la tarea '{titulo}'. Datos intentados: {str(nueva_tarea)}. Detalle: {e}"
         )
-        
         log_error(
             vista="vista_kanban",
             funcion="crear_tarea",
@@ -186,13 +177,9 @@ def editar_tarea(tarea_id, titulo, tipo, prioridad, dificultad, estado, f_ini, f
         st.rerun()
     except Exception as e: 
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         error_detalle = (
-            f"Fallo al editar la tarea ID {tarea_id}. "
-            f"Datos intentados: {str(datos_update)}. Detalle: {e}"
+            f"Fallo al editar la tarea ID {tarea_id}. Datos intentados: {str(datos_update)}. Detalle: {e}"
         )
-        
-
         log_error(
             vista="vista_kanban",
             funcion="editar_tarea",
@@ -220,12 +207,9 @@ def agregar_comentario(tarea_id, autor, tipo, texto):
         st.rerun()
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         error_detalle = (
-            f"Fallo al guardar comentario en la tarea ID {tarea_id}. "
-            f"Autor: {autor}, Tipo: {tipo}. Detalle: {e}"
+            f"Fallo al guardar comentario en la tarea ID {tarea_id}. Autor: {autor}, Tipo: {tipo}. Detalle: {e}"
         )
-    
         log_error(
             vista="vista_kanban",
             funcion="agregar_comentario",
@@ -284,7 +268,6 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
         if tarea['estado'] == 'POR HACER':
             if st.button("➡️ Iniciar", key=f"ini_{tarea['id']}", use_container_width=True, disabled=bloqueada): mover_tarea(tarea['id'], "EN PROGRESO")
         elif tarea['estado'] == 'EN PROGRESO':
-            # Eliminamos las columnas. Los botones ahora se apilarán verticalmente.
             if st.button("✅ Listo", key=f"fin_{tarea['id']}", type="primary", use_container_width=True): mover_tarea(tarea['id'], "COMPLETADO")
             if st.button("⬅️ Pausar Tarea", key=f"pau_{tarea['id']}", use_container_width=True): mover_tarea(tarea['id'], "POR HACER")
             
@@ -293,22 +276,16 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
         num_coms = len(comentarios_tarea)
         
         with st.expander(f"💬 Comentarios y Actividad ({num_coms})", expanded=False):
-            # Historial de Comentarios
             if not comentarios_tarea.empty:
                 for _, com in comentarios_tarea.iterrows():
-                                        # --- CONVERSIÓN DE UTC A ZONA HORARIA DE CHILE (CORREGIDO) ---
-                    # 1. Convertimos la fecha de la base de datos a formato de tiempo
                     fecha_utc = pd.to_datetime(com['fecha'])
                     
-                    # 2. Le indicamos a Python que la hora original viene en UTC y la convertimos a Chile (Santiago)
                     if fecha_utc.tzinfo is None:
                         fecha_chile = fecha_utc.tz_localize('UTC').tz_convert('America/Santiago')
                     else:
                         fecha_chile = fecha_utc.tz_convert('America/Santiago')
                         
-                    # 3. Formateamos la fecha resultante para la pantalla
                     fecha_com = fecha_chile.strftime("%d/%m/%Y %H:%M")
-
                     color_borde = "#1976d2" if "Nota" in com['tipo'] else ("#c62828" if "Error" in com['tipo'] or "Bloqueo" in com['tipo'] else "#388e3c")
                     
                     st.markdown(f"""
@@ -321,9 +298,7 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                 st.caption("Aún no hay comentarios en esta tarea.")
             
             st.markdown("---")
-            # Formulario Nuevo Comentario
             with st.form(f"form_com_{tarea['id']}"):
-                # Eliminamos las columnas anidadas. Los campos ahora se mostrarán en vertical.
                 autor_com = st.text_input("Tu Nombre", placeholder="Ej: Mariana P.")
                 tipo_com = st.selectbox("Tipo de Nota", ["Nota Informativa 📝", "Resolución de Error 🐛", "Avance 🚀", "Duda / Consulta ❓", "Bloqueo 🛑"])
                 texto_com = st.text_area("Comentario", placeholder="Escribe tu actualización aquí...")
@@ -331,7 +306,6 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                     agregar_comentario(tarea['id'], autor_com, tipo_com, texto_com)
 
         # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
-                # --- ✏️ MENÚ DE EDICIÓN RÁPIDA ---
         with st.expander("✏️ Editar Detalles", expanded=False):
             with st.form(f"form_edit_{tarea['id']}"):
                 e_tit = st.text_input("Título", value=tarea['titulo'])
@@ -360,8 +334,7 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
                     editar_tarea(tarea['id'], e_tit, e_tipo, e_prio, e_dif, e_estado, e_ini, e_fin)
                 
             st.markdown("---")
-            st.error("🔴 Zona de Peligro")
-                
+            st.markdown("e_error 🔴 Zona de Peligro")
             confirmar_borrado = st.checkbox("Estoy segura de que quiero eliminar esta tarea permanentemente.", key=f"check_del_{tarea['id']}")
                 
             if st.button("🗑️ Eliminar Tarea", type="primary", use_container_width=True, disabled=not confirmar_borrado, key=f"btn_del_{tarea['id']}"):
@@ -369,14 +342,47 @@ def dibujar_tarjeta(tarea, df_todas, df_comentarios):
 
 def mostrar_kanban():
     st.markdown("<h2 style='color: #4A4D7E;'>📋 Tablero de Proyectos y Tareas</h2>", unsafe_allow_html=True)
+    
+    # Inicialización de limitadores visuales progresivos (3 en 3 por columna)
+    if 'kanban_todo_limit' not in st.session_state:
+        st.session_state.kanban_todo_limit = 3
+    if 'kanban_progress_limit' not in st.session_state:
+        st.session_state.kanban_progress_limit = 3
+    if 'kanban_done_limit' not in st.session_state:
+        st.session_state.kanban_done_limit = 3
+
     conn = get_db_connection()
     try:
-        res = conn.table("tareas_internas").select("*").execute()
-        df_tareas = pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=['id', 'titulo', 'descripcion', 'tipo', 'prioridad', 'dificultad', 'estado', 'fecha_inicio', 'fecha_fin', 'depende_de_id', 'alerta_enviada', 'fecha_creacion'])
+        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todas las tareas del Tablero Kanban
+        all_tasks = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("tareas_internas").select("*").order("id").range(start, end).execute()
+            if res.data:
+                all_tasks.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        df_tareas = pd.DataFrame(all_tasks) if all_tasks else pd.DataFrame(columns=['id', 'titulo', 'descripcion', 'tipo', 'prioridad', 'dificultad', 'estado', 'fecha_inicio', 'fecha_fin', 'depende_de_id', 'alerta_enviada', 'fecha_creacion'])
         
-        # Cargamos todos los comentarios en masa para mayor velocidad
-        res_com = conn.table("tareas_comentarios").select("*").execute()
-        df_comentarios = pd.DataFrame(res_com.data) if res_com.data else pd.DataFrame(columns=['id', 'tarea_id', 'autor', 'tipo', 'comentario', 'fecha'])
+        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todos los comentarios históricos en masa
+        all_comments = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_com = conn.table("tareas_comentarios").select("*").order("id").range(start, end).execute()
+            if res_com.data:
+                all_comments.extend(res_com.data)
+                if len(res_com.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        df_comentarios = pd.DataFrame(all_comments) if all_comments else pd.DataFrame(columns=['id', 'tarea_id', 'autor', 'tipo', 'comentario', 'fecha'])
     except Exception as e:
         st.error("Error al cargar la base de datos."); return
 
@@ -395,10 +401,12 @@ def mostrar_kanban():
             st.markdown("##### Detalles Básicos")
             t_tit = st.text_input("Título de la Tarea*")
             t_desc = st.text_area("Descripción detallada (opcional)")
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             t_tipo = c1.selectbox("Tipo de Tarea", ["Administración 📋", "Desarrollo 💻", "Logística 📦", "Marketing 📱"])
             t_prio = c2.selectbox("Prioridad", ["Alta 🔴", "Media 🟡", "Baja 🟢"], index=1)
             t_dif = c3.selectbox("Dificultad", ["Alta 🔺", "Media 🔸", "Baja 🔹"], index=1)
+            # 🌟 NUEVA CARACTERÍSTICA: Selección del estado inicial para el formulario de creación
+            t_est = c4.selectbox("Estado Inicial", ["POR HACER", "EN PROGRESO", "COMPLETADO"], index=0)
             
             st.markdown("##### Planificación y Dependencias")
             cf1, cf2, cf3 = st.columns(3)
@@ -412,11 +420,11 @@ def mostrar_kanban():
             t_dep_id = opciones_dep[t_dep_label]
             
             if st.form_submit_button("Añadir al Tablero y Notificar", type="primary", use_container_width=True):
-                crear_tarea(t_tit, t_desc, t_tipo, t_prio, t_dif, t_ini, t_fin, t_dep_id)
+                crear_tarea(t_tit, t_desc, t_tipo, t_prio, t_dif, t_est, t_ini, t_fin, t_dep_id)
 
     st.markdown("---")
     
-    # --- 🌟 VISTAS RÁPIDAS ---
+    # --- VISTAS RÁPIDAS ---
     vista_actual = st.radio(
         "👁️ Selecciona tu Vista de Trabajo:", 
         ["🎯 Esta Semana", "📥 Backlog (Sin planificar)", "🌍 Ver Todo"], 
@@ -462,19 +470,61 @@ def mostrar_kanban():
     col_todo, col_progreso, col_done = st.columns(3)
     
     with col_todo:
-        st.markdown(f"### 📌 Por Hacer ({len(df_filtrado[df_filtrado['estado'] == 'POR HACER'])})")
+        df_todo = df_filtrado[df_filtrado['estado'] == 'POR HACER'] if not df_filtrado.empty else pd.DataFrame()
+        total_todo = len(df_todo)
+        limite_todo = st.session_state.kanban_todo_limit
+        df_todo_pag = df_todo.head(limite_todo) if not df_todo.empty else pd.DataFrame()
+
+        st.markdown(f"### 📌 Por Hacer ({total_todo})")
         st.markdown("<div style='height: 4px; background-color: #ffb74d; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
-        if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'POR HACER'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
+        if not df_todo_pag.empty:
+            for _, t in df_todo_pag.iterrows(): 
+                dibujar_tarjeta(t, df_tareas, df_comentarios)
+                
+        # Botón de carga progresiva
+        if total_todo > limite_todo:
+            remanente_todo = total_todo - limite_todo
+            if st.button(f"🔄 Ver más pendientes (+3) — Quedan {remanente_todo} por ver", key="btn_more_todo", use_container_width=True):
+                st.session_state.kanban_todo_limit += 3
+                st.rerun()
 
     with col_progreso:
-        st.markdown(f"### ⏳ En Progreso ({len(df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'])})")
+        df_prog = df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'] if not df_filtrado.empty else pd.DataFrame()
+        total_prog = len(df_prog)
+        limite_prog = st.session_state.kanban_progress_limit
+        df_prog_pag = df_prog.head(limite_prog) if not df_prog.empty else pd.DataFrame()
+
+        st.markdown(f"### ⏳ En Progreso ({total_prog})")
         st.markdown("<div style='height: 4px; background-color: #4fc3f7; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
-        if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'EN PROGRESO'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
+        if not df_prog_pag.empty:
+            for _, t in df_prog_pag.iterrows(): 
+                dibujar_tarjeta(t, df_tareas, df_comentarios)
+
+        # Botón de carga progresiva
+        if total_prog > limite_prog:
+            remanente_prog = total_prog - limite_prog
+            if st.button(f"🔄 Ver más en progreso (+3) — Quedan {remanente_prog} por ver", key="btn_more_prog", use_container_width=True):
+                st.session_state.kanban_progress_limit += 3
+                st.rerun()
 
     with col_done:
-        st.markdown(f"### ✅ Completado ({len(df_filtrado[df_filtrado['estado'] == 'COMPLETADO'])})")
+        df_done = df_filtrado[df_filtrado['estado'] == 'COMPLETADO'] if not df_filtrado.empty else pd.DataFrame()
+        total_done = len(df_done)
+        limite_done = st.session_state.kanban_done_limit
+        df_done_pag = df_done.head(limite_done) if not df_done.empty else pd.DataFrame()
+
+        st.markdown(f"### ✅ Completado ({total_done})")
         st.markdown("<div style='height: 4px; background-color: #81c784; margin-bottom: 10px; border-radius: 2px;'></div>", unsafe_allow_html=True)
-        if not df_filtrado.empty:
-            for _, t in df_filtrado[df_filtrado['estado'] == 'COMPLETADO'].iterrows(): dibujar_tarjeta(t, df_tareas, df_comentarios)
+        if not df_done_pag.empty:
+            for _, t in df_done_pag.iterrows(): 
+                dibujar_tarjeta(t, df_tareas, df_comentarios)
+
+        # Botón de carga progresiva
+        if total_done > limite_done:
+            remanente_done = total_done - limite_done
+            if st.button(f"🔄 Ver más completados (+3) — Quedan {remanente_done} por ver", key="btn_more_done", use_container_width=True):
+                st.session_state.kanban_done_limit += 3
+                st.rerun()
+
+if __name__ == "__main__":
+    mostrar_kanban()
