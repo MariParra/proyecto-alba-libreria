@@ -477,11 +477,11 @@ def actualizar_historial_caja(df_editado):
 def mostrar_caja():
     # Inicialización del limitador de ventas en el historial (empieza en 100 y suma 100)
     if 'caja_limit_view' not in st.session_state:
-        st.session_state.caja_limit_view = 100
+        st.session_state.caja_limit_view = 30
         
-    # Inicialización del limitador de clientes (empieza en 200 y suma 200)
+    # Inicialización del limitador de clientes (empieza en 30 y suma 30)
     if 'clientes_limit_view' not in st.session_state:
-        st.session_state.clientes_limit_view = 200
+        st.session_state.clientes_limit_view = 30
         
     if 'carrito_caja' not in st.session_state: st.session_state.carrito_caja = []
     if 'historial_original' not in st.session_state: st.session_state.historial_original = pd.DataFrame()
@@ -532,10 +532,10 @@ def mostrar_caja():
                     [""] + clientes_filtrados['nombre'].tolist()
                 )
                 
-                # Botón UX para expandir la lista de clientes en el buscador de +200 en +200
+                # Botón UX para expandir la lista de clientes en el buscador de +30 en +30
                 if len(df_clientes) > limite_cli:
-                    if st.button(f"🔍 Cargar más clientes en el buscador (+200)", use_container_width=True):
-                        st.session_state.clientes_limit_view += 200
+                    if st.button(f"🔍 Cargar más clientes en el buscador (+30)", use_container_width=True):
+                        st.session_state.clientes_limit_view += 30
                         st.rerun()
                 if sel_cliente:
                     datos_c = df_clientes[df_clientes['nombre'] == sel_cliente].iloc[0]
