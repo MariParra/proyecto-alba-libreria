@@ -24,8 +24,24 @@ def procesar_clientes_masivos(df):
     conn = get_db_connection()
     exitos, duplicados, errores = 0, 0, []
 
-    res_clientes = conn.table("clientes").select("nombre").execute()
-    catalogo_actual = [limpiar_texto_para_busqueda(c['nombre']) for c in res_clientes.data] if res_clientes.data else []
+    # 🚀 BYPASS DE 1000 REGISTROS: Cargamos la base completa de clientes para validar duplicados
+    all_names = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_clientes = conn.table("clientes")\
+            .select("nombre")\
+            .order("cliente_id")\
+            .range(start, end).execute()
+        if res_clientes.data:
+            all_names.extend(res_clientes.data)
+            if len(res_clientes.data) < chunk_size:
+                break
+        else:
+            break
+            
+    catalogo_actual = [limpiar_texto_para_busqueda(c['nombre']) for c in all_names] if all_names else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de clientes...")
     total_filas = len(df)
@@ -101,8 +117,24 @@ def procesar_nuevos_libros(df):
     conn = get_db_connection()
     exitos, duplicados, errores = 0, 0, []
     
-    res_libros = conn.table("libros").select("titulo, autor").execute()
-    catalogo_actual = [(limpiar_texto_para_busqueda(l['titulo']), limpiar_texto_para_busqueda(l.get('autor', ''))) for l in res_libros.data] if res_libros.data else []
+    # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todo el catálogo de títulos y autores para validar duplicados
+    all_titles = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_libros = conn.table("libros")\
+            .select("titulo, autor")\
+            .order("libro_id")\
+            .range(start, end).execute()
+        if res_libros.data:
+            all_titles.extend(res_libros.data)
+            if len(res_libros.data) < chunk_size:
+                break
+        else:
+            break
+            
+    catalogo_actual = [(limpiar_texto_para_busqueda(l['titulo']), limpiar_texto_para_busqueda(l.get('autor', ''))) for l in all_titles] if all_titles else []
     
     barra_progreso = st.progress(0, text="Iniciando carga de catálogo...")
     total_filas = len(df)
@@ -127,8 +159,6 @@ def procesar_nuevos_libros(df):
             
         try:
             nuevo_libro = {}
-            # Se procesan los datos de forma segura, tipo por tipo
-            
             # 1. Columnas de texto
             for col in columnas_texto:
                 if col in fila and pd.notna(fila[col]):
@@ -138,10 +168,8 @@ def procesar_nuevos_libros(df):
             for col in columnas_numericas:
                 if col in fila and pd.notna(fila[col]):
                     try:
-                        # Se fuerza la conversión a float para ser más robusto
                         nuevo_libro[col] = float(fila[col])
                     except (ValueError, TypeError):
-                        # Si falla (ej. texto en un campo numérico), se omite
                         errores.append(f"Fila {indice + 2}: Valor no numérico en columna '{col}'. Se omitió.")
                         continue
             
@@ -181,9 +209,9 @@ def procesar_nuevos_libros(df):
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return exitos, duplicados, errores
 
-# ======================================================
+# ====================================================
 # --- LÓGICA 3: IMPORTACIÓN DE VENTAS PASADAS ---
-# ======================================================
+# ====================================================
 def generar_plantilla_ventas():
     columnas = ['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente', 'Titulo_Libro', 'Cantidad', 'Precio_Unitario', 'Valor_Envio', 'Metodo_Envio', 'Comentario', 'Estado', 'Abono']
     df_vacio = pd.DataFrame(columns=columnas)
@@ -205,11 +233,36 @@ def procesar_ventas_masivas(df):
         errores.append(f"Fila {i+2}: La fecha es inválida o está vacía y fue omitida.")
     df.dropna(subset=['Fecha_Venta_YYYY_MM_DD'], inplace=True)
 
-    res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
-    res_libros = conn.table("libros").select("libro_id, titulo, autor, costo").execute()
-    
-    map_clientes = {limpiar_texto_para_busqueda(c['nombre']): c['cliente_id'] for c in res_clientes.data} if res_clientes.data else {}
-    map_libros = {limpiar_texto_para_busqueda(l['titulo']): l for l in res_libros.data} if res_libros.data else {}
+    # 🚀 BYPASS DE 1000 REGISTROS: Cargamos y mapeamos todos los clientes existentes de la base
+    all_clients = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_clientes = conn.table("clientes").select("cliente_id, nombre").order("cliente_id").range(start, end).execute()
+        if res_clientes.data:
+            all_clients.extend(res_clientes.data)
+            if len(res_clientes.data) < chunk_size:
+                break
+        else:
+            break
+            
+    map_clientes = {limpiar_texto_para_busqueda(c['nombre']): c['cliente_id'] for c in all_clients} if all_clients else {}
+
+    # 🚀 BYPASS DE 1000 REGISTROS: Cargamos y mapeamos todos los libros del catálogo
+    all_books = []
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_libros = conn.table("libros").select("libro_id, titulo, autor, costo").order("libro_id").range(start, end).execute()
+        if res_libros.data:
+            all_books.extend(res_libros.data)
+            if len(res_libros.data) < chunk_size:
+                break
+        else:
+            break
+            
+    map_libros = {limpiar_texto_para_busqueda(l['titulo']): l for l in all_books} if all_books else {}
 
     df['Valor_Envio'] = pd.to_numeric(df['Valor_Envio'], errors='coerce').fillna(0)
     df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(1)
@@ -291,10 +344,26 @@ def procesar_ventas_masivas(df):
 # --- LÓGICA 4: IMPORTACIÓN DE SUSCRIPCIONES ---
 # ====================================================
 def generar_plantilla_suscripciones():
+    """Genera la plantilla cargando de forma paginada al 100% de clientes."""
     conn = get_db_connection()
     try:
-        res_clientes = conn.table("clientes").select("cliente_id, nombre").execute()
-        df_clientes = pd.DataFrame(res_clientes.data)
+        all_clients = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_clientes = conn.table("clientes").select("cliente_id, nombre").order("cliente_id").range(start, end).execute()
+            if res_clientes.data:
+                all_clients.extend(res_clientes.data)
+                if len(res_clientes.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_clients:
+            return None
+            
+        df_clientes = pd.DataFrame(all_clients)
         df_clientes['valor_suscripcion'] = ''
         
         output = io.BytesIO()
@@ -307,14 +376,12 @@ def generar_plantilla_suscripciones():
         return output.getvalue()
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
         log_error(
             vista="vista_creacion_masiva",
             funcion="generar_plantilla_suscripciones",
             error=e,
             email_usuario=email_usuario
         )
-        
         st.error(f"Error al generar plantilla de suscripciones: {e}")
         return None
 
