@@ -84,16 +84,19 @@ def mostrar_gestion_portadas():
     # ==========================================
     with tab_individual:
         dict_libros = dict(zip(df_libros['libro_id'], df_libros['titulo']))
-        opciones_ids = [None] + list(dict_libros.keys())
+        opciones_ids = list(dict_libros.keys())
         
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("### 1. Selecciona el Libro")
+            # 🌟 MEJORA DE UX: Se configura index=None y placeholder dinámico para iniciar completamente vacío
             libro_id_seleccionado = st.selectbox(
                 "Escribe para buscar (título):", 
                 options=opciones_ids,
-                format_func=lambda x: "" if x is None else f"{dict_libros[x]} (ID: {x})",
+                index=None,
+                placeholder="🔍 Escribe o busca un libro...",
+                format_func=lambda x: f"{dict_libros[x]} (ID: {x})",
                 key="sel_portada_individual"
             )
             
@@ -112,6 +115,13 @@ def mostrar_gestion_portadas():
                             if exito:
                                 st.success("✨ ¡Portada actualizada con éxito!")
                                 st.snow()
+                                
+                                # 🌟 MEJORA DE UX: Eliminamos de forma segura el estado de selección para resetear la casilla
+                                if 'sel_portada_individual' in st.session_state:
+                                    del st.session_state.sel_portada_individual
+                                if 'up_portada_img' in st.session_state:
+                                    del st.session_state.up_portada_img
+                                    
                                 time.sleep(2)
                                 st.cache_data.clear()
                                 st.rerun()
