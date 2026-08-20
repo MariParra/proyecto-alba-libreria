@@ -51,12 +51,28 @@ def unificar_formatos_fecha(serie_fechas):
     except Exception as e:
         return pd.to_datetime(serie_fechas, errors='coerce').dt.tz_localize(None)
 
-@st.cache_data(ttl=60)  # TTL reducido a 1 minuto para mayor frescura de datos
+@st.cache_data(ttl=60)  # TTL de 1 minuto para mayor frescura de datos en vivo
 def cargar_datos_prioritarios():
+    """Descarga de forma dinámica y paginada todas las ventas superando el límite de 1000."""
     conn = get_db_connection()
     try:
-        res = conn.table("registro_ventas").select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono)").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        # Bucle dinámico seguro (hasta 100.000 ventas en auditoría)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("registro_ventas")\
+                .select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono)")\
+                .order("venta_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception as e:
         log_error("vista_alertas_prioritarias", "cargar_datos_prioritarios", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
@@ -64,6 +80,13 @@ def cargar_datos_prioritarios():
 def mostrar_alertas_prioritarias():
     st.title("🚨 Centro de Alertas Prioritarias")
     st.markdown("---")
+    
+    # Inicialización de limitadores visuales progresivos en Streamlit
+    if 'limite_envios_alertas' not in st.session_state:
+        st.session_state.limite_envios_alertas = 5
+        
+    if 'limite_cobranzas_alertas' not in st.session_state:
+        st.session_state.limite_cobranzas_alertas = 5
     
     df_ventas = cargar_datos_prioritarios()
     
@@ -92,7 +115,6 @@ def mostrar_alertas_prioritarias():
     else:
         df_ventas['cliente_nombre'] = 'Cliente Desconocido'
 
-
     # ================= PASO 2: COMPROBACIÓN DE ALERTAS ACTIVAS =================
     df_envios_limbo = df_ventas[
         (df_ventas['dias_antiguedad'] > 5) & 
@@ -107,8 +129,7 @@ def mostrar_alertas_prioritarias():
     hay_envios_limbo = not df_envios_limbo.empty
     hay_cobranzas_criticas = not df_deudores_criticos.empty
 
-
-        # ================= PASO 3: BANNER CÓMICO DE BIENVENIDA (HÁMSTER MULTI-ESTADO) =================
+    # ================= PASO 3: BANNER CÓMICO DE BIENVENIDA (HÁMSTER MULTI-ESTADO) =================
     col_b1, col_b2 = st.columns([1, 2.5])
     if hay_envios_limbo or hay_cobranzas_criticas:
         with col_b1:
@@ -148,18 +169,23 @@ def mostrar_alertas_prioritarias():
             )
     st.markdown("---")
 
-
-    # ================= PASO 4: RENDERIZADO DE COLUMNAS =================
+    # ================= PASO 4: RENDERIZADO DE COLUMNAS CON PAGINACIÓN =================
     col_envios, col_cobranzas = st.columns(2)
 
-    # COLUMNA 1: ENVÍOS
+    # COLUMNA 1: ENVÍOS (PAGINACIÓN DE 5 EN 5)
     with col_envios:
         st.markdown("### 📦 Armado de Paquetes Demorados (>5 días)")
         if not hay_envios_limbo:
             st.success("🟢 Al día: No tienes paquetes pendientes con más de 5 días de retraso.")
         else:
-            st.error(f"⚠️ Atención: Tienes **{len(df_envios_limbo)}** órdenes pendientes de armado en bodega.")
-            for _, row in df_envios_limbo.iterrows():
+            total_envios = len(df_envios_limbo)
+            limite_envios = st.session_state.limite_envios_alertas
+            df_envios_paginado = df_envios_limbo.head(limite_envios)
+            
+            st.error(f"⚠️ Cantidad crítica: Tienes **{total_envios}** órdenes pendientes de armado en bodega.")
+            st.caption(f"Mostrando {len(df_envios_paginado)} de {total_envios} paquetes pendientes:")
+            
+            for _, row in df_envios_paginado.iterrows():
                 libros_raw = row.get('libros_vendidos', '')
                 libros_formateados = formatear_libros_amigable(libros_raw)
                 
@@ -168,18 +194,38 @@ def mostrar_alertas_prioritarias():
                     st.markdown(f"⏳ Hace `{row['dias_antiguedad']} días` (Creado el {row['fecha_limpia'].strftime('%d/%m/%Y')})")
                     st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")
 
-    # COLUMNA 2: COBRANZAS
+            # Botón de carga incremental de envíos
+            if total_envios > limite_envios:
+                remanente_envios = total_envios - limite_envios
+                if st.button(f"🔄 Ver más paquetes (+5) — Quedan {remanente_envios} por ver", key="btn_more_envios", use_container_width=True):
+                    st.session_state.limite_envios_alertas += 5
+                    st.rerun()
+
+    # COLUMNA 2: COBRANZAS (PAGINACIÓN DE 5 EN 5)
     with col_cobranzas:
         st.markdown("### 💸 Cuentas con Mora Crítica (>14 días)")
         if not hay_cobranzas_criticas:
             st.success("🟢 Al día: No tienes cuentas críticas de cobranza con más de 2 semanas de mora.")
         else:
-            st.error(f"🚨 Alerta: Tienes **{len(df_deudores_criticos)}** deudas críticas acumulando atraso.")
-            for _, row in df_deudores_criticos.iterrows():
+            total_cobranzas = len(df_deudores_criticos)
+            limite_cobranzas = st.session_state.limite_cobranzas_alertas
+            df_cobranzas_paginado = df_deudores_criticos.head(limite_cobranzas)
+            
+            st.error(f"🚨 Alerta: Tienes **{total_cobranzas}** deudas críticas acumulando atraso.")
+            st.caption(f"Mostrando {len(df_cobranzas_paginado)} de {total_cobranzas} deudores críticos:")
+            
+            for _, row in df_cobranzas_paginado.iterrows():
                 with st.container(border=True):
                     st.markdown(f"👤 **{row['cliente_nombre']}**")
-                    st.markdown(f"💰 **Deuda Pendiente:** `${row['deuda']:,.0f}` (Total: `${row['monto_final']:,.0f}`)")
+                    st.markdown(f"💰 **Deuda Pendiente:** `{row['deuda']:,.0f}` (Total: `${row['monto_final']:,.0f}`)")
                     st.markdown(f"⏳ `{row['dias_antiguedad']} días` de atraso desde la fecha de venta.")
+
+            # Botón de carga incremental de cobranzas
+            if total_cobranzas > limite_cobranzas:
+                remanente_cobranzas = total_cobranzas - limite_cobranzas
+                if st.button(f"🔄 Ver más deudores (+5) — Quedan {remanente_cobranzas} por ver", key="btn_more_cobranzas", use_container_width=True):
+                    st.session_state.limite_cobranzas_alertas += 5
+                    st.rerun()
 
     st.markdown("---")
     st.info("💡 **Nota:** Para solucionar o actualizar estas alertas, dirígete a los paneles de **Caja / Ventas Rápidas**.")
