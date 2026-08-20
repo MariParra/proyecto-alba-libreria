@@ -11,8 +11,23 @@ from utilidades import get_db_connection, log_error, limpiar_texto_para_busqueda
 def cargar_catalogo_libros_vm():
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, stock").order("titulo").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        # Bucle seguro de rango amplio (hasta 100.000 libros)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros")\
+                .select("libro_id, titulo, autor, stock, genero, editorial")\
+                .order("titulo")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception as e:
         log_error("vista_ventas_masivas", "cargar_catalogo_libros_vm", e)
         st.error("No se pudo cargar el catálogo de libros.")
@@ -21,15 +36,20 @@ def cargar_catalogo_libros_vm():
 @st.cache_data(ttl=600)
 def cargar_listas_desplegables():
     """Obtiene los valores únicos existentes para Autor, Género y Editorial desde la BD."""
-    conn = get_db_connection()
     try:
-        res_autores = conn.table("libros").select("autor").execute()
-        res_generos = conn.table("libros").select("genero").execute()
-        res_editoriales = conn.table("libros").select("editorial").execute()
+        # Reutilizamos la función cacheada y paginada para evitar 3 llamadas API pesadas
+        df_libros = cargar_catalogo_libros_vm()
+        if df_libros.empty:
+            return [], [], []
         
-        autores = sorted(list(set([r['autor'] for r in res_autores.data if r.get('autor')]))) if res_autores.data else []
-        generos = sorted(list(set([r['genero'] for r in res_generos.data if r.get('genero')]))) if res_generos.data else []
-        editoriales = sorted(list(set([r['editorial'] for r in res_editoriales.data if r.get('editorial')]))) if res_editoriales.data else []
+        autores = sorted(list(set(df_libros['autor'].dropna().tolist())))
+        generos = sorted(list(set(df_libros['genero'].dropna().tolist())))
+        editoriales = sorted(list(set(df_libros['editorial'].dropna().tolist())))
+        
+        # Filtramos textos vacíos
+        autores = [a for a in autores if str(a).strip()]
+        generos = [g for g in generos if str(g).strip()]
+        editoriales = [e for e in editoriales if str(e).strip()]
         
         return autores, generos, editoriales
     except Exception as e:
@@ -40,8 +60,23 @@ def cargar_listas_desplegables():
 def cargar_historial_ventas_masivas():
     conn = get_db_connection()
     try:
-        res = conn.table("ventas_masivas").select("*").order("fecha_evento", desc=True).execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        # Bucle dinámico (hasta 100.000 eventos de ventas masivas)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("ventas_masivas")\
+                .select("*")\
+                .order("fecha_evento", desc=True)\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception as e:
         log_error("vista_ventas_masivas", "cargar_historial_ventas_masivas", e)
         st.error("No se pudo cargar el historial de ventas masivas.")
@@ -98,7 +133,7 @@ def procesar_nueva_venta_masiva(datos_evento):
 
 def anular_venta_masiva(evento_id, stock_fue_descontado, libros_implicados_json):
     conn = get_db_connection()
-    if stock_fue_descontado and libros_implicados_json:
+    if stock_fue_descontated and libros_implicados_json:
         try:
             libros = json.loads(libros_implicados_json) if isinstance(libros_implicados_json, str) else libros_implicados_json
             with st.spinner("Restaurando stock al inventario..."):
@@ -182,7 +217,7 @@ def anadir_nuevo_libro_carrito():
         "costo": costo, "stock_inicial": stock
     })
     
-    # Limpiamos todos los campos temporales. En un callback esto no lanza la excepción.
+    # Limpiamos todos los campos temporales
     st.session_state['vm_error_libro'] = ""
     keys_to_clear = [
         'tmp_titulo', 'sel_autor', 'tmp_autor_nuevo', 'sel_genero', 'tmp_genero_nuevo', 
@@ -230,7 +265,7 @@ def mostrar_ventas_masivas():
         'vm_carrito': [], 'vm_nombre_evento': "", 'vm_tipo_sel': "VENTA EN FERIA", 'vm_tipo_pers': "", 
         'vm_fecha_evento': None, 'vm_ingreso': 0.0, 'vm_costo': 0.0, 'vm_descontar_stock': False, 
         'vm_estado_evento': "POR EMPEZAR", 'vm_estado_pago': "PENDIENTE", 'vm_comentarios': "", 
-        'vm_modo_libro': "📚 Existente en Catálogo", 'vm_error_libro': ""
+        'vm_modo_libro': "📚 Existente en Catálogo", 'vm_error_libro': "", 'vm_limit_view': 50
     }
     for key in defaults:
         if key not in st.session_state:
@@ -297,7 +332,7 @@ def mostrar_ventas_masivas():
             elif st.session_state.vm_modo_libro == "➕ Crear Nuevo Libro":
                 st.info("💡 Este libro se creará en el catálogo general. Todos los textos se guardarán en mayúsculas y sin tildes.")
                 
-                # Cargamos listas inteligentes de la BD
+                # Cargamos listas inteligentes de la BD (Optimizadas sin múltiples llamadas API)
                 autores_db, generos_db, editoriales_db = cargar_listas_desplegables()
                 
                 # Desplegamos errores generados desde el callback
@@ -373,7 +408,6 @@ def mostrar_ventas_masivas():
         st.markdown("#### 4. Estado del Evento")
         col_e1, col_e2 = st.columns(2)
         
-        # Usamos on_change para la automatización del pago
         col_e1.selectbox("Estado del Evento", options=estados_evento, key="vm_estado_evento", on_change=on_estado_evento_change)
         
         if st.session_state.vm_estado_evento == "FINALIZADO":
@@ -434,7 +468,7 @@ def mostrar_ventas_masivas():
             # 1. Procesamiento y normalización de fechas
             df_historial['fecha_limpia'] = unificar_formatos_fecha(df_historial['fecha_evento'])
             
-            # 2. Despliegue de Filtros Interactivos (Estilo Caja)
+            # 2. Despliegue de Filtros Interactivos
             with st.expander("🔍 Filtros del Historial"):
                 df_fechas_validas = df_historial.dropna(subset=['fecha_limpia'])
                 opciones_mes = ["Ver Todo"]
@@ -503,7 +537,7 @@ def mostrar_ventas_masivas():
             df_filtrado_vm['costo_total'] = pd.to_numeric(df_filtrado_vm['costo_total'], errors='coerce').fillna(0.0)
             df_filtrado_vm['utilidad_estimada'] = pd.to_numeric(df_filtrado_vm['utilidad_estimada'], errors='coerce').fillna(0.0)
 
-            # 5. Renderizado de Métricas del período filtrado (Estilo Caja)
+            # 5. Renderizado de Métricas
             st.markdown("#### 📊 Resumen Financiero del Período Filtrado")
             m1, m2, m3 = st.columns(3)
             m1.metric("💰 Ingresos Totales", f"${df_filtrado_vm['ingreso_total'].sum():,.0f}")
@@ -511,9 +545,16 @@ def mostrar_ventas_masivas():
             m3.metric("📈 Utilidad Estimada", f"${df_filtrado_vm['utilidad_estimada'].sum():,.0f}")
             st.markdown("---")
 
+            # --- Slicing visual progresivo ---
+            limite_actual = st.session_state.vm_limit_view
+            total_eventos_filtrados = len(df_filtrado_vm)
+            df_paginado = df_filtrado_vm.head(limite_actual)
+
+            st.caption(f"Mostrando los **{len(df_paginado)}** eventos más recientes de un total de **{total_eventos_filtrados}** encontrados.")
+
             # 6. Despliegue de la Tabla de Datos filtrada
             st.dataframe(
-                df_filtrado_vm[['evento_id', 'fecha_evento', 'nombre_evento', 'tipo_evento', 'ingreso_total', 'costo_total', 'utilidad_estimada', 'estado_evento', 'estado_pago', 'stock_descontado', 'libros_resumen', 'comentarios']],
+                df_paginado[['evento_id', 'fecha_evento', 'nombre_evento', 'tipo_evento', 'ingreso_total', 'costo_total', 'utilidad_estimada', 'estado_evento', 'estado_pago', 'stock_descontado', 'libros_resumen', 'comentarios']],
                 use_container_width=True, hide_index=True, 
                 column_config={
                     "evento_id": "ID",
@@ -530,6 +571,15 @@ def mostrar_ventas_masivas():
                     "comentarios": "Comentarios"
                 }
             )
+
+            # Botón dinámico de paginación progresiva para el historial de ventas masivas
+            if total_eventos_filtrados > limite_actual:
+                st.write("")
+                col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
+                with col_pag2:
+                    if st.button(f"🔄 Cargar más eventos (+50) — Quedan {total_eventos_filtrados - limite_actual} por ver", use_container_width=True, key="btn_load_more_vm"):
+                        st.session_state.vm_limit_view += 50
+                        st.rerun()
 
     with tab_anular:
         st.markdown("### 🚫 Anular Venta Masiva y Restaurar Stock")
