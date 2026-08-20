@@ -3,7 +3,6 @@ import pandas as pd
 import io
 import json
 from datetime import datetime
-
 from utilidades import get_db_connection
 
 # ====================================================
@@ -45,32 +44,86 @@ def convertir_df_a_excel(df):
 # ====================================================
 
 def obtener_tabla(nombre_tabla):
+    """Descarga de forma dinámica y paginada el 100% de una tabla para backup sin límite de 1000."""
     conn = get_db_connection()
     try:
-        res = conn.table(nombre_tabla).select("*").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        
+        # Mapeamos la columna ID correcta según la tabla para un ordenamiento consistente
+        order_col = "id"
+        if nombre_tabla == "clientes": order_col = "cliente_id"
+        elif nombre_tabla == "libros": order_col = "libro_id"
+        elif nombre_tabla == "registro_ventas": order_col = "venta_id"
+        elif nombre_tabla == "asignaciones": order_col = "asignacion_id"
+        elif nombre_tabla == "suscripciones": order_col = "suscripcion_id"
+        elif nombre_tabla == "ventas_masivas": order_col = "evento_id"
+        elif nombre_tabla == "librero_historico": order_col = "registro_id"
+
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = (conn.table(nombre_tabla)
+                .select("*")
+                .order(order_col)
+                .range(start, end).execute())
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except: 
         return pd.DataFrame()
 
 def obtener_reporte_asignaciones(ano, lista_meses):
+    """Genera reporte paginado de asignaciones del periodo cruzando tablas sin límites."""
     conn = get_db_connection()
     try:
-        res_asig = conn.table("asignaciones").select("*").eq("ano", ano).in_("mes", lista_meses).execute()
-        if not res_asig.data: return pd.DataFrame()
-        df_asig = pd.DataFrame(res_asig.data)
+        all_asig = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_asig = (conn.table("asignaciones")
+                .select("*")
+                .eq("ano", ano)
+                .in_("mes", lista_meses)
+                .order("asignacion_id")
+                .range(start, end).execute())
+            if res_asig.data:
+                all_asig.extend(res_asig.data)
+                if len(res_asig.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_asig: return pd.DataFrame()
+        df_asig = pd.DataFrame(all_asig)
         
         ids_clientes = df_asig['cliente_id'].dropna().unique().tolist()
         df_clientes = pd.DataFrame()
         if ids_clientes:
-            res_cli = conn.table("clientes").select("cliente_id, nombre, rut, email, status").in_("cliente_id", ids_clientes).execute()
-            if res_cli.data: df_clientes = pd.DataFrame(res_cli.data)
+            client_data = []
+            for idx in range(0, len(ids_clientes), 1000):
+                chunk = ids_clientes[idx:idx + 1000]
+                res_cli = conn.table("clientes").select("cliente_id, nombre, rut, email, status").in_("cliente_id", chunk).execute()
+                if res_cli.data:
+                    client_data.extend(res_cli.data)
+            df_clientes = pd.DataFrame(client_data) if client_data else pd.DataFrame()
         
         ids_libros = [int(x) for x in df_asig['libro_suscripcion_id'].dropna().unique() if pd.notna(x)]
         df_libros = pd.DataFrame()
         if ids_libros:
-            res_lib = conn.table("libros").select("libro_id, titulo, autor, destacado, visible_catalogo").in_("libro_id", ids_libros).execute()
-            if res_lib.data: 
-                df_libros = pd.DataFrame(res_lib.data)
+            book_data = []
+            for idx in range(0, len(ids_libros), 1000):
+                chunk = ids_libros[idx:idx + 1000]
+                res_lib = conn.table("libros").select("libro_id, titulo, autor, destacado, visible_catalogo").in_("libro_id", chunk).execute()
+                if res_lib.data:
+                    book_data.extend(res_lib.data)
+            if book_data: 
+                df_libros = pd.DataFrame(book_data)
                 df_libros.rename(columns={'libro_id': 'libro_suscripcion_id', 'titulo': 'libro_principal', 'autor': 'autor_libro'}, inplace=True)
 
         df_reporte = pd.merge(df_asig, df_clientes, on='cliente_id', how='left')
@@ -88,7 +141,8 @@ def obtener_reporte_asignaciones(ano, lista_meses):
         }, inplace=True)
         
         for col in ['Cliente', 'Libro Principal Asignado', 'Estado Logística', 'Suscripción Pagada']:
-            df_reporte[col] = df_reporte.get(col, 'N/A').fillna('N/A')
+            if col in df_reporte.columns:
+                df_reporte[col] = df_reporte[col].fillna('N/A')
 
         columnas_ordenadas = [
             'ID Asignacion', 'Año', 'Mes', 'Cliente', 'RUT', 'Estado Suscripción', 
@@ -104,17 +158,49 @@ def obtener_reporte_asignaciones(ano, lista_meses):
         return pd.DataFrame()
 
 def obtener_reporte_envios_pendientes():
+    """Genera reporte paginado consolidando envíos del club y de caja."""
     conn = get_db_connection()
     try:
-        res_asig = conn.table("asignaciones").select("cliente_id, estado_envio").in_("estado_envio", ["POR ENVIAR", "POR RETIRAR"]).execute()
-        df_asig = pd.DataFrame(res_asig.data) if res_asig.data else pd.DataFrame()
+        # Asignaciones (Paginado)
+        all_asig = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_asig = (conn.table("asignaciones")
+                .select("cliente_id, estado_envio")
+                .in_("estado_envio", ["POR ENVIAR", "POR RETIRAR"])
+                .order("asignacion_id")
+                .range(start, end).execute())
+            if res_asig.data:
+                all_asig.extend(res_asig.data)
+                if len(res_asig.data) < chunk_size:
+                    break
+            else:
+                break
+        df_asig = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
         if not df_asig.empty:
             df_asig['origen'] = 'Suscripción'
             df_asig.rename(columns={'estado_envio': 'estado'}, inplace=True)
         
+        # Ventas directas (Paginado)
+        all_ventas = []
         estados_venta = ["LISTO / PENDIENTE PAGO", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO"]
-        res_ventas = conn.table("registro_ventas").select("cliente_id, estado, metodo_envio").in_("estado", estados_venta).execute()
-        df_ventas = pd.DataFrame(res_ventas.data) if res_ventas.data else pd.DataFrame()
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_ventas = (conn.table("registro_ventas")
+                .select("cliente_id, estado, metodo_envio")
+                .in_("estado", estados_venta)
+                .order("venta_id")
+                .range(start, end).execute())
+            if res_ventas.data:
+                all_ventas.extend(res_ventas.data)
+                if len(res_ventas.data) < chunk_size:
+                    break
+            else:
+                break
+        df_ventas = pd.DataFrame(all_ventas) if all_ventas else pd.DataFrame()
         if not df_ventas.empty:
             df_ventas['origen'] = 'Venta Directa'
             df_ventas = df_ventas[~df_ventas['metodo_envio'].str.contains('Retiro', na=False, case=False)]
@@ -125,10 +211,15 @@ def obtener_reporte_envios_pendientes():
         ids_clientes = [int(x) for x in df_pendientes['cliente_id'].dropna().unique()]
         if not ids_clientes: return pd.DataFrame()
             
-        res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, email, telefono, direccion").in_("cliente_id", ids_clientes).execute()
-        if not res_clientes.data: return df_pendientes
+        client_data = []
+        for idx in range(0, len(ids_clientes), 1000):
+            chunk = ids_clientes[idx:idx + 1000]
+            res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, email, telefono, direccion").in_("cliente_id", chunk).execute()
+            if res_clientes.data:
+                client_data.extend(res_clientes.data)
+        if not client_data: return df_pendientes
 
-        df_clientes = pd.DataFrame(res_clientes.data)
+        df_clientes = pd.DataFrame(client_data)
         df_reporte = pd.merge(df_pendientes, df_clientes, on='cliente_id', how='left')
 
         df_reporte.rename(columns={
@@ -136,7 +227,7 @@ def obtener_reporte_envios_pendientes():
             'telefono': 'Telefono', 'direccion': 'Dirección Completa'
         }, inplace=True)
         
-        # Añadir columnas para la empresa de courier
+        # Añadir columnas estándar para la empresa de courier
         df_reporte['Comuna'] = ''
         df_reporte['Detalle/Depto'] = ''
         df_reporte['Largo(cm)'] = 25
@@ -151,16 +242,41 @@ def obtener_reporte_envios_pendientes():
         return pd.DataFrame()
 
 def obtener_reporte_sii(ano, mes, tipo_dte):
+    """Genera reporte paginado mensual del SII cruzando clientes."""
     conn = get_db_connection()
     try:
         mes_str = f"{mes:02d}"
-        res_ventas = conn.table("registro_ventas").select("cliente_id, fecha_venta, monto_final, libros_vendidos").gte('fecha_venta', f'{ano}-{mes_str}-01').lte('fecha_venta', f'{ano}-{mes_str}-31T23:59:59').execute()
-        if not res_ventas.data: return pd.DataFrame()
-        df_ventas = pd.DataFrame(res_ventas.data)
+        
+        # Ventas (Paginado)
+        all_ventas = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_ventas = (conn.table("registro_ventas")
+                .select("cliente_id, fecha_venta, monto_final, libros_vendidos")
+                .gte('fecha_venta', f'{ano}-{mes_str}-01')
+                .lte('fecha_venta', f'{ano}-{mes_str}-31T23:59:59')
+                .order("venta_id")
+                .range(start, end).execute())
+            if res_ventas.data:
+                all_ventas.extend(res_ventas.data)
+                if len(res_ventas.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        if not all_ventas: return pd.DataFrame()
+        df_ventas = pd.DataFrame(all_ventas)
 
         ids_clientes = [int(x) for x in df_ventas['cliente_id'].dropna().unique()]
-        res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, direccion").in_("cliente_id", ids_clientes).execute()
-        df_clientes = pd.DataFrame(res_clientes.data)
+        client_data = []
+        for idx in range(0, len(ids_clientes), 1000):
+            chunk = ids_clientes[idx:idx + 1000]
+            res_clientes = conn.table("clientes").select("cliente_id, nombre, rut, direccion").in_("cliente_id", chunk).execute()
+            if res_clientes.data:
+                client_data.extend(res_clientes.data)
+        df_clientes = pd.DataFrame(client_data)
         
         df_reporte = pd.merge(df_ventas, df_clientes, on='cliente_id', how='left').fillna('')
 
@@ -197,13 +313,26 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
         return pd.DataFrame()
 
 def obtener_reporte_bajo_stock(limite=5):
+    """Filtra y descarta stock crítico en Supabase de forma paginada."""
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select(
-            "titulo, autor, editorial, stock, precio, visible_catalogo, destacado"
-        ).lte("stock", limite).order("stock").execute()
-        
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_books = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = (conn.table("libros")
+                .select("titulo, autor, editorial, stock, precio, visible_catalogo, destacado")
+                .lte("stock", limite)
+                .order("stock")
+                .range(start, end).execute())
+            if res.data:
+                all_books.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_books) if all_books else pd.DataFrame()
     except: 
         return pd.DataFrame()
 
