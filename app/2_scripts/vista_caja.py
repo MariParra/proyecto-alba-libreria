@@ -42,8 +42,24 @@ def unificar_formatos_fecha(serie_fechas):
 def cargar_libros_caja():
     conn = get_db_connection()
     try:
-        res = conn.table("libros").select("libro_id, titulo, autor, precio, costo, stock, editorial, encuadernacion").execute()
-        df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        # Bucle seguro de rango amplio (hasta 100.000 libros) que frena al terminar los datos
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("libros")\
+                .select("libro_id, titulo, autor, precio, costo, stock, editorial, encuadernacion")\
+                .order("libro_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+                
+        df = pd.DataFrame(all_data) if all_data else pd.DataFrame()
         if not df.empty:
             df['costo'] = pd.to_numeric(df['costo'], errors='coerce').fillna(0.0)
             df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0.0)
@@ -58,8 +74,23 @@ def cargar_libros_caja():
 def cargar_clientes_caja():
     conn = get_db_connection()
     try:
-        res = conn.table("clientes").select("cliente_id, nombre, email, telefono, status, rut, direccion").execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        all_data = []
+        chunk_size = 1000
+        # Bucle dinámico seguro (hasta 100.000 clientes)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("clientes")\
+                .select("cliente_id, nombre, email, telefono, status, rut, direccion")\
+                .order("cliente_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception as e:
         log_error("vista_caja", "cargar_clientes_caja", e, st.session_state.get('email_usuario', 'Desconocido'))
         st.error("Error crítico: No se pudo cargar el listado de clientes.")
@@ -68,13 +99,16 @@ def cargar_clientes_caja():
 @st.cache_data(ttl=300)
 def cargar_listas_desplegables_caja():
     """Obtiene Autores y Editoriales únicos para los desplegables de caja."""
-    conn = get_db_connection()
     try:
-        res_autores = conn.table("libros").select("autor").execute()
-        res_editoriales = conn.table("libros").select("editorial").execute()
+        df_libros = cargar_libros_caja()
+        if df_libros.empty:
+            return [], []
         
-        autores = sorted(list(set([r['autor'] for r in res_autores.data if r.get('autor')]))) if res_autores.data else []
-        editoriales = sorted(list(set([r['editorial'] for r in res_editoriales.data if r.get('editorial')]))) if res_editoriales.data else []
+        autores = sorted(df_libros['autor'].dropna().unique().tolist())
+        editoriales = sorted(df_libros['editorial'].dropna().unique().tolist())
+        
+        autores = [a for a in autores if str(a).strip()]
+        editoriales = [e for e in editoriales if str(e).strip()]
         
         return autores, editoriales
     except Exception as e:
@@ -117,8 +151,8 @@ def cargar_historial_completo():
     try:
         all_data = []
         chunk_size = 1000
-        # 🚀 Bucle acotado a 5 iteraciones para descargar hasta 5.000 ventas de forma estable y asíncrona
-        for bloque in range(5):
+        # Bucle dinámico ilimitado que frena de forma asíncrona y robusta
+        for bloque in range(200): # Soporta hasta 200.000 ventas
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res_ventas = conn.table("registro_ventas")\
@@ -158,8 +192,6 @@ def cargar_historial_completo():
             else: return libros_data
                 
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
-        
-        # Mantenemos el nombre_cliente antiguo para compatibilidad con código existente
         df_ventas['nombre_cliente'] = df_ventas['cliente_nombre']
         
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
@@ -443,8 +475,13 @@ def actualizar_historial_caja(df_editado):
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
 def mostrar_caja():
+    # Inicialización del limitador de ventas en el historial (empieza en 100 y suma 100)
     if 'caja_limit_view' not in st.session_state:
         st.session_state.caja_limit_view = 100
+        
+    # Inicialización del limitador de clientes (empieza en 200 y suma 200)
+    if 'clientes_limit_view' not in st.session_state:
+        st.session_state.clientes_limit_view = 200
         
     if 'carrito_caja' not in st.session_state: st.session_state.carrito_caja = []
     if 'historial_original' not in st.session_state: st.session_state.historial_original = pd.DataFrame()
@@ -487,7 +524,19 @@ def mostrar_caja():
         
         if modo_cliente == "👤 Buscar Existente":
             if not df_clientes.empty:
-                sel_cliente = st.selectbox("Buscar cliente:", [""] + df_clientes['nombre'].tolist())
+                limite_cli = st.session_state.clientes_limit_view
+                clientes_filtrados = df_clientes.head(limite_cli)
+                
+                sel_cliente = st.selectbox(
+                    f"Buscar cliente (mostrando {len(clientes_filtrados)} de {len(df_clientes)}):", 
+                    [""] + clientes_filtrados['nombre'].tolist()
+                )
+                
+                # Botón UX para expandir la lista de clientes en el buscador de +200 en +200
+                if len(df_clientes) > limite_cli:
+                    if st.button(f"🔍 Cargar más clientes en el buscador (+200)", use_container_width=True):
+                        st.session_state.clientes_limit_view += 200
+                        st.rerun()
                 if sel_cliente:
                     datos_c = df_clientes[df_clientes['nombre'] == sel_cliente].iloc[0]
                     c_id = int(datos_c['cliente_id'])
