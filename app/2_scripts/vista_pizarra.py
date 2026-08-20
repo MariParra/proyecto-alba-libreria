@@ -35,21 +35,21 @@ def calcular_siguiente_fecha(fecha_limite_str, recurrencia, hoy):
     return None
 
 @st.cache_data(ttl=30)
-@st.cache_data(ttl=30)
 def cargar_notas_db():
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
         hoy = datetime.now().date()
         
-        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS ---
+        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS (SEMANA EN CURSO) ---
+        # Calcula el miércoles de la semana en curso (incluso si ya pasó)
         miercoles_esta_semana = hoy - timedelta(days=(hoy.weekday() - 2))
         proximo_miercoles_str = miercoles_esta_semana.strftime("%Y-%m-%d")
         
         res_exist = (conn.table("pizarra_recordatorios")
-        .select("nota_id")
-        .eq("titulo", "HACER FACTURAS DE LA SEMANA")
-        .eq("fecha_limite", proximo_miercoles_str).execute())
+            .select("nota_id")
+            .eq("titulo", "HACER FACTURAS DE LA SEMANA")
+            .eq("fecha_limite", proximo_miercoles_str).execute())
             
         if not res_exist.data:
             datos_fac = {
@@ -61,30 +61,25 @@ def cargar_notas_db():
             conn.table("pizarra_recordatorios").insert(datos_fac).execute()
 
         # --- 2. LÓGICA INTELIGENTE DE AUTO-CLONACIÓN CON PASE DE ESTAFETA (CONCILIADO) ---
-        # Buscamos solo las notas completadas que tengan etiquetas de recurrencia ACTIVAS
-        res_completadas = conn.table("pizarra_recordatorios")\
-            .select("nota_id, titulo, contenido, fecha_limite")\
-            .eq("completada", True).execute()
+        res_completadas = (conn.table("pizarra_recordatorios")
+            .select("nota_id, titulo, contenido, fecha_limite")
+            .eq("completada", True).execute())
             
         if res_completadas.data:
             for nota in res_completadas.data:
                 cont_str = str(nota.get('contenido', ''))
-                # Solo procesa si tiene una recurrencia activa y NO procesada previamente
                 recurrencia = "Semanal" if "[Recurrencia: Semanal]" in cont_str else ("Mensual" if "[Recurrencia: Mensual]" in cont_str else None)
                 
                 if recurrencia:
                     prox_fecha = calcular_siguiente_fecha(nota['fecha_limite'], recurrencia, hoy)
                     if prox_fecha:
                         prox_fecha_str = prox_fecha.strftime("%Y-%m-%d")
-                        
-                        # Validamos que no exista ya una copia activa para esa misma fecha límite
-                        res_active_exist = conn.table("pizarra_recordatorios")\
-                            .select("nota_id")\
-                            .eq("titulo", nota['titulo'])\
-                            .eq("fecha_limite", prox_fecha_str).execute()
+                        res_active_exist = (conn.table("pizarra_recordatorios")
+                            .select("nota_id")
+                            .eq("titulo", nota['titulo'])
+                            .eq("fecha_limite", prox_fecha_str).execute())
                             
                         if not res_active_exist.data:
-                            # A. Creamos la nueva copia activa herendando el tag de recurrencia
                             nueva_copia = {
                                 "titulo": nota['titulo'],
                                 "contenido": nota['contenido'],
@@ -93,24 +88,22 @@ def cargar_notas_db():
                             }
                             conn.table("pizarra_recordatorios").insert(nueva_copia).execute()
                             
-                        # B. 🌟 EL BOTÓN DE SEGURIDAD: Cambiamos el tag de la nota completada a 'Procesada' 
-                        # para que nunca más vuelva a intentar clonarse.
                         nuevo_contenido_viejo = cont_str.replace(f"[Recurrencia: {recurrencia}]", "[Recurrencia: Procesada]")
                         conn.table("pizarra_recordatorios").update({
                             "contenido": nuevo_contenido_viejo
                         }).eq("nota_id", int(nota['nota_id'])).execute()
 
-        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO) ---
+        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO CON BYPASS DE 1000) ---
         all_notes = []
         chunk_size = 1000
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res = conn.table("pizarra_recordatorios")\
-                .select("*")\
-                .eq("completada", False)\
-                .order("fecha_limite", desc=False)\
-                .range(start, end).execute()
+            res = (conn.table("pizarra_recordatorios")
+                .select("*")
+                .eq("completada", False)
+                .order("fecha_limite", desc=False)
+                .range(start, end).execute())
             if res.data:
                 all_notes.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -121,7 +114,6 @@ def cargar_notas_db():
     except Exception as e:
         log_error("vista_pizarra", "cargar_notas_db", e, email_usuario)
         return pd.DataFrame()
-
 
 def guardar_nota_db(titulo, contenido, fecha_limite, recurrencia="Única vez"):
     conn = get_db_connection()
@@ -349,7 +341,7 @@ def mostrar_pizarra():
             wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel}&text={urllib.parse.quote(msg_wa)}"
 
             with col_target:
-                # 🌟 ULTRA BLINDAJE: Concatenamos como string plano de una sola línea para evitar código Markdown pre/code block
+                # 🌟 ULTRA BLINDAJE: Concatenamos como string plano de una sola línea sin saltos de línea ni tabuladores
                 html_postit = (
                     f'<div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">'
                     f'<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">'
