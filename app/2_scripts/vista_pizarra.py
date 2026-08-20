@@ -5,18 +5,48 @@ import urllib.parse
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
+def calcular_siguiente_fecha(fecha_limite_str, recurrencia, hoy):
+    """Calcula matemáticamente la próxima fecha del calendario cruzando años de forma segura."""
+    try:
+        f_lim = datetime.strptime(fecha_limite_str, "%Y-%m-%d").date()
+    except:
+        return hoy
+        
+    if recurrencia == "Semanal":
+        next_date = f_lim
+        while next_date <= hoy:
+            next_date += timedelta(days=7)
+        return next_date
+    elif recurrencia == "Mensual":
+        next_date = f_lim
+        while next_date <= hoy:
+            year = next_date.year
+            month = next_date.month + 1
+            if month == 13:
+                month = 1
+                year += 1
+            try:
+                next_date = date(year, month, f_lim.day)
+            except ValueError:
+                # Si cae un día fuera de rango (ej. 31), se topa al último día del mes
+                next_month_first = date(year, month, 1) + timedelta(days=32)
+                next_date = date(next_month_first.year, next_month_first.month, 1) - timedelta(days=1)
+        return next_date
+    return None
+
 @st.cache_data(ttl=30)
 def cargar_notas_db():
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        # --- 🚀 LÓGICA AUTOMÁTICA: TAREA RECURRENTE DE FACTURAS ---
         hoy = datetime.now().date()
-        dias_hasta_miercoles = (2 - hoy.weekday()) % 7
-        proximo_miercoles = hoy + timedelta(days=dias_hasta_miercoles)
-        proximo_miercoles_str = proximo_miercoles.strftime("%Y-%m-%d")
         
-        # Validamos de forma global para evitar duplicados si ya fue completada o creada
+        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS ---
+        hoy = datetime.now().date()
+        # Calcula el miércoles de la semana en curso (incluso si fue ayer)
+        miercoles_esta_semana = hoy - timedelta(days=(hoy.weekday() - 2))
+        proximo_miercoles_str = miercoles_esta_semana.strftime("%Y-%m-%d")
+        
         res_exist = conn.table("pizarra_recordatorios")\
             .select("nota_id")\
             .eq("titulo", "HACER FACTURAS DE LA SEMANA")\
@@ -25,13 +55,43 @@ def cargar_notas_db():
         if not res_exist.data:
             datos_fac = {
                 "titulo": "HACER FACTURAS DE LA SEMANA",
-                "contenido": "Tarea recurrente semanal para la facturación de la librería.",
+                "contenido": "Tarea recurrente semanal para la facturación de la librería. [Recurrencia: Semanal]",
                 "fecha_limite": proximo_miercoles_str,
                 "completada": False
             }
             conn.table("pizarra_recordatorios").insert(datos_fac).execute()
 
-        # Cargamos las notas que no han sido completadas (PAGINADO BYPASS LÍMITE DE 1000)
+        # --- 2. LOGICA INTELIGENTE DE AUTO-CLONACIÓN DE TAREAS RECURRENTES COMPLETADAS ---
+        # Buscamos todas las notas completadas que tengan tags de recurrencia
+        res_completadas = conn.table("pizarra_recordatorios")\
+            .select("nota_id, titulo, contenido, fecha_limite")\
+            .eq("completada", True).execute()
+            
+        if res_completadas.data:
+            for nota in res_completadas.data:
+                cont_str = str(nota.get('contenido', ''))
+                recurrencia = "Semanal" if "[Recurrencia: Semanal]" in cont_str else ("Mensual" if "[Recurrencia: Mensual]" in cont_str else None)
+                
+                if recurrencia:
+                    prox_fecha = calcular_siguiente_fecha(nota['fecha_limite'], recurrencia, hoy)
+                    if prox_fecha:
+                        prox_fecha_str = prox_fecha.strftime("%Y-%m-%d")
+                        # Validamos que no exista ya una copia activa para esa misma fecha límite
+                        res_active_exist = conn.table("pizarra_recordatorios")\
+                            .select("nota_id")\
+                            .eq("titulo", nota['titulo'])\
+                            .eq("fecha_limite", prox_fecha_str).execute()
+                            
+                        if not res_active_exist.data:
+                            nueva_copia = {
+                                "titulo": nota['titulo'],
+                                "contenido": nota['contenido'],
+                                "fecha_limite": prox_fecha_str,
+                                "completada": False
+                            }
+                            conn.table("pizarra_recordatorios").insert(nueva_copia).execute()
+
+        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO) ---
         all_notes = []
         chunk_size = 1000
         for bloque in range(100):
@@ -53,12 +113,17 @@ def cargar_notas_db():
         log_error("vista_pizarra", "cargar_notas_db", e, email_usuario)
         return pd.DataFrame()
 
-def guardar_nota_db(titulo, contenido, fecha_limite):
+def guardar_nota_db(titulo, contenido, fecha_limite, recurrencia="Única vez"):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    
+    contenido_final = contenido.strip() if contenido else ""
+    if recurrencia != "Única vez":
+        contenido_final += f" [Recurrencia: {recurrencia}]"
+        
     datos = {
         "titulo": limpiar_texto_para_busqueda(titulo),
-        "contenido": contenido.strip() if contenido else "",
+        "contenido": contenido_final,
         "fecha_limite": fecha_limite.strftime("%Y-%m-%d"),
         "completada": False
     }
@@ -115,15 +180,13 @@ def mostrar_pizarra():
     df_notas = cargar_notas_db()
     hoy = datetime.now().date()
 
-    # Inicialización del limitador progresivo (inicia en 3, que es una fila completa)
     if 'pizarra_limit_view' not in st.session_state:
         st.session_state.pizarra_limit_view = 3
 
-    # ================= BANNER DE PRODUCTIVIDAD (HÁMSTER DE LA PIZARRA) =================
+    # ================= BANNER DE PRODUCTIVIDAD (HÁMSTER) =================
     col_ham1, col_ham2 = st.columns([1, 2.5])
     
     if not df_notas.empty:
-        # CASO 1: Hay tareas pendientes en la pizarra (Hámster Vigilante)
         with col_ham1:
             st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg", width=180)
         with col_ham2:
@@ -139,7 +202,6 @@ def mostrar_pizarra():
                 unsafe_allow_html=True
             )
     else:
-        # CASO 2: Todo completado y al día (Hámster Trabajador/Celebrando)
         with col_ham1:
             st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamstertrabajando.jpg", width=180)
         with col_ham2:
@@ -197,14 +259,24 @@ def mostrar_pizarra():
         with st.container(border=True):
             n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy", key="new_note_title")
             n_contenido = st.text_area("Detalles o notas adicionales:", placeholder="Ej: Comprar de 180g...", key="new_note_content")
-            n_fecha = st.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
+            
+            c_p1, c_p2 = st.columns(2)
+            n_fecha = c_p1.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
+            
+            # Selector de Recurrencia para Post-its
+            n_recurrencia = c_p2.selectbox(
+                "⚙️ Frecuencia de Repetición:",
+                options=["Única vez", "Semanal", "Mensual"],
+                index=0,
+                help="Elige si deseas que la tarea se autoregenere automáticamente al completarse."
+            )
             
             st.write("")
             if st.button("📌 Clavar Nota en la Pizarra", type="primary", use_container_width=True):
                 if not n_titulo:
                     st.error("Por favor, ingresa el título del recordatorio.")
                 else:
-                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha)
+                    ok, err = guardar_nota_db(n_titulo, n_contenido, n_fecha, n_recurrencia)
                     if ok:
                         st.success("✅ ¡Nota clavada con éxito!")
                         st.balloons()
@@ -232,7 +304,13 @@ def mostrar_pizarra():
             n_id = row['nota_id']
             fecha_lim = row['fecha_dt']
             titulo_nota = row['titulo']
-            contenido_nota = row['contenido']
+            contenido_raw = str(row['contenido'])
+            
+            # Detectamos si contiene una etiqueta de recurrencia en el texto
+            recurrencia_nota = "Semanal" if "[Recurrencia: Semanal]" in contenido_raw else ("Mensual" if "[Recurrencia: Mensual]" in contenido_raw else None)
+            
+            # Limpiamos el metadato para no mostrárselo de forma técnica al usuario
+            contenido_limpio = contenido_raw.replace("[Recurrencia: Semanal]", "").replace("[Recurrencia: Mensual]", "").strip()
             
             # Definir color del Post-it según urgencia
             if fecha_lim < hoy:
@@ -252,32 +330,38 @@ def mostrar_pizarra():
                 badge = f"📅 {fecha_lim.strftime('%d/%m/%Y')}"
 
             # --- PREPARACIÓN DE ENLACES EXTERNOS ---
-            # 1. Google Calendar URL
             f_cal_str = fecha_lim.strftime("%Y%m%d")
             g_cal_url = (
                 f"https://www.google.com/calendar/render?action=TEMPLATE"
                 f"&text={urllib.parse.quote(titulo_nota)}"
                 f"&dates={f_cal_str}/{f_cal_str}"
-                f"&details={urllib.parse.quote(contenido_nota)}"
+                f"&details={urllib.parse.quote(contenido_limpio)}"
                 f"&sf=true&output=xml"
             )
             
-            # 2. WhatsApp Auto-Recordatorio
             dueña_tel = st.secrets.get("catalogo_publico", {}).get("whatsapp_numero", "56963531241")
-            msg_wa = f"📌 RECORDATORIO ALBA: {titulo_nota} - {contenido_nota} (Fecha Límite: {fecha_lim.strftime('%d/%m/%Y')})"
+            msg_wa = f"📌 RECORDATORIO ALBA: {titulo_nota} - {contenido_limpio} (Fecha Límite: {fecha_lim.strftime('%d/%m/%Y')})"
             wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel}&text={urllib.parse.quote(msg_wa)}"
 
             with col_target:
-                st.markdown(
-                    f"""
-                    <div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                html_postit = f"""
+                <div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">
                         <span style="background-color:{border_color}; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">{badge}</span>
-                        <h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:17px;">{titulo_nota}</h4>
-                        <p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{contenido_nota}</p>
+                """
+                
+                # Si es recurrente, inyectamos una insignia estética en el Post-it
+                if recurrencia_nota:
+                    html_postit += f'<span style="background-color:#7e57c2; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">🔁 {recurrencia_nota.upper()}</span>'
+                
+                html_postit += f"""
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    <h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:17px;">{titulo_nota}</h4>
+                    <p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{contenido_limpio}</p>
+                </div>
+                """
+                
+                st.markdown(html_postit, unsafe_allow_html=True)
                 
                 # --- MENÚ DE CONTROL ÚNICO ---
                 with st.popover("⚙️ Acciones / Control", use_container_width=True):
@@ -296,10 +380,15 @@ def mostrar_pizarra():
                     st.markdown("**✏️ Edición e Historial**")
                     with st.expander("✏️ Editar contenido"):
                         e_titulo = st.text_input("Título:", value=titulo_nota, key=f"edit_tit_{n_id}")
-                        e_content = st.text_area("Detalles:", value=contenido_nota, key=f"edit_cont_{n_id}")
+                        e_content = st.text_area("Detalles:", value=contenido_limpio, key=f"edit_cont_{n_id}")
                         e_fecha = st.date_input("Fecha límite:", value=fecha_lim, key=f"edit_date_{n_id}")
                         if st.button("💾 Guardar cambios", key=f"btn_save_edit_{n_id}", use_container_width=True):
-                            if actualizar_nota_db(n_id, e_titulo, e_content, e_fecha):
+                            # Mantenemos la etiqueta técnica de recurrencia al actualizar si existía
+                            contenido_actualizado = e_content.strip()
+                            if recurrencia_nota:
+                                contenido_actualizado += f" [Recurrencia: {recurrencia_nota}]"
+                                
+                            if actualizar_nota_db(n_id, e_titulo, contenido_actualizado, e_fecha):
                                 st.success("Guardado con éxito.")
                                 time.sleep(1)
                                 st.rerun()
