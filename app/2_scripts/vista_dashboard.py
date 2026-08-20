@@ -188,32 +188,29 @@ def mostrar_dashboard():
     mostrar_alertas_proactivas()
     df_ventas, df_asig, df_vm, df_clientes = cargar_datos_base()
     
-    with st.container(border=True):
-        st.markdown("### 🔎 Filtro de Tiempo Global")
-        hoy = datetime.date.today()
-        hace_un_ano = hoy - datetime.timedelta(days=365)
-        
-        rango_fechas = st.date_input(
-            "Selecciona el Rango de Análisis:",
-            value=(hace_un_ano, hoy),
-            max_value=hoy,
-            format="DD/MM/YYYY"
-        )
-        
-    if len(rango_fechas) != 2:
-        st.warning("Por favor, selecciona una fecha de inicio y una de fin para visualizar los datos.")
-        st.stop()
-        
-    fecha_inicio, fecha_fin = rango_fechas
-    fecha_inicio_pd = pd.to_datetime(fecha_inicio)
-    fecha_fin_pd = pd.to_datetime(fecha_fin) + pd.Timedelta(days=1)
+    # Mapeo de meses de trabajo (Idéntico a vista_asignaciones.py)
+    meses_dict = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+        7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
 
-    # Filtrar datos del período
-    df_v_filt = df_ventas[(df_ventas['fecha_venta'] >= fecha_inicio_pd) & (df_ventas['fecha_venta'] <= fecha_fin_pd)] if not df_ventas.empty else pd.DataFrame()
-    df_a_filt = df_asig[(df_asig['fecha_asignacion'] >= fecha_inicio_pd) & (df_asig['fecha_asignacion'] <= fecha_fin_pd)] if not df_asig.empty else pd.DataFrame()
+    # Widget de selección de Mes y Año de Trabajo (Default: Mes y Año Actuales)
+    with st.container(border=True):
+        st.markdown("### 📅 Mes de Trabajo")
+        c1, c2 = st.columns(2)
+        mes_sel = c1.selectbox("Mes:", list(meses_dict.values()), index=datetime.date.today().month - 1)
+        ano_sel = c2.number_input("Año:", min_value=2020, max_value=2050, value=datetime.date.today().year, step=1)
+        mes_num = list(meses_dict.keys())[list(meses_dict.values()).index(mes_sel)]
+
+    # Filtrar datos del año y mes seleccionados de forma precisa
+    df_v_filt = df_ventas[(df_ventas['fecha_venta'].dt.year == ano_sel) & (df_ventas['fecha_venta'].dt.month == mes_num)] if not df_ventas.empty else pd.DataFrame()
+    df_a_filt = df_asig[(df_asig['fecha_asignacion'].dt.year == ano_sel) & (df_asig['fecha_asignacion'].dt.month == mes_num)] if not df_asig.empty else pd.DataFrame()
     
-    df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
-    df_vm_filt = df_vm[(df_vm['fecha_evento_dt'] >= fecha_inicio_pd) & (df_vm['fecha_evento_dt'] <= fecha_fin_pd)] if not df_vm.empty else pd.DataFrame()
+    if not df_vm.empty:
+        df_vm['fecha_evento_dt'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
+        df_vm_filt = df_vm[(df_vm['fecha_evento_dt'].dt.year == ano_sel) & (df_vm['fecha_evento_dt'].dt.month == mes_num)]
+    else:
+        df_vm_filt = pd.DataFrame()
 
     # --- CÁLCULO DE MÉTRICAS SEGURAS POR CANAL (PAGADOS) ---
     df_a_paid = df_a_filt[df_a_filt['pagado'].str.upper() == 'SI'] if not df_a_filt.empty else pd.DataFrame()
@@ -280,8 +277,9 @@ def mostrar_dashboard():
     st.markdown("---")
     st.markdown("### 📊 Gráficos de Análisis Comercial")
 
-    frecuencia = "M"
-    texto_freq = "Mensual"
+    # Cambio de Frecuencia: De Mensual ("M") a Diario ("D") al analizar un mes específico
+    frecuencia = "D"
+    texto_freq = "Diario"
 
     # Fila 1: Línea Temporal de Evolución y Comparativa de Canales
     col_g1, col_g2 = st.columns(2)
@@ -290,13 +288,13 @@ def mostrar_dashboard():
         with st.container(border=True):
             st.markdown(f"#### 💵 Tendencia de Ingresos ({texto_freq})")
             if not df_v_paid.empty or not df_a_paid.empty or not df_vm_paid.empty:
-                df_v_paid['mes_str'] = df_v_paid['fecha_venta'].dt.strftime('%Y-%m')
-                df_a_paid['mes_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%Y-%m')
-                df_vm_paid['mes_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%Y-%m')
+                df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
+                df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
+                df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
 
-                v_agrupado = df_v_paid.groupby('mes_str')['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(dtype=float)
-                a_agrupado = df_a_paid.groupby('mes_str')['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(dtype=float)
-                vm_agrupado = df_vm_paid.groupby('mes_str')['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(dtype=float)
+                v_agrupado = df_v_paid.groupby('dia_str')['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(dtype=float)
+                a_agrupado = df_a_paid.groupby('dia_str')['monto_total'].sum().rename("Suscripciones") if not df_a_paid.empty else pd.Series(dtype=float)
+                vm_agrupado = df_vm_paid.groupby('dia_str')['ingreso_total'].sum().rename("Ventas Masivas") if not df_vm_paid.empty else pd.Series(dtype=float)
 
                 df_tendencia = pd.concat([v_agrupado, a_agrupado, vm_agrupado], axis=1).fillna(0.0).sort_index()
                 df_tendencia.index = df_tendencia.index.astype(str)
@@ -352,7 +350,8 @@ def mostrar_dashboard():
         with st.container(border=True):
             st.markdown(f"#### 📊 Volumen de Suscripciones del Período ({texto_freq})")
             if not df_a_filt.empty:
-                conteo_asig = df_a_filt.groupby(df_a_filt['fecha_asignacion'].dt.to_period(frecuencia)).size().rename("Cantidad")
+                # Agrupación por día en formato dd/mm para mayor detalle visual
+                conteo_asig = df_a_filt.groupby(df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')).size().rename("Cantidad")
                 conteo_asig.index = conteo_asig.index.astype(str)
                 st.bar_chart(conteo_asig, use_container_width=True, color="#E91E63")
             else:
