@@ -12,7 +12,7 @@ def obtener_historial_completo(cliente_id):
     historial = []
 
     try:
-        # --- PARTE 1, 2 Y 3: Recopilación de datos (Tu lógica original intacta) ---
+        # --- PARTE 1, 2 Y 3: Recopilación de datos ---
         # 1. Librero Histórico
         res_hist = conn.table("librero_historico").select("libro_id, origen, autor_historico").eq("cliente_id", cliente_id).execute()
         if res_hist.data:
@@ -41,13 +41,12 @@ def obtener_historial_completo(cliente_id):
                             "Fuente": f"Venta Directa ({v['fecha_venta']})"
                         })
                 except (json.JSONDecodeError, TypeError) as e_json:
-                    # LOGGING DE JSON CORRUPTO (Silencioso)
                     log_error("vista_clientes", "obtener_historial_completo (JSON Ventas)", f"JSON Corrupto en venta del cliente {cliente_id}. Detalle: {e_json}", "N/A")
                     continue
             if libros_venta:
                 historial.append(pd.DataFrame(libros_venta))
         
-        # --- PARTE 4: Consolidación y cruce (Tu lógica original intacta) ---
+        # --- PARTE 4: Consolidación y cruce ---
         if not historial:
             return pd.DataFrame(columns=columnas_finales)
 
@@ -82,7 +81,6 @@ def obtener_historial_completo(cliente_id):
         return df_final[columnas_finales]
 
     except Exception as e:
-        # --- BLOQUE DE ERROR PRINCIPAL ---
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
             vista="vista_clientes",
@@ -91,13 +89,39 @@ def obtener_historial_completo(cliente_id):
             email_usuario=email_usuario
         )
         st.error(f"No se pudo cargar el historial completo del cliente. Error: {e}")
-        return pd.DataFrame(columns=columnas_finales) # Devolvemos DF vacío en caso de fallo
+        return pd.DataFrame(columns=columnas_finales)
 
 @st.cache_data(ttl=300)
 def cargar_todos_los_clientes():
     conn = get_db_connection()
-    res = conn.table("clientes").select("*").order("nombre").execute()
-    return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    try:
+        all_data = []
+        chunk_size = 1000
+        # Bucle dinámico ilimitado (hasta 100.000 clientes en directorio)
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("clientes")\
+                .select("*")\
+                .order("nombre")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
+    except Exception as e:
+        email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+        log_error(
+            vista="vista_clientes",
+            funcion="cargar_todos_los_clientes",
+            error=e,
+            email_usuario=email_usuario
+        )
+        st.error(f"No se pudo cargar la lista de clientes. Error: {e}")
+        return pd.DataFrame()
 
 def actualizar_status_cliente(cliente_id, nuevo_status):
     """Actualiza el estado de un cliente en la base de datos."""
@@ -113,15 +137,18 @@ def actualizar_status_cliente(cliente_id, nuevo_status):
             error=e,
             email_usuario=email_usuario
         )
-        st.error(f"No se pudo cargar la lista de clientes. Error: {e}")
-        return pd.DataFrame()
-
+        st.error(f"No se pudo cambiar el estado del cliente. Error: {e}")
+        return False, str(e)
 
 # --- VISTA PRINCIPAL ---
 
 def mostrar_clientes():
     st.title("👥 Gestión de Clientes")
     
+    # Inicialización del limitador de clientes para visualización progresiva en UI
+    if 'clientes_limit_view' not in st.session_state:
+        st.session_state.clientes_limit_view = 200
+
     # --- NOTA DE INSTRUCCIONES OCULTA ---
     with st.expander("💡 Guía de Estados de Clientes (Haz clic para desplegar)"):
         st.markdown("""
@@ -169,7 +196,19 @@ def mostrar_clientes():
         if df_clientes_filtrado.empty:
             st.warning(f"No hay clientes registrados bajo el filtro actual ({filtro_estado}).")
         else:
-            cliente_sel = st.selectbox("Selecciona o busca un cliente:", [""] + lista_nombres, key="sel_ficha")
+            limite_cli = st.session_state.clientes_limit_view
+            lista_ficha_paginada = lista_nombres[:limite_cli]
+            
+            cliente_sel = st.selectbox(
+                f"Selecciona o busca un cliente (mostrando {len(lista_ficha_paginada)} de {len(lista_nombres)}):", 
+                [""] + lista_ficha_paginada, 
+                key="sel_ficha"
+            )
+            
+            if len(lista_nombres) > limite_cli:
+                if st.button("🔍 Cargar más clientes en el buscador (+200)", key="btn_load_more_ficha", use_container_width=True):
+                    st.session_state.clientes_limit_view += 200
+                    st.rerun()
             
             if cliente_sel:
                 cliente_data = df_clientes_filtrado[df_clientes_filtrado['nombre'] == cliente_sel].iloc[0]
@@ -185,9 +224,7 @@ def mostrar_clientes():
                         try:
                             idx_estado = estados_totales.index(estado_actual)
                         except ValueError:
-                            error_detalle = (
-                                f"Estado no reconocido encontrado en la base de datos para el cliente "
-                            )
+                            error_detalle = "Estado no reconocido encontrado en la base de datos para el cliente"
                             log_error(
                                 vista="vista_clientes",
                                 funcion="UI - Mostrar Cliente (búsqueda de índice de estado)",
@@ -222,7 +259,7 @@ def mostrar_clientes():
                             st.warning("⏸️ Suscripción en pausa. **NO recibirá caja** hasta que la vuelvas a cambiar a ACTIVA.")
                         elif estado_actual == 'CLIENTE REGULAR':
                             st.success("🛍️ Es un **Cliente Regular** de la tienda. Puede hacer compras directas pero no está en el club de suscripción.")
-                        else: # Este 'else' ahora solo captura 'INACTIVO' y cualquier otro estado inesperado
+                        else:
                             st.error("🔴 Suscripción cancelada. **NO recibirá caja**.")
                 st.markdown("---")
                 
@@ -281,7 +318,6 @@ def mostrar_clientes():
                         return "Otro"
                     
                     df_historial['Origen'] = df_historial['Fuente'].apply(categorizar_fuente)
-                    
                     origenes_unicos = sorted(df_historial['Origen'].unique())
                     
                     with st.expander("🔍 Filtrar historial por origen"):
@@ -297,7 +333,6 @@ def mostrar_clientes():
                         df_historial_filtrado = df_historial
                         
                     st.success(f"Mostrando **{len(df_historial_filtrado)}** de **{len(df_historial)}** libros registrados.")
-                    
                     st.dataframe(
                         df_historial_filtrado[['Título', 'Autor', 'Fuente']], 
                         use_container_width=True, 
@@ -323,13 +358,25 @@ def mostrar_clientes():
                 if not nombre_n:
                     st.error("El nombre es obligatorio.")
                 else:
-                    # Usamos la nueva función para crear la huella digital
                     nombre_normalizado_nuevo = normalizar_nombre_para_duplicados(nombre_n)
-                    
-                    # Verificamos si ya existe en la base de datos
                     conn = get_db_connection()
                     try:
-                        todos_los_clientes = conn.table("clientes").select("nombre").execute().data
+                        # 🔍 BYPASS DE 1000 REGISTROS PARA DETECTAR DUPLICADOS EN TODA LA BASE
+                        todos_los_clientes = []
+                        chunk_size = 1000
+                        for bloque in range(100):
+                            start = bloque * chunk_size
+                            end = start + chunk_size - 1
+                            res_names = conn.table("clientes")\
+                                .select("nombre")\
+                                .range(start, end).execute()
+                            if res_names.data:
+                                todos_los_clientes.extend(res_names.data)
+                                if len(res_names.data) < chunk_size:
+                                    break
+                            else:
+                                break
+                                
                         duplicado_encontrado = False
                         nombre_existente = ""
 
@@ -342,7 +389,6 @@ def mostrar_clientes():
                         if duplicado_encontrado:
                             st.error(f"🚫 ¡DUPLICADO DETENIDO! Ya existe un cliente con un nombre idéntico: '{nombre_existente}'.")
                         else:
-                            # Si no hay duplicados, procedemos a insertar los datos originales
                             conn.table("clientes").insert({
                                 "nombre": str(nombre_n).strip(), 
                                 "email": str(email_n).strip(), 
@@ -364,11 +410,11 @@ def mostrar_clientes():
                             f"Datos intentados: email='{email_n}', status='{estado_n}'. Detalle: {e}"
                         )
                         log_error(
-                                        vista="vista_clientes",
-                                        funcion="UI - Formulario Nuevo Cliente",
-                                        error=error_detalle,
-                                        email_usuario=email_usuario
-                                    )
+                            vista="vista_clientes",
+                            funcion="UI - Formulario Nuevo Cliente",
+                            error=error_detalle,
+                            email_usuario=email_usuario
+                        )
                         st.error(f"Error al guardar el nuevo cliente: {e}")
 
     with tab_editar:
@@ -376,13 +422,25 @@ def mostrar_clientes():
         if df_clientes_filtrado.empty:
             st.info("No hay clientes en el filtro actual para editar.")
         else:
-            cliente_editar = st.selectbox("Selecciona el cliente a editar:", [""] + lista_nombres, key="sel_editar")
+            limite_cli = st.session_state.clientes_limit_view
+            lista_editar_paginada = lista_nombres[:limite_cli]
+            
+            cliente_editar = st.selectbox(
+                f"Selecciona el cliente a editar (mostrando {len(lista_editar_paginada)} de {len(lista_nombres)}):", 
+                [""] + lista_editar_paginada, 
+                key="sel_editar"
+            )
+            
+            if len(lista_nombres) > limite_cli:
+                if st.button("🔍 Cargar más clientes en el buscador (+200)", key="btn_load_more_editar", use_container_width=True):
+                    st.session_state.clientes_limit_view += 200
+                    st.rerun()
             
             if cliente_editar:
                 datos_e = df_clientes_filtrado[df_clientes_filtrado['nombre'] == cliente_editar].iloc[0]
                 c_id_editar = int(datos_e['cliente_id'])
                 
-                # --- 🔍 NUEVO: Buscamos el valor de su suscripción actual ---
+                # --- Buscamos el valor de su suscripción actual ---
                 conn = get_db_connection()
                 valor_suscripcion_actual = 0.0
                 registro_suscripcion_existe = False
@@ -412,7 +470,7 @@ def mostrar_clientes():
                         idx_estado_e = 2 # INACTIVO por defecto
                     estado_e = col2.selectbox("Estado", estados_posibles, index=idx_estado_e)
                     
-                    # --- 💸 NUEVO CAMPO: Edición del Valor de Suscripción ---
+                    # --- Campo de Suscripción ---
                     st.markdown("#### 💳 Detalles de Suscripción")
                     col_susc1, col_susc2 = st.columns(2)
                     nuevo_valor_susc = col_susc1.number_input(
@@ -436,16 +494,14 @@ def mostrar_clientes():
                             
                             # 2. Guardar o actualizar el valor en la tabla 'suscripciones'
                             if registro_suscripcion_existe:
-                                # Si ya tenía un registro, lo actualizamos
                                 conn.table("suscripciones").update({
                                     "valor_suscripcion": float(nuevo_valor_susc)
                                 }).eq("cliente_id", c_id_editar).execute()
                             else:
-                                # Si no existía (estaba vacío/nulo), creamos el registro base
                                 conn.table("suscripciones").insert({
                                     "cliente_id": c_id_editar,
                                     "valor_suscripcion": float(nuevo_valor_susc),
-                                    "metodo_entrega": "RETIRO", # Valor por defecto seguro
+                                    "metodo_entrega": "RETIRO", 
                                     "generos_preferencia": ""
                                 }).execute()
                                 
@@ -463,11 +519,22 @@ def mostrar_clientes():
         if df_clientes_filtrado.empty:
             st.info("No hay clientes en el filtro actual para eliminar.")
         else:
-            cliente_eliminar = st.selectbox("Selecciona el cliente a eliminar:", [""] + lista_nombres, key="sel_eliminar")
+            limite_cli = st.session_state.clientes_limit_view
+            lista_eliminar_paginada = lista_nombres[:limite_cli]
+            
+            cliente_eliminar = st.selectbox(
+                f"Selecciona el cliente a eliminar (mostrando {len(lista_eliminar_paginada)} de {len(lista_nombres)}):", 
+                [""] + lista_eliminar_paginada, 
+                key="sel_eliminar"
+            )
+            
+            if len(lista_nombres) > limite_cli:
+                if st.button("🔍 Cargar más clientes en el buscador (+200)", key="btn_load_more_eliminar", use_container_width=True):
+                    st.session_state.clientes_limit_view += 200
+                    st.rerun()
             
             if cliente_eliminar:
                 id_eliminar = int(df_clientes_filtrado[df_clientes_filtrado['nombre'] == cliente_eliminar].iloc[0]['cliente_id'])
-                
                 confirmacion = st.checkbox(f"Estoy seguro de que quiero eliminar permanentemente a '{cliente_eliminar}'.")
                 
                 if st.button("🗑️ Eliminar Definitivamente", type="secondary", disabled=not confirmacion):
