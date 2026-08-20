@@ -41,9 +41,8 @@ def cargar_notas_db():
     try:
         hoy = datetime.now().date()
         
-        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS ---
-        hoy = datetime.now().date()
-        # Calcula el miércoles de la semana en curso (incluso si fue ayer)
+        # --- 1. TAREA RECURRENTE AUTOMÁTICA DE FACTURAS (SEMANA EN CURSO) ---
+        # Calcula el miércoles de la semana en curso (incluso si ya pasó)
         miercoles_esta_semana = hoy - timedelta(days=(hoy.weekday() - 2))
         proximo_miercoles_str = miercoles_esta_semana.strftime("%Y-%m-%d")
         
@@ -61,8 +60,7 @@ def cargar_notas_db():
             }
             conn.table("pizarra_recordatorios").insert(datos_fac).execute()
 
-        # --- 2. LOGICA INTELIGENTE DE AUTO-CLONACIÓN DE TAREAS RECURRENTES COMPLETADAS ---
-        # Buscamos todas las notas completadas que tengan tags de recurrencia
+        # --- 2. LÓGICA INTELIGENTE DE AUTO-CLONACIÓN DE TAREAS RECURRENTES COMPLETADAS ---
         res_completadas = conn.table("pizarra_recordatorios")\
             .select("nota_id, titulo, contenido, fecha_limite")\
             .eq("completada", True).execute()
@@ -76,7 +74,6 @@ def cargar_notas_db():
                     prox_fecha = calcular_siguiente_fecha(nota['fecha_limite'], recurrencia, hoy)
                     if prox_fecha:
                         prox_fecha_str = prox_fecha.strftime("%Y-%m-%d")
-                        # Validamos que no exista ya una copia activa para esa misma fecha límite
                         res_active_exist = conn.table("pizarra_recordatorios")\
                             .select("nota_id")\
                             .eq("titulo", nota['titulo'])\
@@ -91,7 +88,7 @@ def cargar_notas_db():
                             }
                             conn.table("pizarra_recordatorios").insert(nueva_copia).execute()
 
-        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO) ---
+        # --- 3. CARGA DE POST-ITS ACTIVOS (PAGINADO CON BYPASS DE 1000) ---
         all_notes = []
         chunk_size = 1000
         for bloque in range(100):
@@ -144,7 +141,7 @@ def actualizar_nota_db(nota_id, titulo, contenido, fecha_limite):
         "fecha_limite": fecha_limite.strftime("%Y-%m-%d")
     }
     try:
-        conn.table("pizarra_recordatorios").update(datos).eq("nota_id", nota_id).execute()
+        conn.table("pizarra_recordatorios").update(datos).eq("nota_id", int(nota_id)).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -155,7 +152,7 @@ def completar_nota_db(nota_id):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", nota_id).execute()
+        conn.table("pizarra_recordatorios").update({"completada": True}).eq("nota_id", int(nota_id)).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -166,7 +163,7 @@ def eliminar_nota_db(nota_id):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        conn.table("pizarra_recordatorios").delete().eq("nota_id", nota_id).execute()
+        conn.table("pizarra_recordatorios").delete().eq("nota_id", int(nota_id)).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -254,7 +251,7 @@ def mostrar_pizarra():
                 unsafe_allow_html=True
             )
 
-    # --- SECCIÓN SUPERIOR DE CREACIÓN (Ubicada en la pantalla principal) ---
+    # --- SECCIÓN SUPERIOR DE CREACIÓN ---
     with st.expander("➕ CLAVAR NUEVO POST-IT (CREAR NOTA)", expanded=False):
         with st.container(border=True):
             n_titulo = st.text_input("¿Qué tienes que hacer?:", placeholder="Ej: Comprar papel glossy", key="new_note_title")
@@ -263,7 +260,6 @@ def mostrar_pizarra():
             c_p1, c_p2 = st.columns(2)
             n_fecha = c_p1.date_input("¿Para cuándo es?:", value=datetime.now(), key="new_note_date")
             
-            # Selector de Recurrencia para Post-its
             n_recurrencia = c_p2.selectbox(
                 "⚙️ Frecuencia de Repetición:",
                 options=["Única vez", "Semanal", "Mensual"],
@@ -306,13 +302,9 @@ def mostrar_pizarra():
             titulo_nota = row['titulo']
             contenido_raw = str(row['contenido'])
             
-            # Detectamos si contiene una etiqueta de recurrencia en el texto
             recurrencia_nota = "Semanal" if "[Recurrencia: Semanal]" in contenido_raw else ("Mensual" if "[Recurrencia: Mensual]" in contenido_raw else None)
-            
-            # Limpiamos el metadato para no mostrárselo de forma técnica al usuario
             contenido_limpio = contenido_raw.replace("[Recurrencia: Semanal]", "").replace("[Recurrencia: Mensual]", "").strip()
             
-            # Definir color del Post-it según urgencia
             if fecha_lim < hoy:
                 bg_color = "#ffcdd2"
                 border_color = "#e53935"
@@ -344,24 +336,24 @@ def mostrar_pizarra():
             wa_url = f"https://api.whatsapp.com/send?phone={dueña_tel}&text={urllib.parse.quote(msg_wa)}"
 
             with col_target:
-                html_postit = f"""
-                <div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">
-                        <span style="background-color:{border_color}; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">{badge}</span>
-                """
-                
-                # Si es recurrente, inyectamos una insignia estética en el Post-it
+                # 🌟 ULTRA BLINDAJE: Concatenamos como string plano de una sola línea para evitar código Markdown pre/code block
+                html_postit = (
+                    f'<div style="background-color:{bg_color}; border-left:8px solid {border_color}; padding:15px; border-radius:5px; margin-bottom:10px; min-height:165px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">'
+                    f'<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">'
+                    f'<span style="background-color:{border_color}; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">{badge}</span>'
+                )
                 if recurrencia_nota:
                     html_postit += f'<span style="background-color:#7e57c2; color:white; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:bold;">🔁 {recurrencia_nota.upper()}</span>'
                 
-                html_postit += f"""
-                    </div>
-                    <h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:17px;">{titulo_nota}</h4>
-                    <p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{contenido_limpio}</p>
-                </div>
-                """
+                html_postit += (
+                    f'</div>'
+                    f'<h4 style="color:{text_color}; margin:10px 0 5px 0; font-size:17px;">{titulo_nota}</h4>'
+                    f'<p style="color:#424242; font-size:13px; margin:0 0 10px 0;">{contenido_limpio}</p>'
+                    f'</div>'
+                )
                 
-                st.markdown(html_postit, unsafe_allow_html=True)
+                # Renderizamos con st.html nativo, inmune a errores de sangría de Markdown
+                st.html(html_postit)
                 
                 # --- MENÚ DE CONTROL ÚNICO ---
                 with st.popover("⚙️ Acciones / Control", use_container_width=True):
@@ -383,7 +375,6 @@ def mostrar_pizarra():
                         e_content = st.text_area("Detalles:", value=contenido_limpio, key=f"edit_cont_{n_id}")
                         e_fecha = st.date_input("Fecha límite:", value=fecha_lim, key=f"edit_date_{n_id}")
                         if st.button("💾 Guardar cambios", key=f"btn_save_edit_{n_id}", use_container_width=True):
-                            # Mantenemos la etiqueta técnica de recurrencia al actualizar si existía
                             contenido_actualizado = e_content.strip()
                             if recurrencia_nota:
                                 contenido_actualizado += f" [Recurrencia: {recurrencia_nota}]"

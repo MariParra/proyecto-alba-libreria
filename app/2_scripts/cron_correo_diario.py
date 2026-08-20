@@ -91,9 +91,24 @@ def generar_reporte_empaque():
     dia_semana = hoy.weekday() # Monday is 0, Tuesday is 1, Wednesday is 2
     hora_actual = hoy.hour
 
-    # ================= PARTE 1: CONSULTA DE ENVÍOS PENDIENTES =================
-    res_ventas = supabase.table("registro_ventas").select("venta_id, fecha_venta, estado, libros_vendidos, cliente:clientes(nombre)").execute()
-    df_ventas = pd.DataFrame(res_ventas.data) if res_ventas.data else pd.DataFrame()
+    # ================= PARTE 1: CONSULTA DE ENVÍOS PENDIENTES (PAGINADO) =================
+    all_data = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_ventas = supabase.table("registro_ventas")\
+            .select("venta_id, fecha_venta, estado, libros_vendidos, cliente:clientes(nombre)")\
+            .order("venta_id")\
+            .range(start, end).execute()
+        if res_ventas.data:
+            all_data.extend(res_ventas.data)
+            if len(res_ventas.data) < chunk_size:
+                break
+        else:
+            break
+            
+    df_ventas = pd.DataFrame(all_data) if all_data else pd.DataFrame()
     df_criticas = pd.DataFrame()
     
     if not df_ventas.empty:
@@ -106,9 +121,24 @@ def generar_reporte_empaque():
         if not df_criticas.empty:
             df_criticas['cliente_nombre'] = df_criticas['cliente'].apply(lambda x: x.get('nombre') if isinstance(x, dict) else 'Cliente')
 
-    # ================= PARTE 2: CONSULTA DE NOTAS VENCIDAS DE LA PIZARRA =================
-    res_notas = supabase.table("pizarra_recordatorios").select("*").eq("completada", False).execute()
-    df_notas = pd.DataFrame(res_notas.data) if res_notas.data else pd.DataFrame()
+    # ================= PARTE 2: CONSULTA DE NOTAS DE LA PIZARRA (PAGINADO) =================
+    all_notes = []
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res_notas = supabase.table("pizarra_recordatorios")\
+            .select("*")\
+            .eq("completada", False)\
+            .order("nota_id")\
+            .range(start, end).execute()
+        if res_notas.data:
+            all_notes.extend(res_notas.data)
+            if len(res_notas.data) < chunk_size:
+                break
+        else:
+            break
+            
+    df_notas = pd.DataFrame(all_notes) if all_notes else pd.DataFrame()
     df_notas_vencidas = pd.DataFrame()
 
     if not df_notas.empty:
