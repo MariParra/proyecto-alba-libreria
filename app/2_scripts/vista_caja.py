@@ -16,7 +16,6 @@ def unificar_formatos_fecha(serie_fechas):
             return pd.NaT
         
         val_str = str(val).strip()
-
         # 2. Lógica inteligente para detectar el formato
         try:
             # Si la fecha empieza con 4 dígitos, es formato ISO (YYYY-MM-DD)
@@ -29,7 +28,6 @@ def unificar_formatos_fecha(serie_fechas):
         except:
             # Si todo lo demás falla, intenta un último parseo genérico.
             return pd.to_datetime(val_str, errors='coerce')
-
     # 3. Aplicar la función a toda la columna
     try:
         return serie_fechas.apply(parsear_valor)
@@ -240,7 +238,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
     
     libros_nuevos_list = []
     costo_total_venta = 0.0
-
     for item in carrito:
         libros_nuevos_list.append({
             "libro_id": item['libro_id'], "titulo": item['titulo'], "autor": item['autor'],
@@ -251,7 +248,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         costo_total_venta += float(costo_unitario) * int(item['cantidad'])
         
     subtotal_libros = sum([item['subtotal'] for item in carrito])
-
     try:
         # --- CASO FUSIÓN DE VENTAS ---
         if venta_id_asociada:
@@ -310,7 +306,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
             }
             conn.table("registro_ventas").insert(datos_venta).execute()
-
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
@@ -330,7 +325,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto_para_busqueda(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
-
         if asignacion_id:
             try:
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
@@ -362,9 +356,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             except Exception as ex_asig:
                 log_error("vista_caja", "procesar_venta_carrito (actualizar extras)", f"Error {ex_asig}", email_usuario)
                 st.warning(f"⚠️ Venta procesada, pero no se registraron extras en la suscripción. Detalle: {ex_asig}")
-
         return True, ""
-
     except Exception as e:
         error_detalle = f"Fallo crítico registrando venta. Detalle técnico: {e}"
         log_error("vista_caja", "procesar_venta_carrito", error_detalle, email_usuario)
@@ -405,18 +397,15 @@ def anular_venta(venta_id, texto_libros_vendidos):
 def actualizar_historial_caja(df_editado):
     df_original = st.session_state.get('historial_original', pd.DataFrame())
     if df_original.empty: return 0
-
     # Nos aseguramos de conservar el venta_id real en ambas comparaciones
     df_original_str = df_original.astype(str)
     df_editado_str = df_editado.astype(str)
-
     diff_mask = df_original_str.ne(df_editado_str).any(axis=1)
     filas_cambiadas = df_editado[diff_mask]
     
     if filas_cambiadas.empty:
         st.info("No se detectaron cambios para guardar.")
         return 0
-
     conn = get_db_connection()
     updates = 0
     
@@ -437,18 +426,15 @@ def actualizar_historial_caja(df_editado):
                 datos_cliente_limpios = {k: v for k, v in datos_cliente.items() if pd.notna(v) and v != 'nan'}
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
-
             # 2. DATOS DE LA VENTA
             datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
             
             # Buscamos el monto original usando el venta_id real
             monto_fila_original = df_original.loc[df_original['venta_id'] == venta_id, 'monto_final']
             monto_final_actual = float(monto_fila_original.values[0]) if not monto_fila_original.empty else float(row.get('monto_final', 0))
-
             if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
                 datos_venta_raw['estado_pago'] = 'PAGADO'
                 datos_venta_raw['abono'] = monto_final_actual
-
             datos_venta_final = {}
             columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario']
             for col in columnas_venta_validas:
@@ -458,7 +444,6 @@ def actualizar_historial_caja(df_editado):
                         datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) and str(valor).strip() != '' else None
                     else:
                         datos_venta_final[col] = valor
-
             if datos_venta_final:
                 conn.table("registro_ventas").update(datos_venta_final).eq("venta_id", venta_id).execute()
             
@@ -710,7 +695,6 @@ def mostrar_caja():
                     l_editorial = st.session_state.sel_edit_caja
                 else:
                     l_editorial = ""
-
                 l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
                 es_tapa_dura = (l_encuadernacion == "TAPA DURA")
                 l_apto_cajita = st.checkbox("🎁 Apto para enviar en Cajitas de Suscripción", value=not es_tapa_dura)
@@ -730,14 +714,13 @@ def mostrar_caja():
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
             # Lógica dinámica: Si el libro no tiene stock (<= 0) o el checkbox está marcado, no limitamos el máximo
             limite_maximo = None if (l_stock_actual <= 0 or permitir_sin_stock) else max(1, l_stock_actual)
-            cantidad = col_c2.number_input("Cantidad:", min_value=1, max_value=limite_maximo, step=1)
+            amount_val = col_c2.number_input("Cantidad:", min_value=1, max_value=limite_maximo, step=1)
             
             if not es_nuevo:
                 if l_stock_actual <= 0:
                     st.warning("⚠️ Atención: Estás vendiendo un libro sin stock físico (Stock: 0).")
-                elif cantidad > l_stock_actual:
-                    st.warning(f"⚠️ Atención: Stock insuficiente. Dispones de {l_stock_actual} unidad(es) e intentas vender {cantidad}.")
-
+                elif amount_val > l_stock_actual:
+                    st.warning(f"⚠️ Atención: Stock insuficiente. Dispones de {l_stock_actual} unidad(es) e intentas vender {amount_val}.")
             
             if st.button("➕ AÑADIR AL CARRITO", use_container_width=True):
                 if not l_titulo: st.error("Debes seleccionar un libro.")
@@ -755,8 +738,8 @@ def mostrar_caja():
                         'encuadernacion': encuadernacion_final, 
                         'precio_catalogo': l_precio_catalogo, 
                         'precio_cobrado': precio_a_cobrar, 
-                        'cantidad': cantidad, 
-                        'subtotal': precio_a_cobrar * cantidad,
+                        'cantidad': amount_val, 
+                        'subtotal': precio_a_cobrar * amount_val,
                         'stock_actual': l_stock_actual, 
                         'costo': l_costo, 
                         'es_nuevo': es_nuevo,
@@ -892,17 +875,13 @@ def mostrar_caja():
         monto_final = subtotal_carrito + valor_envio
         abono_default = 0.0
         mensaje_exito = ""
-
         if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
             abono_default = monto_final
             estado_pago_sel = "PAGADO"
             mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
-
         abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
-
         if mensaje_exito:
             st.success(mensaje_exito)
-
         st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
         st.write("")
         
@@ -977,7 +956,6 @@ def mostrar_caja():
                         nombre_amigable = f"{month_map_es.get(mes_num, '')} {ano}"
                         opciones_mes.append(nombre_amigable)
                         mapa_inverso_mes[nombre_amigable] = mes_str
-
                 # 1. Calculamos el nombre amigable del mes actual
                 hoy = datetime.now()
                 nombre_mes_actual = f"{month_map_es.get(hoy.strftime('%m'), '')} {hoy.year}"
@@ -986,7 +964,6 @@ def mostrar_caja():
                 default_index = 0 # Por defecto será "Ver Todo"
                 if nombre_mes_actual in opciones_mes:
                     default_index = opciones_mes.index(nombre_mes_actual)
-
                 # 3. Se lo pasamos como valor inicial al selectbox
                 col_f1, col_f2, col_f3, col_f4 = st.columns(4)
                 mes_seleccionado = col_f1.selectbox(
@@ -1002,7 +979,6 @@ def mostrar_caja():
                 estado_pago_filtro = col_f4.selectbox("Filtrar Pago:", ["Todos", "PAGADO", "PENDIENTE"])
                 
                 st.markdown("---")
-
                 solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 
                 st.markdown("---")
@@ -1066,7 +1042,6 @@ def mostrar_caja():
                 df_estilizado = df_paginado.style.apply(lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if v == 0 else '' for v in s], subset=['costo_venta'])
             else: 
                 df_estilizado = df_paginado
-
             disabled_cols = ['venta_id', 'fecha_venta', 'libros_vendidos', 'deuda', 'utilidad']
             disabled_cols_active = [c for c in disabled_cols if c in columnas_a_mostrar]
             
@@ -1094,8 +1069,19 @@ def mostrar_caja():
                 
                 if venta_a_modificar:
                     v_id_tmp = int(venta_a_modificar.split("Venta #")[1].split(" - ")[0])
-                    row_venta = df_mostrar[df_mostrar['venta_id'] == v_id_tmp].iloc[0]
-                    cliente_id_tmp = row_venta.get('cliente_cliente_id') # Usamos el prefijo aplanado del historial
+                    # 🌟 MEJORA UX Y CORRECCIÓN DE BUGS: Buscamos en df_ventas_global (el DataFrame completo sin recortar de Supabase) 
+                    # para asegurar que siempre encontremos el ID del cliente (cliente_id) sin importar qué columnas oculte el usuario en la UI.
+                    row_venta = df_ventas_global[df_ventas_global['venta_id'] == v_id_tmp].iloc[0]
+                    
+                    # Buscador robusto e insensible a variaciones de columnas
+                    cliente_id_tmp = None
+                    for col in ['cliente_id', 'cliente_cliente_id', 'cliente_id_clean']:
+                        if col in row_venta and pd.notna(row_venta[col]) and str(row_venta[col]).strip() != '':
+                            try:
+                                cliente_id_tmp = int(float(row_venta[col]))
+                                break
+                            except ValueError:
+                                continue
                     
                     st.write(f"👤 **Cliente:** {row_venta['cliente_nombre']}")
                     st.write(f"📦 **Método de Envío Actual:** `{row_venta.get('metodo_envio', 'No especificado')}`")
@@ -1117,7 +1103,7 @@ def mostrar_caja():
                     valor_envio_nuevo = 0.0
                     
                     if nuevo_metodo_sel == "Añadir a caja de suscripción":
-                        if pd.notna(cliente_id_tmp):
+                        if cliente_id_tmp is not None:
                             # Consultamos las cajitas abiertas de ese cliente en tiempo real
                             conn = get_db_connection()
                             res_cajas = conn.table("asignaciones").select("asignacion_id, mes, estado_envio").eq("cliente_id", int(cliente_id_tmp)).execute()
@@ -1150,7 +1136,6 @@ def mostrar_caja():
                                     st.rerun()
                                 else:
                                     st.error(msg)
-
             # 🌟 NUEVO: Botón dinámico de paginación diferida para el Historial de ventas
             if total_ventas_filtradas > limite_actual:
                 st.write("")
@@ -1238,14 +1223,13 @@ def mostrar_caja():
                             Ivonne, tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco.
                         </p>
                         <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
-                            No tienes ningún paquete demorado en bodega. ¡Excelente trabajo de organización! 🌟📦
+                            No tienes ningún paquete demorado en bodega. ¡Excelente trabajo de organization! 🌟📦
                         </p>
                     </div>
                     """, 
                     unsafe_allow_html=True
                 )
         st.markdown("---")
-
         
         if df_ventas_global.empty:
             st.success("🎉 ¡Felicidades! Todo el catálogo está al día y armado.")
@@ -1310,10 +1294,10 @@ def mostrar_caja():
                                 
                             # 2. Redacción del mensaje de autopresión para armar paquetes
                             msg_recordatorio = (
-                                f"🚨 RECORDATORIO INTERNO ALBA LIBRERÍA 🚨\n\n"
-                                f"Hola Ivonne, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\n"
-                                f"⏳ ¡Lleva {dias} días de retraso!\n"
-                                f"📚 Libros a empacar: {libros_str}\n\n"
+                                f"🚨 RECORDATORIO INTERNO ALBA LIBRERÍA 🚨\\n\\n"
+                                f"Hola Ivonne, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\\n"
+                                f"⏳ ¡Lleva {dias} días de retraso!\\n"
+                                f"📚 Libros a empacar: {libros_str}\\n\\n"
                                 f"Por favor, prepáralo y luego márcalo como '¡YA LO ARMÉ!' en la app."
                             )
                             msg_encoded = urllib.parse.quote(msg_recordatorio)
@@ -1334,8 +1318,6 @@ def mostrar_caja():
                                 ''',
                                 unsafe_allow_html=True
                             )
-
-
     with tab_anular:
         st.markdown("### 🚫 Anular Venta y Restaurar Stock")
         df_ventas_anular = df_ventas_global.copy()
