@@ -1,24 +1,30 @@
 import streamlit as st
 import pandas as pd
 import io 
-import base64 # <-- Nueva librería para el truco HTML
+import base64
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
 
 @st.cache_data(ttl=60)
 def cargar_libros_para_marketing():
+    """
+    Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket de Supabase.
+    Bypass del límite de 1000 registros ordenando obligatoriamente por la clave primaria: libro_id.
+    """
     from utilidades import get_db_connection
     conn = get_db_connection()
     try:
         all_books = []
         chunk_size = 1000
-        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todo el catálogo de libros de forma paginada
+        # Paginación dinámica por bloques usando la clave de ordenación obligatoria: libro_id
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = conn.table("libros")\
                 .select("libro_id, titulo, autor, precio, precio_original, genero, stock")\
-                .order("titulo")\
+                .eq("visible_catalogo", True)\
+                .gt("precio", 0)\
+                .order("libro_id")\
                 .range(start, end).execute()
             if res.data:
                 all_books.extend(res.data)
@@ -27,13 +33,41 @@ def cargar_libros_para_marketing():
             else:
                 break
                 
-        df = pd.DataFrame(all_books) if all_books else pd.DataFrame()
-        if not df.empty:
-            df.dropna(subset=['libro_id', 'titulo'], inplace=True)
-            df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0)
-            df['libro_id'] = df['libro_id'].astype(str)
-        return df
-    except:
+        if not all_books:
+            return pd.DataFrame()
+            
+        df_libros = pd.DataFrame(all_books)
+
+        # Cargar lista de portadas físicas existentes en el bucket de storage
+        portadas_existentes = set()
+        offset = 0
+        while True:
+            try:
+                bloque = conn.storage.from_("portadas").list(path="", search_options={"limit": 100, "offset": offset})
+            except TypeError:
+                bloque = conn.storage.from_("portadas").list(path="", options={"limit": 100, "offset": offset})
+            
+            if not bloque:
+                break
+            
+            # Limpiamos cada nombre de archivo al momento de añadirlo
+            for archivo in bloque:
+                if archivo['name'] is not None:
+                    portadas_existentes.add(archivo['name'].strip())
+            
+            offset += 100
+        
+        # Validar y cruzar contra portadas reales
+        df_libros['portada_esperada'] = df_libros['libro_id'].apply(lambda idx: f"{int(float(idx))}.jpg".strip())
+        df_libros['tiene_portada'] = df_libros['portada_esperada'].isin(portadas_existentes)
+        
+        df_final = df_libros[df_libros['tiene_portada'] == True].copy()
+        df_final.drop(columns=['portada_esperada', 'tiene_portada'], inplace=True)
+        df_final['precio'] = pd.to_numeric(df_final['precio'], errors='coerce').fillna(0)
+        df_final['libro_id'] = df_final['libro_id'].astype(str)
+        
+        return df_final
+    except Exception as e:
         return pd.DataFrame()
 
 def mostrar_generador_marketing():
@@ -43,12 +77,12 @@ def mostrar_generador_marketing():
     try:
         URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
     except KeyError:
-        st.error("🚨 Falta la clave 'supabase_portadas_url' in secrets.toml.")
+        st.error("🚨 Falta la clave 'supabase_portadas_url' en secrets.toml.")
         st.stop()
 
     df_libros = cargar_libros_para_marketing()
     if df_libros.empty:
-        st.warning("No hay libros en el catálogo para generar marketing.")
+        st.warning("No hay libros en el catálogo que cumplan las condiciones para marketing (visibles, con precio y con portada cargada).")
         return
 
     with st.container(border=True):
@@ -115,20 +149,40 @@ def mostrar_generador_marketing():
             for idx, (titulo_hoja, img_obj) in enumerate(hojas):
                 col = columnas_render[idx % 3]
                 with col:
-                    # 1. Obtenemos los bytes de la imagen para la descarga
                     buf = io.BytesIO()
                     img_obj.save(buf, format="PNG")
                     img_bytes = buf.getvalue()
                     
-                    # 2. EL TRUCO HTML: Codificamos en Base64 para saltarnos st.image()
                     b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                    # Diseño CSS/HTML Premium con letras atractivas y transiciones dinámicas
                     html_str = f"""
-                    <div style="text-align: center; margin-bottom: 5px; color: #4A4D7E; font-weight: bold;">{titulo_hoja}</div>
-                    <img src="data:image/png;base64,{b64_img}" style="width: 100%; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 10px;">
+                    <div style="
+                        text-align: center; 
+                        margin-bottom: 12px; 
+                        color: #4A4D7E; 
+                        font-family: 'Helvetica Neue', Arial, sans-serif;
+                        font-size: 18px; 
+                        font-weight: bold; 
+                        letter-spacing: 1px;
+                        text-transform: uppercase;
+                        text-shadow: 1px 1px 2px rgba(0,0,0,0.08);
+                        border-bottom: 2px solid #C994C0;
+                        padding-bottom: 6px;
+                    ">
+                        ✨ {titulo_hoja} ✨
+                    </div>
+                    <div style="
+                        border-radius: 12px; 
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
+                        overflow: hidden; 
+                        margin-bottom: 15px;
+                        transition: transform 0.3s ease-in-out;
+                    " onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                        <img src="data:image/png;base64,{b64_img}" style="width: 100%; display: block;">
+                    </div>
                     """
                     st.markdown(html_str, unsafe_allow_html=True)
                     
-                    # 3. El botón de descarga usa los bytes crudos
                     st.download_button(
                         label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
                         file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",

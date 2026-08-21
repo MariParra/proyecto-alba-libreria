@@ -25,8 +25,8 @@ def asegurar_fuentes():
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES"):
     """
-    Genera una imagen 1080x1920 Premium: Sombras 3D, tipografía Bold grande, 
-    paleta rosada y portadas maximizadas (hasta 12 libros).
+    Genera una imagen 1080x1920 Premium con fondo de marca Alba Librería:
+    Sombras 3D, tipografía Bold grande, paleta rosada y portadas maximizadas (hasta 12 libros).
     """
     asegurar_fuentes()
     
@@ -34,7 +34,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         W, H = (1080, 1920)
         
         # --- 🎨 PALETA PINK AESTHETIC & PREMIUM ---
-        BG_COLOR = (253, 232, 243)      # Fondo Rosa Pastel vibrante
+        BG_COLOR = (253, 232, 243)      # Fondo Fallback
         CARD_COLOR = (255, 255, 255)    # Tarjetas Blancas
         SHADOW_COLOR = (244, 204, 220)  # Sombra Rosa Oscuro para efecto 3D
         PRIMARY_COLOR = (49, 46, 129)   # Títulos: Azul Marino muy oscuro (casi negro)
@@ -54,7 +54,16 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         except IOError:
             font_header = font_titulo = font_precio = font_tachado = font_badge = ImageFont.load_default()
 
-        img = Image.new('RGB', (W, H), color=BG_COLOR)
+        # --- 2) CARGAR IMAGEN DE FONDO DE MARCA DESDE SUPABASE ---
+        BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
+        try:
+            req = urllib.request.Request(BG_URL, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as response_bg:
+                img = Image.open(io.BytesIO(response_bg.read())).convert('RGB')
+            img = img.resize((W, H), Image.Resampling.LANCZOS)
+        except Exception as e:
+            img = Image.new('RGB', (W, H), color=BG_COLOR)
+            
         draw = ImageDraw.Draw(img)
 
         # 1. TÍTULO PRINCIPAL (GIGANTE Y CENTRADO)
@@ -118,7 +127,6 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 texto_badge = " DISPONIBLE "
                 try:
                     bbox_badge = draw.textbbox((0, 0), texto_badge, font=font_badge)
-                    # 🌟 CORRECCIÓN DE TUPLA: Extraemos ancho restando coordenadas
                     ancho_badge = bbox_badge[2] - bbox_badge[0]
                     alto_badge = 32
                     
@@ -148,7 +156,6 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 try:
                     draw.text((x_card + cell_w/2, y_texto), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
-                    # 🌟 CORRECCIÓN DE TUPLA: Ancho correcto
                     ancho_orig = bbox_orig[2] - bbox_orig[0]
                     draw.line((x_card + cell_w/2 - ancho_orig/2, y_texto - 10, x_card + cell_w/2 + ancho_orig/2, y_texto - 10), fill=MUTED_COLOR, width=4)
                 except ValueError:
