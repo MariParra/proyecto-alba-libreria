@@ -37,7 +37,6 @@ if script_dir not in sys.path:
 st.set_page_config(page_title="Alba Librería Web", page_icon="📚", layout="wide")
 load_dotenv()
 
-
 # --- INYECCIÓN DE CSS PARA BARRA LATERAL FIJA (PC Y MÓVIL) ---
 st.markdown("""
     <style>
@@ -80,7 +79,6 @@ if CLIENT_ID and CLIENT_SECRET:
     )
 else:
     oauth2 = None
-
 
 @st.cache_data
 def get_image_as_base64(path):
@@ -128,7 +126,6 @@ def mostrar_login():
                     if email and email.lower() in [e.lower() for e in CORREOS_AUTORIZADOS]:
                         st.session_state["usuario_logeado"] = True
                         st.session_state["email_usuario"] = email
-        
                         st.rerun()
                     else:
                         st.error(f"⛔ Acceso denegado: El correo {email} no tiene permisos.")
@@ -138,14 +135,10 @@ def mostrar_login():
                 st.query_params.clear()
                 import time
                 time.sleep(1)
-
                 st.rerun()
         
         st.markdown("<p style='text-align: center; color: #999; font-size: 12px; margin-top: 15px;'>🔒 Sistema protegido con autenticación de Google OAuth 2.0</p>", unsafe_allow_html=True)
     with col3:
-        # En lugar de Base64, llamamos directamente la URL estática del GIF.
-        # Puedes subir el pricono.gif a un hosting de imágenes gratuito (ej. Postimages, ImgBB, Github Pages, etc.)
-        # y pegar aquí el enlace directo (que termine en .gif)
         enlace_directo_gif = "https://raw.githubusercontent.com/MariParra/proyecto-alba-libreria/refs/heads/main/app/2_scripts/pricono.gif"
         
         st.markdown(
@@ -207,95 +200,101 @@ else:
         if "pagina_actual" not in st.session_state:
             st.session_state.pagina_actual = "🚨 ALERTAS PRIORITARIAS"
             
-        if st.button("🚨 ALERTAS PRIORITARIAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🚨 ALERTAS PRIORITARIAS" else "secondary"):
-            st.session_state.pagina_actual = "🚨 ALERTAS PRIORITARIAS"
-            st.rerun()
-        
-        if st.button("📌 PIZARRA DE NOTAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📌 PIZARRA DE NOTAS" else "secondary"):
-            st.session_state.pagina_actual = "📌 PIZARRA DE NOTAS"
-            st.rerun()
-            
-        if st.button("📦 GESTIÓN DE INVENTARIO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO" else "secondary"):
-            st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
-            st.rerun()
-            
-        if st.button("🛒 CAJA / VENTAS RÁPIDAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS" else "secondary"):
-            st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
-            st.rerun()
-        
-        if st.sidebar.button("🎡 VENTAS MASIVAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎡 VENTAS MASIVAS" else "secondary"):
-            st.session_state.pagina_actual = "🎡 VENTAS MASIVAS" 
-            st.rerun()
+        # Definición de grupos de vistas para la apertura dinámica de los expanders
+        grupo_general = ["🚨 ALERTAS PRIORITARIAS", "📌 PIZARRA DE NOTAS", "📋 TABLERO KANBAN", "📊 DASHBOARD"]
+        grupo_ventas = ["🛒 CAJA / VENTAS RÁPIDAS", "🎡 VENTAS MASIVAS", "📦 GESTIÓN DE SUSCRIPCIÓN", "👥 CLIENTES Y LIBRERO"]
+        grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 CATÁLOGO (🏗️)", "🌐 GESTIÓN WEB"]
+        grupo_datos = ["🛠️ SINCRONIZACIÓN GOOGLE SHEET", "📔 IMPORTAR LIBREROS", "📥 REPORTES Y DESCARGAS"]
+        grupo_soporte = ["✨ CREACIÓN MASIVA", "⚡ ACTUALIZACIÓN MASIVA", "⏪ ROLLBACK BD"]
 
-        
-        if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
-            st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
-            st.rerun()
-        
-        if st.button("📦 GESTIÓN DE SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN" else "secondary"):
-            st.session_state.pagina_actual = "📦 GESTIÓN DE SUSCRIPCIÓN"
-            st.rerun()
+        # --- SECCIÓN 1: GENERAL & MONITOREO ---
+        with st.expander("📢 General & Monitoreo", expanded=st.session_state.pagina_actual in grupo_general):
+            if st.button("🚨 ALERTAS PRIORITARIAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🚨 ALERTAS PRIORITARIAS" else "secondary"):
+                st.session_state.pagina_actual = "🚨 ALERTAS PRIORITARIAS"
+                st.rerun()
             
-        if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
-            st.session_state.pagina_actual = "📊 DASHBOARD"
-            st.rerun()
-            
-        if st.button("🛠️ SINCRONIZACIÓN GOOGLE SHEET", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ SINCRONIZACIÓN GOOGLE SHEET" else "secondary"):
-            st.session_state.pagina_actual = "🛠️ SINCRONIZACIÓN GOOGLE SHEET"
-            st.rerun()
-            
-        if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
-            st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
-            st.rerun()
-        
-        if st.button("🖼️ GESTIÓN DE PORTADAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS" else "secondary"):
-            st.session_state.pagina_actual = "🖼️ GESTIÓN DE PORTADAS"
-            st.rerun()
+            if st.button("📌 PIZARRA DE NOTAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📌 PIZARRA DE NOTAS" else "secondary"):
+                st.session_state.pagina_actual = "📌 PIZARRA DE NOTAS"
+                st.rerun()
+                
+            if st.button("📋 TABLERO KANBAN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📋 TABLERO KANBAN" else "secondary"):
+                st.session_state.pagina_actual = "📋 TABLERO KANBAN"
+                st.rerun()
 
+            if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📊 DASHBOARD" else "secondary"):
+                st.session_state.pagina_actual = "📊 DASHBOARD"
+                st.rerun()
 
-        if st.button("🎨 CATÁLOGO (🏗️)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)" else "secondary"):
-            st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
-            st.rerun()
-            
-        if st.button("🌐 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🌐 GESTIÓN WEB" else "secondary"):
-            st.session_state.pagina_actual = "🌐 GESTIÓN WEB"
-            st.rerun()
-        st.markdown("---")
-        
-        st.markdown("### ⚙️ ADMIN AVANZADA")
-        
-        if st.button("📥 REPORTES Y DESCARGAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS" else "secondary"):
-            st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
-            st.rerun()
+        # --- SECCIÓN 2: GESTIÓN DE VENTAS Y CLIENTES ---
+        with st.expander("💰 Ventas & Clientes", expanded=st.session_state.pagina_actual in grupo_ventas):
+            if st.button("🛒 CAJA / VENTAS RÁPIDAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS" else "secondary"):
+                st.session_state.pagina_actual = "🛒 CAJA / VENTAS RÁPIDAS"
+                st.rerun()
+                
+            if st.button("🎡 VENTAS MASIVAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎡 VENTAS MASIVAS" else "secondary"):
+                st.session_state.pagina_actual = "🎡 VENTAS MASIVAS" 
+                st.rerun()
 
-        if st.button("✨ CREACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA" else "secondary"):
-            st.session_state.pagina_actual = "✨ CREACIÓN MASIVA"
-            st.rerun()
-            
-        if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
-            st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
-            st.rerun()
-            
-        if st.button("📋 TABLERO KANBAN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📋 TABLERO KANBAN" else "secondary"):
-            st.session_state.pagina_actual = "📋 TABLERO KANBAN"
-            st.rerun()
-        if st.button("⏪ ROLLBACK BD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⏪ ROLLBACK BD" else "secondary"):
-            st.session_state.pagina_actual = "⏪ ROLLBACK BD"
-            st.rerun()
+            if st.button("📦 GESTIÓN DE SUSCRIPCIÓN", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN" else "secondary"):
+                st.session_state.pagina_actual = "📦 GESTIÓN DE SUSCRIPCIÓN"
+                st.rerun()
+
+            if st.button("👥 CLIENTES Y LIBRERO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO" else "secondary"):
+                st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
+                st.rerun()
+
+        # --- SECCIÓN 3: CATÁLOGO & INVENTARIO ---
+        with st.expander("📦 Catálogo & Inventario", expanded=st.session_state.pagina_actual in grupo_catalogo):
+            if st.button("📦 GESTIÓN DE INVENTARIO", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO" else "secondary"):
+                st.session_state.pagina_actual = "📦 GESTIÓN DE INVENTARIO"
+                st.rerun()
+
+            if st.button("🖼️ GESTIÓN DE PORTADAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🖼️ GESTIÓN DE PORTADAS" else "secondary"):
+                st.session_state.pagina_actual = "🖼️ GESTIÓN DE PORTADAS"
+                st.rerun()
+                
+            if st.button("🎨 CATÁLOGO (🏗️)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)" else "secondary"):
+                st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
+                st.rerun()
+                
+            if st.button("🌐 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🌐 GESTIÓN WEB" else "secondary"):
+                st.session_state.pagina_actual = "🌐 GESTIÓN WEB"
+                st.rerun()
+
+        # --- SECCIÓN 4: DATOS & INTEGRACIONES ---
+        with st.expander("⚙️ Datos & Integraciones", expanded=st.session_state.pagina_actual in grupo_datos):
+            if st.button("🛠️ SINCRONIZACIÓN GOOGLE SHEET", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🛠️ SINCRONIZACIÓN GOOGLE SHEET" else "secondary"):
+                st.session_state.pagina_actual = "🛠️ SINCRONIZACIÓN GOOGLE SHEET"
+                st.rerun()
+                
+            if st.button("📔 IMPORTAR LIBREROS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📔 IMPORTAR LIBREROS" else "secondary"):
+                st.session_state.pagina_actual = "📔 IMPORTAR LIBREROS"
+                st.rerun()
+
+            if st.button("📥 REPORTES Y DESCARGAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS" else "secondary"):
+                st.session_state.pagina_actual = "📥 REPORTES Y DESCARGAS"
+                st.rerun()
+
+        # --- SECCIÓN 5: SOPORTE & ADMIN AVANZADA ---
+        with st.expander("🛠️ Soporte & Admin Avanzada", expanded=st.session_state.pagina_actual in grupo_soporte):
+            if st.button("✨ CREACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "✨ CREACIÓN MASIVA" else "secondary"):
+                st.session_state.pagina_actual = "✨ CREACIÓN MASIVA"
+                st.rerun()
+                
+            if st.button("⚡ ACTUALIZACIÓN MASIVA", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⚡ ACTUALIZACIÓN MASIVA" else "secondary"):
+                st.session_state.pagina_actual = "⚡ ACTUALIZACIÓN MASIVA"
+                st.rerun()
+                
+            if st.button("⏪ ROLLBACK BD", use_container_width=True, type="primary" if st.session_state.pagina_actual == "⏪ ROLLBACK BD" else "secondary"):
+                st.session_state.pagina_actual = "⏪ ROLLBACK BD"
+                st.rerun()
 
         st.markdown("---")
         if st.button("🔄 Refrescar Toda la App", type="secondary", use_container_width=True):
-            # 1. Limpiamos la caché de datos
             st.cache_data.clear()
-            
-            # 2. Mostramos el mensaje de confirmación
             st.toast("✅ ¡Datos actualizados! La aplicación ha sido refrescada.", icon="🔄")
-            
-            # 3. Esperamos un instante para que el mensaje sea visible antes de recargar
             import time
             time.sleep(1) 
-            
-            # 4. Recargamos la página
             st.rerun()
         
         st.markdown("---")
@@ -305,34 +304,34 @@ else:
             st.rerun()
 
         with st.expander("🛠️ Auditoría de Sistema (Versiones)"):
-                    import pandas as pd
-                    import pytz
-                    import gspread
-                    import openpyxl
-                    import xlsxwriter
-                    
-                    # Manejo seguro para librerías que a veces no exponen __version__ fácilmente
-                    try:
-                        import starlette
-                        version_starlette = starlette.__version__
-                    except:
-                        version_starlette = "No instalada o versión oculta"
-                        
-                    try:
-                        import streamlit_oauth
-                        version_oauth = streamlit_oauth.__version__
-                    except:
-                        version_oauth = "No instalada o versión oculta"
+            import pandas as pd
+            import pytz
+            import gspread
+            import openpyxl
+            import xlsxwriter
+            
+            try:
+                import starlette
+                version_starlette = starlette.__version__
+            except:
+                version_starlette = "No instalada o versión oculta"
+                
+            try:
+                import streamlit_oauth
+                version_oauth = streamlit_oauth.__version__
+            except:
+                version_oauth = "No instalada o versión oculta"
 
-                    st.markdown("##### Librerías Instaladas")
-                    st.write(f"🟢 **Streamlit:** `{st.__version__}`")
-                    st.write(f"🟢 **Pandas:** `{pd.__version__}`")
-                    st.write(f"🟢 **Pytz:** `{pytz.__version__}`")
-                    st.write(f"🟢 **Gspread:** `{gspread.__version__}`")
-                    st.write(f"🟢 **Openpyxl:** `{openpyxl.__version__}`")
-                    st.write(f"🟢 **Xlsxwriter:** `{xlsxwriter.__version__}`")
-                    st.write(f"🟢 **Starlette:** `{version_starlette}`")
-                    st.write(f"🟢 **Streamlit-OAuth:** `{version_oauth}`")
+            st.markdown("##### Librerías Instaladas")
+            st.write(f"🟢 **Streamlit:** `{st.__version__}`")
+            st.write(f"🟢 **Pandas:** `{pd.__version__}`")
+            st.write(f"🟢 **Pytz:** `{pytz.__version__}`")
+            st.write(f"🟢 **Gspread:** `{gspread.__version__}`")
+            st.write(f"🟢 **Openpyxl:** `{openpyxl.__version__}`")
+            st.write(f"🟢 **Xlsxwriter:** `{xlsxwriter.__version__}`")
+            st.write(f"🟢 **Starlette:** `{version_starlette}`")
+            st.write(f"🟢 **Streamlit-OAuth:** `{version_oauth}`")
+
     # ================= ÁREA PRINCIPAL =================
     col_izq, col_central, col_der = st.columns([1, 8, 1])
     with col_central:
@@ -340,6 +339,8 @@ else:
             mostrar_alertas_prioritarias()
         elif st.session_state.pagina_actual == "📌 PIZARRA DE NOTAS":
             mostrar_pizarra()
+        
+        # Mantenemos tu estructura condicional exacta para el renderizado
         if st.session_state.pagina_actual == "📦 GESTIÓN DE INVENTARIO":
             mostrar_inventario() 
         elif st.session_state.pagina_actual == "🛒 CAJA / VENTAS RÁPIDAS":
