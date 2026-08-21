@@ -23,6 +23,34 @@ def asegurar_fuentes():
             except Exception as e:
                 pass
 
+def obtener_fuente(tamanio, bold=False):
+    """
+    Carga de forma dinámica y resiliente una fuente de alta calidad
+    del sistema, de la caché local o un fallback del contenedor de Streamlit.
+    """
+    candidatas = [
+        # 1. Caché local (si internet funcionó en algún momento)
+        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
+        # 2. Tipografía Premium geométrica detectada en el servidor de Streamlit
+        "/usr/share/fonts/GoogleSans-Regular.ttf",
+        # 3. Fallbacks nativos en contenedores Debian / Ubuntu
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
+        # 4. Fallbacks nativos si ejecutas en entorno local Windows o MacOS
+        "arialbd.ttf" if bold else "arial.ttf",
+        "Arial.ttf"
+    ]
+    for ruta in candidatas:
+        try:
+            if os.path.exists(ruta) or not ruta.endswith('.ttf'):
+                return ImageFont.truetype(ruta, tamanio)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=tamanio)
+    except:
+        return ImageFont.load_default()
+
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES"):
     """
     Genera una imagen 1080x1920 Premium con fondo de marca Alba Librería:
@@ -43,16 +71,12 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         BADGE_BG = (225, 29, 72)        # Etiqueta "Disponible": Rojo/Rosa encendido
         BADGE_TEXT = (255, 255, 255)    # Texto etiqueta: Blanco
         
-        # --- 🔠 FUENTES MUCHO MÁS GRANDES Y EN NEGRITA ---
-        try:
-            # Todo en Bold para mayor impacto visual
-            font_header = ImageFont.truetype("assets/Montserrat-Bold.ttf", 100)
-            font_titulo = ImageFont.truetype("assets/Montserrat-Bold.ttf", 32)
-            font_precio = ImageFont.truetype("assets/Montserrat-Bold.ttf", 52)
-            font_tachado = ImageFont.truetype("assets/Montserrat-Bold.ttf", 34)
-            font_badge = ImageFont.truetype("assets/Montserrat-Bold.ttf", 18) 
-        except IOError:
-            font_header = font_titulo = font_precio = font_tachado = font_badge = ImageFont.load_default()
+        # --- 🔠 FUENTES DINÁMICAS Y RESISTENTES A FALLAS DE RED ---
+        font_header = obtener_fuente(90, bold=True) # Ajustamos ligeramente a 90 para títulos largos
+        font_titulo = obtener_fuente(32, bold=True)
+        font_precio = obtener_fuente(52, bold=True)
+        font_tachado = obtener_fuente(34, bold=True)
+        font_badge = obtener_fuente(18, bold=True) 
 
         # --- 2) CARGAR IMAGEN DE FONDO DE MARCA DESDE SUPABASE ---
         BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
