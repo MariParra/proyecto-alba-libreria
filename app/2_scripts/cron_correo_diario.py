@@ -126,31 +126,31 @@ def generar_reporte_empaque():
     for bloque in range(100):
         start = bloque * chunk_size
         end = start + chunk_size - 1
-        res_notas = supabase.table("pizarra_recordatorios")\
+        res_notes = supabase.table("pizarra_recordatorios")\
             .select("*")\
             .eq("completada", False)\
             .order("nota_id")\
             .range(start, end).execute()
-        if res_notas.data:
-            all_notes.extend(res_notas.data)
-            if len(res_notas.data) < chunk_size:
+        if res_notes.data:
+            all_notes.extend(res_notes.data)
+            if len(res_notes.data) < chunk_size:
                 break
         else:
             break
             
-    df_notas = pd.DataFrame(all_notes) if all_notes else pd.DataFrame()
+    df_notes = pd.DataFrame(all_notes) if all_notes else pd.DataFrame()
     df_notas_vencidas = pd.DataFrame()
 
-    if not df_notas.empty:
-        df_notas['fecha_limite_dt'] = pd.to_datetime(df_notas['fecha_limite']).dt.date
-        df_notas_vencidas = df_notas[df_notas['fecha_limite_dt'] < hoy.date()].copy()
+    if not df_notes.empty:
+        df_notes['fecha_limite_dt'] = pd.to_datetime(df_notes['fecha_limite']).dt.date
+        df_notas_vencidas = df_notes[df_notes['fecha_limite_dt'] < hoy.date()].copy()
 
     # --- VALIDACIÓN DE FACTURAS VENCIDAS (HÁMSTER FURIOSO OVERRIDE!) ---
     facturas_vencidas_activas = []
-    if not df_notas.empty:
-        facturas_vencidas_activas = df_notas[
-            (df_notas['titulo'] == "HACER FACTURAS DE LA SEMANA") & 
-            (df_notas['fecha_limite_dt'] < hoy.date())
+    if not df_notes.empty:
+        facturas_vencidas_activas = df_notes[
+            (df_notes['titulo'] == "HACER FACTURAS DE LA SEMANA") & 
+            (df_notes['fecha_limite_dt'] < hoy.date())
         ].copy()
 
     # Si es un día estándar sin alertas urgentes ni facturación, abortamos para no molestar por gusto
@@ -223,6 +223,35 @@ def generar_reporte_empaque():
                 </div>
     """
 
+    # --- SECCIÓN 1 (NUEVA PRIORIDAD): POST-ITS VENCIDOS (VISTA_PIZARRA.PY) ---
+    if not df_notas_vencidas.empty:
+        html_content += f"""
+                <h3 style="color: #e65100; border-bottom: 2px solid #ffe0b2; padding-bottom: 5px;">📌 Post-its Vencidos en la Pizarra</h3>
+                <p>Tienes <strong>{len(df_notas_vencidas)}</strong> tareas anotadas cuya fecha límite ya venció:</p>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                    <thead>
+                        <tr style="background-color: #fff3e0;">
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Tarea / Recordatorio</th>
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Detalle Adicional</th>
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Fecha Límite</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        """
+        for _, row in df_notas_vencidas.iterrows():
+            html_content += f"""
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #e65100;">📌 {row['titulo']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{row['contenido']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #d32f2f;">{row['fecha_limite_dt'].strftime('%d/%m/%Y')}</td>
+                        </tr>
+            """
+        html_content += """
+                    </tbody>
+                </table>
+        """
+
+    # --- SECCIÓN 2: ARMADO DE PAQUETES DEMORADOS ---
     if not df_criticas.empty:
         html_content += f"""
                 <h3 style="color: #c62828; border-bottom: 2px solid #ffcdd2; padding-bottom: 5px;">📦 Armado de Paquetes Demorados (>5 días)</h3>
@@ -245,33 +274,6 @@ def generar_reporte_empaque():
                             <td style="padding: 10px; border: 1px solid #ddd;">{row['cliente_nombre']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd; color: #d32f2f; font-weight: bold;">{row['dias']} días</td>
                             <td style="padding: 10px; border: 1px solid #ddd; font-style: italic;">{row['libros_vendidos']}</td>
-                        </tr>
-            """
-        html_content += """
-                    </tbody>
-                </table>
-        """
-
-    if not df_notas_vencidas.empty:
-        html_content += f"""
-                <h3 style="color: #e65100; border-bottom: 2px solid #ffe0b2; padding-bottom: 5px;">📌 Post-its Vencidos en la Pizarra</h3>
-                <p>Tienes <strong>{len(df_notas_vencidas)}</strong> tareas anotadas cuya fecha límite ya venció:</p>
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-                    <thead>
-                        <tr style="background-color: #fff3e0;">
-                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Tarea / Recordatorio</th>
-                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Detalle Adicional</th>
-                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Fecha Límite</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        """
-        for _, row in df_notas_vencidas.iterrows():
-            html_content += f"""
-                        <tr>
-                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #e65100;">📌 {row['titulo']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd;">{row['contenido']}</td>
-                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #d32f2f;">{row['fecha_limite_dt'].strftime('%d/%m/%Y')}</td>
                         </tr>
             """
         html_content += """
