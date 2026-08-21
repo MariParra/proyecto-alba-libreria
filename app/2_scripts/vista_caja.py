@@ -470,6 +470,90 @@ def actualizar_historial_caja(df_editado):
             
     return updates
 
+def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asignacion_id=None):
+    """
+    Re-ruta de forma segura y en caliente una venta del historial hacia couriers 
+    estándar o consolidándola como extra en la cajita mensual activa del cliente.
+    """
+    conn = get_db_connection()
+    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    try:
+        # 1. Recuperamos la venta en crudo desde Supabase
+        res_v = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id)).execute()
+        if not res_v.data:
+            return False, "No se encontró la venta especificada."
+        
+        venta = res_v.data[0]
+        cliente_id = venta.get("cliente_id")
+        subtotal_libros = float(venta.get("subtotal_libros", 0.0))
+        
+        # 2. CASO: Añadir a caja de suscripción
+        if nuevo_metodo == "Añadir a caja de suscripción" and asignacion_id:
+            res_asig = conn.table("asignaciones").select("extras, valor_extras, mes").eq("asignacion_id", int(asignacion_id)).execute()
+            if not res_asig.data:
+                return False, "No se pudo encontrar la asignación seleccionada."
+            
+            asig_actual = res_asig.data[0]
+            extras_previos_raw = asig_actual.get('extras') or ""
+            valor_previo = float(asig_actual.get('valor_extras') or 0.0)
+            mes_caja = asig_actual.get("mes", "")
+            
+            # Parsear los libros de la venta actual para sumarlos como extras
+            libros_raw = venta.get("libros_vendidos", "")
+            nuevos_extras_list = []
+            if libros_raw:
+                try:
+                    libros = json.loads(libros_raw)
+                    nuevos_extras_list = [f"{item.get('cantidad', 1)} x {item.get('titulo', 'N/A')}".upper() for item in libros]
+                except Exception:
+                    nuevos_extras_list = [f"1 x {libros_raw}".upper()]
+            
+            # Limpiar y parsear extras anteriores
+            lista_extras_previos = []
+            if extras_previos_raw:
+                items = extras_previos_raw.replace('\n', '|').split('|')
+                for item in items:
+                    item_limpio = item.strip()
+                    if '.' in item_limpio:
+                        item_limpio = item_limpio.split('.', 1)[-1].strip()
+                    if item_limpio:
+                        lista_extras_previos.append(item_limpio.upper())
+            
+            # Concatenar y dar formato enumerado
+            lista_completa = lista_extras_previos + nuevos_extras_list
+            extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
+            valor_final = valor_previo + subtotal_libros
+            
+            # Actualizar extras en la tabla asignaciones
+            conn.table("asignaciones").update({
+                "extras": extras_final_enumerado,
+                "valor_extras": valor_final
+            }).eq("asignacion_id", int(asignacion_id)).execute()
+            
+            # Actualizar venta a costo de envío $0 y método 'Agregado a Suscripción [Mes]'
+            metodo_envio_final = f"Agregado a Suscripción {mes_caja}"
+            monto_final_nuevo = subtotal_libros
+            conn.table("registro_ventas").update({
+                "metodo_envio": metodo_envio_final,
+                "valor_envio": 0.0,
+                "monto_final": monto_final_nuevo,
+                "abono": monto_final_nuevo if venta.get("estado_pago") == "PAGADO" else float(venta.get("abono", 0.0))
+            }).eq("venta_id", int(venta_id)).execute()
+            
+        else:
+            # 3. CASO: Courier Estándar (Paket, Bluexpress, etc.)
+            monto_final_nuevo = subtotal_libros + float(valor_envio)
+            conn.table("registro_ventas").update({
+                "metodo_envio": nuevo_metodo,
+                "valor_envio": float(valor_envio),
+                "monto_final": monto_final_nuevo,
+                "abono": monto_final_nuevo if venta.get("estado_pago") == "PAGADO" else float(venta.get("abono", 0.0))
+            }).eq("venta_id", int(venta_id)).execute()
+            
+        return True, "¡Método de envío, extras de suscripción y finanzas de venta actualizados con éxito!"
+    except Exception as e:
+        log_error("vista_caja", "cambiar_logistica_venta_existente", e, email_usuario)
+        return False, str(e)
 
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
@@ -972,7 +1056,7 @@ def mostrar_caja():
                 "cliente_telefono": st.column_config.TextColumn("Teléfono Cliente")
             }
             
-                        # 🌟 CORRECCIÓN: Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
+            # Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
             limite_actual = st.session_state.caja_limit_view
             total_ventas_filtradas = len(df_mostrar)
             df_paginado = df_mostrar.head(limite_actual)
@@ -996,6 +1080,77 @@ def mostrar_caja():
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
                     
+            # =========================================================================
+            # 🚚 MÓDULO DE RE-RUTADO LOGÍSTICO Y VINCULACIÓN DINÁMICA A CAJITAS
+            # =========================================================================
+            st.markdown("---")
+            with st.expander("🚚 Re-rutar o Vincular Venta Existente a Suscripción/Courier", expanded=False):
+                st.markdown("#### 🔄 Vincular o Cambiar Método de Envío de una Venta")
+                st.info("💡 **Guía UX:** Si una clienta realizó una compra normal y posteriormente decidió consolidarla en su cajita de suscripción mensual activa, puedes gestionarlo de manera segura desde aquí.")
+                
+                # Lista de ventas de los filtros activos
+                lista_ventas_opciones = [""] + [f"Venta #{v['venta_id']} - {v['cliente_nombre']} (Monto: ${v['monto_final']:,.0f})" for v in df_mostrar.to_dict('records')]
+                venta_a_modificar = st.selectbox("1. Selecciona la venta a modificar:", options=lista_ventas_opciones, index=0)
+                
+                if venta_a_modificar:
+                    v_id_tmp = int(venta_a_modificar.split("Venta #")[1].split(" - ")[0])
+                    row_venta = df_mostrar[df_mostrar['venta_id'] == v_id_tmp].iloc[0]
+                    cliente_id_tmp = row_venta.get('cliente_cliente_id') # Usamos el prefijo aplanado del historial
+                    
+                    st.write(f"👤 **Cliente:** {row_venta['cliente_nombre']}")
+                    st.write(f"📦 **Método de Envío Actual:** `{row_venta.get('metodo_envio', 'No especificado')}`")
+                    st.write(f"📚 **Libros vendidos:** `{row_venta['libros_vendidos']}`")
+                    st.write(f"💰 **Subtotal Libros:** ${row_venta['monto_final'] - row_venta.get('valor_envio', 0.0):,.0f} | **Envío Actual:** ${row_venta.get('valor_envio', 0.0):,.0f}")
+                    
+                    st.markdown("---")
+                    col_mod1, col_mod2 = st.columns(2)
+                    
+                    nuevo_metodo_sel = col_mod1.selectbox(
+                        "2. Selecciona el nuevo Método de Envío:",
+                        options=["Retiro en tienda", "Paket", "Bluexpress", "Envio por pagar", "Añadir a caja de suscripción"],
+                        index=None,
+                        placeholder="Elige un método..."
+                    )
+                    
+                    bloquear_guardado = False
+                    asig_id_target = None
+                    valor_envio_nuevo = 0.0
+                    
+                    if nuevo_metodo_sel == "Añadir a caja de suscripción":
+                        if pd.notna(cliente_id_tmp):
+                            # Consultamos las cajitas abiertas de ese cliente en tiempo real
+                            conn = get_db_connection()
+                            res_cajas = conn.table("asignaciones").select("asignacion_id, mes, estado_envio").eq("cliente_id", int(cliente_id_tmp)).execute()
+                            cajas_abiertas = [c for c in res_cajas.data if c.get('estado_envio', '') not in ["ENVIADO", "RETIRADO", "ENTREGADO/RETIRADO", "ENTREGADO", "FINALIZADO"]]
+                            
+                            if cajas_abiertas:
+                                opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado_envio','')} (ID: {c['asignacion_id']})" for c in cajas_abiertas]
+                                caja_sel = col_mod2.selectbox("3. Selecciona la Caja de Suscripción abierta:", opciones_cajas)
+                                if caja_sel:
+                                    asig_id_target = int(caja_sel.split("(ID: ")[1].strip(")"))
+                                    st.success(f"✅ ¡Perfecto! Los libros se sumarán automáticamente como Extras a la cajita del mes.")
+                            else:
+                                col_mod2.warning("⚠️ El cliente no registra cajitas de suscripción abiertas actualmente para añadir.")
+                                bloquear_guardado = True
+                        else:
+                            col_mod2.error("❌ Esta venta no registra un ID de cliente válido asociado.")
+                            bloquear_guardado = True
+                            
+                    elif nuevo_metodo_sel and nuevo_metodo_sel not in ["Retiro en tienda", "Añadir a caja de suscripción"]:
+                        valor_envio_nuevo = col_mod2.number_input("3. Establecer nuevo Costo de Envío ($):", min_value=0.0, step=500.0, value=float(row_venta.get('valor_envio', 0.0)))
+                        
+                    if nuevo_metodo_sel:
+                        if st.button("💾 Guardar y Aplicar Cambios de Envío", type="primary", use_container_width=True, disabled=bloquear_guardado):
+                            with st.spinner("Procesando re-rutado y actualizando base de datos..."):
+                                ok, msg = cambiar_logistica_venta_existente(v_id_tmp, nuevo_metodo_sel, valor_envio_nuevo, asig_id_target)
+                                if ok:
+                                    st.success(msg)
+                                    st.balloons()
+                                    time.sleep(1.5)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+
             # 🌟 NUEVO: Botón dinámico de paginación diferida para el Historial de ventas
             if total_ventas_filtradas > limite_actual:
                 st.write("")
