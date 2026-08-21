@@ -54,7 +54,8 @@ def cargar_costos_no_ventas():
         df = pd.DataFrame(all_data) if all_data else pd.DataFrame()
         if not df.empty:
             df['monto'] = pd.to_numeric(df['monto'], errors='coerce').fillna(0.0)
-            df['fecha_ocurrencia_limpia'] = unificar_formatos_fecha(df['fecha_ocurrencia'])
+            # 🌟 CORRECCIÓN CRÍTICA: Convertir directamente la columna a datetime.date nativo de Python
+            df['fecha_ocurrencia'] = unificar_formatos_fecha(df['fecha_ocurrencia']).dt.date
         return df
     except Exception as e:
         log_error("vista_costos", "cargar_costos_no_ventas", e, st.session_state.get('email_usuario', 'Desconocido'))
@@ -197,7 +198,7 @@ def mostrar_costos():
                         st.success("🎉 ¡Costo registrado exitosamente!")
                         st.cache_data.clear()
                         
-                        # Patron UX: Auto-limpieza dinámica de estado de widget
+                        # Patron UX: Auto-limpieza dinámica de estado de widget utilizando DEL
                         if "sel_tipo_costo_nuevo" in st.session_state:
                             del st.session_state["sel_tipo_costo_nuevo"]
                         time.sleep(1)
@@ -219,9 +220,9 @@ def mostrar_costos():
                 
                 opciones_mes = ["Ver Todo"]
                 mapa_inverso_mes = {}
-                df_fechas_validas = df_costos.dropna(subset=['fecha_ocurrencia_limpia'])
+                df_fechas_validas = df_costos.dropna(subset=['fecha_ocurrencia'])
                 if not df_fechas_validas.empty:
-                    df_fechas_validas['mes_ano_str'] = df_fechas_validas['fecha_ocurrencia_limpia'].dt.strftime('%Y-%m')
+                    df_fechas_validas['mes_ano_str'] = pd.to_datetime(df_fechas_validas['fecha_ocurrencia']).dt.strftime('%Y-%m')
                     meses_unicos = sorted(df_fechas_validas['mes_ano_str'].unique(), reverse=True)
                     
                     month_map_es = {
@@ -244,7 +245,7 @@ def mostrar_costos():
             if filtro_mes != "Ver Todo":
                 mes_str_a_buscar = mapa_inverso_mes.get(filtro_mes)
                 if mes_str_a_buscar:
-                    df_filtrado = df_filtrado[df_filtrado['fecha_ocurrencia_limpia'].dt.strftime('%Y-%m') == mes_str_a_buscar]
+                    df_filtrado = df_filtrado[pd.to_datetime(df_filtrado['fecha_ocurrencia']).dt.strftime('%Y-%m') == mes_str_a_buscar]
                     
             st.markdown(f"#### Periodo Filtrado - Gasto Acumulado: **${df_filtrado['monto'].sum():,.0f}**")
             
@@ -268,6 +269,7 @@ def mostrar_costos():
             
             st.caption(f"Mostrando {len(df_paginado)} de {len(df_mostrar)} costos encontrados.")
             
+            # 🌟 CORREGIDO: st.data_editor recibirá tipos datetime.date nativos en 'fecha_ocurrencia'
             df_editado = st.data_editor(
                 df_paginado,
                 use_container_width=True,
@@ -321,7 +323,7 @@ def mostrar_costos():
                         st.success(f"🎉 ¡El costo ID {costo_id_eliminar} fue removido exitosamente!")
                         st.cache_data.clear()
                         
-                        # Patron UX: Limpieza de estado
+                        # Patron UX: Limpieza de estado utilizando DEL
                         if "sel_costo_eliminar" in st.session_state:
                             del st.session_state["sel_costo_eliminar"]
                         time.sleep(1.5)
