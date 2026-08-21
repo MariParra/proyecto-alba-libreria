@@ -3,7 +3,7 @@ import pandas as pd
 import io
 import json
 from datetime import datetime
-from utilidades import get_db_connection
+from utilidades import get_db_connection, log_error
 
 # ====================================================
 # --- FUNCIÓN DE UTILIDAD PARA GENERAR EXCEL ---
@@ -59,6 +59,7 @@ def obtener_tabla(nombre_tabla):
         elif nombre_tabla == "suscripciones": order_col = "suscripcion_id"
         elif nombre_tabla == "ventas_masivas": order_col = "evento_id"
         elif nombre_tabla == "librero_historico": order_col = "registro_id"
+        elif nombre_tabla == "costos_no_ventas": order_col = "costo_id"
 
         for bloque in range(100):
             start = bloque * chunk_size
@@ -74,7 +75,8 @@ def obtener_tabla(nombre_tabla):
             else:
                 break
         return pd.DataFrame(all_data) if all_data else pd.DataFrame()
-    except: 
+    except Exception as e:
+        log_error("vista_reportes", "obtener_tabla", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
 
 def obtener_reporte_asignaciones(ano, lista_meses):
@@ -318,8 +320,8 @@ def obtener_reporte_bajo_stock(limite=5):
     try:
         all_books = []
         chunk_size = 1000
-        for bloque in range(100):
-            start = bloque * chunk_size
+        for bloques in range(100):
+            start = bloques * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("libros")
                 .select("titulo, autor, editorial, stock, precio, visible_catalogo, destacado")
@@ -337,6 +339,179 @@ def obtener_reporte_bajo_stock(limite=5):
         return pd.DataFrame()
 
 # ====================================================
+# --- REPORTE DE UTILIDADES Y BALANCE CONSOLIDADO ---
+# ====================================================
+
+def obtener_reporte_utilidades_mensual(ano):
+    """Genera reporte paginado anual consolidando ingresos, costos y utilidades por mes."""
+    conn = get_db_connection()
+    try:
+        chunk_size = 1000
+        
+        # 1. Cargar Ventas Directas del año
+        all_ventas = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_ventas = conn.table("registro_ventas")\
+                .select("fecha_venta, monto_final, costo_venta, valor_envio")\
+                .order("venta_id")\
+                .range(start, end).execute()
+            if res_ventas.data:
+                all_ventas.extend(res_ventas.data)
+                if len(res_ventas.data) < chunk_size: break
+            else: break
+        df_v = pd.DataFrame(all_ventas) if all_data := all_ventas else pd.DataFrame()
+        if not df_v.empty:
+            df_v['fecha_venta'] = pd.to_datetime(df_v['fecha_venta'], errors='coerce')
+            df_v = df_v[df_v['fecha_venta'].dt.year == ano]
+            
+        # 2. Cargar Asignaciones de Suscripciones del año
+        all_asig = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_asig = conn.table("asignaciones")\
+                .select("monto_total, costo_caja, pagado, cliente_id, ano, mes")\
+                .eq("ano", ano)\
+                .order("asignacion_id")\
+                .range(start, end).execute()
+            if res_asig.data:
+                all_asig.extend(res_asig.data)
+                if len(res_asig.data) < chunk_size: break
+            else: break
+        df_a = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
+        if not df_a.empty:
+            res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
+            df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
+            if not df_susc.empty:
+                df_a = pd.merge(df_a, df_susc, on="cliente_id", how="left")
+            else:
+                df_a['valor_suscripcion'] = 18500.0
+            df_a['valor_suscripcion'] = pd.to_numeric(df_a['valor_suscripcion'], errors='coerce').fillna(18500.0)
+            df_a['costo_caja'] = pd.to_numeric(df_a['costo_caja'], errors='coerce').fillna(10000.0)
+            # Filtrar solo asignaciones pagadas
+            df_a['pagado_clean'] = df_a['pagado'].apply(lambda x: "SI" if str(x).upper() in ["TRUE", "T", "1", "SI"] else "NO")
+            df_a = df_a[df_a['pagado_clean'] == 'SI']
+
+        # 3. Cargar Ventas Masivas
+        all_vm = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_vm = conn.table("ventas_masivas")\
+                .select("fecha_evento, ingreso_total, costo_total, utilidad_estimada")\
+                .order("evento_id")\
+                .range(start, end).execute()
+            if res_vm.data:
+                all_vm.extend(res_vm.data)
+                if len(res_vm.data) < chunk_size: break
+            else: break
+        df_vm = pd.DataFrame(all_vm) if all_vm else pd.DataFrame()
+        if not df_vm.empty:
+            df_vm['fecha_evento'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
+            df_vm = df_vm[df_vm['fecha_evento'].dt.year == ano]
+
+        # 4. Cargar Costos No de Ventas
+        all_cnv = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_cnv = conn.table("costos_no_ventas")\
+                .select("fecha_ocurrencia, monto")\
+                .order("costo_id")\
+                .range(start, end).execute()
+            if res_cnv.data:
+                all_cnv.extend(res_cnv.data)
+                if len(res_cnv.data) < chunk_size: break
+            else: break
+        df_cnv = pd.DataFrame(all_cnv) if all_cnv else pd.DataFrame()
+        if not df_cnv.empty:
+            df_cnv['fecha_ocurrencia'] = pd.to_datetime(df_cnv['fecha_ocurrencia'], errors='coerce')
+            df_cnv = df_cnv[df_cnv['fecha_ocurrencia'].dt.year == ano]
+
+        # Construcción del balance mes por mes
+        meses_nombres = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+            7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
+        filas_reporte = []
+
+        for m_num, m_nom in meses_nombres.items():
+            # Canal 1: Suscripciones (Cajitas)
+            if not df_a.empty:
+                a_mes = df_a[df_a['mes'] == m_num]
+                ing_a = pd.to_numeric(a_mes['valor_suscripcion'], errors='coerce').sum()
+                costo_a = pd.to_numeric(a_mes['costo_caja'], errors='coerce').sum()
+                util_a = ing_a - costo_a
+            else:
+                ing_a, costo_a, util_a = 0.0, 0.0, 0.0
+
+            # Canal 2: Ventas Directas
+            if not df_v.empty:
+                v_mes = df_v[df_v['fecha_venta'].dt.month == m_num]
+                ing_v = pd.to_numeric(v_mes['monto_final'], errors='coerce').sum()
+                costo_v = pd.to_numeric(v_mes['costo_venta'], errors='coerce').sum()
+                env_v = pd.to_numeric(v_mes['valor_envio'], errors='coerce').sum()
+                util_v = (ing_v - env_v) - costo_v
+            else:
+                ing_v, costo_v, env_v, util_v = 0.0, 0.0, 0.0, 0.0
+
+            # Canal 3: Ventas Masivas (Eventos)
+            if not df_vm.empty:
+                vm_mes = df_vm[df_vm['fecha_evento'].dt.month == m_num]
+                ing_vm = pd.to_numeric(vm_mes['ingreso_total'], errors='coerce').sum()
+                costo_vm = pd.to_numeric(vm_mes['costo_total'], errors='coerce').sum()
+                util_vm = pd.to_numeric(vm_mes['utilidad_estimada'], errors='coerce').sum()
+            else:
+                ing_vm, costo_vm, util_vm = 0.0, 0.0, 0.0
+
+            # Gastos Operacionales (No de ventas)
+            if not df_cnv.empty:
+                cnv_mes = df_cnv[df_cnv['fecha_ocurrencia'].dt.month == m_num]
+                gasto_cnv = pd.to_numeric(cnv_mes['monto'], errors='coerce').sum()
+            else:
+                gasto_cnv = 0.0
+
+            # Balance Total
+            total_ingresos = ing_a + ing_v + ing_vm
+            total_costos_ventas = costo_a + costo_v + costo_vm
+            utilidad_pre_operacional = util_a + util_v + util_m
+            utilidad_consolidada_final = utilidad_pre_operacional - gasto_cnv
+
+            filas_reporte.append({
+                "Mes": m_nom,
+                "Año": ano,
+                "Ingresos Suscripciones ($)": ing_a,
+                "Costos Suscripciones ($)": costo_a,
+                "Utilidad Suscripciones ($)": util_a,
+                "Ingresos Ventas Directas ($)": ing_v,
+                "Costos Ventas Directas ($)": costo_v,
+                "Despachos Ventas Directas ($)": env_v,
+                "Utilidad Ventas Directas ($)": util_v,
+                "Ingresos Ventas Masivas ($)": ing_vm,
+                "Costos Ventas Masivas ($)": costo_vm,
+                "Utilidad Ventas Masivas ($)": util_vm,
+                "Costos No Ventas (G. Operacionales) ($)": gasto_cnv,
+                "Total Ingresos Brutos ($)": total_ingresos,
+                "Total Costos (Venta + Operaciones) ($)": (total_costos_ventas + gasto_cnv),
+                "Utilidad Real Consolidada ($)": utilidad_consolidada_final
+            })
+
+        df_balance = pd.DataFrame(filas_reporte)
+        
+        # Generar Fila de Totales Consolidados
+        suma_totales = df_balance.select_dtypes(include='number').sum()
+        suma_totales['Mes'] = "TOTAL ANUAL"
+        suma_totales['Año'] = ano
+        
+        df_reporte_final = pd.concat([df_balance, pd.DataFrame([suma_totales])], ignore_index=True)
+        return df_reporte_final
+    except Exception as e:
+        st.error(f"Error generando reporte de utilidades y balances: {e}")
+        return pd.DataFrame()
+
+# ====================================================
 # --- VISTA PRINCIPAL ---
 # ====================================================
 def mostrar_reportes():
@@ -349,7 +524,29 @@ def mostrar_reportes():
         st.markdown("### Reportes listos para usar")
         st.info("💡 Estos reportes cruzan datos para entregarte información lista para la toma de decisiones.")
         
-        # --- REPORTE 1: ASIGNACIONES ---
+        # --- REPORTE 1: UTILIDADES Y BALANCES (NUEVO) ---
+        with st.container(border=True):
+            st.markdown("#### 💸 Utilidades y Balance Consolidado")
+            st.write("Genera un estado financiero consolidado por mes desglosando ingresos de cajitas, ventas rápidas, eventos masivos, costos de adquisición de catálogo y gastos no operacionales.")
+            
+            col_u1 = st.columns(1)[0]
+            ano_balance = col_u1.number_input("Año del Balance Consolidado:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_balance_cons")
+            
+            if st.button("Generar Reporte de Balance y Utilidades", type="primary", use_container_width=True, key="btn_balance"):
+                with st.spinner("Compilando balances financieros de Supabase..."):
+                    df_balance = obtener_reporte_utilidades_mensual(ano_balance)
+                    if not df_balance.empty:
+                        st.download_button(
+                            label=f"Descargar Balance Anual {ano_balance} (.xlsx)", 
+                            data=convertir_df_a_excel(df_balance), 
+                            file_name=f"balance_consolidado_utilidades_{ano_balance}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    else:
+                        st.warning("No se encontraron registros financieros para el año seleccionado.")
+
+        # --- REPORTE 2: ASIGNACIONES ---
         with st.container(border=True):
             st.markdown("#### 🎁 Historial de Asignaciones (Cajitas)")
             st.write("Exporta el detalle de las cajas armadas con el nombre del cliente y los libros que recibió.")
@@ -370,7 +567,7 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron registros de asignación para los meses seleccionados.")
 
-        # --- REPORTE 2: ENVÍOS PENDIENTES ---
+        # --- REPORTE 3: ENVÍOS PENDIENTES ---
         with st.container(border=True):
             st.markdown("#### 🚚 Envíos Pendientes Unificados")
             st.write("Lista consolidada de todas las cajas (suscripciones y ventas) listas para despacho, con formato para courier.")
@@ -381,7 +578,7 @@ def mostrar_reportes():
                 else:
                     st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
 
-        # --- REPORTE 3: SII ---
+        # --- REPORTE 4: SII ---
         with st.container(border=True):
             st.markdown("#### 🇨🇱 Facturación (SII)")
             st.write("Genera el reporte de ventas del mes con el formato para Boletas o Facturas electrónicas.")
@@ -400,7 +597,7 @@ def mostrar_reportes():
                 else:
                     st.warning("No se encontraron ventas para el período seleccionado.")
 
-        # --- REPORTE 4: BAJO STOCK ---
+        # --- REPORTE 5: BAJO STOCK ---
         with st.container(border=True):
             st.markdown("#### 🚨 Libros con Bajo Stock")
             st.write("Identifica rápidamente los libros que están por agotarse para planificar tus compras.")
@@ -416,7 +613,8 @@ def mostrar_reportes():
         st.markdown("### Descarga de Respaldo Crudo (Backup)")
         st.write("Aquí puedes descargar el contenido directo y sin procesar de cualquier tabla de la base de datos.")
         
-        tablas_disponibles = ["clientes", "libros", "registro_ventas", "asignaciones", "suscripciones", "ventas_masivas", "librero_historico", "historial_cambios_masivos", "historial_logs", "meses_cerrados"]
+        # 🌟 TABLAS DISPONIBLES AMPLIADAS CON LA TABLA DE GASTOS ADM
+        tablas_disponibles = ["clientes", "libros", "registro_ventas", "asignaciones", "suscripciones", "ventas_masivas", "librero_historico", "costos_no_ventas", "historial_cambios_masivos", "historial_logs", "meses_cerrados"]
         tabla_seleccionada = st.selectbox("Selecciona la tabla a exportar:", sorted(tablas_disponibles))
         
         if st.button(f"📥 Exportar tabla '{tabla_seleccionada}' completa", use_container_width=True, key="btn_export"):
@@ -426,3 +624,6 @@ def mostrar_reportes():
                     st.download_button(label="✅ Haz clic aquí para descargar el archivo .xlsx", data=convertir_df_a_excel(df_tabla), file_name=f"backup_{tabla_seleccionada}_{datetime.now().strftime('%Y%m%d')}.xlsx", type="primary")
                 else:
                     st.warning("La tabla seleccionada está vacía.")
+
+if __name__ == "__main__":
+    mostrar_reportes()
