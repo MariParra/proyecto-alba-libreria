@@ -142,7 +142,7 @@ def actualizar_destacados_batch(df_con_cambios):
         
     return updates_count
 
-def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo):
+def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True):
     conn = get_db_connection()
     
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
@@ -166,7 +166,10 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         "titulo": titulo_limpio, "autor": autor_limpio,
         "editorial": limpiar_texto_para_busqueda(editorial), "genero": limpiar_texto_para_busqueda(genero),
         "encuadernacion": limpiar_texto_para_busqueda(encuadernacion), "stock": stock,
-        "precio": precio, "precio_original": precio, "costo": costo
+        "precio": precio, "precio_original": precio, "costo": costo,
+        "apto_cajita": apto_cajita, 
+        "destacado": destacado, 
+        "visible_catalogo": visible_catalogo
     }
     try:
         conn.table("libros").insert(datos).execute()
@@ -741,11 +744,19 @@ def mostrar_inventario():
             val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
             val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
             val_precio = c3.number_input("Precio ($):", min_value=0.0, format="%.0f", key="n_pre")
+            
+            st.markdown("🌐 **Configuración Pública y Web**")
+            check_col1, check_col2, check_col3 = st.columns(3)
+            val_apto_cajita = check_col1.checkbox("🎁 Apto Cajitas", value=True, key="n_apto")
+            val_destacado = check_col2.checkbox("⭐ Destacado", value=False, key="n_dest")
+            val_visible = check_col3.checkbox("👁️ Visible en Web", value=True, key="n_vis")
+            
             st.write("")
             col_btn1, col_btn2 = st.columns(2)
             btn_guardar = col_btn1.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True)
             btn_limpiar = col_btn2.form_submit_button("🧹 Limpiar Formulario", type="secondary", use_container_width=True)
-            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre"]
+            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre", "n_apto", "n_dest", "n_vis"]
+
             if btn_limpiar:
                 for key in claves_formulario:
                     if key in st.session_state: del st.session_state[key]
@@ -756,7 +767,20 @@ def mostrar_inventario():
                 genero_final = val_gen_nu if val_gen_nu else val_gen_ex
                 enc_final = val_enc_nu if val_enc_nu else val_enc_ex
                 if val_titulo and autor_final and editorial_final:
-                    success, error = crear_nuevo_libro(val_titulo, autor_final, editorial_final, genero_final, enc_final, val_stock, val_precio, val_costo)
+                    success, error = crear_nuevo_libro(
+                        val_titulo, 
+                        autor_final, 
+                        editorial_final, 
+                        genero_final, 
+                        enc_final, 
+                        val_stock, 
+                        val_precio, 
+                        val_costo,
+                        apto_cajita=val_apto_cajita,
+                        destacado=val_destacado,
+                        visible_catalogo=val_visible
+                    )
+
                     if success:
                         st.success("🎉 ¡Libro creado exitosamente!"); st.snow()
                         for key in claves_formulario:
