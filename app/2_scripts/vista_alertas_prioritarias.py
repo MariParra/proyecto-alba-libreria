@@ -265,6 +265,8 @@ def mostrar_alertas_prioritarias():
                     else:
                         st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}**")
                     st.markdown(f"⏳ Hace `{row['dias_antiguedad']} días` (Creado el {row['fecha_limpia'].strftime('%d/%m/%Y')})")
+                    # Línea de visualización del método de envío agregada de manera elegante:
+                    st.markdown(f"🚚 **Método de Envío:** `{row.get('metodo_envio', 'No especificado')}`")
                     st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")
 
             # Botón de carga incremental de envíos
@@ -290,7 +292,7 @@ def mostrar_alertas_prioritarias():
             for _, row in df_cobranzas_paginado.iterrows():
                 with st.container(border=True):
                     st.markdown(f"👤 **{row['cliente_nombre']}**")
-                    st.markdown(f"💰 **Deuda Pendiente:** `{row['deuda']:,.0f}` (Total: `${row['monto_final']:,.0f}`)")
+                    st.markdown(f"💰 **Deuda Pendiente:** `{row['deuda']:,.0f}` (Total: `${row['monto_final']:,.0f}`) ")
                     st.markdown(f"⏳ `{row['dias_antiguedad']} días` de atraso desde la fecha de venta.")
 
             # Botón de carga incremental de cobranzas
