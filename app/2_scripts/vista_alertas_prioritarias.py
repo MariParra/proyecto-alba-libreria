@@ -58,7 +58,7 @@ def cargar_datos_prioritarios():
     try:
         all_data = []
         chunk_size = 1000
-        # Bucle dinámico seguro (hasta 100.000 ventas en auditoría)
+        # Bucle dinámico seguro (hasta 100.000 ventas en auditoría) con ordenación obligatoria
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -76,6 +76,39 @@ def cargar_datos_prioritarios():
     except Exception as e:
         log_error("vista_alertas_prioritarias", "cargar_datos_prioritarios", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
+
+@st.cache_data(ttl=60)
+def cargar_asignaciones_activas():
+    """Descarga de forma dinámica y paginada todas las asignaciones para cruzar con ventas."""
+    conn = get_db_connection()
+    try:
+        all_data = []
+        chunk_size = 1000
+        # Bucle dinámico seguro utilizando la clave primaria de ordenación obligatoria: asignacion_id
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("asignaciones")\
+                .select("asignacion_id, cliente_id, libro_suscripcion_id, ano, mes, estado_envio")\
+                .order("asignacion_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
+    except Exception as e:
+        log_error("vista_alertas_prioritarias", "cargar_asignaciones_activas", e, st.session_state.get('email_usuario', 'Desconocido'))
+        return pd.DataFrame()
+
+def es_venta_cajita(metodo):
+    """Detecta de forma segura si la venta está destinada a consolidarse en la cajita mensual."""
+    if pd.isna(metodo):
+        return False
+    met_lower = str(metodo).lower().strip()
+    return "cajita" in met_lower or "suscrip" in met_lower or "agregado a" in met_lower
 
 def mostrar_alertas_prioritarias():
     st.title("🚨 Centro de Alertas Prioritarias")
@@ -118,11 +151,43 @@ def mostrar_alertas_prioritarias():
     else:
         df_ventas['cliente_nombre'] = 'Cliente Desconocido'
 
+    # D. Identificar ventas tipo cajita
+    df_ventas['es_cajita'] = df_ventas['metodo_envio'].apply(es_venta_cajita)
+
     # ================= PASO 2: COMPROBACIÓN DE ALERTAS ACTIVAS =================
-    df_envios_limbo = df_ventas[
+    # Cargar y filtrar asignaciones de clientes que ya tienen un libro asignado en su cajita activa
+    df_asig = cargar_asignaciones_activas()
+    clientes_con_cajita_asignada = set()
+    if not df_asig.empty:
+        # Filtrar asignaciones con libro asignado (libro_suscripcion_id no nulo ni cero)
+        df_asig_filtrado = df_asig[
+            df_asig['libro_suscripcion_id'].notna() & 
+            (df_asig['libro_suscripcion_id'] != 0)
+        ]
+        # Adicionalmente, excluimos asignaciones que ya fueron despachadas/entregadas
+        if 'estado_envio' in df_asig_filtrado.columns:
+            df_asig_filtrado = df_asig_filtrado[
+                ~df_asig_filtrado['estado_envio'].astype(str).str.upper().isin(['ENVIADO', 'RETIRADO', 'ENTREGADO/RETIRADO', 'ENTREGADO', 'FINALIZADO'])
+            ]
+        clientes_con_cajita_asignada = set(df_asig_filtrado['cliente_id'].dropna().astype(int).tolist())
+
+    # Condición A: Envíos normales (no cajita, > 5 días en limbo, pendiente de despacho)
+    condicion_normal = (
+        (~df_ventas['es_cajita']) & 
         (df_ventas['dias_antiguedad'] > 5) & 
         (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
-    ].copy()
+    )
+    
+    # Condición B: Envíos asociados a suscripción (es cajita, tiene libro asignado en la cajita atada, pendiente de despacho)
+    df_ventas['cliente_id_clean'] = pd.to_numeric(df_ventas['cliente_id'], errors='coerce').fillna(-1).astype(int)
+    condicion_cajita = (
+        df_ventas['es_cajita'] & 
+        df_ventas['cliente_id_clean'].isin(clientes_con_cajita_asignada) & 
+        (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
+    )
+
+    # Combinamos ambas alertas en el listado de armado de paquetes demorados/prioritarios
+    df_envios_limbo = df_ventas[condicion_normal | condicion_cajita].copy()
     
     df_deudores_criticos = df_ventas[
         (df_ventas['deuda'] > 0) & 
@@ -179,7 +244,7 @@ def mostrar_alertas_prioritarias():
     with col_envios:
         st.markdown("### 📦 Armado de Paquetes Demorados (>5 días)")
         if not hay_envios_limbo:
-            st.success("🟢 Al día: No tienes paquetes pendientes con más de 5 días de retraso.")
+            st.success("🟢 Al día: No tienes paquetes pendientes con más de 5 días de retraso o cajitas listas para consolidar.")
         else:
             total_envios = len(df_envios_limbo)
             limite_envios = st.session_state.limite_envios_alertas
@@ -193,7 +258,12 @@ def mostrar_alertas_prioritarias():
                 libros_formateados = formatear_libros_amigable(libros_raw)
                 
                 with st.container(border=True):
-                    st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}**")
+                    # UX mejorada con distintivo visual para consolidar pedidos
+                    if row.get('es_cajita'):
+                        st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}** 📦 **[AÑADIR A CAJITA]**")
+                        st.markdown(f"ℹ️ *¡Libro ya asignado en su cajita de suscripción! Consolidar todo en un solo empaque.*")
+                    else:
+                        st.markdown(f"**Venta #{row['venta_id']} — {row['cliente_nombre']}**")
                     st.markdown(f"⏳ Hace `{row['dias_antiguedad']} días` (Creado el {row['fecha_limpia'].strftime('%d/%m/%Y')})")
                     st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")
 
