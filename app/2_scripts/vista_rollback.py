@@ -17,8 +17,9 @@ def mostrar_rollback():
     with st.container(border=True):
         st.markdown("### 🛠️ Configuración de Restauración")
         
+        # 🌟 SE INCORPORA LA TABLA costos_no_ventas A LAS TABLAS DISPONIBLES PARA RESTAURACIÓN
         tablas_disponibles = [
-            "asignaciones", "clientes", "librero_historico", 
+            "asignaciones", "clientes", "costos_no_ventas", "librero_historico", 
             "libros", "meses_cerrados", "registro_ventas", 
             "suscripciones", "tareas_internas", "tareas_comentarios"
         ]
@@ -88,3 +89,6 @@ def mostrar_rollback():
                             # 3. Mantenemos tu UI de error original
                             st.error(f"❌ Error crítico durante el rollback: {str(e)}")
                             st.caption("Verifica que tu aplicación web tenga permisos de escritura (Service Role) en Supabase para realizar restauraciones masivas.")
+
+if __name__ == "__main__":
+    mostrar_rollback()
