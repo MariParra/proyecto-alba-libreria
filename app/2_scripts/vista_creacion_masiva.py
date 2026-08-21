@@ -417,6 +417,84 @@ def procesar_suscripciones_masivas(df):
     barra_progreso.progress(1.0, text="¡Carga finalizada!")
     return actualizados, creados, errores
 
+# ====================================================
+# --- LÓGICA 5: CREACIÓN MASIVA DE COSTOS ---
+# ====================================================
+def generar_plantilla_costos():
+    """Genera la plantilla Excel vacía con el esquema estructurado de costos no de ventas."""
+    columnas = ['fecha_ocurrencia_YYYY_MM_DD', 'tipo_costo', 'monto', 'comentario']
+    df_vacio = pd.DataFrame(columns=columnas)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_vacio.to_excel(writer, index=False, sheet_name='Nuevos Costos')
+        worksheet = writer.sheets['Nuevos Costos']
+        for i, col in enumerate(columnas):
+            worksheet.set_column(i, i, 25)
+    return output.getvalue()
+
+def procesar_costos_masivos(df):
+    """Procesa, valida e inserta de forma masiva los costos no operacionales en Supabase."""
+    conn = get_db_connection()
+    email_usuario = st.session_state.get('email_usuario', 'Desconocido')
+    exitos, errores = 0, []
+    
+    barra_progreso = st.progress(0, text="Iniciando procesamiento de costos...")
+    total_filas = len(df)
+    
+    for i, fila in df.iterrows():
+        barra_progreso.progress((i + 1) / total_filas, text=f"Procesando costo {i + 1} de {total_filas}...")
+        
+        fecha_val = fila.get('fecha_ocurrencia_YYYY_MM_DD')
+        tipo_costo = fila.get('tipo_costo')
+        monto_val = fila.get('monto')
+        comentario = fila.get('comentario', '')
+        
+        # Validaciones de nulidad
+        if pd.isna(fecha_val) or not str(fecha_val).strip():
+            errores.append(f"Fila {i+2}: La columna 'fecha_ocurrencia_YYYY_MM_DD' es obligatoria.")
+            continue
+        if pd.isna(tipo_costo) or not str(tipo_costo).strip():
+            errores.append(f"Fila {i+2}: La columna 'tipo_costo' es obligatoria.")
+            continue
+        if pd.isna(monto_val):
+            errores.append(f"Fila {i+2}: La columna 'monto' es obligatoria.")
+            continue
+            
+        # Validación y formateo robusto de fecha
+        try:
+            fecha_clean = pd.to_datetime(fecha_val).strftime("%Y-%m-%d")
+        except Exception as e:
+            errores.append(f"Fila {i+2}: Formato de fecha inválido en '{fecha_val}'. Debe ser YYYY-MM-DD o DD-MM-YYYY.")
+            continue
+            
+        # Validación de monto numérico mayor a $0
+        try:
+            monto_clean = float(monto_val)
+            if monto_clean <= 0:
+                errores.append(f"Fila {i+2}: El monto debe ser un valor mayor a $0.")
+                continue
+        except Exception as e:
+            errores.append(f"Fila {i+2}: El monto debe ser un valor exclusivamente numérico.")
+            continue
+            
+        try:
+            datos_costo = {
+                "fecha_ocurrencia": fecha_clean,
+                "tipo_costo": limpiar_texto_para_busqueda(str(tipo_costo)).upper(),
+                "monto": monto_clean,
+                "comentario": str(comentario).strip() if pd.notna(comentario) else "",
+                "creado_por": email_usuario
+            }
+            conn.table("costos_no_ventas").insert(datos_costo).execute()
+            exitos += 1
+        except Exception as e:
+            log_error(vista="vista_creacion_masiva", funcion="procesar_costos_masivos", error=str(e), email_usuario=email_usuario)
+            errores.append(f"Fila {i+2}: Error de base de datos -> {str(e)}")
+            continue
+            
+    barra_progreso.progress(1.0, text="¡Carga finalizada!")
+    return exitos, errores
+
 # ==========================================
 # --- VISTA PRINCIPAL ---
 # ==========================================
@@ -424,8 +502,11 @@ def mostrar_creacion_masiva():
     st.title("✨ Importación Masiva")
     st.markdown("Añade decenas de registros a la vez usando nuestras plantillas de Excel. Sigue las instrucciones de cada pestaña para evitar errores.")
     
-    tab_clientes, tab_libros, tab_ventas, tab_suscripciones = st.tabs(["👥 Nuevos Clientes", "📚 Nuevos Libros", "🛒 Ventas Pasadas", "💰 Suscripciones"])
+    tab_clientes, tab_libros, tab_ventas, tab_suscripciones, tab_costos = st.tabs([
+        "👥 Nuevos Clientes", "📚 Nuevos Libros", "🛒 Ventas Pasadas", "💰 Suscripciones", "💸 Nuevos Costos"
+    ])
 
+    # ---------------- TAB: CLIENTES ----------------
     with tab_clientes:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Clientes")
@@ -464,6 +545,7 @@ def mostrar_creacion_masiva():
                                 with st.expander("Ver lista de conflictos"):
                                     for err in errores: st.write(err)
 
+    # ---------------- TAB: LIBROS ----------------
     with tab_libros:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Libros")
@@ -502,6 +584,7 @@ def mostrar_creacion_masiva():
                                 with st.expander("Ver lista de conflictos"):
                                     for err in errores: st.write(err)
 
+    # ---------------- TAB: VENTAS ----------------
     with tab_ventas:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla de Ventas")
@@ -545,6 +628,7 @@ def mostrar_creacion_masiva():
                                 with st.expander("Ver lista de conflictos (Revisa fechas o clientes no encontrados)"):
                                     for err in errores_v: st.write(err)
 
+    # ---------------- TAB: SUSCRIPCIONES ----------------
     with tab_suscripciones:
         with st.container(border=True):
             st.markdown("### Paso 1: Descarga la Plantilla Inteligente")
@@ -584,6 +668,48 @@ def mostrar_creacion_masiva():
                             if errores:
                                 with st.expander("Ver lista de conflictos"):
                                     for err in errores: st.write(err)
+
+    # ---------------- TAB: COSTOS NO VENTAS ----------------
+    with tab_costos:
+        with st.container(border=True):
+            st.markdown("### Paso 1: Descarga la Plantilla de Costos")
+            st.info(
+                "ℹ️ **Formato Esperado en Excel:**\n"
+                "- **fecha_ocurrencia_YYYY_MM_DD:** (Obligatorio) Formatos estándar (ej: 25/08/2026, 2026-08-25). Celdas vacías se omitirán.\n"
+                "- **tipo_costo:** (Obligatorio) Tipo o categoría de gasto (ej: Contadora, Publicidad, Insumos, Personal).\n"
+                "- **monto:** (Obligatorio numérico) Escribe números puros sin letras ni símbolos (ej: escribe '150000', no '$150.000').\n"
+                "- **comentario:** (Opcional) Texto explicativo del costo."
+            )
+            st.download_button(
+                label="📥 Descargar Plantilla Costos (.xlsx)",
+                data=generar_plantilla_costos(),
+                file_name="plantilla_nuevos_costos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with st.container(border=True):
+            st.markdown("### Paso 2: Sube tu Excel Lleno")
+            archivo_costos = st.file_uploader("Sube el archivo de costos", type=["xlsx"], key="up_costos")
+            
+            if archivo_costos:
+                df_cos = pd.read_excel(archivo_costos, engine='openpyxl')
+                if 'tipo_costo' not in df_cos.columns or 'monto' not in df_cos.columns:
+                    st.error("🛑 El archivo no es válido. Usa la plantilla de costos del Paso 1.")
+                else:
+                    if st.button("🚀 Ingresar Costos Masivamente", type="primary", use_container_width=True):
+                        with st.spinner("Procesando costos..."):
+                            exitos_cos, errores_cos = procesar_costos_masivos(df_cos)
+                            c1, c2 = st.columns(2)
+                            c1.metric("✅ Ingresados exitosamente", exitos_cos)
+                            c2.metric("❌ Registros fallidos", len(errores_cos))
+                            
+                            if exitos_cos > 0:
+                                st.balloons()
+                                st.success("¡Registros de costos importados exitosamente!")
+                                st.cache_data.clear()
+                            if errores_cos:
+                                with st.expander("Ver lista de conflictos"):
+                                    for err in errores_cos: st.write(err)
 
 if __name__ == "__main__":
     mostrar_creacion_masiva()
