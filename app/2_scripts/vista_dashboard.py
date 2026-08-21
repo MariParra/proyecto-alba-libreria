@@ -159,8 +159,33 @@ def cargar_datos_base():
         df_clientes = pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception as e:
         log_error("vista_dashboard", "cargar_datos_base_clientes", e)
+
+    # 5. Costos No de Ventas (Paginado)
+    df_costos_no_ventas = pd.DataFrame()
+    try:
+        all_data = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("costos_no_ventas")\
+                .select("fecha_ocurrencia, monto, tipo_costo")\
+                .order("costo_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        df_costos_no_ventas = pd.DataFrame(all_data) if all_data else pd.DataFrame()
+        if not df_costos_no_ventas.empty:
+            df_costos_no_ventas['fecha_ocurrencia'] = unificar_formatos_fecha(df_costos_no_ventas['fecha_ocurrencia'])
+            df_costos_no_ventas.dropna(subset=['fecha_ocurrencia'], inplace=True)
+    except Exception as e:
+        log_error("vista_dashboard", "cargar_datos_base_costos_no_ventas", e)
         
-    return df_ventas, df_asig, df_vm, df_clientes
+    return df_ventas, df_asig, df_vm, df_clientes, df_costos_no_ventas
 
 def mostrar_alertas_proactivas():
     """Alerta de stock crítico con bypass del límite de 1000."""
@@ -240,7 +265,7 @@ def mostrar_dashboard():
     st.title("📈 Panel de Control y Estadísticas")
     
     mostrar_alertas_proactivas()
-    df_ventas, df_asig, df_vm, df_clientes = cargar_datos_base()
+    df_ventas, df_asig, df_vm, df_clientes, df_costos_no_ventas = cargar_datos_base()
     
     # Mapeo de meses de trabajo
     meses_dict = {
@@ -354,6 +379,12 @@ def mostrar_dashboard():
     else:
         df_vm_filt = pd.DataFrame()
 
+    if not df_costos_no_ventas.empty:
+        df_costos_no_ventas['ano_mes_int'] = df_costos_no_ventas['fecha_ocurrencia'].dt.year * 100 + df_costos_no_ventas['fecha_ocurrencia'].dt.month
+        df_costos_no_v_filt = df_costos_no_ventas[df_costos_no_ventas['ano_mes_int'].isin(secuencia_ano_mes)]
+    else:
+        df_costos_no_v_filt = pd.DataFrame()
+
     # --- CÁLCULO DE MÉTRICAS SEGURAS POR CANAL (CONCILIADAS CON HISTORIALES) ---
     if not df_a_filt.empty:
         df_a_filt['pagado_clean'] = df_a_filt['pagado'].apply(mapear_sino)
@@ -380,17 +411,20 @@ def mostrar_dashboard():
     costo_vm = pd.to_numeric(df_vm_paid['costo_total'], errors='coerce').sum() if not df_vm_paid.empty else 0.0
     utilidad_vm = pd.to_numeric(df_vm_paid['utilidad_estimada'], errors='coerce').sum() if not df_vm_paid.empty else 0.0
 
+    # 3.5 Costos No operacionales (Gastos Generales)
+    costos_no_ventas_total = pd.to_numeric(df_costos_no_v_filt['monto'], errors='coerce').sum() if not df_costos_no_v_filt.empty else 0.0
+
     # 4. Totales Consolidados de Alba Librería
     ingresos_totales = ingreso_asig + ingreso_caja + ingreso_vm
     costos_totales = costo_asig + costo_caja + costo_vm
-    utilidad_total = utilidad_asig + utilidad_caja + utilidad_vm
+    utilidad_pre_operacional = utilidad_asig + utilidad_caja + utilidad_vm
 
-    # ================= RENDERIZADO DE LAS 4 LÍNEAS DE MÉTRICAS =================
+    # ================= RENDERIZADO DE LAS MÉTRICAS DE CANAL =================
     st.markdown("---")
     st.markdown("### 🎯 Rendimiento Financiero por Canal de Venta")
     
     # Línea 1: Suscripciones
-    st.markdown("#### 📦 1. Club de Suscripción (Asignaciones)")
+    st.markdown("#### 📦 1. Cajitas de suscripcion")
     col_a1, col_a2, col_a3 = st.columns(3)
     col_a1.metric("Ingreso Suscripciones", f"${ingreso_asig:,.0f}")
     col_a2.metric("Costo Suscripciones", f"${costo_asig:,.0f}")
@@ -410,16 +444,25 @@ def mostrar_dashboard():
     col_c2.metric("Costo Eventos", f"${costo_vm:,.0f}")
     col_c3.metric("Utilidad Eventos", f"${utilidad_vm:,.0f}")
 
-    # Línea 4: Consolidado Total
-    st.markdown("#### 📊 4. Totales Consolidados (Balance Total Alba)")
+    # Línea 4: Costos no Operacionales
+    st.markdown("#### 💸 4. Costos No de Ventas (Gastos Operacionales)")
+    col_cnv1, col_cnv2, col_cnv3 = st.columns(3)
+    col_cnv1.metric("Total Gastos No Ventas", f"${costos_no_ventas_total:,.0f}")
+    col_cnv2.metric("Cantidad de Registros", f"{len(df_costos_no_v_filt)}" if not df_costos_no_v_filt.empty else "0")
+    col_cnv3.metric("Gasto Promedio", f"${df_costos_no_v_filt['monto'].mean():,.0f}" if (not df_costos_no_v_filt.empty and len(df_costos_no_v_filt) > 0) else "$0")
+
+    # Línea 5: Consolidado Total
+    st.markdown("#### 📊 5. Totales Consolidados (Balance Total Alba Libreria)")
     with st.container(border=True):
         col_t1, col_t2, col_t3 = st.columns(3)
         col_t1.metric("🔥 Ingreso Neto Consolidado", f"${ingresos_totales:,.0f}")
-        col_t2.metric("📦 Costo Total Consolidado", f"${costos_totales:,.0f}")
-        if utilidad_total >= 0:
-            col_t3.metric("📈 Utilidad Alba Estimada", f"${utilidad_total:,.0f}")
+        col_t2.metric("📦 Costo Total Consolidado (Venta + No Venta)", f"${(costos_totales + costos_no_ventas_total):,.0f}")
+        
+        utilidad_final = utilidad_pre_operacional - costos_no_ventas_total
+        if utilidad_final >= 0:
+            col_t3.metric("📈 Utilidad Alba Libreria Estimada", f"${utilidad_final:,.0f}")
         else:
-            col_t3.metric("📉 Pérdida Consolidada", f"${utilidad_total:,.0f}")
+            col_t3.metric("📉 Pérdida Consolidada", f"${utilidad_final:,.0f}")
 
     st.markdown("---")
     st.markdown("### 📊 Gráficos de Análisis Comercial")
@@ -432,7 +475,7 @@ def mostrar_dashboard():
         frecuencia = "M"
         texto_freq = "Mensual"
 
-    # Fila 1: Línea Temporal de Evolución y Comparativa de Canales
+    # Fila 1: Tendencia de Ingresos y Tendencia de Costos
     col_g1, col_g2 = st.columns(2)
     
     with col_g1:
@@ -440,20 +483,14 @@ def mostrar_dashboard():
             st.markdown(f"#### 💵 Tendencia de Ingresos ({texto_freq})")
             if not df_v_paid.empty or not df_a_paid.empty or not df_vm_paid.empty:
                 if es_mes_unico:
-                    if not df_v_paid.empty:
-                        df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
-                    if not df_a_paid.empty:
-                        df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
-                    if not df_vm_paid.empty:
-                        df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
+                    if not df_v_paid.empty: df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
+                    if not df_a_paid.empty: df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
+                    if not df_vm_paid.empty: df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
                     col_agrupa = 'dia_str'
                 else:
-                    if not df_v_paid.empty:
-                        df_v_paid['mes_str'] = df_v_paid['fecha_venta'].dt.strftime('%Y-%m')
-                    if not df_a_paid.empty:
-                        df_a_paid['mes_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%Y-%m')
-                    if not df_vm_paid.empty:
-                        df_vm_paid['mes_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%Y-%m')
+                    if not df_v_paid.empty: df_v_paid['mes_str'] = df_v_paid['fecha_venta'].dt.strftime('%Y-%m')
+                    if not df_a_paid.empty: df_a_paid['mes_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%Y-%m')
+                    if not df_vm_paid.empty: df_vm_paid['mes_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%Y-%m')
                     col_agrupa = 'mes_str'
 
                 v_agrupado = df_v_paid.groupby(col_agrupa)['monto_final'].sum().rename("Ventas Directas") if not df_v_paid.empty else pd.Series(name="Ventas Directas", dtype=float)
@@ -468,6 +505,37 @@ def mostrar_dashboard():
 
     with col_g2:
         with st.container(border=True):
+            st.markdown(f"#### 💸 Tendencia de Costos de Ventas vs No Ventas ({texto_freq})")
+            if not df_v_paid.empty or not df_a_paid.empty or not df_vm_paid.empty or not df_costos_no_v_filt.empty:
+                if es_mes_unico:
+                    if not df_v_paid.empty: df_v_paid['dia_str'] = df_v_paid['fecha_venta'].dt.strftime('%d/%m')
+                    if not df_a_paid.empty: df_a_paid['dia_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%d/%m')
+                    if not df_vm_paid.empty: df_vm_paid['dia_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%d/%m')
+                    if not df_costos_no_v_filt.empty: df_costos_no_v_filt['dia_str'] = df_costos_no_v_filt['fecha_ocurrencia'].dt.strftime('%d/%m')
+                    col_agrupa = 'dia_str'
+                else:
+                    if not df_v_paid.empty: df_v_paid['mes_str'] = df_v_paid['fecha_venta'].dt.strftime('%Y-%m')
+                    if not df_a_paid.empty: df_a_paid['mes_str'] = df_a_paid['fecha_asignacion'].dt.strftime('%Y-%m')
+                    if not df_vm_paid.empty: df_vm_paid['mes_str'] = df_vm_paid['fecha_evento_dt'].dt.strftime('%Y-%m')
+                    if not df_costos_no_v_filt.empty: df_costos_no_v_filt['mes_str'] = df_costos_no_v_filt['fecha_ocurrencia'].dt.strftime('%Y-%m')
+                    col_agrupa = 'mes_str'
+
+                v_costo_agrupado = df_v_paid.groupby(col_agrupa)['costo_venta'].sum().rename("Costo Ventas Directas") if not df_v_paid.empty else pd.Series(name="Costo Ventas Directas", dtype=float)
+                a_costo_agrupado = df_a_paid.groupby(col_agrupa)['costo_caja'].sum().rename("Costo Suscripciones") if not df_a_paid.empty else pd.Series(name="Costo Suscripciones", dtype=float)
+                vm_costo_agrupado = df_vm_paid.groupby(col_agrupa)['costo_total'].sum().rename("Costo Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Costo Ventas Masivas", dtype=float)
+                cnv_costo_agrupado = df_costos_no_v_filt.groupby(col_agrupa)['monto'].sum().rename("Costos No de Ventas") if not df_costos_no_v_filt.empty else pd.Series(name="Costos No de Ventas", dtype=float)
+
+                df_costos_tendencia = pd.concat([v_costo_agrupado, a_costo_agrupado, vm_costo_agrupado, cnv_costo_agrupado], axis=1).fillna(0.0).sort_index()
+                df_costos_tendencia.index = df_costos_tendencia.index.astype(str)
+                st.line_chart(df_costos_tendencia, use_container_width=True)
+            else:
+                st.info("No hay costos registrados en el periodo.")
+
+    # Fila 2: Operaciones y Clientes
+    col_g3, col_g4 = st.columns(2)
+    
+    with col_g3:
+        with st.container(border=True):
             st.markdown("#### ⚖️ Volumen vs. Rentabilidad por Canal")
             df_canales = pd.DataFrame({
                 "Canal": ["Suscripciones", "Ventas Directas", "Ventas Masivas"],
@@ -476,10 +544,7 @@ def mostrar_dashboard():
             }).set_index("Canal")
             st.bar_chart(df_canales, use_container_width=True)
 
-    # Fila 2: Gráficos de Operaciones
-    col_g3, col_g4 = st.columns(2)
-    
-    with col_g3:
+    with col_g4:
         with st.container(border=True):
             st.markdown("#### 👥 Salud y Estado del Club de Lectura")
             if not df_clientes.empty and 'status' in df_clientes.columns:
@@ -488,7 +553,10 @@ def mostrar_dashboard():
             else:
                 st.info("No se registran estados de clientes.")
 
-    with col_g4:
+    # Fila 3: Envíos y Libros Populares
+    col_g5, col_g6 = st.columns(2)
+    
+    with col_g5:
         with st.container(border=True):
             st.markdown("#### 🚚 Métodos de Envío más Utilizados (Ventas)")
             if not df_v_filt.empty and 'metodo_envio' in df_v_filt.columns:
@@ -498,10 +566,7 @@ def mostrar_dashboard():
             else:
                 st.info("No hay registros de envío en este periodo.")
 
-    # Fila 3: Rankings
-    col_g5, col_g6 = st.columns(2)
-    
-    with col_g5:
+    with col_g6:
         with st.container(border=True):
             st.markdown("#### 🔥 Top 10 Libros Populares (Ventas + Suscripción)")
             df_populares = obtener_top_libros_populares(df_v_filt, df_a_filt)
@@ -510,20 +575,16 @@ def mostrar_dashboard():
             else:
                 st.info("No hay asignaciones o ventas en este período.")
 
-    with col_g6:
-        with st.container(border=True):
-            st.markdown(f"#### 📊 Volumen de Suscripciones del Período ({texto_freq})")
-            if not df_a_filt.empty:
-                if es_mes_unico:
-                    df_a_filt['vol_str'] = df_a_filt['fecha_asignacion'].dt.strftime('%d/%m')
-                else:
-                    df_a_filt['vol_str'] = df_a_filt['ano'].astype(str) + "-" + df_a_filt['mes'].astype(str).str.zfill(2)
-                    
-                conteo_asig = df_a_filt.groupby('vol_str').size().rename("Cantidad")
-                conteo_asig.index = conteo_asig.index.astype(str)
-                st.bar_chart(conteo_asig, use_container_width=True, color="#E91E63")
-            else:
-                st.info("No hay asignaciones en este periodo.")
+    # Fila 4: Volumen de Suscripciones (Frecuencia Mensual Forzada)
+    with st.container(border=True):
+        st.markdown("#### 📊 Volumen de Suscripciones del Período (Mensual)")
+        if not df_a_filt.empty:
+            df_a_filt['vol_str'] = df_a_filt['ano'].astype(str) + "-" + df_a_filt['mes'].astype(str).str.zfill(2)
+            conteo_asig = df_a_filt.groupby('vol_str').size().rename("Cantidad")
+            conteo_asig.index = conteo_asig.index.astype(str)
+            st.bar_chart(conteo_asig, use_container_width=True, color="#E91E63")
+        else:
+            st.info("No hay asignaciones en este periodo.")
 
 if __name__ == '__main__':
     mostrar_dashboard()
