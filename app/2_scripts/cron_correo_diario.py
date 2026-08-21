@@ -140,10 +140,17 @@ def generar_reporte_empaque():
             
     df_notes = pd.DataFrame(all_notes) if all_notes else pd.DataFrame()
     df_notas_vencidas = pd.DataFrame()
+    df_notas_pendientes = pd.DataFrame()
 
     if not df_notes.empty:
         df_notes['fecha_limite_dt'] = pd.to_datetime(df_notes['fecha_limite']).dt.date
+        # 1. Separar vencidas
         df_notas_vencidas = df_notes[df_notes['fecha_limite_dt'] < hoy.date()].copy()
+        # 2. Separar pendientes en plazo (hoy o fecha futura)
+        df_notas_pendientes = df_notes[df_notes['fecha_limite_dt'] >= hoy.date()].copy()
+        # Ordenar pendientes por fecha para ver las que expiran más pronto arriba
+        if not df_notas_pendientes.empty:
+            df_notas_pendientes = df_notas_pendientes.sort_values(by='fecha_limite_dt')
 
     # --- VALIDACIÓN DE FACTURAS VENCIDAS (HÁMSTER FURIOSO OVERRIDE!) ---
     facturas_vencidas_activas = []
@@ -159,7 +166,6 @@ def generar_reporte_empaque():
         return
 
     # ================= PARTE 3: MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
-    # A. Comprobación del Hámster Furioso (Facturas Vencidas) - ¡Máxima Prioridad!
     if not facturas_vencidas_activas.empty:
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/angry%20hamster.jpg"
         header_color = "#d32f2f"
@@ -168,7 +174,6 @@ def generar_reporte_empaque():
         msg_titulo = "🔥 ¡HÁMSTER FURIOSO: FACTURAS VENCIDAS! 🔥"
         msg_cuerpo = f"¡Ivonne, esto ya es el colmo! Tienes {len(facturas_vencidas_activas)} tarea(s) vieja(s) de facturas pendientes de completar en la pizarra. ¡El hámster está extremadamente enojado y listo para morder! 🐹💢 ¡Ponte a facturar de inmediato!"
 
-    # B. Si no hay facturas vencidas, evaluamos el día de la semana
     elif dia_semana == 1: # Martes
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20peace.jpg"
         header_color = "#0288d1"
@@ -190,7 +195,6 @@ def generar_reporte_empaque():
             msg_titulo = "🚨 ¡MIÉRCOLES DE FACTURAS (ÚLTIMO AVISO DE LA TARDE)! 🚨"
             msg_cuerpo = "¡Ivonne! Son las 5 de la tarde de miércoles. Termina de clavar las facturas de la semana en la pizarra antes de que acabe el día laboral. 🐹📦"
 
-    # C. Días Estándar con deudas o envíos demorados
     else:
         max_dias_retraso = df_criticas['dias'].max() if not df_criticas.empty else 0
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20vigilando.jpg"
@@ -223,7 +227,7 @@ def generar_reporte_empaque():
                 </div>
     """
 
-    # --- SECCIÓN 1 (NUEVA PRIORIDAD): POST-ITS VENCIDOS (VISTA_PIZARRA.PY) ---
+    # --- SECCIÓN 1.1: POST-ITS VENCIDOS (URGENTES / COLOR NARANJA) ---
     if not df_notas_vencidas.empty:
         html_content += f"""
                 <h3 style="color: #e65100; border-bottom: 2px solid #ffe0b2; padding-bottom: 5px;">📌 Post-its Vencidos en la Pizarra</h3>
@@ -244,6 +248,42 @@ def generar_reporte_empaque():
                             <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #e65100;">📌 {row['titulo']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd;">{row['contenido']}</td>
                             <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #d32f2f;">{row['fecha_limite_dt'].strftime('%d/%m/%Y')}</td>
+                        </tr>
+            """
+        html_content += """
+                    </tbody>
+                </table>
+        """
+
+    # --- SECCIÓN 1.2 (NUEVA): POST-ITS PENDIENTES (EN PLAZO / COLOR AZUL) ---
+    if not df_notas_pendientes.empty:
+        html_content += f"""
+                <h3 style="color: #1565c0; border-bottom: 2px solid #bbdefb; padding-bottom: 5px;">📅 Post-its Pendientes (En Plazo)</h3>
+                <p>Tienes <strong>{len(df_notas_pendientes)}</strong> tareas activas por hacer con vencimiento hoy o a futuro:</p>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                    <thead>
+                        <tr style="background-color: #e3f2fd;">
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Tarea / Recordatorio</th>
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Detalle Adicional</th>
+                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Fecha Límite</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        """
+        for _, row in df_notas_pendientes.iterrows():
+            # Si vence hoy, se resalta en verde negrita para llamar la atención moderadamente
+            vence_hoy = row['fecha_limite_dt'] == hoy.date()
+            color_fecha = "#2e7d32" if vence_hoy else "#333"
+            peso_fecha = "bold" if vence_hoy else "normal"
+            label_hoy = " (¡Vence Hoy!)" if vence_hoy else ""
+            
+            html_content += f"""
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #1565c0;">📌 {row['titulo']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">{row['contenido']}</td>
+                            <td style="padding: 10px; border: 1px solid #ddd; font-weight: {peso_fecha}; color: {color_fecha};">
+                                {row['fecha_limite_dt'].strftime('%d/%m/%Y')}{label_hoy}
+                            </td>
                         </tr>
             """
         html_content += """
@@ -296,8 +336,12 @@ def generar_reporte_empaque():
     msg['From'] = EMAIL_EMISOR
     msg['To'] = EMAIL_RECEPTOR
     
-    total_retrasos = len(df_criticas) + len(df_notas_vencidas)
-    msg['Subject'] = f"{msg_titulo} ({total_retrasos} pendientes) - {hoy.strftime('%d/%m/%Y')}"
+    # Contadores e información para el Asunto
+    retrasos = len(df_criticas) + len(df_notas_vencidas)
+    pendientes_en_plazo = len(df_notas_pendientes)
+    total_alertas = retrasos + pendientes_en_plazo
+    
+    msg['Subject'] = f"{msg_titulo} ({retrasos} críticos / {total_alertas} total) - {hoy.strftime('%d/%m/%Y')}"
 
     msg.attach(MIMEText(html_content, 'html'))
     
@@ -307,7 +351,7 @@ def generar_reporte_empaque():
         server.login(EMAIL_EMISOR, EMAIL_PASSWORD)
         server.sendmail(EMAIL_EMISOR, EMAIL_RECEPTOR, msg.as_string())
         server.quit()
-        print(f"✅ ¡Éxito! Reporte consolidado de {total_retrasos} alertas enviado correctamente.")
+        print(f"✅ ¡Éxito! Reporte consolidado de {total_alertas} alertas enviado correctamente.")
     except Exception as e:
         print(f"❌ Error al enviar el correo por SMTP: {e}")
 
