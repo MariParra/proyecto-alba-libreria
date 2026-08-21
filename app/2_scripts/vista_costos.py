@@ -199,7 +199,7 @@ def mostrar_costos():
                         
                         # Patron UX: Auto-limpieza dinámica de estado de widget
                         if "sel_tipo_costo_nuevo" in st.session_state:
-                            st.session_state.sel_tipo_costo_nuevo = None
+                            del st.session_state["sel_tipo_costo_nuevo"]
                         time.sleep(1)
                         st.rerun()
                     else:
@@ -323,7 +323,7 @@ def mostrar_costos():
                         
                         # Patron UX: Limpieza de estado
                         if "sel_costo_eliminar" in st.session_state:
-                            st.session_state.sel_costo_eliminar = None
+                            del st.session_state["sel_costo_eliminar"]
                         time.sleep(1.5)
                         st.rerun()
                     else:
