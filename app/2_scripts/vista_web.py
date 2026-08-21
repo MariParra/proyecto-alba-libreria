@@ -5,6 +5,14 @@ import time
 import urllib.request
 from utilidades import get_db_connection
 
+from vista_inventario import (
+    cargar_datos_completos, 
+    actualizar_destacados_batch, 
+    actualizar_visibilidad_batch,
+    limpiar_texto_para_busqueda
+)
+
+
 def leer_texto_remoto(nombre_archivo):
     """Descarga el texto actual desde Supabase para poder editarlo."""
     url = f"https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/{nombre_archivo}"
@@ -38,10 +46,12 @@ def procesar_y_subir_imagen(conn, uploaded_file, nombre_final):
     )
 
 def mostrar_gestion_web():
-    st.markdown("## 🎨 Gestión de la Tienda Web")
+    st.markdown("## 🎨 Gestión de la Tienda Web y Catálogo Redes Sociales")
     
     # Dividimos en pestañas para mayor orden
-    tab_banners, tab_textos = st.tabs(["🖼️ Banners", "📝 Textos Legales"])
+    tab_banners, tab_textos, tab_destacados = st.tabs([
+        "🖼️ Banners", "📝 Textos Legales", "⭐ Destacados y Visibilidad"
+    ])
     
     # ==========================================
     # PESTAÑA 1: BANNERS
@@ -127,3 +137,98 @@ def mostrar_gestion_web():
                     st.info("💡 Recuerda ir a tu catálogo y añadir `?admin=limpiar` a la URL para ver los cambios de inmediato.")
                 except Exception as e:
                     st.error(f"Error al guardar los textos: {e}")
+    # ==========================================
+    # PESTAÑA 3: DESTACADOS Y VISIBILIDAD (NUEVA)
+    # ==========================================
+    with tab_destacados:
+        st.markdown("### ⭐ Destacados y Visibilidad en la Web")
+        st.caption("Administra qué libros se muestran en la página pública y cuáles aparecen en el carrusel principal.")
+
+        # Cargar catálogo completo
+        df_web = cargar_datos_completos()
+
+        if df_web.empty:
+            st.warning("⚠️ No se pudieron cargar los libros del catálogo.")
+        else:
+            # Buscador integrado para facilitar la gestión
+            busqueda_web = st.text_input("🔍 Buscar libro por título o autor:", placeholder="Ej: El Principito / J.K. Rowling", key="busqueda_destacados_web")
+            
+            df_filtrado_web = df_web.copy()
+            if busqueda_web:
+                busqueda_limpia = limpiar_texto_para_busqueda(busqueda_web)
+                df_filtrado_web = df_filtrado_web[
+                    df_filtrado_web['titulo'].apply(limpiar_texto_para_busqueda).str.contains(busqueda_limpia, case=False, na=False) |
+                    df_filtrado_web['autor'].apply(limpiar_texto_para_busqueda).str.contains(busqueda_limpia, case=False, na=False)
+                ]
+
+            st.write(f"Mostrando **{len(df_filtrado_web)}** libros.")
+
+            col_dest1, col_dest2 = st.columns(2)
+            
+            # --- COLUMNA 1: CARRUSEL DE DESTACADOS ---
+            with col_dest1:
+                st.markdown("##### ⭐ Carrusel de Destacados")
+                st.caption("Libros en el carrusel de inicio de la web.")
+                columnas_destacados = ['libro_id', 'titulo', 'destacado']
+                
+                if 'destacado' not in df_filtrado_web.columns:
+                    st.error("Columna 'destacado' no encontrada.")
+                else:
+                    df_para_editar_dest = df_filtrado_web[columnas_destacados].copy().reset_index(drop=True)
+                    df_editado_dest = st.data_editor(
+                        df_para_editar_dest,
+                        key="editor_destacados_web_view",
+                        hide_index=True,
+                        use_container_width=True,
+                        disabled=['libro_id', 'titulo'],
+                        column_config={
+                            "libro_id": st.column_config.NumberColumn("ID", format="%d"),
+                            "titulo": st.column_config.TextColumn("Título"),
+                            "destacado": st.column_config.CheckboxColumn("¿Destacado? ⭐", default=False)
+                        }
+                    )
+                    cambios_dest = df_para_editar_dest['destacado'] != df_editado_dest['destacado']
+                    hay_cambios_dest = cambios_dest.any()
+                    
+                    if st.button("💾 Guardar Destacados", type="primary", use_container_width=True, disabled=not hay_cambios_dest, key="btn_save_dest_web"):
+                        df_final_dest = df_editado_dest[cambios_dest]
+                        num_act = actualizar_destacados_batch(df_final_dest)
+                        if num_act > 0:
+                            st.success(f"¡Se actualizaron {num_act} destacados!")
+                            st.balloons()
+                            time.sleep(1.5)
+                            st.rerun()
+
+    # --- COLUMNA 2: VISIBILIDAD EN CATÁLOGO ---
+    with col_dest2:
+        st.markdown("##### 👁️ Visibilidad en Catálogo")
+        st.caption("Define qué libros se muestran al público general.")
+        columnas_visibilidad = ['libro_id', 'titulo', 'visible_catalogo']
+        
+        if 'visible_catalogo' not in df_filtrado_web.columns:
+            st.error("Columna 'visible_catalogo' no encontrada.")
+        else:
+            df_para_editar_vis = df_filtrado_web[columnas_visibilidad].copy().reset_index(drop=True)
+            df_editado_vis = st.data_editor(
+                df_para_editar_vis,
+                key="editor_visibilidad_web_view",
+                hide_index=True,
+                use_container_width=True,
+                disabled=['libro_id', 'titulo'],
+                column_config={
+                    "libro_id": st.column_config.NumberColumn("ID", format="%d"),
+                    "titulo": st.column_config.TextColumn("Título"),
+                    "visible_catalogo": st.column_config.CheckboxColumn("¿Visible? 👁️", default=True)
+                }
+            )
+            cambios_vis = df_para_editar_vis['visible_catalogo'] != df_editado_vis['visible_catalogo']
+            hay_cambios_vis = cambios_vis.any()
+            
+            if st.button("💾 Guardar Visibilidad", type="primary", use_container_width=True, disabled=not hay_cambios_vis, key="btn_save_vis_web"):
+                df_final_vis = df_editado_vis[cambios_vis]
+                num_act = actualizar_visibilidad_batch(df_final_vis)
+                if num_act > 0:
+                    st.success(f"¡Se actualizó la visibilidad de {num_act} libros!")
+                    st.balloons()
+                    time.sleep(1.5)
+                    st.rerun()

@@ -469,8 +469,8 @@ def mostrar_inventario():
     st.markdown("---")
     
     # Tabs de navegación
-    tab_catalogo, tab_editar, tab_crear, tab_desc, tab_destacados, tab_eliminar = st.tabs([
-        "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "⭐ Destacados", "🗑️ Eliminar"
+    tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
+        "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
 
 
@@ -789,75 +789,6 @@ def mostrar_inventario():
                     st.success(mensaje); st.snow()
                     time.sleep(2); st.rerun()
                 else: st.error(f"Error al aplicar descuento: {mensaje}")
-
-        with tab_destacados:
-            st.markdown("#### ⭐ Visibilidad y Destacados del Catálogo")
-            
-            col_dest1, col_dest2 = st.columns(2)
-            
-            with col_dest1:
-                st.markdown("##### ⭐ Carrusel de Destacados")
-                st.caption("Libros destacados en la página de inicio del catálogo público.")
-                columnas_destacados = ['libro_id', 'titulo', 'destacado']
-                if 'destacado' not in df_filtrado.columns:
-                    st.error("Columna 'destacado' no cargada en el catálogo.")
-                else:
-                    df_para_editar_dest = df_filtrado[columnas_destacados].copy().reset_index(drop=True)
-                    df_editado_dest = st.data_editor(
-                        df_para_editar_dest,
-                        key="editor_destacados_new",
-                        hide_index=True,
-                        use_container_width=True,
-                        disabled=['libro_id', 'titulo'],
-                        column_config={
-                            "libro_id": st.column_config.NumberColumn("ID", format="%d"),
-                            "titulo": st.column_config.TextColumn("Título"),
-                            "destacado": st.column_config.CheckboxColumn("¿Destacado? ⭐", default=False)
-                        }
-                    )
-                    cambios_dest = df_para_editar_dest['destacado'] != df_editado_dest['destacado']
-                    hay_cambios_dest = cambios_dest.any()
-                    
-                    if st.button("💾 Guardar Destacados", type="primary", use_container_width=True, disabled=not hay_cambios_dest, key="btn_save_dest"):
-                        df_final_dest = df_editado_dest[cambios_dest]
-                        num_act = actualizar_destacados_batch(df_final_dest)
-                        if num_act > 0:
-                            st.success(f"¡Se actualizaron {num_act} destacados!")
-                            st.balloons()
-                            time.sleep(1.5)
-                            st.rerun()
-
-            with col_dest2:
-                st.markdown("##### 👁️ Visibilidad en Catálogo")
-                st.caption("Define qué libros del inventario se muestran al público general.")
-                columnas_visibilidad = ['libro_id', 'titulo', 'visible_catalogo']
-                if 'visible_catalogo' not in df_filtrado.columns:
-                    st.error("Columna 'visible_catalogo' no cargada en el catálogo.")
-                else:
-                    df_para_editar_vis = df_filtrado[columnas_visibilidad].copy().reset_index(drop=True)
-                    df_editado_vis = st.data_editor(
-                        df_para_editar_vis,
-                        key="editor_visibilidad",
-                        hide_index=True,
-                        use_container_width=True,
-                        disabled=['libro_id', 'titulo'],
-                        column_config={
-                            "libro_id": st.column_config.NumberColumn("ID", format="%d"),
-                            "titulo": st.column_config.TextColumn("Título"),
-                            "visible_catalogo": st.column_config.CheckboxColumn("¿Visible? 👁️", default=True)
-                        }
-                    )
-                    cambios_vis = df_para_editar_vis['visible_catalogo'] != df_editado_vis['visible_catalogo']
-                    hay_cambios_vis = cambios_vis.any()
-                    
-                    if st.button("💾 Guardar Visibilidad", type="primary", use_container_width=True, disabled=not hay_cambios_vis, key="btn_save_vis"):
-                        df_final_vis = df_editado_vis[cambios_vis]
-                        num_act = actualizar_visibilidad_batch(df_final_vis)
-                        if num_act > 0:
-                            st.success(f"¡Se actualizó la visibilidad de {num_act} libros!")
-                            st.balloons()
-                            time.sleep(1.5)
-                            st.rerun()
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
