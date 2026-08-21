@@ -1032,7 +1032,7 @@ def mostrar_caja():
                 "cliente_telefono": st.column_config.TextColumn("Teléfono Cliente")
             }
             
-            # Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
+                        # 🌟 CORRECCIÓN: Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
             limite_actual = st.session_state.caja_limit_view
             total_ventas_filtradas = len(df_mostrar)
             df_paginado = df_mostrar.head(limite_actual)
@@ -1063,17 +1063,22 @@ def mostrar_caja():
                 st.markdown("#### 🔄 Vincular o Cambiar Método de Envío de una Venta")
                 st.info("💡 **Guía UX:** Si una clienta realizó una compra normal y posteriormente decidió consolidarla en su cajita de suscripción mensual activa, puedes gestionarlo de manera segura desde aquí.")
                 
-                # Lista de ventas de los filtros activos
-                lista_ventas_opciones = [""] + [f"Venta #{v['venta_id']} - {v['cliente_nombre']} (Monto: ${v['monto_final']:,.0f})" for v in df_mostrar.to_dict('records')]
+                df_target_ventas = df_filtrado_general.copy()
+                if solo_costo_cero:
+                    df_target_ventas = df_target_ventas[df_target_ventas['costo_venta'] == 0]
+                
+                lista_ventas_opciones = [""] + [
+                    f"Venta #{v['venta_id']} - {v.get('cliente_nombre', 'Sin Nombre')} (Monto: ${v.get('monto_final', 0.0):,.0f})" 
+                    for v in df_target_ventas.to_dict('records')
+                ]
                 venta_a_modificar = st.selectbox("1. Selecciona la venta a modificar:", options=lista_ventas_opciones, index=0)
                 
                 if venta_a_modificar:
                     v_id_tmp = int(venta_a_modificar.split("Venta #")[1].split(" - ")[0])
-                    # 🌟 MEJORA UX Y CORRECCIÓN DE BUGS: Buscamos en df_ventas_global (el DataFrame completo sin recortar de Supabase) 
-                    # para asegurar que siempre encontremos el ID del cliente (cliente_id) sin importar qué columnas oculte el usuario en la UI.
-                    row_venta = df_ventas_global[df_ventas_global['venta_id'] == v_id_tmp].iloc[0]
+                    # 🌟 SOLUCIÓN DEFINITIVA A ID NO ASOCIADO: Buscamos en df_target_ventas para conservar
+                    # todas las columnas en crudo (como cliente_id) no recortadas por el multiselect.
+                    row_venta = df_target_ventas[df_target_ventas['venta_id'] == v_id_tmp].iloc[0]
                     
-                    # Buscador robusto e insensible a variaciones de columnas
                     cliente_id_tmp = None
                     for col in ['cliente_id', 'cliente_cliente_id', 'cliente_id_clean']:
                         if col in row_venta and pd.notna(row_venta[col]) and str(row_venta[col]).strip() != '':
