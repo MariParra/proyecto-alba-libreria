@@ -171,7 +171,7 @@ def mostrar_clientes():
 
     # --- FILTRO GLOBAL PARA TODAS LAS PESTAÑAS ---
     st.markdown("### 🔍 Filtrar Directorio")
-    estados_disponibles = ["Todos", "ACTIVA", "PAUSADO", "INACTIVO", "CLIENTE REGULAR"]
+    estados_disponibles = ["Todos", "ACTIVA", "PAUSADO", "NO ACTIVA", "CLIENTE REGULAR"]
     filtro_estado = st.selectbox("Mostrar clientes con estado:", estados_disponibles)
     
     # Aplicar el filtro a la tabla principal
@@ -222,7 +222,7 @@ def mostrar_clientes():
                     col_status, col_info = st.columns([1, 2])
                     
                     with col_status:
-                        estados_totales = ["ACTIVA", "PAUSADO", "INACTIVO", "CLIENTE REGULAR"]
+                        estados_totales = ["ACTIVA", "PAUSADO", "NO ACTIVA", "CLIENTE REGULAR"]
                         try:
                             idx_estado = estados_totales.index(estado_actual)
                         except ValueError:
@@ -351,7 +351,7 @@ def mostrar_clientes():
             rut_n = col2.text_input("RUT")
             dir_n = st.text_input("Dirección de Envío")
             ig_n = col1.text_input("Instagram")
-            estado_n = col2.selectbox("Estado", ["ACTIVA", "PAUSADO", "INACTIVO", "CLIENTE REGULAR"])
+            estado_n = col2.selectbox("Estado", ["ACTIVA", "PAUSADO", "NO ACTIVA", "CLIENTE REGULAR"])
             
             st.markdown("*Campos obligatorios")
             submit_nuevo = st.form_submit_button("💾 Guardar Cliente", type="primary", use_container_width=True)
@@ -467,7 +467,7 @@ def mostrar_clientes():
                     dir_e = st.text_input("Dirección de Envío", value=datos_e.get('direccion', ''))
                     ig_e = col1.text_input("Instagram", value=datos_e.get('instagram', ''))
                     
-                    estados_posibles = ["ACTIVA", "PAUSADO", "INACTIVO", "CLIENTE REGULAR"]
+                    estados_posibles = ["ACTIVA", "PAUSADO", "NO ACTIVA", "CLIENTE REGULAR"]
                     try:
                         idx_estado_e = estados_posibles.index(datos_e.get('status'))
                     except ValueError:
