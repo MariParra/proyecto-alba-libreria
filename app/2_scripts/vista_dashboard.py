@@ -546,7 +546,7 @@ def mostrar_dashboard():
 
     with col_g4:
         with st.container(border=True):
-            st.markdown("#### 👥 Salud y Estado del Club de Lectura")
+            st.markdown("#### 👥 Volumen según tipo de cliente")
             if not df_clientes.empty and 'status' in df_clientes.columns:
                 conteo_clientes = df_clientes['status'].value_counts()
                 st.bar_chart(conteo_clientes, use_container_width=True, color="#4CAF50")
