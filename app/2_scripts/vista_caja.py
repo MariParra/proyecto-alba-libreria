@@ -961,6 +961,11 @@ def mostrar_caja():
                 "estado": st.column_config.SelectboxColumn("Estado Venta", options=estados_posibles),
                 "estado_pago": st.column_config.SelectboxColumn("Estado Pago", options=["PENDIENTE", "PAGADO"]),
                 "fecha_pago": st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
+                "metodo_envio": st.column_config.SelectboxColumn(
+                    "Método de Envío", 
+                    options=["Retiro en tienda", "Paket", "Bluexpress", "Envio por pagar", "Añadir a compra anterior", "Añadir a caja de suscripción"], 
+                    required=True
+                ),
                 "cliente_nombre": st.column_config.TextColumn("Nombre Cliente"),
                 "cliente_rut": st.column_config.TextColumn("RUT Cliente"),
                 "cliente_email": st.column_config.TextColumn("Email Cliente"),
