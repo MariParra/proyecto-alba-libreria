@@ -139,7 +139,7 @@ def mostrar_generador_marketing():
         return
 
     # =========================================================================
-    # 🎨 PANEL INTERACTIVO DE PERSONALIZACIÓN COMPACTA (SIN COLUMNAS ANIDADAS)
+    # 🎨 PANEL INTERACTIVO DE PERSONALIZACIÓN COMPACTA Y SIMÉTRICA
     # =========================================================================
     with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
         st.markdown("#### 📐 Configuración de Cuadrícula")
@@ -153,7 +153,7 @@ def mostrar_generador_marketing():
         st.markdown("---")
         st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
         
-        # Checkbox interactivo de alternancia de ayuda de fuentes
+        # Checkbox interactivo de ayuda de fuentes Google
         mostrar_ayuda_fuentes = st.checkbox("ℹ️ Mostrar ayuda de fuentes Google Fonts", value=False)
         if mostrar_ayuda_fuentes:
             st.info(
@@ -164,7 +164,7 @@ def mostrar_generador_marketing():
             
         listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
         
-        # Persistencia de tipografía del género (dropdown y text input)
+        # Persistencia de tipografía del género
         saved_font_h = config_default.get("font_family_header", "Montserrat")
         if saved_font_h in listado_fuentes[:-1]:
             default_index_h = listado_fuentes.index(saved_font_h)
@@ -199,32 +199,37 @@ def mostrar_generador_marketing():
         st.markdown("---")
         st.markdown("#### 📦 Rectángulo del Título (Género)")
         c_rect1, c_rect2, c_rect3, c_rect4 = st.columns(4)
-        color_rect_bg = c_rect1.color_picker("Fondo del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
-        color_rect_border = c_rect2.color_picker("Borde del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_border", "#7C0C3F"))
-        border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
-        radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
+        color_rect_bg = c_rect1.color_picker("Fondo del Recuadro:", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
+        color_rect_border = c_rect2.color_picker("Borde del Recuadro:", value=config_default.get("color_header_rect_border", "#7C0C3F"))
+        border_w = c_rect3.slider("Grosor del Borde:", 0, 10, int(config_default.get("header_rect_border_width", 2)))
+        radius_h = c_rect4.slider("Redondeo de Esquinas:", 0, 40, int(config_default.get("header_rect_radius", 20)))
 
         st.markdown("##### ↕️ Ajuste de Ancho y Alto de Rectángulo (Padding)")
         c_pad1, c_pad2 = st.columns(2)
-        pad_x = c_pad1.slider("Ajuste Ancho (Márgenes Izquierda/Derecha):", 10, 150, int(config_default.get("header_pad_x", 40)))
-        pad_y = c_pad2.slider("Ajuste Alto (Márgenes Superior/Inferior):", 5, 80, int(config_default.get("header_pad_y", 20)))
+        pad_x = c_pad1.slider("Ajuste Ancho (Padding X):", 10, 150, int(config_default.get("header_pad_x", 40)))
+        pad_y = c_pad2.slider("Ajuste Alto (Padding Y):", 5, 80, int(config_default.get("header_pad_y", 20)))
 
         st.markdown("---")
+        # 🌟 MEJORA UX: Alineación de Paleta de Colores en Cuadrícula 3x3 Perfecta con etiquetas concisas
         st.markdown("#### 🎨 Paleta de Colores (HEX)")
-        c_col1, c_col2, c_col3 = st.columns(3)
-        c_bg = c_col1.color_picker("Fondo del Collage (si falla plantilla):", value=config_default.get("color_bg", "#FDE8F3"))
-        c_card = c_col2.color_picker("Fondo de la Tarjeta del Libro (Blanco):", value=config_default.get("color_card", "#FFFFFF"))
-        c_shadow = c_col3.color_picker("Sombra 3D de Tarjetas y Título:", value=config_default.get("color_shadow", "#F4CCD4"))
         
-        c_col4, c_col5, c_col6, c_col7 = st.columns(4)
-        c_primary_header = c_col4.color_picker("Color de Letras del Título del Género:", value=config_default.get("color_primary_header", "#7C0C3F"))
-        c_primary_books = c_col5.color_picker("Color de Letras de Títulos de Libros:", value=config_default.get("color_primary_books", "#7C0C3F"))
-        c_accent = c_col6.color_picker("Color de Precio de Oferta (Fucsia/Rojo):", value=config_default.get("color_accent", "#DB2777"))
-        c_muted = c_col7.color_picker("Color de Precio Original Tachado (Gris):", value=config_default.get("color_muted", "#BA96A5"))
+        # Fila 1: Lienzo y Tarjetas
+        cc1, cc2, cc3 = st.columns(3)
+        c_bg = cc1.color_picker("Fondo del Collage", value=config_default.get("color_bg", "#FDE8F3"))
+        c_card = cc2.color_picker("Fondo de Tarjetas", value=config_default.get("color_card", "#FFFFFF"))
+        c_shadow = cc3.color_picker("Sombra de Tarjetas", value=config_default.get("color_shadow", "#F4CCD4"))
         
-        c_col8, c_col9 = st.columns(2)
-        c_badge_bg = c_col8.color_picker("Fondo del Rectángulo 'Disponible' (Badge):", value=config_default.get("color_badge_bg", "#DB2777"))
-        c_badge_text = c_col9.color_picker("Color del Texto 'Disponible' (Badge):", value=config_default.get("color_badge_text", "#FFFFFF"))
+        # Fila 2: Letras Principales
+        cc4, cc5, cc6 = st.columns(3)
+        c_primary_header = cc4.color_picker("Texto del Género", value=config_default.get("color_primary_header", "#7C0C3F"))
+        c_primary_books = cc5.color_picker("Texto de Títulos", value=config_default.get("color_primary_books", "#7C0C3F"))
+        c_accent = cc6.color_picker("Precio de Oferta", value=config_default.get("color_accent", "#DB2777"))
+        
+        # Fila 3: Precios Tachados y Etiquetas
+        cc7, cc8, cc9 = st.columns(3)
+        c_muted = cc7.color_picker("Precio Tachado", value=config_default.get("color_muted", "#BA96A5"))
+        c_badge_bg = cc8.color_picker("Fondo de Etiqueta", value=config_default.get("color_badge_bg", "#DB2777"))
+        c_badge_text = cc9.color_picker("Texto de Etiqueta", value=config_default.get("color_badge_text", "#FFFFFF"))
 
         config_diseno_final = {
             "font_family_header": font_h_sel,
@@ -252,7 +257,7 @@ def mostrar_generador_marketing():
         }
 
         # =========================================================================
-        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (ALINEADO Y COMPATIBLE)
+        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (DISEÑO ALINEADO 3x3)
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
