@@ -20,7 +20,7 @@ def cargar_configuracion_marketing():
                 return json.load(f)
         except Exception:
             pass
-    # Configuración por defecto elegante (separando color_primary en dos)
+    # Configuración por defecto elegante
     return {
         "font_family_header": "Montserrat",
         "font_family_books": "Montserrat",
@@ -88,7 +88,6 @@ def cargar_libros_para_marketing():
         if not all_books:
             return pd.DataFrame()
             
-        # Operaciones de DataFrame 100% libres de corchetes para evadir filtros de Markdown
         df_libros = pd.DataFrame(all_books)
 
         # Carga física y paginada de portadas existentes en el Storage
@@ -108,7 +107,7 @@ def cargar_libros_para_marketing():
                     portadas_existentes.add(archivo.get('name').strip())
             offset += 100
         
-        # Cruzamos y filtramos de forma segura
+        # Cruzamos y filtramos de forma segura libre de corchetes Markdown
         df_libros = df_libros.assign(portada_esperada = df_libros.libro_id.apply(lambda idx: f"{int(float(idx))}.jpg".strip()))
         df_libros = df_libros.assign(tiene_portada = df_libros.portada_esperada.isin(portadas_existentes))
         
@@ -140,236 +139,237 @@ def mostrar_generador_marketing():
         return
 
     # =========================================================================
-    # 🎨 REQUISITOS: PANEL INTERACTIVO DE PERSONALIZACIÓN
+    # 🎨 2 COLUMNAS: PANEL INTERACTIVO DE PERSONALIZACIÓN COMPACTA
     # =========================================================================
     with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
-        st.markdown("#### 📐 Configuración de Cuadrícula")
-        opciones_paginacion = tuple((1, 4, 8, 12))
-        libros_por_pag = st.selectbox(
-            "Cantidad de libros por página:", 
-            options=opciones_paginacion, 
-            index=opciones_paginacion.index(config_default.get("libros_por_pagina", 12)) if config_default.get("libros_por_pagina", 12) in opciones_paginacion else 3
-        )
+        col_controles, col_preview = st.columns([1.1, 1.0])
         
-        st.markdown("---")
-        st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
-        listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
-        
-        # PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
-        saved_font_h = config_default.get("font_family_header", "Montserrat")
-        if saved_font_h in listado_fuentes[:-1]:
-            default_index_h = listado_fuentes.index(saved_font_h)
-            custom_value_h = "Montserrat"
-        else:
-            default_index_h = listado_fuentes.index("Escribir otra...")
-            custom_value_h = saved_font_h
-
-        font_h_sel = st.selectbox(
-            "Fuente del título (Género):", 
-            options=listado_fuentes,
-            index=default_index_h
-        )
-        if font_h_sel == "Escribir otra...":
-            font_h_sel = st.text_input(
-                "Ingresa el nombre exacto de la fuente de Google Fonts (Género):", 
-                value=custom_value_h,
-                key="text_font_h_custom"
+        with col_controles:
+            st.markdown("#### 📐 Configuración de Cuadrícula")
+            opciones_paginacion = tuple((1, 4, 8, 12))
+            libros_por_pag = st.selectbox(
+                "Cantidad de libros por página:", 
+                options=opciones_paginacion, 
+                index=opciones_paginacion.index(config_default.get("libros_por_pagina", 12)) if config_default.get("libros_por_pagina", 12) in opciones_paginacion else 3
             )
-
-        # PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
-        saved_font_b = config_default.get("font_family_books", "Montserrat")
-        if saved_font_b in listado_fuentes[:-1]:
-            default_index_b = listado_fuentes.index(saved_font_b)
-            custom_value_b = "Montserrat"
-        else:
-            default_index_b = listado_fuentes.index("Escribir otra...")
-            custom_value_b = saved_font_b
-
-        font_b_sel = st.selectbox(
-            "Fuente de los textos del libro:", 
-            options=listado_fuentes,
-            index=default_index_b
-        )
-        if font_b_sel == "Escribir otra...":
-            font_b_sel = st.text_input(
-                "Ingresa el nombre de la fuente para libros en Google Fonts:", 
-                value=custom_value_b,
-                key="text_font_b_custom"
-            )
-
-        c_font1, c_font2, c_font3, c_font4 = st.columns(4)
-        bold_h = c_font1.checkbox("Aplicar Negrita (Bold) al Género", value=config_default.get("bold_header", True))
-        italic_h = c_font2.checkbox("Aplicar Cursiva (Italic) al Género", value=config_default.get("italic_header", False))
-        size_h = c_font3.slider("Tamaño Fuente Género:", 20, 100, int(config_default.get("tamanio_header", 45)))
-        size_b = c_font4.slider("Tamaño Fuente Libros:", 12, 35, int(config_default.get("tamanio_libros", 20)))
-
-        st.markdown("---")
-        st.markdown("#### 📦 Rectángulo del Título (Género)")
-        c_rect1, c_rect2, c_rect3, c_rect4 = st.columns(4)
-        color_rect_bg = c_rect1.color_picker("Fondo del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
-        color_rect_border = c_rect2.color_picker("Borde del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_border", "#7C0C3F"))
-        border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
-        radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
-
-        st.markdown("##### ↕️ Ajuste de Ancho y Alto de Rectángulo (Padding)")
-        c_pad1, c_pad2 = st.columns(2)
-        pad_x = c_pad1.slider("Ajuste Ancho (Márgenes Izquierda/Derecha):", 10, 150, int(config_default.get("header_pad_x", 40)))
-        pad_y = c_pad2.slider("Ajuste Alto (Márgenes Superior/Inferior):", 5, 80, int(config_default.get("header_pad_y", 20)))
-
-        st.markdown("---")
-        st.markdown("#### 🎨 Paleta de Colores (HEX)")
-        c_col1, c_col2, c_col3 = st.columns(3)
-        c_bg = c_col1.color_picker("Fondo del Collage (si falla plantilla):", value=config_default.get("color_bg", "#FDE8F3"))
-        c_card = c_col2.color_picker("Fondo de la Tarjeta del Libro (Blanco por defecto):", value=config_default.get("color_card", "#FFFFFF"))
-        c_shadow = c_col3.color_picker("Sombra 3D de Tarjetas y Título (Gris/Rosa):", value=config_default.get("color_shadow", "#F4CCD4"))
-        
-        c_col4, c_col5, c_col6, c_col7 = st.columns(4)
-        c_primary_header = c_col4.color_picker("Color de Letras del Título del Género (Arriba):", value=config_default.get("color_primary_header", "#7C0C3F"))
-        c_primary_books = c_col5.color_picker("Color de Letras de Títulos de Libros (Tarjetas):", value=config_default.get("color_primary_books", "#7C0C3F"))
-        c_accent = c_col6.color_picker("Color de Precio de Oferta (Fucsia/Rojo):", value=config_default.get("color_accent", "#DB2777"))
-        c_muted = c_col7.color_picker("Color de Precio Original Tachado (Gris):", value=config_default.get("color_muted", "#BA96A5"))
-        
-        c_col8, c_col9 = st.columns(2)
-        c_badge_bg = c_col8.color_picker("Fondo del Rectángulo 'Disponible' (Badge):", value=config_default.get("color_badge_bg", "#DB2777"))
-        c_badge_text = c_col9.color_picker("Color del Texto 'Disponible' (Badge):", value=config_default.get("color_badge_text", "#FFFFFF"))
-
-        config_diseno_final = {
-            "font_family_header": font_h_sel,
-            "font_family_books": font_b_sel,
-            "bold_header": bold_h,
-            "italic_header": italic_h,
-            "tamanio_header": size_h,
-            "tamanio_libros": size_b,
-            "color_header_rect_bg": color_rect_bg,
-            "color_header_rect_border": color_rect_border,
-            "header_rect_border_width": border_w,
-            "header_rect_radius": radius_h,
-            "header_pad_x": pad_x,
-            "header_pad_y": pad_y,
-            "color_bg": c_bg,
-            "color_card": c_card,
-            "color_shadow": c_shadow,
-            "color_primary_header": c_primary_header,
-            "color_primary_books": c_primary_books,
-            "color_accent": c_accent,
-            "color_muted": c_muted,
-            "color_badge_bg": c_badge_bg,
-            "color_badge_text": c_badge_text,
-            "libros_por_pagina": libros_por_pag
-        }
-
-        # =========================================================================
-        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS INCLUYE BADGE DISPONIBLE)
-        # =========================================================================
-        st.markdown("---")
-        st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
-        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales con todos sus componentes.")
-        
-        import_font_h = font_h_sel.replace(" ", "+")
-        import_font_b = font_b_sel.replace(" ", "+")
-        
-        preview_html = f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family={import_font_h}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family={import_font_b}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
-        
-        .preview-container {{
-            background-color: {c_bg};
-            padding: 40px 30px;
-            border-radius: 15px;
-            text-align: center;
-            font-family: '{font_b_sel}', sans-serif;
-            margin-bottom: 20px;
-        }}
-        .preview-header-rect {{
-            background-color: {color_rect_bg};
-            border: {border_w}px solid {color_rect_border};
-            border-radius: {radius_h}px;
-            padding: {pad_y}px {pad_x}px;
-            display: inline-block;
-            margin-bottom: 25px;
-            box-shadow: 8px 8px 0px {c_shadow};
-        }}
-        .preview-header-text {{
-            color: {c_primary_header};
-            font-family: '{font_h_sel}', sans-serif;
-            font-size: 24px;
-            font-weight: {'bold' if bold_h else 'normal'};
-            font-style: {'italic' if italic_h else 'normal'};
-            margin: 0;
-            text-transform: uppercase;
-        }}
-        .preview-card {{
-            background-color: {c_card};
-            border-radius: 20px;
-            padding: 20px;
-            display: inline-block;
-            width: 250px;
-            margin: 15px auto 10px auto;
-            box-shadow: 10px 10px 0px {c_shadow};
-            text-align: center;
-            position: relative;
-        }}
-        .preview-badge {{
-            background-color: {c_badge_bg};
-            color: {c_badge_text};
-            font-family: '{font_b_sel}', sans-serif;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 4px 12px;
-            border-radius: 10px;
-            position: absolute;
-            top: -14px;
-            left: 50%;
-            transform: translateX(-50%);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            white-space: nowrap;
-        }}
-        .preview-book-title {{
-            color: {c_primary_books};
-            font-weight: bold;
-            font-size: 16px;
-            margin-top: 15px;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }}
-        .preview-book-price-tachado {{
-            color: {c_muted};
-            font-size: 13px;
-            text-decoration: line-through;
-            margin-bottom: 2px;
-            font-weight: bold;
-        }}
-        .preview-book-price {{
-            color: {c_accent};
-            font-weight: bold;
-            font-size: 22px;
-        }}
-        </style>
-        
-        <div class="preview-container">
-            <div class="preview-header-rect">
-                <h2 class="preview-header-text">GÉNERO PREVIA</h2>
-            </div>
-            <br/>
-            <div class="preview-card">
-                <div class="preview-badge">DISPONIBLE</div>
-                <div style="background-color: #F5EEF1; height: 145px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #888;">
-                    📚 Portada
-                </div>
-                <div class="preview-book-title">Título del Libro</div>
-                <div class="preview-book-price-tachado">$14,000</div>
-                <div class="preview-book-price">$13,300</div>
-            </div>
-        </div>
-        """
-        st.markdown(preview_html, unsafe_allow_html=True)
-
-        st.markdown("---")
-        if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
-            if guardar_configuracion_marketing(config_diseno_final):
-                st.success("✅ ¡Ajustes guardados con éxito! Se cargarán de forma predeterminada en tu próxima sesión.")
+            
+            st.markdown("---")
+            st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
+            
+            # 🌟 REQUISITO 4: Opcion de ocultar ayuda con link de fuentes
+            with st.expander("ℹ️ Ver fuentes de Google Fonts soportadas", expanded=False):
+                st.info(
+                    "Las fuentes personalizables provienen del catálogo oficial de Google Fonts. "
+                    "Puedes revisar y buscar tipografías soportadas aquí: "
+                    "https://fonts.google.com/?preview.script=Latn"
+                )
+                
+            listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
+            
+            # Persistencia de tipografía del género
+            saved_font_h = config_default.get("font_family_header", "Montserrat")
+            if saved_font_h in listado_fuentes[:-1]:
+                default_index_h = listado_fuentes.index(saved_font_h)
+                custom_value_h = "Montserrat"
             else:
-                st.error("❌ No se pudieron guardar los ajustes en el archivo local.")
+                default_index_h = listado_fuentes.index("Escribir otra...")
+                custom_value_h = saved_font_h
+
+            font_h_sel = st.selectbox("Fuente del género (Título superior):", options=listado_fuentes, index=default_index_h)
+            if font_h_sel == "Escribir otra...":
+                font_h_sel = st.text_input("Ingresa el nombre exacto de la fuente de Google Fonts (Género):", value=custom_value_h, key="txt_fnh")
+
+            # Persistencia de tipografía de libros
+            saved_font_b = config_default.get("font_family_books", "Montserrat")
+            if saved_font_b in listado_fuentes[:-1]:
+                default_index_b = listado_fuentes.index(saved_font_b)
+                custom_value_b = "Montserrat"
+            else:
+                default_index_b = listado_fuentes.index("Escribir otra...")
+                custom_value_b = saved_font_b
+
+            font_b_sel = st.selectbox("Fuente de los libros (Títulos/Precios):", options=listado_fuentes, index=default_index_b)
+            if font_b_sel == "Escribir otra...":
+                font_b_sel = st.text_input("Ingresa el nombre de la fuente para libros en Google Fonts:", value=custom_value_b, key="txt_fnb")
+
+            cf1, cf2 = st.columns(2)
+            bold_h = cf1.checkbox("Género en Negrita (Bold)", value=config_default.get("bold_header", True))
+            italic_h = cf2.checkbox("Género en Cursiva (Italic)", value=config_default.get("italic_header", False))
+            
+            cf3, cf4 = st.columns(2)
+            size_h = cf3.slider("Tamaño Fuente Género:", 20, 100, int(config_default.get("tamanio_header", 45)))
+            size_b = cf4.slider("Tamaño Fuente Libros:", 12, 35, int(config_default.get("tamanio_libros", 20)))
+
+            st.markdown("---")
+            st.markdown("#### 📦 Rectángulo del Género (Título Superior)")
+            cr1, cr2 = st.columns(2)
+            color_rect_bg = cr1.color_picker("Fondo del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
+            color_rect_border = cr2.color_picker("Borde del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_border", "#7C0C3F"))
+            
+            cr3, cr4 = st.columns(2)
+            border_w = cr3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
+            radius_h = cr4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
+
+            cp1, cp2 = st.columns(2)
+            pad_x = cp1.slider("Ajuste Ancho (Padding X):", 10, 150, int(config_default.get("header_pad_x", 40)))
+            pad_y = cp2.slider("Ajuste Alto (Padding Y):", 5, 80, int(config_default.get("header_pad_y", 20)))
+
+            st.markdown("---")
+            st.markdown("#### 🎨 Paleta de Colores (HEX)")
+            # 🌟 REQUISITO 1: Paleta de colores explicativa y en filas ordenadas de 2
+            cc1, cc2 = st.columns(2)
+            c_bg = cc1.color_picker("Fondo del Collage (si falla plantilla):", value=config_default.get("color_bg", "#FDE8F3"))
+            c_card = cc2.color_picker("Fondo de la Tarjeta del Libro (Blanco):", value=config_default.get("color_card", "#FFFFFF"))
+            
+            cc3, cc4 = st.columns(2)
+            c_shadow = cc3.color_picker("Sombra 3D de Tarjetas y Título:", value=config_default.get("color_shadow", "#F4CCD4"))
+            c_primary_header = cc4.color_picker("Color de Letras del Título del Género:", value=config_default.get("color_primary_header", "#7C0C3F"))
+            
+            cc5, cc6 = st.columns(2)
+            c_primary_books = cc5.color_picker("Color de Letras de Títulos de Libros:", value=config_default.get("color_primary_books", "#7C0C3F"))
+            c_accent = cc6.color_picker("Color de Precio de Oferta (Fucsia/Rojo):", value=config_default.get("color_accent", "#DB2777"))
+            
+            cc7, cc8 = st.columns(2)
+            c_muted = cc7.color_picker("Color de Precio Original Tachado (Gris):", value=config_default.get("color_muted", "#BA96A5"))
+            c_badge_bg = cc8.color_picker("Fondo del Rectángulo 'Disponible' (Badge):", value=config_default.get("color_badge_bg", "#DB2777"))
+            
+            c_badge_text = st.color_picker("Color del Texto 'Disponible' (Badge):", value=config_default.get("color_badge_text", "#FFFFFF"))
+
+            config_diseno_final = {
+                "font_family_header": font_h_sel,
+                "font_family_books": font_b_sel,
+                "bold_header": bold_h,
+                "italic_header": italic_h,
+                "tamanio_header": size_h,
+                "tamanio_libros": size_b,
+                "color_header_rect_bg": color_rect_bg,
+                "color_header_rect_border": color_rect_border,
+                "header_rect_border_width": border_w,
+                "header_rect_radius": radius_h,
+                "header_pad_x": pad_x,
+                "header_pad_y": pad_y,
+                "color_bg": c_bg,
+                "color_card": c_card,
+                "color_shadow": c_shadow,
+                "color_primary_header": c_primary_header,
+                "color_primary_books": c_primary_books,
+                "color_accent": c_accent,
+                "color_muted": c_muted,
+                "color_badge_bg": c_badge_bg,
+                "color_badge_text": c_badge_text,
+                "libros_por_pagina": libros_por_pag
+            }
+
+            st.markdown("---")
+            if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
+                if guardar_configuracion_marketing(config_diseno_final):
+                    st.success("✅ ¡Ajustes guardados como predeterminados con éxito!")
+                else:
+                    st.error("❌ No se pudieron guardar los ajustes.")
+
+        with col_preview:
+            # 🌟 REQUISITO 2 y 3: Previsualizador completo a la derecha que incluye badge disponible, precios y cabecera
+            st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
+            st.caption("Muestra de forma exacta cómo se renderizarán los componentes con tu tipografía y colores Hex elegidos.")
+            
+            import_font_h = font_h_sel.replace(" ", "+")
+            import_font_b = font_b_sel.replace(" ", "+")
+            
+            preview_html = f"""
+            <style>
+            @import url('https://fonts.googleapis.com/css2?family={import_font_h}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family={import_font_b}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
+            
+            .preview-container {{
+                background-color: {c_bg};
+                padding: 40px 20px;
+                border-radius: 15px;
+                text-align: center;
+                font-family: '{font_b_sel}', sans-serif;
+                margin-top: 10px;
+            }}
+            .preview-header-rect {{
+                background-color: {color_rect_bg};
+                border: {border_w}px solid {color_rect_border};
+                border-radius: {radius_h}px;
+                padding: {pad_y}px {pad_x}px;
+                display: inline-block;
+                margin-bottom: 25px;
+                box-shadow: 8px 8px 0px {c_shadow};
+            }}
+            .preview-header-text {{
+                color: {c_primary_header};
+                font-family: '{font_h_sel}', sans-serif;
+                font-size: 24px;
+                font-weight: {'bold' if bold_h else 'normal'};
+                font-style: {'italic' if italic_h else 'normal'};
+                margin: 0;
+                text-transform: uppercase;
+            }}
+            .preview-card {{
+                background-color: {c_card};
+                border-radius: 20px;
+                padding: 20px;
+                display: inline-block;
+                width: 250px;
+                margin: 15px auto 10px auto;
+                box-shadow: 10px 10px 0px {c_shadow};
+                text-align: center;
+                position: relative;
+            }}
+            .preview-badge {{
+                background-color: {c_badge_bg};
+                color: {c_badge_text};
+                font-family: '{font_b_sel}', sans-serif;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 4px 12px;
+                border-radius: 10px;
+                position: absolute;
+                top: -14px;
+                left: 50%;
+                transform: translateX(-50%);
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                white-space: nowrap;
+            }}
+            .preview-book-title {{
+                color: {c_primary_books};
+                font-weight: bold;
+                font-size: 16px;
+                margin-top: 15px;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+            }}
+            .preview-book-price-orig {{
+                color: {c_muted};
+                font-size: 13px;
+                text-decoration: line-through;
+                margin-bottom: 2px;
+                font-weight: bold;
+            }}
+            .preview-book-price {{
+                color: {c_accent};
+                font-weight: bold;
+                font-size: 22px;
+            }}
+            </style>
+            
+            <div class="preview-container">
+                <div class="preview-header-rect">
+                    <h2 class="preview-header-text">GÉNERO PREVIA</h2>
+                </div>
+                <br/>
+                <div class="preview-card">
+                    <div class="preview-badge">DISPONIBLE</div>
+                    <div style="background-color: #F5EEF1; height: 145px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #888;">
+                        📚 Portada
+                    </div>
+                    <div class="preview-book-title">Título del Libro</div>
+                    <div class="preview-book-price-orig">$14,000</div>
+                    <div class="preview-book-price">$13,300</div>
+                </div>
+            </div>
+            """
+            st.markdown(preview_html, unsafe_allow_html=True)
 
     # =========================================================================
     # 🖼️ CARGA DE ARCHIVO PARA IMAGEN DE FONDO SUPABASE
@@ -463,32 +463,8 @@ def mostrar_generador_marketing():
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
         
         # =========================================================================
-        # 📥 DESCARGA MASIVA EN UN SOLO ARCHIVO ZIP (NUEVO BOTÓN INTEGRADO)
+        # 📥 DESCARGA MASIVA ZIP REUBICADA DEBAJO DE LAS IMÁGENES
         # =========================================================================
-        st.markdown("---")
-        st.markdown("#### 📥 Descarga Masiva del Catálogo Completo")
-        st.caption("Usa este botón para descargar todas las hojas generadas comprimidas en un único archivo ZIP en un clic.")
-        
-        # Compilación en caliente del ZIP en memoria
-        zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for titulo_hoja, img_obj in hojas:
-                buf_img = io.BytesIO()
-                img_obj.save(buf_img, format="PNG")
-                img_bytes = buf_img.getvalue()
-                file_name = f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png"
-                zip_file.writestr(file_name, img_bytes)
-                
-        st.download_button(
-            label="📥 Descargar Catálogo Completo (ZIP)",
-            data=zip_buf.getvalue(),
-            file_name="Catalogo_Completo_Alba_Libreria.zip",
-            mime="application/zip",
-            use_container_width=True,
-            type="primary"
-        )
-        st.markdown("---")
-        
         with st.expander("Ver y Descargar las Hojas Generadas Individualmente", expanded=True):
             columnas_render = st.columns(3)
             for idx, (titulo_hoja, img_obj) in enumerate(hojas):
@@ -499,7 +475,7 @@ def mostrar_generador_marketing():
                     img_bytes = buf.getvalue()
                     
                     b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                    # Diseño CSS/HTML Premium con letras atractivas y transiciones dinámicas
+                    # Diseño CSS/HTML Premium
                     html_str = f"""
                     <div style="
                         text-align: center; 
@@ -533,3 +509,26 @@ def mostrar_generador_marketing():
                         file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
                         mime="image/png", key=f"dl_btn_{idx}", use_container_width=True
                     )
+            
+            # 🌟 NUEVA UBICACIÓN: Botón de descarga masiva ZIP al final del Expander
+            st.markdown("---")
+            st.markdown("#### 📦 Descarga Masiva del Catálogo Completo")
+            st.caption("Usa este botón para descargar todas las hojas generadas comprimidas en un único archivo ZIP en un clic.")
+            
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for t_hoja, i_obj in hojas:
+                    buf_img = io.BytesIO()
+                    i_obj.save(buf_img, format="PNG")
+                    img_bytes = buf_img.getvalue()
+                    file_name = f"Catalogo_{t_hoja.replace(' ', '_').replace('/', '-')}.png"
+                    zip_file.writestr(file_name, img_bytes)
+                    
+            st.download_button(
+                label="📥 Descargar Catálogo Completo (ZIP)",
+                data=zip_buf.getvalue(),
+                file_name="Catalogo_Completo_Alba_Libreria.zip",
+                mime="application/zip",
+                use_container_width=True,
+                type="primary"
+            )
