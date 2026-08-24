@@ -137,7 +137,7 @@ def mostrar_generador_marketing():
         return
 
     # =========================================================================
-    # 🎨 REQUISITOS 2, 3, 4, 5, 7: PANEL INTERACTIVO DE PERSONALIZACIÓN
+    # 🎨 REQUISITOS: PANEL INTERACTIVO DE PERSONALIZACIÓN
     # =========================================================================
     with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
         st.markdown("#### 📐 Configuración de Cuadrícula")
@@ -152,23 +152,51 @@ def mostrar_generador_marketing():
         st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
         listado_fuentes = ["Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."]
         
-        # Selector de Fuente del género
+        # =========================================================================
+        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO
+        # =========================================================================
+        saved_font_h = config_default.get("font_family_header", "Montserrat")
+        if saved_font_h in listado_fuentes[:-1]:
+            default_index_h = listado_fuentes.index(saved_font_h)
+            custom_value_h = "Montserrat"
+        else:
+            default_index_h = listado_fuentes.index("Escribir otra...")
+            custom_value_h = saved_font_h
+
         font_h_sel = st.selectbox(
             "Fuente del título (Género):", 
             options=listado_fuentes,
-            index=listado_fuentes.index(config_default.get("font_family_header", "Montserrat")) if config_default.get("font_family_header", "Montserrat") in listado_fuentes else 0
+            index=default_index_h
         )
         if font_h_sel == "Escribir otra...":
-            font_h_sel = st.text_input("Ingresa el nombre exacto de la fuente de Google Fonts:", value="Montserrat")
+            font_h_sel = st.text_input(
+                "Ingresa el nombre exacto de la fuente de Google Fonts (Género):", 
+                value=custom_value_h,
+                key="text_font_h_custom"
+            )
 
-        # Selector de Fuente de los libros
+        # =========================================================================
+        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
+        # =========================================================================
+        saved_font_b = config_default.get("font_family_books", "Montserrat")
+        if saved_font_b in listado_fuentes[:-1]:
+            default_index_b = listado_fuentes.index(saved_font_b)
+            custom_value_b = "Montserrat"
+        else:
+            default_index_b = listado_fuentes.index("Escribir otra...")
+            custom_value_b = saved_font_b
+
         font_b_sel = st.selectbox(
             "Fuente de los textos del libro:", 
             options=listado_fuentes,
-            index=listado_fuentes.index(config_default.get("font_family_books", "Montserrat")) if config_default.get("font_family_books", "Montserrat") in listado_fuentes else 0
+            index=default_index_b
         )
         if font_b_sel == "Escribir otra...":
-            font_b_sel = st.text_input("Ingresa el nombre de la fuente para libros en Google Fonts:", value="Montserrat")
+            font_b_sel = st.text_input(
+                "Ingresa el nombre de la fuente para libros en Google Fonts:", 
+                value=custom_value_b,
+                key="text_font_b_custom"
+            )
 
         c_font1, c_font2, c_font3, c_font4 = st.columns(4)
         bold_h = c_font1.checkbox("Aplicar Negrita (Bold) al Género", value=config_default.get("bold_header", True))
@@ -184,7 +212,6 @@ def mostrar_generador_marketing():
         border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
         radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
 
-        # 🌟 NUEVA INTERFAZ DE MÁRGENES (PADDING) PARA EL RECTÁNGULO DE GÉNERO
         st.markdown("##### ↕️ Ajuste de Ancho y Alto de Rectángulo (Padding)")
         c_pad1, c_pad2 = st.columns(2)
         pad_x = c_pad1.slider("Ajuste Ancho (Márgenes Izquierda/Derecha):", 10, 150, int(config_default.get("header_pad_x", 40)))
@@ -204,7 +231,6 @@ def mostrar_generador_marketing():
         c_badge_bg = c_col7.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
         c_badge_text = c_col8.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
 
-        # Construcción del diccionario estructurado completo
         config_diseno_final = {
             "font_family_header": font_h_sel,
             "font_family_books": font_b_sel,
@@ -237,7 +263,7 @@ def mostrar_generador_marketing():
                 st.error("❌ No se pudieron guardar los ajustes en el archivo local.")
 
     # =========================================================================
-    # 🖼️ REQUISITO 6: CARGA DE ARCHIVO PARA IMAGEN DE FONDO SUPABASE
+    # 🖼️ CARGA DE ARCHIVO PARA IMAGEN DE FONDO SUPABASE
     # =========================================================================
     with st.expander("🖼️ Cargar y Cambiar Imagen de Fondo Oficial (Supabase base.png)", expanded=False):
         st.info("Subir una nueva imagen de fondo (idealmente 1080x1920) sobreescribirá la plantilla de Alba Librería en tiempo real.")
@@ -251,7 +277,6 @@ def mostrar_generador_marketing():
                         conn = get_db_connection()
                         img_bytes = img_fondo_subida.getvalue()
                         
-                        # Subida con upsert=True para sobrescribir en caliente
                         conn.storage.from_("grafica").upload(
                             path="base.png",
                             file=img_bytes,

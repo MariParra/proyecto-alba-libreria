@@ -6,7 +6,7 @@ import urllib.request
 import re
 
 def asegurar_fuentes():
-    """Descarga las fuentes desde Google Fonts si no existen."""
+    """Descarga las fuentes base desde Google Fonts si no existen en el sistema."""
     if not os.path.exists("assets"):
         os.makedirs("assets")
     
@@ -99,7 +99,7 @@ def obtener_fuente(nombre_fuente, tamanio, bold=False, italic=False):
         return ImageFont.load_default()
 
 def dividir_texto_en_lineas(texto, max_chars=14):
-    """Divide el título de un libro en 2 líneas para evitar desbordamientos."""
+    """Divide de forma inteligente el título de un libro en 2 líneas para evitar desbordamientos."""
     palabras = texto.split()
     lineas = []
     linea_actual = []
@@ -122,7 +122,7 @@ def dividir_texto_en_lineas(texto, max_chars=14):
     joined_lines = " ".join(lineas)
     if len(words_joined) > len(joined_lines):
         if len(lineas) == 2:
-            lineas[1] = lineas[1][:11] + ".."
+            lineas = lineas[:11] + ".."
         elif len(lineas) == 1:
             lineas[0] = lineas[0][:11] + ".."
             
@@ -130,7 +130,8 @@ def dividir_texto_en_lineas(texto, max_chars=14):
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES", config_diseno=None):
     """
-    Genera una imagen 1080x1920 con retícula dinámica y colores HEX configurables.
+    Genera un collage de marketing 1080x1920 con retícula dinámica simétrica y adaptativa.
+    Centra automáticamente los elementos si la última fila queda con espacios sobrantes.
     """
     if config_diseno is None:
         config_diseno = {
@@ -159,6 +160,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
     try:
         W, H = (1080, 1920)
         
+        # --- 🎨 PALETA AESTHETIC DE ROSADOS Y FRAMBUESAS PREMIUM ---
         BG_COLOR = hex_to_rgb(config_diseno.get("color_bg", "#FDE8F3"))
         CARD_COLOR = hex_to_rgb(config_diseno.get("color_card", "#FFFFFF"))
         SHADOW_COLOR = hex_to_rgb(config_diseno.get("color_shadow", "#F4CCD4"))
@@ -189,7 +191,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         font_tachado = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 28, bold=True)
         font_badge = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 18, bold=True)
 
-        # Cargar imagen de fondo oficial
+        # Cargar imagen de fondo oficial desde Supabase
         BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
         try:
             req = urllib.request.Request(BG_URL, headers={'User-Agent': 'Mozilla/5.0'})
@@ -201,12 +203,12 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. Cabecera dinámica de género (se adapta automáticamente al texto y al margen interno)
+        # 1. Título de género con tamaño y bordes adaptables
         titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
         try:
             bbox_header = draw.textbbox((0, 0), titulo_limpio, font=font_header)
-            text_w = bbox_header[2] - bbox_header[0]
-            text_h = bbox_header[3] - bbox_header[1]
+            text_w = bbox_header - bbox_header[0]
+            text_h = bbox_header - bbox_header
             
             box_w = text_w + HEADER_PAD_X * 2
             box_h = text_h + HEADER_PAD_Y * 2
@@ -216,13 +218,10 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             box_x2 = box_x1 + box_w
             box_y2 = box_y1 + box_h
             
-            # Dibujar la sombra de la cabecera (offset 8px)
+            # Sombra y Rectángulo Principal
             draw.rounded_rectangle([box_x1 + 8, box_y1 + 8, box_x2 + 8, box_y2 + 8], radius=HEADER_RECT_RADIUS, fill=SHADOW_COLOR)
-            
-            # Dibujar la tarjeta principal de la cabecera
             draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=HEADER_RECT_RADIUS, fill=HEADER_RECT_BG)
             
-            # Dibujar borde
             if HEADER_RECT_BORDER_W > 0:
                 draw.rounded_rectangle(
                     [box_x1, box_y1, box_x2, box_y2], 
@@ -231,12 +230,11 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                     width=HEADER_RECT_BORDER_W
                 )
             
-            # Dibujar el texto centrado
             draw.text((W/2, box_y1 + box_h/2), titulo_limpio, font=font_header, fill=PRIMARY_COLOR, anchor="mm")
         except Exception:
             pass
 
-        # Retícula adaptativa
+        # --- 📐 RETÍCULA ADAPTATIVA INTELIGENTE ---
         n_libros = len(lista_libros_chunk)
         
         if n_libros == 1:
@@ -272,6 +270,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             y_margin = 40
             img_height = 220
 
+        # Dibujo secuencial de tarjetas
         for i, libro in enumerate(lista_libros_chunk):
             if i >= 12: 
                 break 
@@ -279,8 +278,22 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             row_idx = i // cols
             col_idx = i % cols
 
-            x_card = x_margin + col_idx * (cell_w + x_margin)
+            # =========================================================================
+            # 🌟 MEJORA UX CLAVE: CENTRADO DE FILA SI SOBRA ESPACIO (Última Fila)
+            # =========================================================================
+            # Calculamos cuántos elementos habrá en la fila actual
+            elementos_en_esta_fila = min(cols, n_libros - row_idx * cols)
+            
+            # Ancho total ocupado por las tarjetas y sus respectivos márgenes en esta fila
+            ancho_ocupado_fila = elementos_en_esta_fila * cell_w + (elementos_en_esta_fila - 1) * x_margin
+            
+            # Margen inicial centrado para esta fila
+            x_inicio_centrado = (W - ancho_ocupado_fila) / 2
+            
+            # Coordenada X final corregida y centrada
+            x_card = x_inicio_centrado + col_idx * (cell_w + x_margin)
             y_card = start_y + row_idx * (cell_h + y_margin)
+            # =========================================================================
 
             try:
                 draw.rounded_rectangle([x_card + 12, y_card + 12, x_card + cell_w + 12, y_card + cell_h + 12], radius=25, fill=SHADOW_COLOR)
@@ -306,7 +319,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 texto_badge = " DISPONIBLE "
                 try:
                     bbox_badge = draw.textbbox((0, 0), texto_badge, font=font_badge)
-                    ancho_badge = bbox_badge[2] - bbox_badge[0]
+                    ancho_badge = bbox_badge - bbox_badge[0]
                     alto_badge = 32
                     
                     x_badge = x_card + (cell_w - ancho_badge) / 2
@@ -339,7 +352,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 try:
                     draw.text((x_card + cell_w/2, y_precios), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
-                    ancho_orig = bbox_orig[2] - bbox_orig[0]
+                    ancho_orig = bbox_orig - bbox_orig[0]
                     draw.line((x_card + cell_w/2 - ancho_orig/2, y_precios - 8, x_card + cell_w/2 + ancho_orig/2, y_precios - 8), fill=MUTED_COLOR, width=3)
                 except ValueError:
                     pass
