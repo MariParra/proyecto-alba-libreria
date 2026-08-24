@@ -156,8 +156,9 @@ def mostrar_generador_marketing():
             st.markdown("---")
             st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
             
-            # 🌟 REQUISITO 4: Opcion de ocultar ayuda con link de fuentes
-            with st.expander("ℹ️ Ver fuentes de Google Fonts soportadas", expanded=False):
+            # 🌟 SOLUCIÓN DEFINITIVA: Checkbox de alternancia (inmune a errores de anidamiento)
+            mostrar_ayuda_fuentes = st.checkbox("ℹ️ Mostrar ayuda de fuentes Google Fonts", value=False)
+            if mostrar_ayuda_fuentes:
                 st.info(
                     "Las fuentes personalizables provienen del catálogo oficial de Google Fonts. "
                     "Puedes revisar y buscar tipografías soportadas aquí: "
@@ -216,7 +217,6 @@ def mostrar_generador_marketing():
 
             st.markdown("---")
             st.markdown("#### 🎨 Paleta de Colores (HEX)")
-            # 🌟 REQUISITO 1: Paleta de colores explicativa y en filas ordenadas de 2
             cc1, cc2 = st.columns(2)
             c_bg = cc1.color_picker("Fondo del Collage (si falla plantilla):", value=config_default.get("color_bg", "#FDE8F3"))
             c_card = cc2.color_picker("Fondo de la Tarjeta del Libro (Blanco):", value=config_default.get("color_card", "#FFFFFF"))
@@ -268,7 +268,6 @@ def mostrar_generador_marketing():
                     st.error("❌ No se pudieron guardar los ajustes.")
 
         with col_preview:
-            # 🌟 REQUISITO 2 y 3: Previsualizador completo a la derecha que incluye badge disponible, precios y cabecera
             st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
             st.caption("Muestra de forma exacta cómo se renderizarán los componentes con tu tipografía y colores Hex elegidos.")
             
