@@ -1,22 +1,70 @@
 import streamlit as st
 import pandas as pd
 import io 
+import json
+import os
 import base64
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
+import time
+
+# Ruta física para la persistencia del archivo de configuración JSON
+CONFIG_FILE = "assets/default_marketing_config.json"
+
+def cargar_configuracion_marketing():
+    """Carga los valores por defecto del archivo JSON si existe."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # Configuración por defecto elegante
+    return {
+        "font_family_header": "Montserrat",
+        "font_family_books": "Montserrat",
+        "bold_header": True,
+        "italic_header": False,
+        "tamanio_header": 45,
+        "tamanio_libros": 20,
+        "color_bg": "#FDE8F3",
+        "color_card": "#FFFFFF",
+        "color_shadow": "#F4CCD4",
+        "color_primary": "#7C0C3F",
+        "color_accent": "#DB2777",
+        "color_muted": "#BA96A5",
+        "color_badge_bg": "#DB2777",
+        "color_badge_text": "#FFFFFF",
+        "color_header_rect_bg": "#FFFFFF",
+        "color_header_rect_border": "#7C0C3F",
+        "header_rect_border_width": 2,
+        "header_rect_radius": 20,
+        "libros_por_pagina": 12
+    }
+
+def guardar_configuracion_marketing(config):
+    """Guarda persistentemente la configuración en el JSON de assets."""
+    if not os.path.exists("assets"):
+        os.makedirs("assets")
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+        return True
+    except Exception as e:
+        return False
 
 @st.cache_data(ttl=60)
 def cargar_libros_para_marketing():
     """
-    Filtro Maestro: Obtiene libros visibles, con precio > 0 y con portada en el bucket de Supabase.
-    Bypass del límite de 1000 registros ordenando obligatoriamente por la clave primaria: libro_id.
+    Filtro Maestro (Requisito 1): Carga libros visibles, con precio > 0 y con portada en Supabase.
+    Bypass seguro de 1000 registros ordenando obligatoriamente por la clave primaria: libro_id.
     """
     from utilidades import get_db_connection
     conn = get_db_connection()
     try:
         all_books = []
         chunk_size = 1000
-        # Paginación dinámica por bloques usando la clave de ordenación obligatoria: libro_id
+        # Paginación dinámica segura
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -38,7 +86,7 @@ def cargar_libros_para_marketing():
             
         df_libros = pd.DataFrame(all_books)
 
-        # Cargar lista de portadas físicas existentes en el bucket de storage
+        # Carga física y paginada de portadas existentes en el Storage
         portadas_existentes = set()
         offset = 0
         while True:
@@ -50,14 +98,12 @@ def cargar_libros_para_marketing():
             if not bloque:
                 break
             
-            # Limpiamos cada nombre de archivo al momento de añadirlo
             for archivo in bloque:
                 if archivo['name'] is not None:
                     portadas_existentes.add(archivo['name'].strip())
-            
             offset += 100
         
-        # Validar y cruzar contra portadas reales
+        # Cruzamos y filtramos
         df_libros['portada_esperada'] = df_libros['libro_id'].apply(lambda idx: f"{int(float(idx))}.jpg".strip())
         df_libros['tiene_portada'] = df_libros['portada_esperada'].isin(portadas_existentes)
         
@@ -72,7 +118,7 @@ def cargar_libros_para_marketing():
 
 def mostrar_generador_marketing():
     st.title("🎨 Generador de Catálogos Masivos")
-    st.info("Genera imágenes para tus Stories (12 libros por página).")
+    st.info("Genera imágenes personalizadas para tus Stories de Redes Sociales.")
 
     try:
         URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
@@ -80,11 +126,136 @@ def mostrar_generador_marketing():
         st.error("🚨 Falta la clave 'supabase_portadas_url' en secrets.toml.")
         st.stop()
 
+    # Cargar configuraciones guardadas o por defecto
+    config_default = cargar_configuracion_marketing()
+
     df_libros = cargar_libros_para_marketing()
     if df_libros.empty:
         st.warning("No hay libros en el catálogo que cumplan las condiciones para marketing (visibles, con precio y con portada cargada).")
         return
 
+    # =========================================================================
+    # 🎨 REQUISITOS 2, 3, 4, 5, 7: PANEL INTERACTIVO DE PERSONALIZACIÓN
+    # =========================================================================
+    with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
+        st.markdown("#### 📐 Configuración de Cuadrícula")
+        opciones_paginacion = [1, 4, 8, 12]
+        libros_por_pag = st.selectbox(
+            "Cantidad de libros por página:", 
+            options=opciones_paginacion, 
+            index=opciones_paginacion.index(config_default.get("libros_por_pagina", 12)) if config_default.get("libros_por_pagina", 12) in opciones_paginacion else 3
+        )
+        
+        st.markdown("---")
+        st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
+        listado_fuentes = ["Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."]
+        
+        # Selector de Fuente del género
+        font_h_sel = st.selectbox(
+            "Fuente del título (Género):", 
+            options=listado_fuentes,
+            index=listado_fuentes.index(config_default.get("font_family_header", "Montserrat")) if config_default.get("font_family_header", "Montserrat") in listado_fuentes else 0
+        )
+        if font_h_sel == "Escribir otra...":
+            font_h_sel = st.text_input("Ingresa el nombre exacto de la fuente de Google Fonts:", value="Montserrat")
+
+        # Selector de Fuente de los libros
+        font_b_sel = st.selectbox(
+            "Fuente de los textos del libro:", 
+            options=listado_fuentes,
+            index=listado_fuentes.index(config_default.get("font_family_books", "Montserrat")) if config_default.get("font_family_books", "Montserrat") in listado_fuentes else 0
+        )
+        if font_b_sel == "Escribir otra...":
+            font_b_sel = st.text_input("Ingresa el nombre de la fuente para libros en Google Fonts:", value="Montserrat")
+
+        c_font1, c_font2, c_font3, c_font4 = st.columns(4)
+        bold_h = c_font1.checkbox("Aplicar Negrita (Bold) al Género", value=config_default.get("bold_header", True))
+        italic_h = c_font2.checkbox("Aplicar Cursiva (Italic) al Género", value=config_default.get("italic_header", False))
+        size_h = c_font3.slider("Tamaño Fuente Género:", 20, 100, int(config_default.get("tamanio_header", 45)))
+        size_b = c_font4.slider("Tamaño Fuente Libros:", 12, 35, int(config_default.get("tamanio_libros", 20)))
+
+        st.markdown("---")
+        st.markdown("#### 📦 Rectángulo del Título (Género)")
+        c_rect1, c_rect2, c_rect3, c_rect4 = st.columns(4)
+        color_rect_bg = c_rect1.color_picker("Fondo Rectángulo:", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
+        color_rect_border = c_rect2.color_picker("Borde Rectángulo:", value=config_default.get("color_header_rect_border", "#7C0C3F"))
+        border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
+        radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
+
+        st.markdown("---")
+        st.markdown("#### 🎨 Paleta de Colores (HEX)")
+        c_col1, c_col2, c_col3, c_col4 = st.columns(4)
+        c_bg = c_col1.color_picker("Fondo Base (Fallback):", value=config_default.get("color_bg", "#FDE8F3"))
+        c_card = c_col2.color_picker("Color de Tarjetas:", value=config_default.get("color_card", "#FFFFFF"))
+        c_shadow = c_col3.color_picker("Color de Sombras 3D:", value=config_default.get("color_shadow", "#F4CCD4"))
+        c_primary = c_col4.color_picker("Color Textos / Títulos:", value=config_default.get("color_primary", "#7C0C3F"))
+        
+        c_col5, c_col6, c_col7, c_col8 = st.columns(4)
+        c_accent = c_col5.color_picker("Color Ofertas / Fucsia:", value=config_default.get("color_accent", "#DB2777"))
+        c_muted = c_col6.color_picker("Color Precios Tachados:", value=config_default.get("color_muted", "#BA96A5"))
+        c_badge_bg = c_col7.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
+        c_badge_text = c_col8.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
+
+        # Construcción del diccionario estructurado
+        config_diseno_final = {
+            "font_family_header": font_h_sel,
+            "font_family_books": font_b_sel,
+            "bold_header": bold_h,
+            "italic_header": italic_h,
+            "tamanio_header": size_h,
+            "tamanio_libros": size_b,
+            "color_header_rect_bg": color_rect_bg,
+            "color_header_rect_border": color_rect_border,
+            "header_rect_border_width": border_w,
+            "header_rect_radius": radius_h,
+            "color_bg": c_bg,
+            "color_card": c_card,
+            "color_shadow": c_shadow,
+            "color_primary": c_primary,
+            "color_accent": c_accent,
+            "color_muted": c_muted,
+            "color_badge_bg": c_badge_bg,
+            "color_badge_text": c_badge_text,
+            "libros_por_pagina": libros_por_pag
+        }
+
+        st.markdown("---")
+        if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
+            if guardar_configuracion_marketing(config_diseno_final):
+                st.success("✅ ¡Ajustes guardados con éxito! Se cargarán de forma predeterminada en tu próxima sesión.")
+            else:
+                st.error("❌ No se pudieron guardar los ajustes en el archivo local.")
+
+    # =========================================================================
+    # 🖼️ REQUISITO 6: CARGA DE ARCHIVO PARA IMAGEN DE FONDO SUPABASE
+    # =========================================================================
+    with st.expander("🖼️ Cargar y Cambiar Imagen de Fondo Oficial (Supabase base.png)", expanded=False):
+        st.info("Subir una nueva imagen de fondo (idealmente 1080x1920) sobreescribirá la plantilla de Alba Librería en tiempo real.")
+        img_fondo_subida = st.file_uploader("Sube tu archivo de fondo (PNG recomendado):", type=["png", "jpg", "jpeg"])
+        
+        if img_fondo_subida is not None:
+            if st.button("🚀 Subir e Inyectar en Supabase", type="primary", use_container_width=True):
+                with st.spinner("Subiendo imagen de fondo y sobrescribiendo plantilla..."):
+                    try:
+                        from utilidades import get_db_connection
+                        conn = get_db_connection()
+                        img_bytes = img_fondo_subida.getvalue()
+                        
+                        # Subida con upsert=True para sobrescribir en caliente
+                        conn.storage.from_("grafica").upload(
+                            path="base.png",
+                            file=img_bytes,
+                            file_options={"cache-control": "3600", "upsert": "true"}
+                        )
+                        st.success("🎉 ¡Fondo oficial actualizado con éxito en Supabase!")
+                        time.sleep(1.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error cargando imagen de fondo: {e}")
+
+    # =========================================================================
+    # RENDERIZADO COMÚN
+    # =========================================================================
     with st.container(border=True):
         st.markdown("#### 1. Filtra y Selecciona")
         
@@ -122,22 +293,25 @@ def mostrar_generador_marketing():
             df_final = df_libros[df_libros['libro_id'].isin(ids_seleccionados)].copy()
             st.session_state.hojas_generadas = []
 
+            # Libros por página dinámico desde la configuración
+            libros_por_pagina = config_diseno_final.get("libros_por_pagina", 12)
+
             with st.spinner("Pintando hojas del catálogo... Aguarda un momento."):
                 if agrupar_por_genero:
                     for genero, df_grupo in df_final.groupby('genero'):
                         titulo_base = str(genero).upper() if pd.notna(genero) else "OTROS"
                         lista_data = df_grupo.sort_values('titulo').to_dict('records')
-                        chunks = [lista_data[i:i + 12] for i in range(0, len(lista_data), 12)]
+                        chunks = [lista_data[i:i + libros_por_pagina] for i in range(0, len(lista_data), libros_por_pagina)]
                         for idx, chunk in enumerate(chunks):
                             titulo_hoja = titulo_base if len(chunks) == 1 else f"{titulo_base} ({idx + 1}/{len(chunks)})"
-                            img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
+                            img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja, config_diseno_final)
                             if img_obj: st.session_state.hojas_generadas.append((titulo_hoja, img_obj))
                 else:
                     lista_data = df_final.sort_values('titulo').to_dict('records')
-                    chunks = [lista_data[i:i + 12] for i in range(0, len(lista_data), 12)]
+                    chunks = [lista_data[i:i + libros_por_pagina] for i in range(0, len(lista_data), libros_por_pagina)]
                     for idx, chunk in enumerate(chunks):
                         titulo_hoja = "NOVEDADES" if len(chunks) == 1 else f"NOVEDADES ({idx + 1}/{len(chunks)})"
-                        img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja)
+                        img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja, config_diseno_final)
                         if img_obj: st.session_state.hojas_generadas.append((titulo_hoja, img_obj))
 
     if 'hojas_generadas' in st.session_state and st.session_state.hojas_generadas:
@@ -159,14 +333,14 @@ def mostrar_generador_marketing():
                     <div style="
                         text-align: center; 
                         margin-bottom: 12px; 
-                        color: #4A4D7E; 
+                        color: {config_diseno_final.get('color_primary', '#7C0C3F')}; 
                         font-family: 'Helvetica Neue', Arial, sans-serif;
                         font-size: 18px; 
                         font-weight: bold; 
                         letter-spacing: 1px;
                         text-transform: uppercase;
                         text-shadow: 1px 1px 2px rgba(0,0,0,0.08);
-                        border-bottom: 2px solid #C994C0;
+                        border-bottom: 2px solid {config_diseno_final.get('color_accent', '#DB2777')};
                         padding-bottom: 6px;
                     ">
                         ✨ {titulo_hoja} ✨
