@@ -30,14 +30,10 @@ def obtener_fuente(tamanio, bold=False):
     del sistema, de la caché local o un fallback del contenedor de Streamlit.
     """
     candidatas = [
-        # 1. Caché local
         "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
-        # 2. Tipografía Premium geométrica del servidor de Streamlit
         "/usr/share/fonts/GoogleSans-Regular.ttf",
-        # 3. Fallbacks nativos en contenedores Debian / Ubuntu
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
-        # 4. Fallbacks nativos si ejecutas en entorno local Windows o MacOS
         "arialbd.ttf" if bold else "arial.ttf",
         "Arial.ttf"
     ]
@@ -51,6 +47,40 @@ def obtener_fuente(tamanio, bold=False):
         return ImageFont.load_default(size=tamanio)
     except:
         return ImageFont.load_default()
+
+def dividir_texto_en_lineas(texto, max_chars=14):
+    """
+    Divide de forma inteligente el título de un libro en 2 líneas
+    para evitar desbordamientos y colisiones en la retícula.
+    """
+    palabras = texto.split()
+    lineas = []
+    linea_actual = []
+    longitud_actual = 0
+    for palabra in palabras:
+        if longitud_actual + len(palabra) + (1 if linea_actual else 0) <= max_chars:
+            linea_actual.append(palabra)
+            longitud_actual += len(palabra) + (1 if len(linea_actual) > 1 else 0)
+        else:
+            if linea_actual:
+                lineas.append(" ".join(linea_actual))
+            linea_actual = [palabra]
+            longitud_actual = len(palabra)
+            if len(lineas) >= 2:
+                break
+    if linea_actual and len(lineas) < 2:
+        lineas.append(" ".join(linea_actual))
+    
+    # Añadimos puntos suspensivos si quedaron palabras fuera
+    words_joined = " ".join(palabras)
+    joined_lines = " ".join(lineas)
+    if len(words_joined) > len(joined_lines):
+        if len(lineas) == 2:
+            lineas[1] = lineas[1][:11] + ".."
+        elif len(lineas) == 1:
+            lineas[0] = lineas[0][:11] + ".."
+            
+    return lineas
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES"):
     """
@@ -73,8 +103,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         BADGE_TEXT = (255, 255, 255)    # Texto etiqueta: Blanco
         
         # --- 🔠 FUENTES GEOMÉTRICAS GRANDES Y ATRACTIVAS ---
-        font_header = obtener_fuente(85, bold=True) 
-        font_titulo = obtener_fuente(25, bold=True)
+        font_header = obtener_fuente(45, bold=True) 
+        font_titulo = obtener_fuente(20, bold=True)  # Ajustado a 20 para ser súper legible en 2 líneas
         font_precio = obtener_fuente(42, bold=True)
         font_tachado = obtener_fuente(28, bold=True)
         font_badge = obtener_fuente(18, bold=True) 
@@ -91,14 +121,31 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. TÍTULO PRINCIPAL (LIMPIO Y SIN ÍNDICES 1/2 O 1-2)
-        titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header)
-        titulo_seguro = (titulo_limpio[:20] + '..') if len(titulo_limpio) > 20 else titulo_limpio
+        # 1. TÍTULO PRINCIPAL EN UN RECTÁNGULO REDONDEADO CON SOMBRA (SIN 1/2 NI 1-2)
+        titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
         try:
-            # Sombra y texto principal en frambuesa
-            draw.text((W/2 + 4, 104), titulo_seguro.upper(), font=font_header, fill=SHADOW_COLOR, anchor="ms")
-            draw.text((W/2, 100), titulo_seguro.upper(), font=font_header, fill=PRIMARY_COLOR, anchor="ms")
-        except ValueError:
+            bbox_header = draw.textbbox((0, 0), titulo_limpio, font=font_header)
+            text_w = bbox_header[2] - bbox_header[0]
+            text_h = bbox_header[3] - bbox_header[1]
+            
+            pad_x, pad_y = 40, 20
+            box_w = text_w + pad_x * 2
+            box_h = text_h + pad_y * 2
+            
+            box_x1 = (W - box_w) / 2
+            box_y1 = 60
+            box_x2 = box_x1 + box_w
+            box_y2 = box_y1 + box_h
+            
+            # Dibujar la sombra de la cabecera (offset 8px)
+            draw.rounded_rectangle([box_x1 + 8, box_y1 + 8, box_x2 + 8, box_y2 + 8], radius=20, fill=SHADOW_COLOR)
+            
+            # Dibujar la tarjeta principal de la cabecera
+            draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=20, fill=CARD_COLOR)
+            
+            # Dibujar el texto centrado
+            draw.text((W/2, box_y1 + box_h/2), titulo_limpio, font=font_header, fill=PRIMARY_COLOR, anchor="mm")
+        except Exception as e:
             pass
 
         # --- 📏 GEOMETRÍA AJUSTADA: RETÍCULA PERFECTA Y ALINEADA ---
@@ -163,15 +210,18 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                     pass
 
             # 5. TEXTOS GRANDES, LEGIBLES Y ALINEADOS EN RETÍCULA FIJA
-            # Aumentamos la longitud permitida a 22 caracteres
-            titulo_corto = (libro['titulo'][:22] + '..') if len(libro['titulo']) > 22 else libro['titulo']
+            lineas_titulo = dividir_texto_en_lineas(libro['titulo'].upper(), max_chars=14)
+            y_titulo_start = y_card + 285
             
-            # Título del libro (Ubicación fija)
-            y_titulo_fijo = y_card + 285
-            try:
-                draw.text((x_card + cell_w/2, y_titulo_fijo), titulo_corto.upper(), font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
-            except ValueError:
-                pass
+            # Ajustamos levemente el inicio si hay dos líneas para evitar colisiones
+            if len(lineas_titulo) == 2:
+                y_titulo_start = y_card + 273
+                
+            for idx_linea, linea in enumerate(lineas_titulo):
+                try:
+                    draw.text((x_card + cell_w/2, y_titulo_start + idx_linea * 24), linea, font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
+                except ValueError:
+                    pass
 
             precio_float = float(libro['precio'])
             precio_orig_float = float(libro.get('precio_original', precio_float))
@@ -179,7 +229,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             if precio_float < precio_orig_float:
                 # Caso: Descuento Activo
                 texto_orig = f"${precio_orig_float:,.0f}"
-                y_orig_fijo = y_card + 330
+                y_orig_fijo = y_card + 342
                 try:
                     draw.text((x_card + cell_w/2, y_orig_fijo), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
@@ -189,7 +239,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                     pass
                 
                 texto_final = f"${precio_float:,.0f}"
-                y_final_fijo = y_card + 380
+                y_final_fijo = y_card + 392
                 try:
                     draw.text((x_card + cell_w/2, y_final_fijo), texto_final, font=font_precio, fill=ACCENT_COLOR, anchor="ms")
                 except ValueError:
@@ -197,7 +247,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             else:
                 # Caso: Precio Normal
                 texto_final = f"${precio_float:,.0f}"
-                y_final_centrado = y_card + 355
+                y_final_centrado = y_card + 372
                 try:
                     draw.text((x_card + cell_w/2, y_final_centrado), texto_final, font=font_precio, fill=PRIMARY_COLOR, anchor="ms")
                 except ValueError:
