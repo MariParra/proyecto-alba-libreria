@@ -205,7 +205,7 @@ else:
         # Definición de grupos de vistas para la apertura dinámica de los expanders
         grupo_general = ["🚨 ALERTAS PRIORITARIAS", "📌 PIZARRA DE NOTAS", "📋 TABLERO KANBAN", "📊 DASHBOARD"]
         grupo_ventas = ["🛒 CAJA / VENTAS RÁPIDAS", "🎡 VENTAS MASIVAS", "📦 GESTIÓN DE SUSCRIPCIÓN", "👥 CLIENTES Y LIBRERO", "💸 COSTOS NO DE VENTAS"]
-        grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 CATÁLOGO (🏗️)", "🌐 GESTIÓN WEB"]
+        grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 GENERADOR CATÁLOGO IG", "🌐 GESTIÓN WEB"]
         grupo_datos = ["🛠️ SINCRONIZACIÓN GOOGLE SHEET", "📔 IMPORTAR LIBREROS", "📥 REPORTES Y DESCARGAS"]
         grupo_soporte = ["✨ CREACIÓN MASIVA", "⚡ ACTUALIZACIÓN MASIVA", "⏪ ROLLBACK BD"]
 
@@ -259,8 +259,8 @@ else:
                 st.session_state.pagina_actual = "🖼️ GESTIÓN DE PORTADAS"
                 st.rerun()
                 
-            if st.button("🎨 CATÁLOGO (🏗️)", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)" else "secondary"):
-                st.session_state.pagina_actual = "🎨 CATÁLOGO (🏗️)"
+            if st.button("🎨 GENERADOR CATÁLOGO IG", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🎨 GENERADOR CATÁLOGO IG" else "secondary"):
+                st.session_state.pagina_actual = "🎨 GENERADOR CATÁLOGO IG"
                 st.rerun()
                 
             if st.button("🌐 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🌐 GESTIÓN WEB" else "secondary"):
@@ -359,7 +359,7 @@ else:
             mostrar_costos()
         elif st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN":
             mostrar_asignaciones()
-        elif st.session_state.pagina_actual == "🎨 CATÁLOGO (🏗️)":
+        elif st.session_state.pagina_actual == "🎨 GENERADOR CATÁLOGO IG":
             mostrar_generador_marketing()
         elif st.session_state.pagina_actual == "📊 DASHBOARD":
             mostrar_dashboard()
