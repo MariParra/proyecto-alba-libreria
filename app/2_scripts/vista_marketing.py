@@ -86,6 +86,7 @@ def cargar_libros_para_marketing():
         if not all_books:
             return pd.DataFrame()
             
+        # Operaciones de DataFrame 100% libres de corchetes para evadir filtros de Markdown
         df_libros = pd.DataFrame(all_books)
 
         # Carga física y paginada de portadas existentes en el Storage
@@ -101,18 +102,18 @@ def cargar_libros_para_marketing():
                 break
             
             for archivo in bloque:
-                if archivo['name'] is not None:
-                    portadas_existentes.add(archivo['name'].strip())
+                if archivo.get('name') is not None:
+                    portadas_existentes.add(archivo.get('name').strip())
             offset += 100
         
-        # Cruzamos y filtramos
-        df_libros['portada_esperada'] = df_libros['libro_id'].apply(lambda idx: f"{int(float(idx))}.jpg".strip())
-        df_libros['tiene_portada'] = df_libros['portada_esperada'].isin(portadas_existentes)
+        # Cruzamos y filtramos de forma segura
+        df_libros = df_libros.assign(portada_esperada = df_libros.libro_id.apply(lambda idx: f"{int(float(idx))}.jpg".strip()))
+        df_libros = df_libros.assign(tiene_portada = df_libros.portada_esperada.isin(portadas_existentes))
         
-        df_final = df_libros[df_libros['tiene_portada'] == True].copy()
-        df_final.drop(columns=['portada_esperada', 'tiene_portada'], inplace=True)
-        df_final['precio'] = pd.to_numeric(df_final['precio'], errors='coerce').fillna(0)
-        df_final['libro_id'] = df_final['libro_id'].astype(str)
+        df_final = df_libros.query("tiene_portada == True").copy()
+        df_final = df_final.drop(columns=list(("portada_esperada", "tiene_portada")))
+        df_final.loc[:, 'precio'] = pd.to_numeric(df_final.precio, errors='coerce').fillna(0)
+        df_final.loc[:, 'libro_id'] = df_final.libro_id.astype(str)
         
         return df_final
     except Exception as e:
@@ -123,7 +124,7 @@ def mostrar_generador_marketing():
     st.info("Genera imágenes personalizadas para tus Stories de Redes Sociales.")
 
     try:
-        URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
+        URL_BASE_SUPABASE = st.secrets.get("catalogo_publico", {}).get("supabase_portadas_url")
     except KeyError:
         st.error("🚨 Falta la clave 'supabase_portadas_url' en secrets.toml.")
         st.stop()
@@ -141,7 +142,7 @@ def mostrar_generador_marketing():
     # =========================================================================
     with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
         st.markdown("#### 📐 Configuración de Cuadrícula")
-        opciones_paginacion = [1, 4, 8, 12]
+        opciones_paginacion = tuple((1, 4, 8, 12))
         libros_por_pag = st.selectbox(
             "Cantidad de libros por página:", 
             options=opciones_paginacion, 
@@ -150,10 +151,10 @@ def mostrar_generador_marketing():
         
         st.markdown("---")
         st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
-        listado_fuentes = ["Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."]
+        listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
         
         # =========================================================================
-        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO
+        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
         # =========================================================================
         saved_font_h = config_default.get("font_family_header", "Montserrat")
         if saved_font_h in listado_fuentes[:-1]:
@@ -255,6 +256,87 @@ def mostrar_generador_marketing():
             "libros_por_pagina": libros_por_pag
         }
 
+        # =========================================================================
+        # 🌟 NUEVA SECCIÓN: PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
+        # =========================================================================
+        st.markdown("---")
+        st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
+        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales.")
+        
+        import_font_h = font_h_sel.replace(" ", "+")
+        import_font_b = font_b_sel.replace(" ", "+")
+        
+        preview_html = f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family={import_font_h}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family={import_font_b}:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
+        
+        .preview-container {{
+            background-color: {c_bg};
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            font-family: '{font_b_sel}', sans-serif;
+            margin-bottom: 20px;
+        }}
+        .preview-header-rect {{
+            background-color: {color_rect_bg};
+            border: {border_w}px solid {color_rect_border};
+            border-radius: {radius_h}px;
+            padding: {pad_y}px {pad_x}px;
+            display: inline-block;
+            margin-bottom: 25px;
+            box-shadow: 8px 8px 0px {c_shadow};
+        }}
+        .preview-header-text {{
+            color: {c_primary};
+            font-family: '{font_h_sel}', sans-serif;
+            font-size: 24px;
+            font-weight: {'bold' if bold_h else 'normal'};
+            font-style: {'italic' if italic_h else 'normal'};
+            margin: 0;
+            text-transform: uppercase;
+        }}
+        .preview-card {{
+            background-color: {c_card};
+            border-radius: 20px;
+            padding: 20px;
+            display: inline-block;
+            width: 250px;
+            margin: 10px auto;
+            box-shadow: 10px 10px 0px {c_shadow};
+            text-align: center;
+        }}
+        .preview-book-title {{
+            color: {c_primary};
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }}
+        .preview-book-price {{
+            color: {c_accent};
+            font-weight: bold;
+            font-size: 22px;
+        }}
+        </style>
+        
+        <div class="preview-container">
+            <div class="preview-header-rect">
+                <h2 class="preview-header-text">GÉNERO PREVIA</h2>
+            </div>
+            <br/>
+            <div class="preview-card">
+                <div style="background-color: #EFEFEF; height: 150px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #888;">
+                    📚 Portada
+                </div>
+                <div class="preview-book-title">Título del Libro</div>
+                <div class="preview-book-price">$13,300</div>
+            </div>
+        </div>
+        """
+        st.markdown(preview_html, unsafe_allow_html=True)
+
         st.markdown("---")
         if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
             if guardar_configuracion_marketing(config_diseno_final):
@@ -294,17 +376,17 @@ def mostrar_generador_marketing():
     with st.container(border=True):
         st.markdown("#### 1. Filtra y Selecciona")
         
-        generos_disponibles = sorted(df_libros['genero'].dropna().unique())
+        generos_disponibles = sorted(list(df_libros.genero.dropna().unique()))
         genero_seleccionado = st.selectbox("Filtrar por Género (opcional):", ["Todos"] + generos_disponibles)
 
         df_filtrado = df_libros
         if genero_seleccionado != "Todos":
-            df_filtrado = df_libros[df_libros['genero'] == genero_seleccionado]
+            df_filtrado = df_libros.query(f"genero == '{genero_seleccionado}'").copy()
 
-        df_filtrado['label_selectbox'] = df_filtrado.apply(
-            lambda x: f"{x['titulo']} (Sin Stock)" if int(x.get('stock', 0)) <= 0 else x['titulo'], axis=1
+        df_filtrado = df_filtrado.assign(
+            label_selectbox = df_filtrado.apply(lambda x: f"{x.titulo} (Sin Stock)" if int(x.get("stock", 0)) <= 0 else x.titulo, axis=1)
         )
-        opciones_libros = dict(zip(df_filtrado['label_selectbox'], df_filtrado['libro_id']))
+        opciones_libros = dict(zip(df_filtrado.label_selectbox, df_filtrado.libro_id))
 
         seleccionar_todos = st.checkbox(f"✅ Seleccionar TODOS los libros filtrados ({len(df_filtrado)} libros)")
         
@@ -325,7 +407,7 @@ def mostrar_generador_marketing():
                 st.warning("No se seleccionaron libros válidos.")
                 st.stop()
 
-            df_final = df_libros[df_libros['libro_id'].isin(ids_seleccionados)].copy()
+            df_final = df_libros.query(f"libro_id in {tuple(ids_seleccionados)}").copy() if len(ids_seleccionados) > 1 else df_libros.query(f"libro_id == '{ids_seleccionados[0]}'").copy()
             st.session_state.hojas_generadas = []
 
             # Libros por página dinámico desde la configuración
