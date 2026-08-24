@@ -1,364 +1,355 @@
-import streamlit as st
-import pandas as pd
-import io 
-import json
+from PIL import Image, ImageDraw, ImageFont
+import io
+import requests
 import os
-import base64
-from utilidades import limpiar_texto_para_busqueda
-from generador_collage import generar_collage_marketing
-import time
+import urllib.request
+import re
 
-# Ruta física para la persistencia del archivo de configuración JSON
-CONFIG_FILE = "assets/default_marketing_config.json"
-
-def cargar_configuracion_marketing():
-    """Carga los valores por defecto del archivo JSON si existe."""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    # Configuración por defecto elegante
-    return {
-        "font_family_header": "Montserrat",
-        "font_family_books": "Montserrat",
-        "bold_header": True,
-        "italic_header": False,
-        "tamanio_header": 45,
-        "tamanio_libros": 20,
-        "color_bg": "#FDE8F3",
-        "color_card": "#FFFFFF",
-        "color_shadow": "#F4CCD4",
-        "color_primary": "#7C0C3F",
-        "color_accent": "#DB2777",
-        "color_muted": "#BA96A5",
-        "color_badge_bg": "#DB2777",
-        "color_badge_text": "#FFFFFF",
-        "color_header_rect_bg": "#FFFFFF",
-        "color_header_rect_border": "#7C0C3F",
-        "header_rect_border_width": 2,
-        "header_rect_radius": 20,
-        "libros_por_pagina": 12
-    }
-
-def guardar_configuracion_marketing(config):
-    """Guarda persistentemente la configuración en el JSON de assets."""
+def asegurar_fuentes():
+    """Descarga las fuentes desde Google Fonts si no existen."""
     if not os.path.exists("assets"):
         os.makedirs("assets")
-    try:
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(config, f, indent=4)
-        return True
-    except Exception as e:
-        return False
-
-@st.cache_data(ttl=60)
-def cargar_libros_para_marketing():
-    """
-    Filtro Maestro (Requisito 1): Carga libros visibles, con precio > 0 y con portada en Supabase.
-    Bypass seguro de 1000 registros ordenando obligatoriamente por la clave primaria: libro_id.
-    """
-    from utilidades import get_db_connection
-    conn = get_db_connection()
-    try:
-        all_books = []
-        chunk_size = 1000
-        # Paginación dinámica segura
-        for bloque in range(100):
-            start = bloque * chunk_size
-            end = start + chunk_size - 1
-            res = conn.table("libros")\
-                .select("libro_id, titulo, autor, precio, precio_original, genero, stock")\
-                .eq("visible_catalogo", True)\
-                .gt("precio", 0)\
-                .order("libro_id")\
-                .range(start, end).execute()
-            if res.data:
-                all_books.extend(res.data)
-                if len(res.data) < chunk_size:
-                    break
-            else:
-                break
-                
-        if not all_books:
-            return pd.DataFrame()
-            
-        df_libros = pd.DataFrame(all_books)
-
-        # Carga física y paginada de portadas existentes en el Storage
-        portadas_existentes = set()
-        offset = 0
-        while True:
+    
+    fuentes = {
+        "Montserrat-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Bold.ttf",
+        "Montserrat-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Regular.ttf"
+    }
+    
+    for nombre, url in fuentes.items():
+        ruta = os.path.join("assets", nombre)
+        if not os.path.exists(ruta):
             try:
-                bloque = conn.storage.from_("portadas").list(path="", search_options={"limit": 100, "offset": offset})
-            except TypeError:
-                bloque = conn.storage.from_("portadas").list(path="", options={"limit": 100, "offset": offset})
-            
-            if not bloque:
-                break
-            
-            for archivo in bloque:
-                if archivo['name'] is not None:
-                    portadas_existentes.add(archivo['name'].strip())
-            offset += 100
-        
-        # Cruzamos y filtramos
-        df_libros['portada_esperada'] = df_libros['libro_id'].apply(lambda idx: f"{int(float(idx))}.jpg".strip())
-        df_libros['tiene_portada'] = df_libros['portada_esperada'].isin(portadas_existentes)
-        
-        df_final = df_libros[df_libros['tiene_portada'] == True].copy()
-        df_final.drop(columns=['portada_esperada', 'tiene_portada'], inplace=True)
-        df_final['precio'] = pd.to_numeric(df_final['precio'], errors='coerce').fillna(0)
-        df_final['libro_id'] = df_final['libro_id'].astype(str)
-        
-        return df_final
-    except Exception as e:
-        return pd.DataFrame()
+                print(f"Descargando fuente {nombre}...")
+                urllib.request.urlretrieve(url, ruta)
+            except Exception as e:
+                pass
 
-def mostrar_generador_marketing():
-    st.title("🎨 Generador de Catálogos Masivos")
-    st.info("Genera imágenes personalizadas para tus Stories de Redes Sociales.")
+def asegurar_fuente_google(nombre_fuente):
+    """
+    Descarga dinámicamente cualquier fuente TrueType (.ttf) desde el repositorio
+    oficial de Google Fonts en GitHub y la almacena en caché localmente.
+    """
+    if not os.path.exists("assets"):
+        os.makedirs("assets")
+        
+    nombre_limpio = nombre_fuente.strip().replace(" ", "")
+    ruta_font = os.path.join("assets", f"{nombre_limpio}.ttf")
+    
+    if os.path.exists(ruta_font):
+        return ruta_font
 
+    formatos_url = [
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_fuente.replace(' ', '')}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/apache/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}.ttf"
+    ]
+    
+    for url in formatos_url:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                with open(ruta_font, "wb") as f:
+                    f.write(response.read())
+            return ruta_font
+        except Exception:
+            continue
+            
+    return None
+
+def hex_to_rgb(hex_str):
+    """Convierte un string de color HEX (#RRGGBB) a una tupla RGB (R, G, B) de forma segura."""
+    if not hex_str or not isinstance(hex_str, str):
+        return (255, 255, 255)
+    hex_str = hex_str.strip().lstrip('#')
     try:
-        URL_BASE_SUPABASE = st.secrets["catalogo_publico"]["supabase_portadas_url"]
-    except KeyError:
-        st.error("🚨 Falta la clave 'supabase_portadas_url' en secrets.toml.")
-        st.stop()
+        return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    except Exception:
+        return (255, 255, 255)
 
-    # Cargar configuraciones guardadas o por defecto
-    config_default = cargar_configuracion_marketing()
-
-    df_libros = cargar_libros_para_marketing()
-    if df_libros.empty:
-        st.warning("No hay libros en el catálogo que cumplan las condiciones para marketing (visibles, con precio y con portada cargada).")
-        return
-
-    # =========================================================================
-    # 🎨 REQUISITOS 2, 3, 4, 5, 7: PANEL INTERACTIVO DE PERSONALIZACIÓN
-    # =========================================================================
-    with st.expander("🛠️ Personalizar Diseño, Colores y Retícula del Catálogo", expanded=False):
-        st.markdown("#### 📐 Configuración de Cuadrícula")
-        opciones_paginacion = [1, 4, 8, 12]
-        libros_por_pag = st.selectbox(
-            "Cantidad de libros por página:", 
-            options=opciones_paginacion, 
-            index=opciones_paginacion.index(config_default.get("libros_por_pagina", 12)) if config_default.get("libros_por_pagina", 12) in opciones_paginacion else 3
-        )
+def obtener_fuente(nombre_fuente, tamanio, bold=False, italic=False):
+    """
+    Carga de forma dinámica y resiliente una fuente tipográfica premium con estilos aplicados.
+    """
+    nombre_limpio = nombre_fuente.strip()
+    ruta_google = asegurar_fuente_google(nombre_limpio)
+    
+    candidatas = []
+    if ruta_google:
+        candidatas.append(ruta_google)
         
-        st.markdown("---")
-        st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
-        listado_fuentes = ["Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."]
-        
-        # Selector de Fuente del género
-        font_h_sel = st.selectbox(
-            "Fuente del título (Género):", 
-            options=listado_fuentes,
-            index=listado_fuentes.index(config_default.get("font_family_header", "Montserrat")) if config_default.get("font_family_header", "Montserrat") in listado_fuentes else 0
-        )
-        if font_h_sel == "Escribir otra...":
-            font_h_sel = st.text_input("Ingresa el nombre exacto de la fuente de Google Fonts:", value="Montserrat")
+    candidatas.extend([
+        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
+        "/usr/share/fonts/GoogleSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
+        "arialbd.ttf" if bold else "arial.ttf",
+        "Arial.ttf"
+    ])
+    
+    for ruta in candidatas:
+        try:
+            if os.path.exists(ruta) or not ruta.endswith('.ttf'):
+                return ImageFont.truetype(ruta, tamanio)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=tamanio)
+    except:
+        return ImageFont.load_default()
 
-        # Selector de Fuente de los libros
-        font_b_sel = st.selectbox(
-            "Fuente de los textos del libro:", 
-            options=listado_fuentes,
-            index=listado_fuentes.index(config_default.get("font_family_books", "Montserrat")) if config_default.get("font_family_books", "Montserrat") in listado_fuentes else 0
-        )
-        if font_b_sel == "Escribir otra...":
-            font_b_sel = st.text_input("Ingresa el nombre de la fuente para libros en Google Fonts:", value="Montserrat")
+def dividir_texto_en_lineas(texto, max_chars=14):
+    """Divide el título de un libro en 2 líneas para evitar desbordamientos."""
+    palabras = texto.split()
+    lineas = []
+    linea_actual = []
+    longitud_actual = 0
+    for palabra in palabras:
+        if longitud_actual + len(palabra) + (1 if linea_actual else 0) <= max_chars:
+            linea_actual.append(palabra)
+            longitud_actual += len(palabra) + (1 if len(linea_actual) > 1 else 0)
+        else:
+            if linea_actual:
+                lineas.append(" ".join(linea_actual))
+            linea_actual = [palabra]
+            longitud_actual = len(palabra)
+            if len(lineas) >= 2:
+                break
+    if linea_actual and len(lineas) < 2:
+        lineas.append(" ".join(linea_actual))
+    
+    words_joined = " ".join(palabras)
+    joined_lines = " ".join(lineas)
+    if len(words_joined) > len(joined_lines):
+        if len(lineas) == 2:
+            lineas[1] = lineas[1][:11] + ".."
+        elif len(lineas) == 1:
+            lineas[0] = lineas[0][:11] + ".."
+            
+    return lineas
 
-        c_font1, c_font2, c_font3, c_font4 = st.columns(4)
-        bold_h = c_font1.checkbox("Aplicar Negrita (Bold) al Género", value=config_default.get("bold_header", True))
-        italic_h = c_font2.checkbox("Aplicar Cursiva (Italic) al Género", value=config_default.get("italic_header", False))
-        size_h = c_font3.slider("Tamaño Fuente Género:", 20, 100, int(config_default.get("tamanio_header", 45)))
-        size_b = c_font4.slider("Tamaño Fuente Libros:", 12, 35, int(config_default.get("tamanio_libros", 20)))
-
-        st.markdown("---")
-        st.markdown("#### 📦 Rectángulo del Título (Género)")
-        c_rect1, c_rect2, c_rect3, c_rect4 = st.columns(4)
-        color_rect_bg = c_rect1.color_picker("Fondo Rectángulo:", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
-        color_rect_border = c_rect2.color_picker("Borde Rectángulo:", value=config_default.get("color_header_rect_border", "#7C0C3F"))
-        border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
-        radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
-
-        st.markdown("---")
-        st.markdown("#### 🎨 Paleta de Colores (HEX)")
-        c_col1, c_col2, c_col3, c_col4 = st.columns(4)
-        c_bg = c_col1.color_picker("Fondo Base (Fallback):", value=config_default.get("color_bg", "#FDE8F3"))
-        c_card = c_col2.color_picker("Color de Tarjetas:", value=config_default.get("color_card", "#FFFFFF"))
-        c_shadow = c_col3.color_picker("Color de Sombras 3D:", value=config_default.get("color_shadow", "#F4CCD4"))
-        c_primary = c_col4.color_picker("Color Textos / Títulos:", value=config_default.get("color_primary", "#7C0C3F"))
-        
-        c_col5, c_col6, c_col7, c_col8 = st.columns(4)
-        c_accent = c_col5.color_picker("Color Ofertas / Fucsia:", value=config_default.get("color_accent", "#DB2777"))
-        c_muted = c_col6.color_picker("Color Precios Tachados:", value=config_default.get("color_muted", "#BA96A5"))
-        c_badge_bg = c_col7.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
-        c_badge_text = c_col8.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
-
-        # Construcción del diccionario estructurado
-        config_diseno_final = {
-            "font_family_header": font_h_sel,
-            "font_family_books": font_b_sel,
-            "bold_header": bold_h,
-            "italic_header": italic_h,
-            "tamanio_header": size_h,
-            "tamanio_libros": size_b,
-            "color_header_rect_bg": color_rect_bg,
-            "color_header_rect_border": color_rect_border,
-            "header_rect_border_width": border_w,
-            "header_rect_radius": radius_h,
-            "color_bg": c_bg,
-            "color_card": c_card,
-            "color_shadow": c_shadow,
-            "color_primary": c_primary,
-            "color_accent": c_accent,
-            "color_muted": c_muted,
-            "color_badge_bg": c_badge_bg,
-            "color_badge_text": c_badge_text,
-            "libros_por_pagina": libros_por_pag
+def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES", config_diseno=None):
+    """
+    Genera un collage de marketing 1080x1920 con retícula dinámica y colores HEX configurables.
+    """
+    if config_diseno is None:
+        config_diseno = {
+            "font_family_header": "Montserrat",
+            "font_family_books": "Montserrat",
+            "bold_header": True,
+            "italic_header": False,
+            "tamanio_header": 45,
+            "tamanio_libros": 20,
+            "color_bg": "#FDE8F3",
+            "color_card": "#FFFFFF",
+            "color_shadow": "#F4CCD4",
+            "color_primary": "#7C0C3F",
+            "color_accent": "#DB2777",
+            "color_muted": "#BA96A5",
+            "color_badge_bg": "#DB2777",
+            "color_badge_text": "#FFFFFF",
+            "color_header_rect_bg": "#FFFFFF",
+            "color_header_rect_border": "#7C0C3F",
+            "header_rect_border_width": 2,
+            "header_rect_radius": 20
         }
 
-        st.markdown("---")
-        if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
-            if guardar_configuracion_marketing(config_diseno_final):
-                st.success("✅ ¡Ajustes guardados con éxito! Se cargarán de forma predeterminada en tu próxima sesión.")
-            else:
-                st.error("❌ No se pudieron guardar los ajustes en el archivo local.")
-
-    # =========================================================================
-    # 🖼️ REQUISITO 6: CARGA DE ARCHIVO PARA IMAGEN DE FONDO SUPABASE
-    # =========================================================================
-    with st.expander("🖼️ Cargar y Cambiar Imagen de Fondo Oficial (Supabase base.png)", expanded=False):
-        st.info("Subir una nueva imagen de fondo (idealmente 1080x1920) sobreescribirá la plantilla de Alba Librería en tiempo real.")
-        img_fondo_subida = st.file_uploader("Sube tu archivo de fondo (PNG recomendado):", type=["png", "jpg", "jpeg"])
+    try:
+        W, H = (1080, 1920)
         
-        if img_fondo_subida is not None:
-            if st.button("🚀 Subir e Inyectar en Supabase", type="primary", use_container_width=True):
-                with st.spinner("Subiendo imagen de fondo y sobrescribiendo plantilla..."):
-                    try:
-                        from utilidades import get_db_connection
-                        conn = get_db_connection()
-                        img_bytes = img_fondo_subida.getvalue()
-                        
-                        # Subida con upsert=True para sobrescribir en caliente
-                        conn.storage.from_("grafica").upload(
-                            path="base.png",
-                            file=img_bytes,
-                            file_options={"cache-control": "3600", "upsert": "true"}
-                        )
-                        st.success("🎉 ¡Fondo oficial actualizado con éxito en Supabase!")
-                        time.sleep(1.5)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error cargando imagen de fondo: {e}")
-
-    # =========================================================================
-    # RENDERIZADO COMÚN
-    # =========================================================================
-    with st.container(border=True):
-        st.markdown("#### 1. Filtra y Selecciona")
+        BG_COLOR = hex_to_rgb(config_diseno.get("color_bg", "#FDE8F3"))
+        CARD_COLOR = hex_to_rgb(config_diseno.get("color_card", "#FFFFFF"))
+        SHADOW_COLOR = hex_to_rgb(config_diseno.get("color_shadow", "#F4CCD4"))
+        PRIMARY_COLOR = hex_to_rgb(config_diseno.get("color_primary", "#7C0C3F"))
+        ACCENT_COLOR = hex_to_rgb(config_diseno.get("color_accent", "#DB2777"))
+        MUTED_COLOR = hex_to_rgb(config_diseno.get("color_muted", "#BA96A5"))
+        BADGE_BG = hex_to_rgb(config_diseno.get("color_badge_bg", "#DB2777"))
+        BADGE_TEXT = hex_to_rgb(config_diseno.get("color_badge_text", "#FFFFFF"))
+        HEADER_RECT_BG = hex_to_rgb(config_diseno.get("color_header_rect_bg", "#FFFFFF"))
+        HEADER_RECT_BORDER = hex_to_rgb(config_diseno.get("color_header_rect_border", "#7C0C3F"))
+        HEADER_RECT_BORDER_W = int(config_diseno.get("header_rect_border_width", 2))
+        HEADER_RECT_RADIUS = int(config_diseno.get("header_rect_radius", 20))
         
-        generos_disponibles = sorted(df_libros['genero'].dropna().unique())
-        genero_seleccionado = st.selectbox("Filtrar por Género (opcional):", ["Todos"] + generos_disponibles)
-
-        df_filtrado = df_libros
-        if genero_seleccionado != "Todos":
-            df_filtrado = df_libros[df_libros['genero'] == genero_seleccionado]
-
-        df_filtrado['label_selectbox'] = df_filtrado.apply(
-            lambda x: f"{x['titulo']} (Sin Stock)" if int(x.get('stock', 0)) <= 0 else x['titulo'], axis=1
+        font_header = obtener_fuente(
+            config_diseno.get("font_family_header", "Montserrat"), 
+            int(config_diseno.get("tamanio_header", 45)),
+            bold=config_diseno.get("bold_header", True),
+            italic=config_diseno.get("italic_header", False)
         )
-        opciones_libros = dict(zip(df_filtrado['label_selectbox'], df_filtrado['libro_id']))
+        font_titulo = obtener_fuente(
+            config_diseno.get("font_family_books", "Montserrat"), 
+            int(config_diseno.get("tamanio_libros", 20)),
+            bold=True
+        )
+        font_precio = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 42, bold=True)
+        font_tachado = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 28, bold=True)
+        font_badge = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 18, bold=True)
 
-        seleccionar_todos = st.checkbox(f"✅ Seleccionar TODOS los libros filtrados ({len(df_filtrado)} libros)")
+        # Cargar imagen de fondo oficial
+        BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
+        try:
+            req = urllib.request.Request(BG_URL, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=8) as response_bg:
+                img = Image.open(io.BytesIO(response_bg.read())).convert('RGB')
+            img = img.resize((W, H), Image.Resampling.LANCZOS)
+        except Exception:
+            img = Image.new('RGB', (W, H), color=BG_COLOR)
+            
+        draw = ImageDraw.Draw(img)
+
+        # 1. Cabecera dinámica de género
+        titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
+        try:
+            bbox_header = draw.textbbox((0, 0), titulo_limpio, font=font_header)
+            text_w = bbox_header[2] - bbox_header[0]
+            text_h = bbox_header[3] - bbox_header[1]
+            
+            pad_x, pad_y = 40, 20
+            box_w = text_w + pad_x * 2
+            box_h = text_h + pad_y * 2
+            
+            box_x1 = (W - box_w) / 2
+            box_y1 = 60
+            box_x2 = box_x1 + box_w
+            box_y2 = box_y1 + box_h
+            
+            draw.rounded_rectangle([box_x1 + 8, box_y1 + 8, box_x2 + 8, box_y2 + 8], radius=HEADER_RECT_RADIUS, fill=SHADOW_COLOR)
+            draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=HEADER_RECT_RADIUS, fill=HEADER_RECT_BG)
+            
+            if HEADER_RECT_BORDER_W > 0:
+                draw.rounded_rectangle(
+                    [box_x1, box_y1, box_x2, box_y2], 
+                    radius=HEADER_RECT_RADIUS, 
+                    outline=HEADER_RECT_BORDER, 
+                    width=HEADER_RECT_BORDER_W
+                )
+            
+            draw.text((W/2, box_y1 + box_h/2), titulo_limpio, font=font_header, fill=PRIMARY_COLOR, anchor="mm")
+        except Exception:
+            pass
+
+        # Retícula adaptativa
+        n_libros = len(lista_libros_chunk)
         
-        libros_seleccionados = []
-        if seleccionar_todos:
-            libros_seleccionados = list(opciones_libros.keys())
+        if n_libros == 1:
+            cols = 1
+            start_y = 520
+            cell_w = 600
+            cell_h = 750
+            x_margin = (W - cell_w) / 2
+            y_margin = 0
+            img_height = 420
+        elif n_libros <= 4:
+            cols = 2
+            start_y = 400
+            cell_w = 420
+            cell_h = 560
+            x_margin = (W - cell_w * 2) / 3
+            y_margin = 60
+            img_height = 320
+        elif n_libros <= 8:
+            cols = 2
+            start_y = 230
+            cell_w = 420
+            cell_h = 360
+            x_margin = (W - cell_w * 2) / 3
+            y_margin = 40
+            img_height = 170
         else:
-            libros_seleccionados = st.multiselect("O selecciona manualmente:", options=opciones_libros.keys())
+            cols = 3
+            start_y = 190
+            cell_w = 313
+            cell_h = 420
+            x_margin = 35
+            y_margin = 40
+            img_height = 220
 
-    if libros_seleccionados:
-        st.markdown("---")
-        st.markdown("#### 2. Configuración y Generación")
-        agrupar_por_genero = st.checkbox("🗂️ Agrupar y titular hojas por Género", value=True)
+        for i, libro in enumerate(lista_libros_chunk):
+            if i >= 12: 
+                break 
 
-        if st.button("🚀 Generar Catálogo Completo", type="primary", use_container_width=True):
-            ids_seleccionados = [opciones_libros[t] for t in libros_seleccionados if t in opciones_libros]
-            if not ids_seleccionados:
-                st.warning("No se seleccionaron libros válidos.")
-                st.stop()
+            row_idx = i // cols
+            col_idx = i % cols
 
-            df_final = df_libros[df_libros['libro_id'].isin(ids_seleccionados)].copy()
-            st.session_state.hojas_generadas = []
+            x_card = x_margin + col_idx * (cell_w + x_margin)
+            y_card = start_y + row_idx * (cell_h + y_margin)
 
-            # Libros por página dinámico desde la configuración
-            libros_por_pagina = config_diseno_final.get("libros_por_pagina", 12)
+            try:
+                draw.rounded_rectangle([x_card + 12, y_card + 12, x_card + cell_w + 12, y_card + cell_h + 12], radius=25, fill=SHADOW_COLOR)
+                draw.rounded_rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], radius=25, fill=CARD_COLOR)
+            except AttributeError:
+                draw.rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], fill=CARD_COLOR)
 
-            with st.spinner("Pintando hojas del catálogo... Aguarda un momento."):
-                if agrupar_por_genero:
-                    for genero, df_grupo in df_final.groupby('genero'):
-                        titulo_base = str(genero).upper() if pd.notna(genero) else "OTROS"
-                        lista_data = df_grupo.sort_values('titulo').to_dict('records')
-                        chunks = [lista_data[i:i + libros_por_pagina] for i in range(0, len(lista_data), libros_por_pagina)]
-                        for idx, chunk in enumerate(chunks):
-                            titulo_hoja = titulo_base if len(chunks) == 1 else f"{titulo_base} ({idx + 1}/{len(chunks)})"
-                            img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja, config_diseno_final)
-                            if img_obj: st.session_state.hojas_generadas.append((titulo_hoja, img_obj))
-                else:
-                    lista_data = df_final.sort_values('titulo').to_dict('records')
-                    chunks = [lista_data[i:i + libros_por_pagina] for i in range(0, len(lista_data), libros_por_pagina)]
-                    for idx, chunk in enumerate(chunks):
-                        titulo_hoja = "NOVEDADES" if len(chunks) == 1 else f"NOVEDADES ({idx + 1}/{len(chunks)})"
-                        img_obj = generar_collage_marketing(chunk, URL_BASE_SUPABASE, titulo_hoja, config_diseno_final)
-                        if img_obj: st.session_state.hojas_generadas.append((titulo_hoja, img_obj))
+            y_img = y_card + 20
+            try:
+                url_portada = f"{url_base_supabase}{libro['libro_id']}.jpg"
+                response = requests.get(url_portada, stream=True, timeout=5)
+                response.raise_for_status()
+                portada_img = Image.open(response.raw).convert("RGBA")
+                
+                portada_img.thumbnail((int(cell_w - 24), img_height)) 
+                x_img = x_card + (cell_w - portada_img.width) / 2
+                
+                img.paste(portada_img, (int(x_img), int(y_img)), portada_img)
+            except Exception:
+                draw.rectangle([x_card + 24, y_img, x_card + cell_w - 24, y_img + img_height], fill=(245, 238, 241))
 
-    if 'hojas_generadas' in st.session_state and st.session_state.hojas_generadas:
-        hojas = st.session_state.hojas_generadas
-        st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
+            if int(libro.get('stock', 0)) > 0:
+                texto_badge = " DISPONIBLE "
+                try:
+                    bbox_badge = draw.textbbox((0, 0), texto_badge, font=font_badge)
+                    ancho_badge = bbox_badge[2] - bbox_badge[0]
+                    alto_badge = 32
+                    
+                    x_badge = x_card + (cell_w - ancho_badge) / 2
+                    y_badge_pos = y_card - 15 
+                    
+                    draw.rounded_rectangle([x_badge, y_badge_pos, x_badge + ancho_badge, y_badge_pos + alto_badge], radius=15, fill=BADGE_BG)
+                    draw.text((x_badge + ancho_badge/2, y_badge_pos + alto_badge/2), texto_badge, font=font_badge, fill=BADGE_TEXT, anchor="mm")
+                except Exception:
+                    pass
+
+            max_c = 18 if n_libros > 4 else 26
+            lineas_titulo = dividir_texto_en_lineas(libro['titulo'].upper(), max_chars=max_c)
+            
+            y_titulo_start = y_card + (cell_h * 0.68)
+            if len(lineas_titulo) == 2:
+                y_titulo_start -= 12
+                
+            for idx_linea, linea in enumerate(lineas_titulo):
+                try:
+                    draw.text((x_card + cell_w/2, y_titulo_start + idx_linea * 24), linea, font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
+                except ValueError:
+                    pass
+
+            precio_float = float(libro['precio'])
+            precio_orig_float = float(libro.get('precio_original', precio_float))
+
+            y_precios = y_card + (cell_h * 0.82)
+            if precio_float < precio_orig_float:
+                texto_orig = f"${precio_orig_float:,.0f}"
+                try:
+                    draw.text((x_card + cell_w/2, y_precios), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
+                    bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
+                    ancho_orig = bbox_orig[2] - bbox_orig[0]
+                    draw.line((x_card + cell_w/2 - ancho_orig/2, y_precios - 8, x_card + cell_w/2 + ancho_orig/2, y_precios - 8), fill=MUTED_COLOR, width=3)
+                except ValueError:
+                    pass
+                
+                texto_final = f"${precio_float:,.0f}"
+                try:
+                    draw.text((x_card + cell_w/2, y_precios + 45), texto_final, font=font_precio, fill=ACCENT_COLOR, anchor="ms")
+                except ValueError:
+                    pass
+            else:
+                texto_final = f"${precio_float:,.0f}"
+                try:
+                    draw.text((x_card + cell_w/2, y_precios + 25), texto_final, font=font_precio, fill=PRIMARY_COLOR, anchor="ms")
+                except ValueError:
+                    pass
+
+        return img
         
-        with st.expander("Ver y Descargar las Hojas Generadas", expanded=True):
-            columnas_render = st.columns(3)
-            for idx, (titulo_hoja, img_obj) in enumerate(hojas):
-                col = columnas_render[idx % 3]
-                with col:
-                    buf = io.BytesIO()
-                    img_obj.save(buf, format="PNG")
-                    img_bytes = buf.getvalue()
-                    
-                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                    # Diseño CSS/HTML Premium con letras atractivas y transiciones dinámicas
-                    html_str = f"""
-                    <div style="
-                        text-align: center; 
-                        margin-bottom: 12px; 
-                        color: {config_diseno_final.get('color_primary', '#7C0C3F')}; 
-                        font-family: 'Helvetica Neue', Arial, sans-serif;
-                        font-size: 18px; 
-                        font-weight: bold; 
-                        letter-spacing: 1px;
-                        text-transform: uppercase;
-                        text-shadow: 1px 1px 2px rgba(0,0,0,0.08);
-                        border-bottom: 2px solid {config_diseno_final.get('color_accent', '#DB2777')};
-                        padding-bottom: 6px;
-                    ">
-                        ✨ {titulo_hoja} ✨
-                    </div>
-                    <div style="
-                        border-radius: 12px; 
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
-                        overflow: hidden; 
-                        margin-bottom: 15px;
-                        transition: transform 0.3s ease-in-out;
-                    " onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
-                        <img src="data:image/png;base64,{b64_img}" style="width: 100%; display: block;">
-                    </div>
-                    """
-                    st.markdown(html_str, unsafe_allow_html=True)
-                    
-                    st.download_button(
-                        label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
-                        file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
-                        mime="image/png", key=f"dl_btn_{idx}", use_container_width=True
-                    )
+    except Exception as e:
+        print(f"Error en motor de collage: {e}")
+        return None
