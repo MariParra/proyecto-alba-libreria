@@ -4,6 +4,7 @@ import io
 import json
 import os
 import base64
+import zipfile
 from utilidades import limpiar_texto_para_busqueda
 from generador_collage import generar_collage_marketing
 import time
@@ -205,8 +206,8 @@ def mostrar_generador_marketing():
         st.markdown("---")
         st.markdown("#### 📦 Rectángulo del Título (Género)")
         c_rect1, c_rect2, c_rect3, c_rect4 = st.columns(4)
-        color_rect_bg = c_rect1.color_picker("Fondo Rectángulo:", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
-        color_rect_border = c_rect2.color_picker("Borde Rectángulo:", value=config_default.get("color_header_rect_border", "#7C0C3F"))
+        color_rect_bg = c_rect1.color_picker("Fondo del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_bg", "#FFFFFF"))
+        color_rect_border = c_rect2.color_picker("Borde del Rectángulo del Género (Arriba):", value=config_default.get("color_header_rect_border", "#7C0C3F"))
         border_w = c_rect3.slider("Grosor Borde Rectángulo (px):", 0, 10, int(config_default.get("header_rect_border_width", 2)))
         radius_h = c_rect4.slider("Redondeo del Rectángulo (px):", 0, 40, int(config_default.get("header_rect_radius", 20)))
 
@@ -218,20 +219,19 @@ def mostrar_generador_marketing():
         st.markdown("---")
         st.markdown("#### 🎨 Paleta de Colores (HEX)")
         c_col1, c_col2, c_col3 = st.columns(3)
-        c_bg = c_col1.color_picker("Fondo Base (Fallback):", value=config_default.get("color_bg", "#FDE8F3"))
-        c_card = c_col2.color_picker("Color de Tarjetas:", value=config_default.get("color_card", "#FFFFFF"))
-        c_shadow = c_col3.color_picker("Color de Sombras 3D:", value=config_default.get("color_shadow", "#F4CCD4"))
+        c_bg = c_col1.color_picker("Fondo del Collage (si falla plantilla):", value=config_default.get("color_bg", "#FDE8F3"))
+        c_card = c_col2.color_picker("Fondo de la Tarjeta del Libro (Blanco por defecto):", value=config_default.get("color_card", "#FFFFFF"))
+        c_shadow = c_col3.color_picker("Sombra 3D de Tarjetas y Título (Gris/Rosa):", value=config_default.get("color_shadow", "#F4CCD4"))
         
-        # 🌟 SEPARACIÓN DE SELECTORES DE COLOR PARA GÉNERO Y LIBRO
         c_col4, c_col5, c_col6, c_col7 = st.columns(4)
-        c_primary_header = c_col4.color_picker("Color Texto Género:", value=config_default.get("color_primary_header", "#7C0C3F"))
-        c_primary_books = c_col5.color_picker("Color Texto Libros:", value=config_default.get("color_primary_books", "#7C0C3F"))
-        c_accent = c_col6.color_picker("Color Ofertas / Fucsia:", value=config_default.get("color_accent", "#DB2777"))
-        c_muted = c_col7.color_picker("Color Precios Tachados:", value=config_default.get("color_muted", "#BA96A5"))
+        c_primary_header = c_col4.color_picker("Color de Letras del Título del Género (Arriba):", value=config_default.get("color_primary_header", "#7C0C3F"))
+        c_primary_books = c_col5.color_picker("Color de Letras de Títulos de Libros (Tarjetas):", value=config_default.get("color_primary_books", "#7C0C3F"))
+        c_accent = c_col6.color_picker("Color de Precio de Oferta (Fucsia/Rojo):", value=config_default.get("color_accent", "#DB2777"))
+        c_muted = c_col7.color_picker("Color de Precio Original Tachado (Gris):", value=config_default.get("color_muted", "#BA96A5"))
         
         c_col8, c_col9 = st.columns(2)
-        c_badge_bg = c_col8.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
-        c_badge_text = c_col9.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
+        c_badge_bg = c_col8.color_picker("Fondo del Rectángulo 'Disponible' (Badge):", value=config_default.get("color_badge_bg", "#DB2777"))
+        c_badge_text = c_col9.color_picker("Color del Texto 'Disponible' (Badge):", value=config_default.get("color_badge_text", "#FFFFFF"))
 
         config_diseno_final = {
             "font_family_header": font_h_sel,
@@ -249,8 +249,8 @@ def mostrar_generador_marketing():
             "color_bg": c_bg,
             "color_card": c_card,
             "color_shadow": c_shadow,
-            "color_primary_header": c_primary_header, # Nueva llave separada
-            "color_primary_books": c_primary_books,   # Nueva llave separada
+            "color_primary_header": c_primary_header,
+            "color_primary_books": c_primary_books,
             "color_accent": c_accent,
             "color_muted": c_muted,
             "color_badge_bg": c_badge_bg,
@@ -259,11 +259,11 @@ def mostrar_generador_marketing():
         }
 
         # =========================================================================
-        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS ACTUALIZADO)
+        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS INCLUYE BADGE DISPONIBLE)
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
-        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales.")
+        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales con todos sus componentes.")
         
         import_font_h = font_h_sel.replace(" ", "+")
         import_font_b = font_b_sel.replace(" ", "+")
@@ -274,7 +274,7 @@ def mostrar_generador_marketing():
         
         .preview-container {{
             background-color: {c_bg};
-            padding: 30px;
+            padding: 40px 30px;
             border-radius: 15px;
             text-align: center;
             font-family: '{font_b_sel}', sans-serif;
@@ -304,9 +304,25 @@ def mostrar_generador_marketing():
             padding: 20px;
             display: inline-block;
             width: 250px;
-            margin: 10px auto;
+            margin: 15px auto 10px auto;
             box-shadow: 10px 10px 0px {c_shadow};
             text-align: center;
+            position: relative;
+        }}
+        .preview-badge {{
+            background-color: {c_badge_bg};
+            color: {c_badge_text};
+            font-family: '{font_b_sel}', sans-serif;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 4px 12px;
+            border-radius: 10px;
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            white-space: nowrap;
         }}
         .preview-book-title {{
             color: {c_primary_books};
@@ -315,6 +331,13 @@ def mostrar_generador_marketing():
             margin-top: 15px;
             margin-bottom: 10px;
             text-transform: uppercase;
+        }}
+        .preview-book-price-tachado {{
+            color: {c_muted};
+            font-size: 13px;
+            text-decoration: line-through;
+            margin-bottom: 2px;
+            font-weight: bold;
         }}
         .preview-book-price {{
             color: {c_accent};
@@ -329,10 +352,12 @@ def mostrar_generador_marketing():
             </div>
             <br/>
             <div class="preview-card">
-                <div style="background-color: #EFEFEF; height: 150px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #888;">
+                <div class="preview-badge">DISPONIBLE</div>
+                <div style="background-color: #F5EEF1; height: 145px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #888;">
                     📚 Portada
                 </div>
                 <div class="preview-book-title">Título del Libro</div>
+                <div class="preview-book-price-tachado">$14,000</div>
                 <div class="preview-book-price">$13,300</div>
             </div>
         </div>
@@ -437,7 +462,34 @@ def mostrar_generador_marketing():
         hojas = st.session_state.hojas_generadas
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
         
-        with st.expander("Ver y Descargar las Hojas Generadas", expanded=True):
+        # =========================================================================
+        # 📥 DESCARGA MASIVA EN UN SOLO ARCHIVO ZIP (NUEVO BOTÓN INTEGRADO)
+        # =========================================================================
+        st.markdown("---")
+        st.markdown("#### 📥 Descarga Masiva del Catálogo Completo")
+        st.caption("Usa este botón para descargar todas las hojas generadas comprimidas en un único archivo ZIP en un clic.")
+        
+        # Compilación en caliente del ZIP en memoria
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for titulo_hoja, img_obj in hojas:
+                buf_img = io.BytesIO()
+                img_obj.save(buf_img, format="PNG")
+                img_bytes = buf_img.getvalue()
+                file_name = f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png"
+                zip_file.writestr(file_name, img_bytes)
+                
+        st.download_button(
+            label="📥 Descargar Catálogo Completo (ZIP)",
+            data=zip_buf.getvalue(),
+            file_name="Catalogo_Completo_Alba_Libreria.zip",
+            mime="application/zip",
+            use_container_width=True,
+            type="primary"
+        )
+        st.markdown("---")
+        
+        with st.expander("Ver y Descargar las Hojas Generadas Individualmente", expanded=True):
             columnas_render = st.columns(3)
             for idx, (titulo_hoja, img_obj) in enumerate(hojas):
                 col = columnas_render[idx % 3]
