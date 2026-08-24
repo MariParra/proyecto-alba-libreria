@@ -5,6 +5,25 @@ import os
 import urllib.request
 import re
 
+def asegurar_fuentes():
+    """Descarga las fuentes desde Google Fonts si no existen."""
+    if not os.path.exists("assets"):
+        os.makedirs("assets")
+    
+    fuentes = {
+        "Montserrat-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Bold.ttf",
+        "Montserrat-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Regular.ttf"
+    }
+    
+    for nombre, url in fuentes.items():
+        ruta = os.path.join("assets", nombre)
+        if not os.path.exists(ruta):
+            try:
+                print(f"Descargando fuente {nombre}...")
+                urllib.request.urlretrieve(url, ruta)
+            except Exception as e:
+                pass
+
 def asegurar_fuente_google(nombre_fuente):
     """
     Descarga dinámicamente cualquier fuente TrueType (.ttf) desde el repositorio
@@ -13,15 +32,12 @@ def asegurar_fuente_google(nombre_fuente):
     if not os.path.exists("assets"):
         os.makedirs("assets")
         
-    # Limpiamos el nombre de la fuente para armar el nombre del archivo
     nombre_limpio = nombre_fuente.strip().replace(" ", "")
     ruta_font = os.path.join("assets", f"{nombre_limpio}.ttf")
     
     if os.path.exists(ruta_font):
         return ruta_font
 
-    # Buscamos en el repositorio oficial de Google Fonts en GitHub (OFL o Apache)
-    # Probamos múltiples ubicaciones comunes para asegurar la descarga
     formatos_url = [
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_fuente.replace(' ', '')}-Regular.ttf",
@@ -35,7 +51,6 @@ def asegurar_fuente_google(nombre_fuente):
             with urllib.request.urlopen(req, timeout=5) as response:
                 with open(ruta_font, "wb") as f:
                     f.write(response.read())
-            print(f"Fuente '{nombre_fuente}' descargada con éxito enassets.")
             return ruta_font
         except Exception:
             continue
@@ -57,8 +72,6 @@ def obtener_fuente(nombre_fuente, tamanio, bold=False, italic=False):
     Carga de forma dinámica y resiliente una fuente tipográfica premium con estilos aplicados.
     """
     nombre_limpio = nombre_fuente.strip()
-    
-    # Intentamos descargar e indexar la fuente desde Google Fonts
     ruta_google = asegurar_fuente_google(nombre_limpio)
     
     candidatas = []
@@ -66,12 +79,10 @@ def obtener_fuente(nombre_fuente, tamanio, bold=False, italic=False):
         candidatas.append(ruta_google)
         
     candidatas.extend([
-        # Tipografía Premium del sistema Streamlit
+        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
         "/usr/share/fonts/GoogleSans-Regular.ttf",
-        # Fallbacks Debian
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
-        # Fallbacks Windows/macOS en local
         "arialbd.ttf" if bold else "arial.ttf",
         "Arial.ttf"
     ])
@@ -88,7 +99,7 @@ def obtener_fuente(nombre_fuente, tamanio, bold=False, italic=False):
         return ImageFont.load_default()
 
 def dividir_texto_en_lineas(texto, max_chars=14):
-    """Divide de forma inteligente el título de un libro en 2 líneas para evitar desbordamientos."""
+    """Divide el título de un libro en 2 líneas para evitar desbordamientos."""
     palabras = texto.split()
     lineas = []
     linea_actual = []
@@ -111,7 +122,7 @@ def dividir_texto_en_lineas(texto, max_chars=14):
     joined_lines = " ".join(lineas)
     if len(words_joined) > len(joined_lines):
         if len(lineas) == 2:
-            lineas = lineas[:11] + ".."
+            lineas[1] = lineas[1][:11] + ".."
         elif len(lineas) == 1:
             lineas[0] = lineas[0][:11] + ".."
             
@@ -119,11 +130,9 @@ def dividir_texto_en_lineas(texto, max_chars=14):
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES", config_diseno=None):
     """
-    Genera un collage de marketing 1080x1920 altamente personalizado basado en una
-    retícula dinámica adaptativa y paleta de colores HEX configurables.
+    Genera una imagen 1080x1920 con retícula dinámica y colores HEX configurables.
     """
     if config_diseno is None:
-        # Fallback de diseño base si no viene configuración
         config_diseno = {
             "font_family_header": "Montserrat",
             "font_family_books": "Montserrat",
@@ -142,13 +151,14 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             "color_header_rect_bg": "#FFFFFF",
             "color_header_rect_border": "#7C0C3F",
             "header_rect_border_width": 2,
-            "header_rect_radius": 20
+            "header_rect_radius": 20,
+            "header_pad_x": 40,
+            "header_pad_y": 20
         }
 
     try:
         W, H = (1080, 1920)
         
-        # --- 🎨 CONVERSIÓN DE COLORES HEX A RGB PARA PILLOW ---
         BG_COLOR = hex_to_rgb(config_diseno.get("color_bg", "#FDE8F3"))
         CARD_COLOR = hex_to_rgb(config_diseno.get("color_card", "#FFFFFF"))
         SHADOW_COLOR = hex_to_rgb(config_diseno.get("color_shadow", "#F4CCD4"))
@@ -161,8 +171,9 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         HEADER_RECT_BORDER = hex_to_rgb(config_diseno.get("color_header_rect_border", "#7C0C3F"))
         HEADER_RECT_BORDER_W = int(config_diseno.get("header_rect_border_width", 2))
         HEADER_RECT_RADIUS = int(config_diseno.get("header_rect_radius", 20))
+        HEADER_PAD_X = int(config_diseno.get("header_pad_x", 40))
+        HEADER_PAD_Y = int(config_diseno.get("header_pad_y", 20))
         
-        # --- 🔠 CARGA DE FUENTES PERSONALIZADAS ---
         font_header = obtener_fuente(
             config_diseno.get("font_family_header", "Montserrat"), 
             int(config_diseno.get("tamanio_header", 45)),
@@ -178,7 +189,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         font_tachado = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 28, bold=True)
         font_badge = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 18, bold=True)
 
-        # --- 🖼️ CARGAR IMAGEN DE FONDO DESDE SUPABASE ---
+        # Cargar imagen de fondo oficial
         BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
         try:
             req = urllib.request.Request(BG_URL, headers={'User-Agent': 'Mozilla/5.0'})
@@ -190,29 +201,28 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. TÍTULO PRINCIPAL EN UN RECTÁNGULO CON BORDE Y SOMBRA PERSONALIZABLES
+        # 1. Cabecera dinámica de género (se adapta automáticamente al texto y al margen interno)
         titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
         try:
             bbox_header = draw.textbbox((0, 0), titulo_limpio, font=font_header)
-            text_w = bbox_header - bbox_header[0]
-            text_h = bbox_header - bbox_header
+            text_w = bbox_header[2] - bbox_header[0]
+            text_h = bbox_header[3] - bbox_header[1]
             
-            pad_x, pad_y = 40, 20
-            box_w = text_w + pad_x * 2
-            box_h = text_h + pad_y * 2
+            box_w = text_w + HEADER_PAD_X * 2
+            box_h = text_h + HEADER_PAD_Y * 2
             
             box_x1 = (W - box_w) / 2
             box_y1 = 60
             box_x2 = box_x1 + box_w
             box_y2 = box_y1 + box_h
             
-            # Dibujar sombra (offset de 8px)
+            # Dibujar la sombra de la cabecera (offset 8px)
             draw.rounded_rectangle([box_x1 + 8, box_y1 + 8, box_x2 + 8, box_y2 + 8], radius=HEADER_RECT_RADIUS, fill=SHADOW_COLOR)
             
-            # Dibujar fondo del rectángulo
+            # Dibujar la tarjeta principal de la cabecera
             draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=HEADER_RECT_RADIUS, fill=HEADER_RECT_BG)
             
-            # Dibujar el borde del rectángulo si el grosor es mayor a 0
+            # Dibujar borde
             if HEADER_RECT_BORDER_W > 0:
                 draw.rounded_rectangle(
                     [box_x1, box_y1, box_x2, box_y2], 
@@ -226,7 +236,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         except Exception:
             pass
 
-        # --- 📏 5) RETÍCULA DINÁMICA SEGÚN CANTIDAD DE LIBROS POR PÁGINA ---
+        # Retícula adaptativa
         n_libros = len(lista_libros_chunk)
         
         if n_libros == 1:
@@ -253,7 +263,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             x_margin = (W - cell_w * 2) / 3
             y_margin = 40
             img_height = 170
-        else: # 12 libros por defecto
+        else:
             cols = 3
             start_y = 190
             cell_w = 313
@@ -272,14 +282,12 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             x_card = x_margin + col_idx * (cell_w + x_margin)
             y_card = start_y + row_idx * (cell_h + y_margin)
 
-            # Sombra y Tarjeta
             try:
                 draw.rounded_rectangle([x_card + 12, y_card + 12, x_card + cell_w + 12, y_card + cell_h + 12], radius=25, fill=SHADOW_COLOR)
                 draw.rounded_rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], radius=25, fill=CARD_COLOR)
             except AttributeError:
                 draw.rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], fill=CARD_COLOR)
 
-            # Carga de la Portada
             y_img = y_card + 20
             try:
                 url_portada = f"{url_base_supabase}{libro['libro_id']}.jpg"
@@ -294,12 +302,11 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             except Exception:
                 draw.rectangle([x_card + 24, y_img, x_card + cell_w - 24, y_img + img_height], fill=(245, 238, 241))
 
-            # Etiqueta Disponibilidad
             if int(libro.get('stock', 0)) > 0:
                 texto_badge = " DISPONIBLE "
                 try:
                     bbox_badge = draw.textbbox((0, 0), texto_badge, font=font_badge)
-                    ancho_badge = bbox_badge - bbox_badge[0]
+                    ancho_badge = bbox_badge[2] - bbox_badge[0]
                     alto_badge = 32
                     
                     x_badge = x_card + (cell_w - ancho_badge) / 2
@@ -310,8 +317,6 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 except Exception:
                     pass
 
-            # Textos y Retícula Dinámica Interna
-            # Si hay 1 solo libro o 4 por página, permitimos títulos más largos y fuentes proporcionales
             max_c = 18 if n_libros > 4 else 26
             lineas_titulo = dividir_texto_en_lineas(libro['titulo'].upper(), max_chars=max_c)
             
@@ -334,7 +339,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 try:
                     draw.text((x_card + cell_w/2, y_precios), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
-                    ancho_orig = bbox_orig - bbox_orig[0]
+                    ancho_orig = bbox_orig[2] - bbox_orig[0]
                     draw.line((x_card + cell_w/2 - ancho_orig/2, y_precios - 8, x_card + cell_w/2 + ancho_orig/2, y_precios - 8), fill=MUTED_COLOR, width=3)
                 except ValueError:
                     pass
