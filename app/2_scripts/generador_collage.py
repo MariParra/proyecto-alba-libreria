@@ -3,6 +3,7 @@ import io
 import requests
 import os
 import urllib.request
+import re
 
 def asegurar_fuentes():
     """Descarga las fuentes desde Google Fonts si no existen."""
@@ -29,9 +30,9 @@ def obtener_fuente(tamanio, bold=False):
     del sistema, de la caché local o un fallback del contenedor de Streamlit.
     """
     candidatas = [
-        # 1. Caché local (si internet funcionó en algún momento)
+        # 1. Caché local
         "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
-        # 2. Tipografía Premium geométrica detectada en el servidor de Streamlit
+        # 2. Tipografía Premium geométrica del servidor de Streamlit
         "/usr/share/fonts/GoogleSans-Regular.ttf",
         # 3. Fallbacks nativos en contenedores Debian / Ubuntu
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -61,21 +62,21 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
     try:
         W, H = (1080, 1920)
         
-        # --- 🎨 PALETA PINK AESTHETIC & PREMIUM ---
+        # --- 🎨 PALETA AESTHETIC DE ROSADOS Y FRAMBUESAS PREMIUM ---
         BG_COLOR = (253, 232, 243)      # Fondo Fallback
         CARD_COLOR = (255, 255, 255)    # Tarjetas Blancas
-        SHADOW_COLOR = (244, 204, 220)  # Sombra Rosa Oscuro para efecto 3D
-        PRIMARY_COLOR = (49, 46, 129)   # Títulos: Azul Marino muy oscuro (casi negro)
-        ACCENT_COLOR = (219, 39, 119)   # Precios y Botones: Fucsia / Rosa Fuerte
-        MUTED_COLOR = (156, 163, 175)   # Precios tachados: Gris
-        BADGE_BG = (225, 29, 72)        # Etiqueta "Disponible": Rojo/Rosa encendido
+        SHADOW_COLOR = (244, 204, 220)  # Sombra Rosa Pastel para efecto 3D
+        PRIMARY_COLOR = (124, 12, 63)   # Títulos: Frambuesa / Vino Profundo (¡Cero Azul!)
+        ACCENT_COLOR = (219, 39, 119)   # Precios de oferta: Fucsia / Rosa Fuerte
+        MUTED_COLOR = (186, 150, 165)   # Precios original tachado: Rosa Muted
+        BADGE_BG = (219, 39, 119)        # Etiqueta "Disponible": Fucsia vibrante
         BADGE_TEXT = (255, 255, 255)    # Texto etiqueta: Blanco
         
-        # --- 🔠 FUENTES DINÁMICAS Y RESISTENTES A FALLAS DE RED ---
-        font_header = obtener_fuente(90, bold=True) # Ajustamos ligeramente a 90 para títulos largos
-        font_titulo = obtener_fuente(32, bold=True)
-        font_precio = obtener_fuente(52, bold=True)
-        font_tachado = obtener_fuente(34, bold=True)
+        # --- 🔠 FUENTES GEOMÉTRICAS GRANDES Y ATRACTIVAS ---
+        font_header = obtener_fuente(85, bold=True) 
+        font_titulo = obtener_fuente(25, bold=True)
+        font_precio = obtener_fuente(42, bold=True)
+        font_tachado = obtener_fuente(28, bold=True)
         font_badge = obtener_fuente(18, bold=True) 
 
         # --- 2) CARGAR IMAGEN DE FONDO DE MARCA DESDE SUPABASE ---
@@ -90,24 +91,25 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. TÍTULO PRINCIPAL (GIGANTE Y CENTRADO)
-        titulo_seguro = (titulo_header[:20] + '..') if len(titulo_header) > 20 else titulo_header
+        # 1. TÍTULO PRINCIPAL (LIMPIO Y SIN ÍNDICES 1/2 O 1-2)
+        titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header)
+        titulo_seguro = (titulo_limpio[:20] + '..') if len(titulo_limpio) > 20 else titulo_limpio
         try:
-            # Sombra del título para que resalte del fondo
-            draw.text((W/2 + 5, 105), titulo_seguro.upper(), font=font_header, fill=SHADOW_COLOR, anchor="ms")
+            # Sombra y texto principal en frambuesa
+            draw.text((W/2 + 4, 104), titulo_seguro.upper(), font=font_header, fill=SHADOW_COLOR, anchor="ms")
             draw.text((W/2, 100), titulo_seguro.upper(), font=font_header, fill=PRIMARY_COLOR, anchor="ms")
         except ValueError:
             pass
 
-        # --- 📏 GEOMETRÍA AJUSTADA: MENOS MARGEN, MÁS PORTADA ---
+        # --- 📏 GEOMETRÍA AJUSTADA: RETÍCULA PERFECTA Y ALINEADA ---
         cols = 3
         x_margin = 35
         y_margin = 40
         start_y = 190
         
-        # Tarjetas más anchas y altas
+        # Tarjetas más altas y cómodas
         cell_w = int((W - x_margin * (cols + 1)) / cols)
-        cell_h = 400 
+        cell_h = 420 
 
         for i, libro in enumerate(lista_libros_chunk):
             if i >= 12: break 
@@ -127,7 +129,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 draw.rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], fill=CARD_COLOR)
 
             # 3. MAXIMIZAR LA PORTADA (Ocupa casi el 60% de la tarjeta con muy poco margen)
-            img_height = int(cell_h * 0.58) 
+            img_height = 220 
             y_img = y_card + 20 # Sube la imagen para pegarla más al borde superior
             
             try:
@@ -141,10 +143,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 x_img = x_card + (cell_w - portada_img.width) / 2
                 
                 img.paste(portada_img, (int(x_img), int(y_img)), portada_img)
-                y_texto = y_img + portada_img.height + 35
             except Exception:
-                draw.rectangle([x_card + 20, y_img, x_card + cell_w - 20, y_img + img_height], fill=(240,240,240))
-                y_texto = y_img + img_height + 35
+                draw.rectangle([x_card + 20, y_img, x_card + cell_w - 20, y_img + img_height], fill=(245, 238, 241))
 
             # 4. ETIQUETA DE STOCK (Estilo "Cinta" vibrante)
             if int(libro.get('stock', 0)) > 0:
@@ -162,40 +162,44 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 except Exception:
                     pass
 
-            # 5. TEXTOS EXTRA GRANDES Y NEGRITAS
-            # Acortamos un poco el título a 18 caracteres para que quepa bien la fuente gigante
-            titulo_corto = (libro['titulo'][:18] + '..') if len(libro['titulo']) > 18 else libro['titulo']
+            # 5. TEXTOS GRANDES, LEGIBLES Y ALINEADOS EN RETÍCULA FIJA
+            # Aumentamos la longitud permitida a 22 caracteres
+            titulo_corto = (libro['titulo'][:22] + '..') if len(libro['titulo']) > 22 else libro['titulo']
+            
+            # Título del libro (Ubicación fija)
+            y_titulo_fijo = y_card + 285
             try:
-                draw.text((x_card + cell_w/2, y_texto), titulo_corto.upper(), font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
+                draw.text((x_card + cell_w/2, y_titulo_fijo), titulo_corto.upper(), font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
             except ValueError:
                 pass
-            
-            y_texto += 55
 
             precio_float = float(libro['precio'])
             precio_orig_float = float(libro.get('precio_original', precio_float))
 
             if precio_float < precio_orig_float:
+                # Caso: Descuento Activo
                 texto_orig = f"${precio_orig_float:,.0f}"
+                y_orig_fijo = y_card + 330
                 try:
-                    draw.text((x_card + cell_w/2, y_texto), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
+                    draw.text((x_card + cell_w/2, y_orig_fijo), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     bbox_orig = draw.textbbox((0, 0), texto_orig, font=font_tachado)
                     ancho_orig = bbox_orig[2] - bbox_orig[0]
-                    draw.line((x_card + cell_w/2 - ancho_orig/2, y_texto - 10, x_card + cell_w/2 + ancho_orig/2, y_texto - 10), fill=MUTED_COLOR, width=4)
+                    draw.line((x_card + cell_w/2 - ancho_orig/2, y_orig_fijo - 8, x_card + cell_w/2 + ancho_orig/2, y_orig_fijo - 8), fill=MUTED_COLOR, width=3)
                 except ValueError:
                     pass
                 
-                y_texto += 55
                 texto_final = f"${precio_float:,.0f}"
+                y_final_fijo = y_card + 380
                 try:
-                    draw.text((x_card + cell_w/2, y_texto), texto_final, font=font_precio, fill=ACCENT_COLOR, anchor="ms")
+                    draw.text((x_card + cell_w/2, y_final_fijo), texto_final, font=font_precio, fill=ACCENT_COLOR, anchor="ms")
                 except ValueError:
                     pass
             else:
-                y_texto += 25
+                # Caso: Precio Normal
                 texto_final = f"${precio_float:,.0f}"
+                y_final_centrado = y_card + 355
                 try:
-                    draw.text((x_card + cell_w/2, y_texto), texto_final, font=font_precio, fill=PRIMARY_COLOR, anchor="ms")
+                    draw.text((x_card + cell_w/2, y_final_centrado), texto_final, font=font_precio, fill=PRIMARY_COLOR, anchor="ms")
                 except ValueError:
                     pass
 
