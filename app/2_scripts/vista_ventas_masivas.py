@@ -19,7 +19,7 @@ def cargar_catalogo_libros_vm():
             end = start + chunk_size - 1
             res = conn.table("libros")\
                 .select("libro_id, titulo, autor, stock, genero, editorial")\
-                .order("titulo")\
+                .order("libro_id")\
                 .range(start, end).execute()
             if res.data:
                 all_data.extend(res.data)
@@ -133,7 +133,7 @@ def procesar_nueva_venta_masiva(datos_evento):
 
 def anular_venta_masiva(evento_id, stock_fue_descontado, libros_implicados_json):
     conn = get_db_connection()
-    if stock_fue_descontated and libros_implicados_json:
+    if stock_fue_descontado and libros_implicados_json:
         try:
             libros = json.loads(libros_implicados_json) if isinstance(libros_implicados_json, str) else libros_implicados_json
             with st.spinner("Restaurando stock al inventario..."):
