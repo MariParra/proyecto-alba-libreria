@@ -154,7 +154,7 @@ def mostrar_generador_marketing():
         listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
         
         # =========================================================================
-        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
+        # 🌟 PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
         # =========================================================================
         saved_font_h = config_default.get("font_family_header", "Montserrat")
         if saved_font_h in listado_fuentes[:-1]:
@@ -177,7 +177,7 @@ def mostrar_generador_marketing():
             )
 
         # =========================================================================
-        # 🌟 MEJORA EXCLUSIVA: PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
+        # 🌟 PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
         # =========================================================================
         saved_font_b = config_default.get("font_family_books", "Montserrat")
         if saved_font_b in listado_fuentes[:-1]:
@@ -257,7 +257,7 @@ def mostrar_generador_marketing():
         }
 
         # =========================================================================
-        # 🌟 NUEVA SECCIÓN: PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
+        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
