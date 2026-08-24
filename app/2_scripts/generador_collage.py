@@ -122,7 +122,7 @@ def dividir_texto_en_lineas(texto, max_chars=14):
     joined_lines = " ".join(lineas)
     if len(words_joined) > len(joined_lines):
         if len(lineas) == 2:
-            lineas[1] = lineas[1][:11] + ".."
+            lineas = lineas[:11] + ".."
         elif len(lineas) == 1:
             lineas[0] = lineas[0][:11] + ".."
             
@@ -130,7 +130,7 @@ def dividir_texto_en_lineas(texto, max_chars=14):
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES", config_diseno=None):
     """
-    Genera una imagen 1080x1920 con retícula dinámica simétrica y adaptativa.
+    Genera un collage de marketing 1080x1920 con retícula dinámica simétrica y adaptativa.
     Centra automáticamente los elementos si la última fila queda con espacios sobrantes.
     """
     if config_diseno is None:
@@ -144,7 +144,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             "color_bg": "#FDE8F3",
             "color_card": "#FFFFFF",
             "color_shadow": "#F4CCD4",
-            "color_primary": "#7C0C3F",
+            "color_primary_header": "#7C0C3F",
+            "color_primary_books": "#7C0C3F",
             "color_accent": "#DB2777",
             "color_muted": "#BA96A5",
             "color_badge_bg": "#DB2777",
@@ -160,10 +161,15 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
     try:
         W, H = (1080, 1920)
         
+        # --- 🎨 CONVERSIÓN DE COLORES HEX A RGB PARA PILLOW ---
         BG_COLOR = hex_to_rgb(config_diseno.get("color_bg", "#FDE8F3"))
         CARD_COLOR = hex_to_rgb(config_diseno.get("color_card", "#FFFFFF"))
         SHADOW_COLOR = hex_to_rgb(config_diseno.get("color_shadow", "#F4CCD4"))
-        PRIMARY_COLOR = hex_to_rgb(config_diseno.get("color_primary", "#7C0C3F"))
+        
+        # 🌟 SEPARACIÓN DE COLORES DE TEXTO (GENERO VS LIBROS)
+        PRIMARY_COLOR_HEADER = hex_to_rgb(config_diseno.get("color_primary_header", "#7C0C3F"))
+        PRIMARY_COLOR_BOOKS = hex_to_rgb(config_diseno.get("color_primary_books", "#7C0C3F"))
+        
         ACCENT_COLOR = hex_to_rgb(config_diseno.get("color_accent", "#DB2777"))
         MUTED_COLOR = hex_to_rgb(config_diseno.get("color_muted", "#BA96A5"))
         BADGE_BG = hex_to_rgb(config_diseno.get("color_badge_bg", "#DB2777"))
@@ -202,7 +208,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. Cabecera dinámica de género (con desempaquetado de tupla 100% inmune a markdown)
+        # 1. Cabecera dinámica de género (se adapta automáticamente al texto y al margen interno)
         titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
         try:
             x0, y0, x1, y1 = draw.textbbox((0, 0), titulo_limpio, font=font_header)
@@ -229,11 +235,12 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                     width=HEADER_RECT_BORDER_W
                 )
             
-            draw.text((W/2, box_y1 + box_h/2), titulo_limpio, font=font_header, fill=PRIMARY_COLOR, anchor="mm")
+            # Usar color de cabecera configurado (PRIMARY_COLOR_HEADER)
+            draw.text((W/2, box_y1 + box_h/2), titulo_limpio, font=font_header, fill=PRIMARY_COLOR_HEADER, anchor="mm")
         except Exception:
             pass
 
-        # --- 📐 RETÍCULA ADAPTATIVA INTELIGENTE ---
+        # Retícula adaptativa
         n_libros = len(lista_libros_chunk)
         
         if n_libros == 1:
@@ -344,13 +351,14 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
                 
             for idx_linea, linea in enumerate(lineas_titulo):
                 try:
-                    draw.text((x_card + cell_w/2, y_titulo_start + idx_linea * 24), linea, font=font_titulo, fill=PRIMARY_COLOR, anchor="ms")
+                    # Usar color de texto de libros configurado (PRIMARY_COLOR_BOOKS)
+                    draw.text((x_card + cell_w/2, y_titulo_start + idx_linea * 24), linea, font=font_titulo, fill=PRIMARY_COLOR_BOOKS, anchor="ms")
                 except ValueError:
                     pass
 
             precio_float = float(libro.get('precio', 0.0) or 0.0)
             
-            # 🌟 CORRECCIÓN DEFINITIVA AL BUG DE PRECIO ORIGINAL NULO ( float(None) )
+            # CORRECCIÓN DEFINITIVA AL BUG DE PRECIO ORIGINAL NULO ( float(None) )
             precio_orig_val = libro.get('precio_original')
             if precio_orig_val is not None and str(precio_orig_val).strip() != '' and str(precio_orig_val).lower() != 'none':
                 try:
@@ -379,7 +387,8 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             else:
                 texto_final = f"${precio_float:,.0f}"
                 try:
-                    draw.text((x_card + cell_w/2, y_precios + 25), texto_final, font=font_precio, fill=PRIMARY_COLOR, anchor="ms")
+                    # Usar color de texto de libros configurado (PRIMARY_COLOR_BOOKS)
+                    draw.text((x_card + cell_w/2, y_precios + 25), texto_final, font=font_precio, fill=PRIMARY_COLOR_BOOKS, anchor="ms")
                 except ValueError:
                     pass
 

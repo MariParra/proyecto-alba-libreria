@@ -19,7 +19,7 @@ def cargar_configuracion_marketing():
                 return json.load(f)
         except Exception:
             pass
-    # Configuración por defecto elegante
+    # Configuración por defecto elegante (separando color_primary en dos)
     return {
         "font_family_header": "Montserrat",
         "font_family_books": "Montserrat",
@@ -30,7 +30,8 @@ def cargar_configuracion_marketing():
         "color_bg": "#FDE8F3",
         "color_card": "#FFFFFF",
         "color_shadow": "#F4CCD4",
-        "color_primary": "#7C0C3F",
+        "color_primary_header": "#7C0C3F",
+        "color_primary_books": "#7C0C3F",
         "color_accent": "#DB2777",
         "color_muted": "#BA96A5",
         "color_badge_bg": "#DB2777",
@@ -86,6 +87,7 @@ def cargar_libros_para_marketing():
         if not all_books:
             return pd.DataFrame()
             
+        # Operaciones de DataFrame 100% libres de corchetes para evadir filtros de Markdown
         df_libros = pd.DataFrame(all_books)
 
         # Carga física y paginada de portadas existentes en el Storage
@@ -152,9 +154,7 @@ def mostrar_generador_marketing():
         st.markdown("#### 🔠 Tipografías y Textos (Google Fonts)")
         listado_fuentes = tuple(("Montserrat", "Playfair Display", "Lobster", "Pacifico", "Roboto", "Oswald", "Lato", "Merriweather", "Dancing Script", "Escribir otra..."))
         
-        # =========================================================================
-        # 🌟 PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
-        # =========================================================================
+        # PERSISTENCIA COMPLETA DE FUENTES DE GÉNERO (dropdown y text input)
         saved_font_h = config_default.get("font_family_header", "Montserrat")
         if saved_font_h in listado_fuentes[:-1]:
             default_index_h = listado_fuentes.index(saved_font_h)
@@ -175,9 +175,7 @@ def mostrar_generador_marketing():
                 key="text_font_h_custom"
             )
 
-        # =========================================================================
-        # 🌟 PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
-        # =========================================================================
+        # PERSISTENCIA COMPLETA DE FUENTES DE LIBROS
         saved_font_b = config_default.get("font_family_books", "Montserrat")
         if saved_font_b in listado_fuentes[:-1]:
             default_index_b = listado_fuentes.index(saved_font_b)
@@ -219,17 +217,21 @@ def mostrar_generador_marketing():
 
         st.markdown("---")
         st.markdown("#### 🎨 Paleta de Colores (HEX)")
-        c_col1, c_col2, c_col3, c_col4 = st.columns(4)
+        c_col1, c_col2, c_col3 = st.columns(3)
         c_bg = c_col1.color_picker("Fondo Base (Fallback):", value=config_default.get("color_bg", "#FDE8F3"))
         c_card = c_col2.color_picker("Color de Tarjetas:", value=config_default.get("color_card", "#FFFFFF"))
         c_shadow = c_col3.color_picker("Color de Sombras 3D:", value=config_default.get("color_shadow", "#F4CCD4"))
-        c_primary = c_col4.color_picker("Color Textos / Títulos:", value=config_default.get("color_primary", "#7C0C3F"))
         
-        c_col5, c_col6, c_col7, c_col8 = st.columns(4)
-        c_accent = c_col5.color_picker("Color Ofertas / Fucsia:", value=config_default.get("color_accent", "#DB2777"))
-        c_muted = c_col6.color_picker("Color Precios Tachados:", value=config_default.get("color_muted", "#BA96A5"))
-        c_badge_bg = c_col7.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
-        c_badge_text = c_col8.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
+        # 🌟 SEPARACIÓN DE SELECTORES DE COLOR PARA GÉNERO Y LIBRO
+        c_col4, c_col5, c_col6, c_col7 = st.columns(4)
+        c_primary_header = c_col4.color_picker("Color Texto Género:", value=config_default.get("color_primary_header", "#7C0C3F"))
+        c_primary_books = c_col5.color_picker("Color Texto Libros:", value=config_default.get("color_primary_books", "#7C0C3F"))
+        c_accent = c_col6.color_picker("Color Ofertas / Fucsia:", value=config_default.get("color_accent", "#DB2777"))
+        c_muted = c_col7.color_picker("Color Precios Tachados:", value=config_default.get("color_muted", "#BA96A5"))
+        
+        c_col8, c_col9 = st.columns(2)
+        c_badge_bg = c_col8.color_picker("Fondo Badge Disponible:", value=config_default.get("color_badge_bg", "#DB2777"))
+        c_badge_text = c_col9.color_picker("Texto Badge Disponible:", value=config_default.get("color_badge_text", "#FFFFFF"))
 
         config_diseno_final = {
             "font_family_header": font_h_sel,
@@ -247,7 +249,8 @@ def mostrar_generador_marketing():
             "color_bg": c_bg,
             "color_card": c_card,
             "color_shadow": c_shadow,
-            "color_primary": c_primary,
+            "color_primary_header": c_primary_header, # Nueva llave separada
+            "color_primary_books": c_primary_books,   # Nueva llave separada
             "color_accent": c_accent,
             "color_muted": c_muted,
             "color_badge_bg": c_badge_bg,
@@ -256,7 +259,7 @@ def mostrar_generador_marketing():
         }
 
         # =========================================================================
-        # 🌟 NUEVA SECCIÓN: PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
+        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS ACTUALIZADO)
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
@@ -287,7 +290,7 @@ def mostrar_generador_marketing():
             box-shadow: 8px 8px 0px {c_shadow};
         }}
         .preview-header-text {{
-            color: {c_primary};
+            color: {c_primary_header};
             font-family: '{font_h_sel}', sans-serif;
             font-size: 24px;
             font-weight: {'bold' if bold_h else 'normal'};
@@ -306,7 +309,7 @@ def mostrar_generador_marketing():
             text-align: center;
         }}
         .preview-book-title {{
-            color: {c_primary};
+            color: {c_primary_books};
             font-weight: bold;
             font-size: 16px;
             margin-top: 15px;
@@ -449,7 +452,7 @@ def mostrar_generador_marketing():
                     <div style="
                         text-align: center; 
                         margin-bottom: 12px; 
-                        color: {config_diseno_final.get('color_primary', '#7C0C3F')}; 
+                        color: {config_diseno_final.get('color_primary_books', '#7C0C3F')}; 
                         font-family: 'Helvetica Neue', Arial, sans-serif;
                         font-size: 18px; 
                         font-weight: bold; 
