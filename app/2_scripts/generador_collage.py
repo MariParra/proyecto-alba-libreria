@@ -130,7 +130,7 @@ def dividir_texto_en_lineas(texto, max_chars=14):
 
 def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_header="NOVEDADES", config_diseno=None):
     """
-    Genera un collage de marketing 1080x1920 con retícula dinámica simétrica y adaptativa.
+    Genera una imagen 1080x1920 con retícula dinámica simétrica y adaptativa.
     Centra automáticamente los elementos si la última fila queda con espacios sobrantes.
     """
     if config_diseno is None:
@@ -183,12 +183,12 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         )
         font_titulo = obtener_fuente(
             config_diseno.get("font_family_books", "Montserrat"), 
-            int(config_diseno.get("tamanio_libros", 20)),
+            int(config_diseno.get("tamanio_libros", 18)), # Ajustado a 18 para la retícula perfecta de 3 columnas
             bold=True
         )
-        font_precio = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 42, bold=True)
-        font_tachado = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 28, bold=True)
-        font_badge = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 18, bold=True)
+        font_precio = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 38, bold=True)
+        font_tachado = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 26, bold=True)
+        font_badge = obtener_fuente(config_diseno.get("font_family_books", "Montserrat"), 15, bold=True)
 
         # Cargar imagen de fondo oficial
         BG_URL = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/base.png"
@@ -202,10 +202,9 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             
         draw = ImageDraw.Draw(img)
 
-        # 1. Cabecera dinámica de género (se adapta automáticamente al texto y al margen interno)
+        # 1. Cabecera dinámica de género (con desempaquetado de tupla 100% inmune a markdown)
         titulo_limpio = re.sub(r"\s*\(\d+[\/\-]\d+\)", "", titulo_header).strip().upper()
         try:
-            # Desempaquetado de tuplas dinámico (inmune a markdown)
             x0, y0, x1, y1 = draw.textbbox((0, 0), titulo_limpio, font=font_header)
             text_w = x1 - x0
             text_h = y1 - y0
@@ -234,7 +233,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
         except Exception:
             pass
 
-        # Retícula adaptativa
+        # --- 📐 RETÍCULA ADAPTATIVA INTELIGENTE ---
         n_libros = len(lista_libros_chunk)
         
         if n_libros == 1:
@@ -245,6 +244,9 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             x_margin = (W - cell_w) / 2
             y_margin = 0
             img_height = 420
+            y_img_offset = 40
+            y_titulo_offset = 540
+            y_precios_offset = 610
         elif n_libros <= 4:
             cols = 2
             start_y = 400
@@ -253,6 +255,9 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             x_margin = (W - cell_w * 2) / 3
             y_margin = 60
             img_height = 320
+            y_img_offset = 25
+            y_titulo_offset = 410
+            y_precios_offset = 470
         elif n_libros <= 8:
             cols = 2
             start_y = 230
@@ -260,16 +265,23 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             cell_h = 360
             x_margin = (W - cell_w * 2) / 3
             y_margin = 40
-            img_height = 170
-        else:
+            img_height = 180
+            y_img_offset = 20
+            y_titulo_offset = 245
+            y_precios_offset = 295
+        else: # 12 libros
             cols = 3
-            start_y = 190
+            start_y = 180
             cell_w = 313
-            cell_h = 420
+            cell_h = 385  # Modificado dinámicamente de 420 a 385 para evitar el desajuste vertical
             x_margin = 35
-            y_margin = 40
-            img_height = 220
+            y_margin = 25
+            img_height = 200
+            y_img_offset = 15
+            y_titulo_offset = 260
+            y_precios_offset = 310
 
+        # Dibujo secuencial de tarjetas
         for i, libro in enumerate(lista_libros_chunk):
             if i >= 12: 
                 break 
@@ -291,7 +303,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             except AttributeError:
                 draw.rectangle([x_card, y_card, x_card + cell_w, y_card + cell_h], fill=CARD_COLOR)
 
-            y_img = y_card + 20
+            y_img = y_card + y_img_offset
             try:
                 url_portada = f"{url_base_supabase}{libro['libro_id']}.jpg"
                 response = requests.get(url_portada, stream=True, timeout=5)
@@ -326,7 +338,7 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             titulo_libro = str(libro.get('titulo', 'Sin Título') or 'Sin Título').upper()
             lineas_titulo = dividir_texto_en_lineas(titulo_libro, max_chars=max_c)
             
-            y_titulo_start = y_card + (cell_h * 0.68)
+            y_titulo_start = y_card + y_titulo_offset
             if len(lineas_titulo) == 2:
                 y_titulo_start -= 12
                 
@@ -348,11 +360,11 @@ def generar_collage_marketing(lista_libros_chunk, url_base_supabase, titulo_head
             else:
                 precio_orig_float = precio_float
 
-            y_precios = y_card + (cell_h * 0.82)
+            y_precios = y_card + y_precios_offset
             if precio_float < precio_orig_float:
                 texto_orig = f"${precio_orig_float:,.0f}"
                 try:
-                    draw.text((x_card + cell_w/2, y_precios), texto_orig, font=font_content if 'font_content' in locals() else font_tachado, fill=MUTED_COLOR, anchor="ms")
+                    draw.text((x_card + cell_w/2, y_precios), texto_orig, font=font_tachado, fill=MUTED_COLOR, anchor="ms")
                     ox0, oy0, ox1, oy1 = draw.textbbox((0, 0), texto_orig, font=font_tachado)
                     ancho_orig = ox1 - ox0
                     draw.line((x_card + cell_w/2 - ancho_orig/2, y_precios - 8, x_card + cell_w/2 + ancho_orig/2, y_precios - 8), fill=MUTED_COLOR, width=3)

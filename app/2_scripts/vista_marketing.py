@@ -86,7 +86,6 @@ def cargar_libros_para_marketing():
         if not all_books:
             return pd.DataFrame()
             
-        # Operaciones de DataFrame 100% libres de corchetes para evadir filtros de Markdown
         df_libros = pd.DataFrame(all_books)
 
         # Carga física y paginada de portadas existentes en el Storage
@@ -257,7 +256,7 @@ def mostrar_generador_marketing():
         }
 
         # =========================================================================
-        # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
+        # 🌟 NUEVA SECCIÓN: PREVISUALIZADOR PREMIUM EN TIEMPO REAL (HTML/CSS)
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
