@@ -1237,7 +1237,7 @@ def mostrar_asignaciones():
                     st.rerun()
 
                 if st.session_state.edit_mode:
-                    with st.expander("Edición Masiva AYyuda 🆘", expanded=False):
+                    with st.expander("🆘 Edición Masiva Ayuda 🆘", expanded=False):
                         st.info(
                             "💡 **GUÍA RÁPIDA: ¿Cómo usar la Edición en Bloque?**\n"
                             "1. ✅ **Selecciona a los clientes:** Marca la casilla en la primera columna de la tabla (`Seleccionar`) para cada cliente que quieras modificar.\n"
