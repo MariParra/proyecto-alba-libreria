@@ -662,12 +662,12 @@ def generar_comprobante(
     draw = ImageDraw.Draw(img)
     
     # Fuentes Premium de Google Fonts
-    font_title = obtener_fuente_comprobante("Shadows Into Light", 32, bold=True)
-    font_section = obtener_fuente_comprobante("Shadows Into Light", 22, bold=True)
-    font_body = obtener_fuente_comprobante("Albert Sans", 15)
-    font_body_bold = obtener_fuente_comprobante("Albert Sans", 15, bold=True)
-    font_price_accent = obtener_fuente_comprobante("Albert Sans", 17, bold=True)
-    font_footer = obtener_fuente_comprobante("Shadows Into Light", 20, bold=True)
+    font_title = obtener_fuente_comprobante("Dancing Script", 32, bold=True)
+    font_section = obtener_fuente_comprobante("Dancing Script", 22, bold=True)
+    font_body = obtener_fuente_comprobante("Lato", 15)
+    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
+    font_price_accent = obtener_fuente_comprobante("Lato", 17, bold=True)
+    font_footer = obtener_fuente_comprobante("Dancing Script", 20, bold=True)
     
     # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
     x_margin = 130
