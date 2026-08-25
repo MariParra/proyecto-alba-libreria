@@ -388,7 +388,7 @@ def anular_venta(venta_id, texto_libros_vendidos):
                     if stock_bd <= 0:
                         nuevo_stock = 0 # Se mantiene en 0
                     else:
-                        nuevo_stock = stock_bd + cantidad_devuelta
+                        nuevo_stock = stock_bd + quantity_devuelta
                         
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
                     
@@ -824,7 +824,8 @@ def mostrar_caja():
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
         
         col_e1, col_e2 = st.columns(2)
-        opciones_envio = ["Retiro en tienda", "Paket", "Bluexpress", "Envio por pagar", "Añadir a compra anterior", "Añadir a caja de suscripción"]
+        # 🌟 TAREA 2: "Envio por pagar" removido de opciones_envio
+        opciones_envio = ["Retiro en tienda", "Paket", "Bluexpress", "Añadir a compra anterior", "Añadir a caja de suscripción"]
         modo_envio = col_e1.selectbox("Modo de Envío:", opciones_envio)
         
         valor_envio = 0.0
@@ -837,8 +838,7 @@ def mostrar_caja():
         es_por_pagar = False
         
         if mostrar_ticket_cobro:
-            default_por_pagar = (modo_envio == "Envio por pagar")
-            es_por_pagar = col_e1.checkbox("📦 Envío por Pagar (Se cobra en destino)", value=default_por_pagar)
+            es_por_pagar = col_e1.checkbox("📦 Envío por Pagar (Se cobra en destino)", value=False)
         
         if modo_envio == "Añadir a caja de suscripción":
             if c_id is not None:
@@ -901,24 +901,10 @@ def mostrar_caja():
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
         fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
         
-        monto_final = subtotal_carrito + valor_envio
-        abono_default = 0.0
-        mensaje_exito = ""
-        if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
-            abono_default = monto_final
-            estado_pago_sel = "PAGADO"
-            mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
-        abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
-        if mensaje_exito:
-            st.success(mensaje_exito)
-        st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
-        st.write("")
-        
-        desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
-        
+        # 🌟 TAREA 1: Determinar tipo_cobro_envio y monto_final real ANTES de calcular abonos
         if es_por_pagar:
             tipo_cobro_envio = "envio por pagar"
-            monto_final = subtotal_carrito  # 🌟 TAREA 1: El envío por pagar NO se suma al valor del monto final
+            monto_final = subtotal_carrito
         else:
             if modo_envio in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción"]:
                 tipo_cobro_envio = "retiro"
@@ -926,7 +912,23 @@ def mostrar_caja():
             else:
                 tipo_cobro_envio = "envio pagado"
                 monto_final = subtotal_carrito + valor_envio
-                
+        
+        abono_default = 0.0
+        mensaje_exito = ""
+        if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
+            abono_default = monto_final
+            estado_pago_sel = "PAGADO"
+            mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
+            
+        abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
+        if mensaje_exito:
+            st.success(mensaje_exito)
+            
+        st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
+        st.write("")
+        
+        desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
+        
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
                 final_cliente_id, error_cliente = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
@@ -983,7 +985,7 @@ def mostrar_caja():
                     st.dataframe(df_ventas[fechas_invalidas][['venta_id', 'fecha_venta', 'cliente_nombre']], hide_index=True)
             with st.expander("🔍 Filtros del Historial"):
                 df_fechas_validas = df_ventas.dropna(subset=['fecha_limpia'])
-                opciones_mes = ["Ver Todo"]
+                options_mes = ["Ver Todo"]
                 mapa_inverso_mes = {}
                 if not df_fechas_validas.empty:
                     df_fechas_validas['mes_ano_str'] = df_fechas_validas['fecha_limpia'].dt.strftime('%Y-%m')
@@ -994,7 +996,7 @@ def mostrar_caja():
                     for mes_str in meses_unicos:
                         ano, mes_num = mes_str.split('-')
                         nombre_amigable = f"{month_map_es.get(mes_num, '')} {ano}"
-                        opciones_mes.append(nombre_amigable)
+                        options_mes.append(nombre_amigable)
                         mapa_inverso_mes[nombre_amigable] = mes_str
                 # 1. Calculamos el nombre amigable del mes actual
                 hoy = datetime.now()
@@ -1002,20 +1004,20 @@ def mostrar_caja():
                 
                 # 2. Buscamos el índice de ese mes en nuestra lista de opciones
                 default_index = 0 # Por defecto será "Ver Todo"
-                if nombre_mes_actual in opciones_mes:
-                    default_index = opciones_mes.index(nombre_mes_actual)
+                if nombre_mes_actual in options_mes:
+                    default_index = options_mes.index(nombre_mes_actual)
                 # 3. Se lo pasamos como valor inicial al selectbox
                 col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns(5)
-                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=opciones_mes, index=default_index)
+                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=options_mes, index=default_index)
                 cliente_filtro = col_f2.selectbox("Filtrar Cliente:", ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist()))
                 estado_filtro = col_f3.selectbox("Filtrar Estado:", ["Todos"] + sorted(df_ventas['estado'].unique().tolist()))
                 estado_pago_filtro = col_f4.selectbox("Filtrar Pago:", ["Todos", "PAGADO", "PENDIENTE"])
                 
                 if 'tipo_cobro_envio' in df_ventas.columns:
-                    tipo_cobro_opciones = ["Todos"] + sorted(df_ventas['tipo_cobro_envio'].dropna().unique().tolist())
+                    tipo_cobro_options = ["Todos"] + sorted(df_ventas['tipo_cobro_envio'].dropna().unique().tolist())
                 else:
-                    tipo_cobro_opciones = ["Todos", "retiro", "envio por pagar", "envio pagado"]
-                tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", options=tipo_cobro_opciones)
+                    tipo_cobro_options = ["Todos", "retiro", "envio por pagar", "envio pagado"]
+                tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", options=tipo_cobro_options)
                 
                 st.markdown("---")
                 solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
