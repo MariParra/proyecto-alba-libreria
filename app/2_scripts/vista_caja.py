@@ -789,8 +789,15 @@ def generar_comprobante(
     # 5. PIE DE PÁGINA (Shadows Into Light)
     draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería ✨📚", fill='#7C0C3F', font=font_footer, anchor="mm")
     
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
+        
+    img_resized = img.resize((480, 720), resample_filter)
+    
     buf = io.BytesIO()
-    img.save(buf, format='JPEG', quality=95)
+    img_resized.save(buf, format='JPEG', quality=95)
     return buf.getvalue()
 
 # ==========================================
@@ -1193,7 +1200,7 @@ def mostrar_caja():
                         abono=abono_inicial,
                         deuda=monto_final - abono_inicial
                     )
-                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_column_width=True)
+                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", width=480)
                     st.download_button(
                         label="📥 Descargar Comprobante (JPG)",
                         data=img_bytes_preview,
@@ -1767,7 +1774,7 @@ def mostrar_caja():
                         )
                         
                         # Uso de BytesIO y use_column_width=True para máxima compatibilidad
-                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_column_width=True)
+                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", width=480)
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                             data=img_bytes_abierta,
