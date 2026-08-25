@@ -155,7 +155,7 @@ def cargar_historial_completo():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res_ventas = conn.table("registro_ventas")\
-                .select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono)")\
+                .select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono, direccion)")\
                 .order("venta_id", desc=True)\
                 .range(start, end).execute()
                 
@@ -179,6 +179,7 @@ def cargar_historial_completo():
             df_ventas['cliente_rut'] = ''
             df_ventas['cliente_email'] = ''
             df_ventas['cliente_telefono'] = ''
+            df_ventas['cliente_direccion'] = ''
             df_ventas['cliente_id'] = None
             
         def formatear_libros(libros_data):
@@ -388,7 +389,7 @@ def anular_venta(venta_id, texto_libros_vendidos):
                     if stock_bd <= 0:
                         nuevo_stock = 0 # Se mantiene en 0
                     else:
-                        nuevo_stock = stock_bd + quantity_devuelta
+                        nuevo_stock = stock_bd + cantidad_devuelta
                         
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
                     
@@ -562,6 +563,134 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
         log_error("vista_caja", "cambiar_logistica_venta_existente", e, email_usuario)
         return False, str(e)
 
+def generar_comprobante(
+    carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
+    fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
+):
+    import urllib.request
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    
+    # Intentar descargar el fondo del comprobante
+    url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
+    img = None
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            img = Image.open(io.BytesIO(r.read())).convert('RGB')
+            # Asegurar tamaño exacto para que calce con la plantilla
+            try:
+                resample_filter = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample_filter = Image.ANTIALIAS
+            img = img.resize((800, 1200), resample_filter)
+    except Exception:
+        pass
+        
+    if img is None:
+        # Hermoso Fallback en la paleta de Alba Librería si falla internet
+        img = Image.new('RGB', (800, 1200), color='#FAF8FC')
+        
+    width, height = img.size
+    draw = ImageDraw.Draw(img)
+    
+    # Carga de tipografías del sistema de manera segura
+    def get_font(size, bold=False):
+        font_names = ["DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", 
+                      "Arial.ttf", "LiberationSans-Regular.ttf", "Helvetica.ttf"]
+        for font_name in font_names:
+            try:
+                return ImageFont.truetype(font_name, size)
+            except IOError:
+                continue
+        return ImageFont.load_default()
+        
+    font_title = get_font(32, bold=True)
+    font_subtitle = get_font(20)
+    font_body = get_font(18)
+    font_body_bold = get_font(18, bold=True)
+    font_small = get_font(14)
+    
+    # Dibujar decoraciones solo si es el lienzo fallback
+    if width == 800 and height == 1200 and img.getpixel((100, 100)) == (250, 248, 252):
+        draw.rectangle([15, 15, width-15, height-15], outline='#C994C0', width=4)
+        draw.rectangle([25, 25, width-25, height-25], outline='#4A4D7E', width=2)
+        
+        # Encabezado
+        draw.text((width/2, 65), "📚 ALBA LIBRERÍA", fill='#4A4D7E', anchor="mm", font=font_title)
+        draw.text((width/2, 105), "Portal Administrativo - Comprobante de Venta", fill='#666666', anchor="mm", font=font_subtitle)
+        draw.line([40, 130, width-40, 130], fill='#C994C0', width=2)
+        
+    y_start = 160
+    id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
+    draw.text((50, y_start), id_str, fill='#4A4D7E', font=font_body_bold)
+    
+    # Bloque de Información del Cliente
+    draw.text((50, y_start + 40), f"Cliente: {cliente_nombre}", fill='#333333', font=font_body)
+    draw.text((50, y_start + 70), f"RUT: {cliente_rut or 'No registrado'}", fill='#333333', font=font_body)
+    draw.text((50, y_start + 100), f"Email: {cliente_email or 'No registrado'}", fill='#333333', font=font_body)
+    draw.text((50, y_start + 130), f"Teléfono: {cliente_telefono or 'No registrado'}", fill='#333333', font=font_body)
+    draw.text((50, y_start + 160), f"Dirección: {cliente_direccion or 'No especificado'}", fill='#333333', font=font_body)
+    
+    # Bloque de Datos de Transacción
+    draw.text((450, y_start + 40), f"Fecha: {fecha}", fill='#333333', font=font_body)
+    draw.text((450, y_start + 70), f"Envío: {metodo_envio}", fill='#333333', font=font_body)
+    draw.text((450, y_start + 100), f"Pago: {metodo_pago}", fill='#333333', font=font_body)
+    
+    draw.line([40, y_start + 210, width-40, y_start + 210], fill='#C994C0', width=2)
+    
+    # Detalle de Productos
+    y_table = y_start + 230
+    draw.text((50, y_table), "CANT", fill='#4A4D7E', font=font_body_bold)
+    draw.text((120, y_table), "DESCRIPCIÓN / LIBRO", fill='#4A4D7E', font=font_body_bold)
+    draw.text((580, y_table), "P. UNIT", fill='#4A4D7E', font=font_body_bold)
+    draw.text((680, y_table), "SUBTOTAL", fill='#4A4D7E', font=font_body_bold)
+    
+    draw.line([40, y_table + 30, width-40, y_table + 30], fill='#4A4D7E', width=1)
+    
+    y_item = y_table + 45
+    for item in carrito:
+        draw.text((50, y_item), str(item.get('cantidad', 1)), fill='#333333', font=font_body)
+        
+        titulo = str(item.get('titulo', 'N/A'))
+        if len(titulo) > 40:
+            titulo = titulo[:37] + "..."
+            
+        draw.text((120, y_item), titulo.upper(), fill='#333333', font=font_body)
+        draw.text((580, y_item), f"${float(item.get('precio_cobrado', 0.0)):,.0f}", fill='#333333', font=font_body)
+        draw.text((680, y_item), f"${float(item.get('subtotal', 0.0)):,.0f}", fill='#333333', font=font_body)
+        y_item += 35
+        if y_item > height - 320:
+            draw.text((120, y_item), "... (Otros libros omitidos por espacio)", fill='#777777', font=font_small)
+            break
+            
+    # Línea antes de Totales
+    y_totals = height - 260
+    draw.line([40, y_totals, width-40, y_totals], fill='#C994C0', width=2)
+    
+    # Totales y Estado Financiero
+    draw.text((420, y_totals + 20), "SUBTOTAL LIBROS:", fill='#555555', font=font_body)
+    draw.text((680, y_totals + 20), f"${float(subtotal):,.0f}", fill='#555555', font=font_body)
+    
+    draw.text((420, y_totals + 50), "COSTO ENVÍO:", fill='#555555', font=font_body)
+    draw.text((680, y_totals + 50), f"${float(valor_envio):,.0f}", fill='#555555', font=font_body)
+    
+    draw.text((420, y_totals + 85), "MONTO FINAL:", fill='#4A4D7E', font=font_body_bold)
+    draw.text((680, y_totals + 85), f"${float(monto_final):,.0f}", fill='#4A4D7E', font=font_body_bold)
+    
+    draw.text((420, y_totals + 120), "ABONO REGISTRADO:", fill='#2E7D32', font=font_body_bold)
+    draw.text((680, y_totals + 120), f"${float(abono):,.0f}", fill='#2E7D32', font=font_body_bold)
+    
+    draw.text((420, y_totals + 150), "DEUDA PENDIENTE:", fill='#C62828', font=font_body_bold)
+    draw.text((680, y_totals + 150), f"${float(deuda):,.0f}", fill='#C62828', font=font_body_bold)
+    
+    # Pie de página
+    draw.text((width/2, height - 45), "¡Gracias por tu preferencia! - Alba Librería ✨📚", fill='#4A4D7E', anchor="mm", font=font_subtitle)
+    
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', quality=95)
+    return buf.getvalue()
+
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
@@ -603,8 +732,8 @@ def mostrar_caja():
                     st.sidebar.warning(f"👤 **{row['cliente_nombre']}**\n💰 Deuda: ${row['deuda']:,.0f}\n⏳ {row['dias_mora']} días")
                 st.error(f"🚨 **¡ATENCIÓN!** Tienes {len(deudas_criticas)} cuenta(s) crítica(s) con más de 14 días de mora.")
     
-    tab_venta, tab_historial, tab_cobranza, tab_alertas, tab_anular = st.tabs([
-        "🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚨 Alertas (>5 días)", "🚫 Anular"
+    tab_venta, tab_historial, tab_cobranza, tab_alertas, tab_comprobantes, tab_anular = st.tabs([
+        "🛒 Nueva Venta", "📜 Historial", "💸 Cobranza", "🚨 Alertas (>5 días)", "🧾 Comprobantes", "🚫 Anular"
     ])
     
     with tab_venta:
@@ -920,7 +1049,9 @@ def mostrar_caja():
             estado_pago_sel = "PAGADO"
             mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
             
-        abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
+        val_abono = float(abono_default) if (abono_default is not None and not pd.isna(abono_default)) else 0.0
+        abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=val_abono)
+        
         if mensaje_exito:
             st.success(mensaje_exito)
             
@@ -933,6 +1064,42 @@ def mostrar_caja():
             
         
         desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
+        
+        st.markdown("---")
+        st.markdown("#### 🧾 Generar Comprobante Resumen (Opcional)")
+        generar_comp = st.checkbox("🧾 Generar Vista Previa del Comprobante para descarga", value=False, key="chk_generar_comp_nueva")
+        if generar_comp:
+            if not c_nombre:
+                st.info("💡 Completa el nombre del cliente para previsualizar el comprobante.")
+            elif len(st.session_state.carrito_caja) == 0:
+                st.info("💡 Agrega libros al carrito para previsualizar el comprobante.")
+            else:
+                with st.spinner("Generando comprobante..."):
+                    img_bytes_preview = generar_comprobante(
+                        carrito=st.session_state.carrito_caja,
+                        cliente_nombre=c_nombre,
+                        cliente_rut=c_rut,
+                        cliente_email=c_correo,
+                        cliente_telefono=c_telefono,
+                        cliente_direccion=c_direccion,
+                        fecha=fecha_venta_manual.strftime("%Y-%m-%d"),
+                        metodo_envio=metodo_envio_final,
+                        valor_envio=valor_envio,
+                        metodo_pago=metodo_pago,
+                        subtotal=subtotal_carrito,
+                        monto_final=monto_final,
+                        abono=abono_inicial,
+                        deuda=monto_final - abono_inicial
+                    )
+                    st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_container_width=True)
+                    st.download_button(
+                        label="📥 Descargar Comprobante (JPG)",
+                        data=img_bytes_preview,
+                        file_name=f"comprobante_{limpiar_texto_para_busqueda(c_nombre).replace(' ', '_')}.jpg",
+                        mime="image/jpeg",
+                        use_container_width=True,
+                        key="btn_dl_comprobante_nueva"
+                    )
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
@@ -1383,6 +1550,129 @@ def mostrar_caja():
                         st.success("¡Venta anulada con éxito!")
                         time.sleep(1.5); st.rerun()
                     else: st.error(f"Error al anular: {error}")
+    with tab_comprobantes:
+        st.markdown("### 🧾 Comprobantes de Ventas Abiertas")
+        st.info("Genera y descarga el comprobante para ventas que aún no han sido finalizadas o que fueron recientemente actualizadas.")
+        
+        if df_ventas_global.empty:
+            st.warning("No hay ventas registradas en el sistema.")
+        else:
+            # Filtrar ventas abiertas (estado != FINALIZADO)
+            df_abiertas = df_ventas_global[df_ventas_global['estado'] != 'FINALIZADO'].copy()
+            
+            if df_abiertas.empty:
+                st.success("🎉 ¡Excelente! No hay ventas abiertas pendientes en este momento.")
+            else:
+                # Armamos una etiqueta descriptiva respetando lineamientos UX (index=None)
+                df_abiertas['etiqueta_abierta'] = df_abiertas.apply(
+                    lambda row: f"Venta #{row.get('venta_id','')} | {row.get('cliente_nombre','')} | ${row.get('monto_final',0):,.0f} | Estado: {row.get('estado','')}", axis=1
+                )
+                
+                venta_abierta_sel = st.selectbox(
+                    "Selecciona una venta abierta:",
+                    options=[""] + df_abiertas['etiqueta_abierta'].tolist(),
+                    index=None,
+                    placeholder="Elige una venta abierta...",
+                    key="sel_venta_abierta_comprobante"
+                )
+                
+                if venta_abierta_sel:
+                    # Obtener datos de la fila original
+                    row_v = df_abiertas[df_abiertas['etiqueta_abierta'] == venta_abierta_sel].iloc[0]
+                    v_id_sel = int(row_v['venta_id'])
+                    
+                    # Decodificación resiliente del carrito
+                    libros_vendidos_raw = row_v.get('libros_vendidos', '[]')
+                    carrito_reconstruido = []
+                    
+                    if isinstance(libros_vendidos_raw, str) and libros_vendidos_raw.strip().startswith('['):
+                        try:
+                            items_json = json.loads(libros_vendidos_raw)
+                            for item in items_json:
+                                q = int(item.get('cantidad', 1))
+                                p = float(item.get('precio', 0.0))
+                                carrito_reconstruido.append({
+                                    'cantidad': q,
+                                    'titulo': item.get('titulo', 'N/A'),
+                                    'precio_cobrado': p,
+                                    'subtotal': q * p
+                                })
+                        except Exception:
+                            carrito_reconstruido = [{'cantidad': 1, 'titulo': libros_vendidos_raw, 'precio_cobrado': float(row_v.get('monto_final', 0.0)), 'subtotal': float(row_v.get('monto_final', 0.0))}]
+                    else:
+                        items_str = str(libros_vendidos_raw).split(" | ")
+                        for item_str in items_str:
+                            partes = item_str.split(" x ", 1)
+                            if len(partes) == 2:
+                                try:
+                                    q = int(partes[0].strip())
+                                    titulo_l = partes[1].strip()
+                                except ValueError:
+                                    q = 1
+                                    titulo_l = item_str
+                            else:
+                                q = 1
+                                titulo_l = item_str
+                                
+                            sub_libros = float(row_v.get('subtotal_libros', 0.0))
+                            carrito_reconstruido.append({
+                                'cantidad': q,
+                                'titulo': titulo_l,
+                                'precio_cobrado': sub_libros / max(1, q) if len(items_str) == 1 else 0.0,
+                                'subtotal': sub_libros if len(items_str) == 1 else 0.0
+                            })
+                    
+                    # Datos desglosados
+                    c_nom_v = row_v.get('cliente_nombre', 'Cliente')
+                    c_rut_v = row_v.get('cliente_rut', '')
+                    c_em_v = row_v.get('cliente_email', '')
+                    c_tel_v = row_v.get('cliente_telefono', '')
+                    c_dir_v = row_v.get('cliente_direccion', '')
+                    
+                    # Visualización limpia de la ficha de datos
+                    col_info1, col_info2 = st.columns(2)
+                    with col_info1:
+                        st.markdown(f"👤 **Cliente:** {c_nom_v}")
+                        st.markdown(f"🆔 **RUT:** {c_rut_v or 'No registrado'}")
+                        st.markdown(f"📧 **Email:** {c_em_v or 'No registrado'}")
+                        st.markdown(f"📞 **Teléfono:** {c_tel_v or 'No registrado'}")
+                        st.markdown(f"📍 **Dirección:** {c_dir_v or 'No registrada'}")
+                    with col_info2:
+                        st.markdown(f"📅 **Fecha Venta:** {row_v.get('fecha_venta')}")
+                        st.markdown(f"🚚 **Método Envío:** {row_v.get('metodo_envio')}")
+                        st.markdown(f"💳 **Método Pago:** {row_v.get('comentario', '')}")
+                        st.markdown(f"⚙️ **Estado Venta:** {row_v.get('estado')}")
+                        
+                    # Generación y previsualización
+                    st.markdown("#### 🎨 Comprobante Generado")
+                    with st.spinner("Creando ticket en base a plantilla..."):
+                        img_bytes_abierta = generar_comprobante(
+                            carrito=carrito_reconstruido,
+                            cliente_nombre=c_nom_v,
+                            cliente_rut=c_rut_v,
+                            cliente_email=c_em_v,
+                            cliente_telefono=c_tel_v,
+                            cliente_direccion=c_dir_v,
+                            fecha=str(row_v.get('fecha_venta'))[:10],
+                            metodo_envio=row_v.get('metodo_envio'),
+                            valor_envio=float(row_v.get('valor_envio', 0.0)),
+                            metodo_pago=row_v.get('comentario', 'N/A'),
+                            subtotal=float(row_v.get('subtotal_libros', 0.0)),
+                            monto_final=float(row_v.get('monto_final', 0.0)),
+                            abono=float(row_v.get('abono', 0.0)),
+                            deuda=float(row_v.get('deuda', 0.0)),
+                            venta_id=v_id_sel
+                        )
+                        
+                        st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                        st.download_button(
+                            label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
+                            data=img_bytes_abierta,
+                            file_name=f"comprobante_venta_{v_id_sel}_{limpiar_texto_para_busqueda(c_nom_v).replace(' ', '_')}.jpg",
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key=f"dl_abierta_{v_id_sel}"
+                        )
 
 if __name__ == "__main__":
     mostrar_caja()
