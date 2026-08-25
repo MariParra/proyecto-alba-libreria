@@ -1237,13 +1237,15 @@ def mostrar_asignaciones():
                     st.rerun()
 
                 if st.session_state.edit_mode:
-                    st.info(
-                        "💡 **GUÍA RÁPIDA: ¿Cómo usar la Edición en Bloque?**\n"
-                        "1. ✅ **Selecciona a los clientes:** Marca la casilla en la primera columna de la tabla (`Seleccionar`) para cada cliente que quieras modificar.\n"
-                        "2. ✍️ **Elige el cambio:** Ve al formulario de abajo y escoge la **columna** que quieres cambiar y el **nuevo valor** que le aplicarás a todos.\n"
-                        "3. 🔍 **Previsualiza:** Presiona el botón `Previsualizar Cambios`. El sistema te mostrará un resumen de lo que estás a punto de hacer.\n"
-                        "4. 🛡️ **Confirma con seguridad:** En el cuadro de previsualización, escribe la palabra `CONFIRMAR CAMBIOS` y presiona `Confirmar y Ejecutar` para aplicar los cambios de forma masiva."
-                    )
+                    with st.expander("Edición Masiva AYyuda 🆘", expanded=False):
+                        st.info(
+                            "💡 **GUÍA RÁPIDA: ¿Cómo usar la Edición en Bloque?**\n"
+                            "1. ✅ **Selecciona a los clientes:** Marca la casilla en la primera columna de la tabla (`Seleccionar`) para cada cliente que quieras modificar.\n"
+                            "2. ✍️ **Elige el cambio:** Ve al formulario de abajo y escoge la **columna** que quieres cambiar y el **nuevo valor** que le aplicarás a todos.\n"
+                            "3. 🔍 **Previsualiza:** Presiona el botón `Previsualizar Cambios`. El sistema te mostrará un resumen de lo que estás a punto de hacer.\n"
+                            "4. 🛡️ **Confirma con seguridad:** En el cuadro de previsualización, escribe la palabra `CONFIRMAR CAMBIOS` y presiona `Confirmar y Ejecutar` para aplicar los cambios de forma masiva."
+                        )
+                        
                     df_mostrar.insert(0, "Seleccionar", False)
 
                 # --- 5. GUARDADO DE ESTADO ORIGINAL ---
