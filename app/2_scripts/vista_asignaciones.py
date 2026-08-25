@@ -769,21 +769,33 @@ def mapear_sino(val):
 def actualizar_asignaciones_masivo(lista_asignacion_ids, columna, nuevo_valor):
     """
     Actualiza una columna específica con un nuevo valor para una lista de asignaciones.
-    Diseñada para la edición en bloque.
+    Diseñada para la edición en bloque aplicando la integridad de datos de despacho.
     """
     if not lista_asignacion_ids:
         return False, "No se seleccionaron filas para actualizar."
-
     conn = get_db_connection()
     try:
         # Preparamos los datos para el update
-        datos_update = {columna: nuevo_valor}
+        datos_update = {}
         
+        # 🚚 Lógica auto-curativa y conversión a NULL
+        if columna == "cobro_envio":
+            val_str = str(nuevo_valor).upper().strip() if pd.notna(nuevo_valor) else ""
+            if val_str in ["", "NONE"]:
+                datos_update["cobro_envio"] = None  # Guardar como NULL en Supabase
+            else:
+                datos_update["cobro_envio"] = val_str
+                
+            # Si el tipo de envío es por pagar o retiro, forzamos "NO APLICA"
+            if val_str in ["POR PAGAR", "RETIRO EN TIENDA"]:
+                datos_update["envio_pagado"] = "NO APLICA"
+        else:
+            datos_update[columna] = nuevo_valor
+            
         # Ejecutamos la actualización masiva para todos los IDs de la lista
         conn.table("asignaciones").update(datos_update).in_("asignacion_id", lista_asignacion_ids).execute()
         
         return True, ""
-
     except Exception as e:
         # --- BLOQUE DE LOGGING DE ERRORES ---
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -791,7 +803,6 @@ def actualizar_asignaciones_masivo(lista_asignacion_ids, columna, nuevo_valor):
             f"Fallo en EDICIÓN EN BLOQUE. Columna: '{columna}', Valor: '{nuevo_valor}'. "
             f"IDs afectados: {str(lista_asignacion_ids[:5])}... ({len(lista_asignacion_ids)} total). Detalle: {e}"
         )
-        
         log_error(
             vista="vista_asignaciones",
             funcion="actualizar_asignaciones_masivo",
@@ -1353,15 +1364,17 @@ def mostrar_asignaciones():
                             pass 
 
                         col1, col2 = st.columns(2)
+                        col1, col2 = st.columns(2)
                         with col1:
-                            columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "valor_envio", "comentario"]
+                            columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "cobro_envio", "valor_envio", "comentario"]
                             columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar", on_change=forzar_rerun)
                         
                         with col2:
                             opciones_desplegables = {
                                 "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
                                 "pagado": ["SI", "NO", "ABONO"],
-                                "envio_pagado": ["SI", "NO", "NO APLICA"]
+                                "envio_pagado": ["SI", "NO", "NO APLICA"],
+                                "cobro_envio": ["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"]
                             }
                             if columna_a_cambiar in opciones_desplegables:
                                 nuevo_valor = st.selectbox("2. Nuevo valor:", options=opciones_desplegables[columna_a_cambiar])
