@@ -716,7 +716,13 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             costo_c = float(row.get('costo_caja', 10000.0) or 10000.0) 
             m_total = val_sub + v_envio + v_extras 
             
-            c_envio = str(row.get('cobro_envio', 'PAGADO')).upper().strip()
+            c_envio_raw = row.get('cobro_envio')
+            c_envio = str(c_envio_raw).upper().strip() if pd.notna(c_envio_raw) else ""
+            if c_envio in ["", "NONE"]:
+                c_envio_db = None
+            else:
+                c_envio_db = c_envio
+                
             e_pagado = str(row['envio_pagado']).upper().strip()
             if c_envio in ["POR PAGAR", "RETIRO EN TIENDA"]:
                 e_pagado = "NO APLICA"
@@ -725,7 +731,7 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
                 "estado_envio": str(row['estado_envio']).upper(), 
                 "pagado": str(row['pagado']).upper(),
                 "envio_pagado": e_pagado, 
-                "cobro_envio": c_envio,
+                "cobro_envio": c_envio_db,
                 "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')),
                 "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total,
@@ -964,9 +970,9 @@ def mostrar_asignaciones():
         
         # 1. Normalizar y rellenar cobro_envio en caso de nulos
         if 'cobro_envio' not in df_mes.columns:
-            df_mes['cobro_envio'] = "PAGADO"
-        df_mes['cobro_envio'] = df_mes['cobro_envio'].fillna("PAGADO").astype(str).str.upper().str.strip()
-        
+            df_mes['cobro_envio'] = ""
+        df_mes['cobro_envio'] = df_mes['cobro_envio'].fillna("").astype(str).str.upper().str.strip()
+                
         # 2. Regla auto-curativa en memoria: Si es POR PAGAR o RETIRO, envio_pagado es NO APLICA
         mask_no_aplica = df_mes['cobro_envio'].isin(["POR PAGAR", "RETIRO EN TIENDA"])
         df_mes.loc[mask_no_aplica, 'envio_pagado'] = "NO APLICA"
@@ -1241,7 +1247,7 @@ def mostrar_asignaciones():
                     "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                     "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                     "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado 💳", options=["SI", "NO", "NO APLICA"], required=True),
-                    "cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=True),
+                    "cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=False),
                     "costo_caja": st.column_config.NumberColumn("Costo Caja Fijo ($)", format="$%.0f"),
                     "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                     "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
