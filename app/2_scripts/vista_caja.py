@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 import json
 import time
 import io
+import os
+import urllib.request
+import re
+from PIL import Image, ImageDraw, ImageFont
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 def unificar_formatos_fecha(serie_fechas):
@@ -390,6 +394,7 @@ def anular_venta(venta_id, texto_libros_vendidos):
                     if stock_bd <= 0:
                         nuevo_stock = 0 # Se mantiene en 0
                     else:
+                        # 🌟 CORREGIDO: Cambiado quantity_devuelta por cantidad_devuelta para evitar NameError
                         nuevo_stock = stock_bd + cantidad_devuelta
                         
                     conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
@@ -481,7 +486,7 @@ def actualizar_historial_caja(df_editado):
 def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asignacion_id=None):
     """
     Re-ruta de forma segura y en caliente una venta del historial hacia couriers 
-    estándar o consolidándola como extra en la cajita mensual activa del cliente.
+    estandar o consolidándola como extra en la cajita mensual activa del cliente.
     """
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -564,22 +569,83 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
         log_error("vista_caja", "cambiar_logistica_venta_existente", e, email_usuario)
         return False, str(e)
 
+def asegurar_fuente_comprobante(nombre_fuente):
+    """
+    Descarga dinámicamente cualquier fuente TrueType (.ttf) desde el repositorio
+    oficial de Google Fonts en GitHub y la almacena en caché localmente.
+    """
+    if not os.path.exists("assets"):
+        os.makedirs("assets")
+        
+    nombre_limpio = nombre_fuente.strip().replace(" ", "")
+    ruta_font = os.path.join("assets", f"{nombre_limpio}.ttf")
+    
+    if os.path.exists(ruta_font):
+        return ruta_font
+
+    formatos_url = [
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_fuente.replace(' ', '')}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/apache/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf"
+    ]
+    
+    for url in formatos_url:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                with open(ruta_font, "wb") as f:
+                    f.write(response.read())
+            return ruta_font
+        except Exception:
+            continue
+            
+    return None
+
+def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
+    """
+    Obtiene fuentes TrueType dinámicas con soporte excelente de fallback local.
+    """
+    ruta_google = asegurar_fuente_comprobante(nombre_fuente)
+    
+    candidatas = []
+    if ruta_google:
+        candidatas.append(ruta_google)
+        
+    candidatas.extend([
+        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
+        "arialbd.ttf" if bold else "arial.ttf",
+        "Arial.ttf"
+    ])
+    
+    for ruta in candidatas:
+        try:
+            if os.path.exists(ruta) or not ruta.endswith('.ttf'):
+                return ImageFont.truetype(ruta, tamanio)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=tamanio)
+    except:
+        return ImageFont.load_default()
+
 def generar_comprobante(
     carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
     fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
 ):
-    import urllib.request
-    from PIL import Image, ImageDraw, ImageFont
-    import io
-    
-    # Intentar descargar el fondo del comprobante
+    """
+    Genera un comprobante premium sobre plantilla con márgenes alineados al cuaderno.
+    Utiliza Albert Sans para texto regular y Shadows Into Light para títulos destacados.
+    """
+    # Intentar descargar el fondo oficial del comprobante
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
     img = None
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=3) as r:
             img = Image.open(io.BytesIO(r.read())).convert('RGB')
-            # Asegurar tamaño exacto para que calce con la plantilla
             try:
                 resample_filter = Image.Resampling.LANCZOS
             except AttributeError:
@@ -595,98 +661,133 @@ def generar_comprobante(
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    # Carga de tipografías del sistema de manera segura
-    def get_font(size, bold=False):
-        font_names = ["DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", 
-                      "Arial.ttf", "LiberationSans-Regular.ttf", "Helvetica.ttf"]
-        for font_name in font_names:
-            try:
-                return ImageFont.truetype(font_name, size)
-            except IOError:
-                continue
-        return ImageFont.load_default()
-        
-    font_title = get_font(32, bold=True)
-    font_subtitle = get_font(20)
-    font_body = get_font(18)
-    font_body_bold = get_font(18, bold=True)
-    font_small = get_font(14)
+    # Fuentes Premium de Google Fonts
+    font_title = obtener_fuente_comprobante("Shadows Into Light", 32, bold=True)
+    font_section = obtener_fuente_comprobante("Shadows Into Light", 22, bold=True)
+    font_body = obtener_fuente_comprobante("Albert Sans", 15)
+    font_body_bold = obtener_fuente_comprobante("Albert Sans", 15, bold=True)
+    font_price_accent = obtener_fuente_comprobante("Albert Sans", 17, bold=True)
+    font_footer = obtener_fuente_comprobante("Shadows Into Light", 20, bold=True)
     
-    # Dibujar decoraciones solo si es el lienzo fallback
-    if width == 800 and height == 1200 and img.getpixel((100, 100)) == (250, 248, 252):
-        draw.rectangle([15, 15, width-15, height-15], outline='#C994C0', width=4)
-        draw.rectangle([25, 25, width-25, height-25], outline='#4A4D7E', width=2)
-        
-        # Encabezado
-        draw.text((width/2, 65), "📚 ALBA LIBRERÍA", fill='#4A4D7E', anchor="mm", font=font_title)
-        draw.text((width/2, 105), "Portal Administrativo - Comprobante de Venta", fill='#666666', anchor="mm", font=font_subtitle)
-        draw.line([40, 130, width-40, 130], fill='#C994C0', width=2)
-        
-    y_start = 160
+    # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
+    x_margin = 130
+    x_right = 740
+    
+    # 1. CABECERA (Shadows Into Light)
+    draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
+    
     id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
-    draw.text((50, y_start), id_str, fill='#4A4D7E', font=font_body_bold)
+    draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
     
-    # Bloque de Información del Cliente
-    draw.text((50, y_start + 40), f"Cliente: {cliente_nombre}", fill='#333333', font=font_body)
-    draw.text((50, y_start + 70), f"RUT: {cliente_rut or 'No registrado'}", fill='#333333', font=font_body)
-    draw.text((50, y_start + 100), f"Email: {cliente_email or 'No registrado'}", fill='#333333', font=font_body)
-    draw.text((50, y_start + 130), f"Teléfono: {cliente_telefono or 'No registrado'}", fill='#333333', font=font_body)
-    draw.text((50, y_start + 160), f"Dirección: {cliente_direccion or 'No especificado'}", fill='#333333', font=font_body)
+    # Línea divisoria
+    draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
     
-    # Bloque de Datos de Transacción
-    draw.text((450, y_start + 40), f"Fecha: {fecha}", fill='#333333', font=font_body)
-    draw.text((450, y_start + 70), f"Envío: {metodo_envio}", fill='#333333', font=font_body)
-    draw.text((450, y_start + 100), f"Pago: {metodo_pago}", fill='#333333', font=font_body)
+    # 2. SECCIÓN: DATOS DEL CLIENTE (Shadows Into Light)
+    draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
     
-    draw.line([40, y_start + 210, width-40, y_start + 210], fill='#C994C0', width=2)
-    
-    # Detalle de Productos
-    y_table = y_start + 230
-    draw.text((50, y_table), "CANT", fill='#4A4D7E', font=font_body_bold)
-    draw.text((120, y_table), "DESCRIPCIÓN / LIBRO", fill='#4A4D7E', font=font_body_bold)
-    draw.text((580, y_table), "P. UNIT", fill='#4A4D7E', font=font_body_bold)
-    draw.text((680, y_table), "SUBTOTAL", fill='#4A4D7E', font=font_body_bold)
-    
-    draw.line([40, y_table + 30, width-40, y_table + 30], fill='#4A4D7E', width=1)
-    
-    y_item = y_table + 45
-    for item in carrito:
-        draw.text((50, y_item), str(item.get('cantidad', 1)), fill='#333333', font=font_body)
+    # Limpieza de redundancias en texto de Pago
+    metodo_pago_limpio = str(metodo_pago).strip()
+    if metodo_pago_limpio.lower().startswith("pago:"):
+        metodo_pago_limpio = metodo_pago_limpio[5:].strip()
         
-        titulo = str(item.get('titulo', 'N/A'))
-        if len(titulo) > 40:
-            titulo = titulo[:37] + "..."
+    # Datos de cliente alineados en 2 columnas
+    # Columna Izquierda: Cliente, RUT, Email, Teléfono, Dirección
+    draw.text((x_margin, 190), "Cliente:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 80, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
+    
+    draw.text((x_margin, 220), "RUT:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 80, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
+    
+    draw.text((x_margin, 250), "Email:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 80, 250), str(cliente_email or 'No registrado'), fill='#333333', font=font_body)
+    
+    draw.text((x_margin, 280), "Teléfono:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 80, 280), str(cliente_telefono or 'No registrado'), fill='#333333', font=font_body)
+    
+    direccion_c = str(cliente_direccion or 'No especificado')
+    if len(direccion_c) > 30:
+        direccion_c = direccion_c[:27] + "..."
+    draw.text((x_margin, 310), "Dirección:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 80, 310), direccion_c, fill='#333333', font=font_body)
+    
+    # Columna Derecha: Fecha, Envío, Pago
+    x_col2 = 470
+    draw.text((x_col2, 190), "Fecha:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
+    
+    draw.text((x_col2, 220), "Envío:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 220), str(metodo_envio), fill='#333333', font=font_body)
+    
+    draw.text((x_col2, 250), "Pago:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 250), metodo_pago_limpio, fill='#333333', font=font_body)
+    
+    # Línea divisoria
+    draw.line([x_margin, 350, x_right, 350], fill='#BA96A5', width=2)
+    
+    # 3. SECCIÓN: DETALLE DE PRODUCTOS (Shadows Into Light)
+    draw.text((x_margin, 365), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
+    
+    # Encabezados de la Tabla de Productos
+    y_table = 405
+    draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_body_bold)
+    draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
+    draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
+    
+    draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
+    
+    # Renglones de Libros Vendidos (Albert Sans)
+    y_item = y_table + 35
+    for item in carrito:
+        qty_str = str(item.get('cantidad', 1))
+        draw.text((x_margin, y_item), qty_str, fill='#333333', font=font_body)
+        
+        titulo = str(item.get('titulo', 'N/A')).upper()
+        if len(titulo) > 28:
+            titulo = titulo[:25] + "..."
             
-        draw.text((120, y_item), titulo.upper(), fill='#333333', font=font_body)
-        draw.text((580, y_item), f"${float(item.get('precio_cobrado', 0.0)):,.0f}", fill='#333333', font=font_body)
-        draw.text((680, y_item), f"${float(item.get('subtotal', 0.0)):,.0f}", fill='#333333', font=font_body)
-        y_item += 35
-        if y_item > height - 320:
-            draw.text((120, y_item), "... (Otros libros omitidos por espacio)", fill='#777777', font=font_small)
+        draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
+        
+        precio_val = float(item.get('precio_cobrado', 0.0))
+        draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
+        
+        subtotal_val = float(item.get('subtotal', 0.0))
+        draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
+        
+        y_item += 32
+        if y_item > 850:
+            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos por espacio)", fill='#777777', font=font_body)
             break
             
-    # Línea antes de Totales
-    y_totals = height - 260
-    draw.line([40, y_totals, width-40, y_totals], fill='#C994C0', width=2)
+    # Línea divisoria antes de totales
+    draw.line([x_margin, 880, x_right, 880], fill='#BA96A5', width=2)
     
-    # Totales y Estado Financiero
-    draw.text((420, y_totals + 20), "SUBTOTAL LIBROS:", fill='#555555', font=font_body)
-    draw.text((680, y_totals + 20), f"${float(subtotal):,.0f}", fill='#555555', font=font_body)
+    # 4. CARD DE TOTALES Y FINANZAS A LA DERECHA (con Sombra y formato Premium)
+    box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
+    # Sombra
+    draw.rounded_rectangle([box_x1 + 8, box_y1 + 8, box_x2 + 8, box_y2 + 8], radius=15, fill='#F4CCD4')
+    # Tarjeta Principal
+    draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill='#FFFFFF', outline='#7C0C3F', width=2)
     
-    draw.text((420, y_totals + 50), "COSTO ENVÍO:", fill='#555555', font=font_body)
-    draw.text((680, y_totals + 50), f"${float(valor_envio):,.0f}", fill='#555555', font=font_body)
+    # Dibujar Valores alineados dentro de la tarjeta de forma simétrica
+    def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, color_lbl='#555555'):
+        draw.text((box_x1 + 20, y_pos), label, fill=color_lbl, font=font_lbl)
+        val_str = f"${val_float:,.0f}"
+        try:
+            x0, y0, x1, y1 = draw.textbbox((0, 0), val_str, font=font_val)
+            w_val = x1 - x0
+        except Exception:
+            w_val = len(val_str) * 9
+        draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
+        
+    draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body, font_body, '#333333')
+    draw_total_row("Costo Envío:", float(valor_envio), 945, font_body, font_body, '#333333')
+    draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', color_lbl='#7C0C3F')
+    draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32')
+    draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828')
     
-    draw.text((420, y_totals + 85), "MONTO FINAL:", fill='#4A4D7E', font=font_body_bold)
-    draw.text((680, y_totals + 85), f"${float(monto_final):,.0f}", fill='#4A4D7E', font=font_body_bold)
-    
-    draw.text((420, y_totals + 120), "ABONO REGISTRADO:", fill='#2E7D32', font=font_body_bold)
-    draw.text((680, y_totals + 120), f"${float(abono):,.0f}", fill='#2E7D32', font=font_body_bold)
-    
-    draw.text((420, y_totals + 150), "DEUDA PENDIENTE:", fill='#C62828', font=font_body_bold)
-    draw.text((680, y_totals + 150), f"${float(deuda):,.0f}", fill='#C62828', font=font_body_bold)
-    
-    # Pie de página
-    draw.text((width/2, height - 45), "¡Gracias por tu preferencia! - Alba Librería ✨📚", fill='#4A4D7E', anchor="mm", font=font_subtitle)
+    # 5. PIE DE PÁGINA (Shadows Into Light)
+    draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería ✨📚", fill='#7C0C3F', font=font_footer, anchor="mm")
     
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=95)
@@ -1665,6 +1766,7 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
+                        # Uso de BytesIO y use_column_width=True para máxima compatibilidad
                         st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_column_width=True)
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
