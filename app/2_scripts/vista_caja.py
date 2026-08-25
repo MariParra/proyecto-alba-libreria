@@ -901,7 +901,7 @@ def mostrar_caja():
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
         fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
         
-        # 🌟 TAREA 1: Determinar tipo_cobro_envio y monto_final real ANTES de calcular abonos
+        # Determinar tipo_cobro_envio y monto_final real ANTES de abonos y de renderizar la tarjeta verde
         if es_por_pagar:
             tipo_cobro_envio = "envio por pagar"
             monto_final = subtotal_carrito
@@ -921,6 +921,13 @@ def mostrar_caja():
             mensaje_exito = "💡 Venta FINALIZADA/PAGADA: El abono se iguala al monto total."
             
         abono_inicial = col_abono4.number_input("Abono Inicial ($):", min_value=0.0, step=1000.0, value=abono_default)
+        if mensaje_exito:
+            st.success(mensaje_exito)
+            
+        # 3. Dibujamos la tarjeta verde con los montos exactos recalculados
+        st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
+        st.write("")
+        
         if mensaje_exito:
             st.success(mensaje_exito)
             
