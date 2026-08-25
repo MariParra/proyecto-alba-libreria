@@ -28,6 +28,7 @@ def unificar_formatos_fecha(serie_fechas):
         except:
             # Si todo lo demás falla, intenta un último parseo genérico.
             return pd.to_datetime(val_str, errors='coerce')
+            
     # 3. Aplicar la función a toda la columna
     try:
         return serie_fechas.apply(parsear_valor)
@@ -231,8 +232,8 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         datos["precio_original"] = float(precio_catalogo)
         response = conn.table("libros").insert(datos).execute()
         return response.data[0]['libro_id']
-
-def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, asignacion_id=None, venta_id_asociada=None):
+    
+def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, tipo_cobro_envio, asignacion_id=None, venta_id_asociada=None):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     
@@ -251,20 +252,15 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
     try:
         # --- CASO FUSIÓN DE VENTAS ---
         if venta_id_asociada:
-            # 1. Recuperamos la venta anterior desde Supabase
             res_old = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id_asociada)).execute()
             if not res_old.data:
                 return False, f"No se pudo encontrar la venta de origen #{venta_id_asociada} para fusionar."
-            
             venta_old = res_old.data[0]
-            
-            # 2. Deserializar libros antiguos y combinar con los nuevos
             try:
                 libros_old_list = json.loads(venta_old.get('libros_vendidos', '[]'))
             except:
                 libros_old_list = []
                 
-            # Combinar duplicando o agregando
             for n_item in libros_nuevos_list:
                 found = False
                 for o_item in libros_old_list:
@@ -275,14 +271,19 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not found:
                     libros_old_list.append(n_item)
             
-            # 3. Sumar y acumular los montos financieros de forma matemática
             nuevo_subtotal_libros = float(venta_old.get('subtotal_libros', 0.0)) + float(subtotal_libros)
             nuevo_costo_venta = float(venta_old.get('costo_venta', 0.0)) + float(costo_total_venta)
-            nuevo_monto_final = nuevo_subtotal_libros + float(venta_old.get('valor_envio', 0.0))
+            
+            # Si el origen es 'envio por pagar', el envío acumulado no se suma al monto final
+            old_tipo_cobro = venta_old.get('tipo_cobro_envio', 'envio pagado')
+            if old_tipo_cobro == "envio por pagar":
+                nuevo_monto_final = nuevo_subtotal_libros
+            else:
+                nuevo_monto_final = nuevo_subtotal_libros + float(venta_old.get('valor_envio', 0.0))
+                
             nuevo_abono = float(venta_old.get('abono', 0.0)) + float(abono_venta)
             
-            # 4. Actualizar la venta de origen
-            datos_fusión = {
+            datos_fusion = {
                 "libros_vendidos": json.dumps(libros_old_list, ensure_ascii=False),
                 "subtotal_libros": nuevo_subtotal_libros,
                 "costo_venta": nuevo_costo_venta,
@@ -290,11 +291,12 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 "abono": nuevo_abono,
                 "comentario": f"{venta_old.get('comentario', '')} | Fusionada: {comentario}".strip()
             }
-            conn.table("registro_ventas").update(datos_fusión).eq("venta_id", int(venta_id_asociada)).execute()
+            conn.table("registro_ventas").update(datos_fusion).eq("venta_id", int(venta_id_asociada)).execute()
             
-        # --- CASO VENTA NORMAL (No Fusión) ---
+        # --- CASO VENTA NORMAL ---
         else:
-            monto_final = subtotal_libros + valor_envio
+            # Si es por pagar, el costo de envío NO se suma al monto final a cobrar al cliente
+            monto_final = subtotal_libros + valor_envio if tipo_cobro_envio != "envio por pagar" else subtotal_libros
             datos_venta = {
                 "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
                 "libros_vendidos": json.dumps(libros_nuevos_list, ensure_ascii=False), 
@@ -303,9 +305,11 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 "comentario": f"Pago: {metodo_pago}. {comentario}".strip(), "estado": estado_venta,
                 "estado_pago": estado_pago, 
                 "fecha_pago": fecha_pago.isoformat() if fecha_pago else None,
-                "abono": float(abono_venta), "costo_venta": float(costo_total_venta) 
+                "abono": float(abono_venta), "costo_venta": float(costo_total_venta),
+                "tipo_cobro_envio": tipo_cobro_envio
             }
             conn.table("registro_ventas").insert(datos_venta).execute()
+            
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
@@ -325,6 +329,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto_para_busqueda(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
+                    
         if asignacion_id:
             try:
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
@@ -375,7 +380,6 @@ def anular_venta(venta_id, texto_libros_vendidos):
                 except ValueError:
                     continue
                 res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_libro).execute()
-                res_l = conn.table("libros").select("libro_id, stock").eq("titulo", titulo_libro).execute()
                 if res_l.data:
                     l_id = res_l.data[0]['libro_id']
                     stock_bd = res_l.data[0]['stock']
@@ -397,7 +401,7 @@ def anular_venta(venta_id, texto_libros_vendidos):
 def actualizar_historial_caja(df_editado):
     df_original = st.session_state.get('historial_original', pd.DataFrame())
     if df_original.empty: return 0
-    # Nos aseguramos de conservar el venta_id real en ambas comparaciones
+    
     df_original_str = df_original.astype(str)
     df_editado_str = df_editado.astype(str)
     diff_mask = df_original_str.ne(df_editado_str).any(axis=1)
@@ -409,12 +413,11 @@ def actualizar_historial_caja(df_editado):
     conn = get_db_connection()
     updates = 0
     
-    # Recorremos asegurándonos de extraer el ID real de la venta
     for _, row in filas_cambiadas.iterrows():
         try:
             venta_id = int(row['venta_id'])
             
-            # 1. DATOS DEL CLIENTE
+            # 1. ACTUALIZACIÓN DE DATOS DEL CLIENTE
             cliente_id = row.get('cliente_cliente_id') 
             if cliente_id and pd.notna(cliente_id):
                 datos_cliente = {
@@ -426,17 +429,34 @@ def actualizar_historial_caja(df_editado):
                 datos_cliente_limpios = {k: v for k, v in datos_cliente.items() if pd.notna(v) and v != 'nan'}
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
-            # 2. DATOS DE LA VENTA
+            
+            # 2. ACTUALIZACIÓN Y RECÁLCULO DE DATOS DE LA VENTA
             datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
             
-            # Buscamos el monto original usando el venta_id real
-            monto_fila_original = df_original.loc[df_original['venta_id'] == venta_id, 'monto_final']
-            monto_final_actual = float(monto_fila_original.values[0]) if not monto_fila_original.empty else float(row.get('monto_final', 0))
+            # Recálculo financiero dinámico en base al tipo de cobro y valor de envío
+            tipo_cobro = str(datos_venta_raw.get('tipo_cobro_envio', 'envio pagado')).lower().strip()
+            subtotal = float(row.get('subtotal_libros', 0.0))
+            envio = float(row.get('valor_envio', 0.0))
+            
+            if tipo_cobro == "envio por pagar":
+                monto_final_actual = subtotal  # El envío no se le cobra al cliente
+            elif tipo_cobro == "retiro":
+                monto_final_actual = subtotal
+            else:
+                monto_final_actual = subtotal + envio # En envío pagado, se le cobra el total
+                
+            datos_venta_raw['monto_final'] = monto_final_actual
+            
+            # Gestión de abonos automáticos
             if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
                 datos_venta_raw['estado_pago'] = 'PAGADO'
                 datos_venta_raw['abono'] = monto_final_actual
+            else:
+                datos_venta_raw['abono'] = float(row.get('abono', 0.0))
+                
             datos_venta_final = {}
-            columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario']
+            # 🌟 AGREGA 'valor_envio' A LA LISTA DE COLUMNAS ACTUALIZABLES
+            columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario', 'tipo_cobro_envio', 'valor_envio']
             for col in columnas_venta_validas:
                 if col in datos_venta_raw:
                     valor = datos_venta_raw[col]
@@ -444,6 +464,7 @@ def actualizar_historial_caja(df_editado):
                         datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) and str(valor).strip() != '' else None
                     else:
                         datos_venta_final[col] = valor
+                        
             if datos_venta_final:
                 conn.table("registro_ventas").update(datos_venta_final).eq("venta_id", venta_id).execute()
             
@@ -522,7 +543,8 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
                 "metodo_envio": metodo_envio_final,
                 "valor_envio": 0.0,
                 "monto_final": monto_final_nuevo,
-                "abono": monto_final_nuevo if venta.get("estado_pago") == "PAGADO" else float(venta.get("abono", 0.0))
+                "abono": monto_final_nuevo if venta.get("estado_pago") == "PAGADO" else float(venta.get("abono", 0.0)),
+                "tipo_cobro_envio": "retiro"
             }).eq("venta_id", int(venta_id)).execute()
             
         else:
@@ -544,11 +566,11 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
 def mostrar_caja():
-    # Inicialización del limitador de ventas en el historial (empieza en 100 y suma 100)
+    # Inicialización del limitador de ventas en el historial (empieza en 30 y suma 100)
     if 'caja_limit_view' not in st.session_state:
         st.session_state.caja_limit_view = 30
         
-    # Inicialización del limitador de clientes (empieza en 30 y suma 30)
+    # Inicialización del limitador de clientes (empieza en 300 y suma 200)
     if 'clientes_limit_view' not in st.session_state:
         st.session_state.clientes_limit_view = 300
         
@@ -604,7 +626,7 @@ def mostrar_caja():
                     key="sel_cliente_caja"
                 )
                 
-                # Botón UX para expandir la lista de clientes en el buscador de +30 en +30
+                # Botón UX para expandir la lista de clientes en el buscador de +200 en +200
                 if len(df_clientes) > limite_cli:
                     if st.button(f"🔍 Cargar más clientes en el buscador (+200)", use_container_width=True):
                         st.session_state.clientes_limit_view += 200
@@ -709,7 +731,6 @@ def mostrar_caja():
             # Checkbox para permitir vender más unidades que las disponibles en stock
             permitir_sin_stock = st.checkbox("🔓 Permitir sobreventa (omitir límite de stock disponible)", value=False)
             
-            
             col_c1, col_c2 = st.columns(2)
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(l_precio_catalogo), step=500.0)
             # Lógica dinámica: Si el libro no tiene stock (<= 0) o el checkbox está marcado, no limitamos el máximo
@@ -811,6 +832,14 @@ def mostrar_caja():
         bloquear_venta = False 
         asignacion_id_target = None
         
+        # 🌟 TAREA 1: El ticket (checkbox) de envío por pagar no aparece para retiros o consolidaciones
+        mostrar_ticket_cobro = modo_envio not in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción"]
+        es_por_pagar = False
+        
+        if mostrar_ticket_cobro:
+            default_por_pagar = (modo_envio == "Envio por pagar")
+            es_por_pagar = col_e1.checkbox("📦 Envío por Pagar (Se cobra en destino)", value=default_por_pagar)
+        
         if modo_envio == "Añadir a caja de suscripción":
             if c_id is not None:
                 conn = get_db_connection()
@@ -819,7 +848,7 @@ def mostrar_caja():
                 if cajas_abiertas:
                     opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado_envio','')} (ID: {c['asignacion_id']})" for c in cajas_abiertas]
                     caja_sel = col_e2.selectbox("Caja de Suscripción abierta:", opciones_cajas)
-                    asignacion_id_target = int(caja_sel.split("(ID: ")[1].strip(")"))
+                    asignacion_id_target = int(caja_sel.split("(ID: ")[-1].strip(")"))
                     metodo_envio_final = f"Agregado a {caja_sel.split(' -')[0]}"
                     st.info("Los libros se agregarán como Extras a la caja seleccionada (Envío $0).")
                 else:
@@ -845,7 +874,7 @@ def mostrar_caja():
                             <h4 style="color:#856404; margin:0; font-size:18px;">⚠️ ¡ALERTA: ESTA VENTA SE FUSIONARÁ!</h4>
                             <p style="color:#856404; margin:5px 0 0 0; font-size:14px; font-weight:bold;">
                                 Los libros de este carrito se integrarán directamente dentro de la <b>Venta #{v_id_asociada}</b>. 
-                                No se creará una venta nueva, sino que se sumará el stock, el abono y el subtotal en la orden original del historial.
+                                No se creará una venta nueva, sino que se sumará el stock, el abono and el subtotal en la orden original del historial.
                             </p>
                         </div>
                         """, 
@@ -887,6 +916,17 @@ def mostrar_caja():
         
         desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
         
+        if es_por_pagar:
+            tipo_cobro_envio = "envio por pagar"
+            monto_final = subtotal_carrito  # 🌟 TAREA 1: El envío por pagar NO se suma al valor del monto final
+        else:
+            if modo_envio in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción"]:
+                tipo_cobro_envio = "retiro"
+                monto_final = subtotal_carrito
+            else:
+                tipo_cobro_envio = "envio pagado"
+                monto_final = subtotal_carrito + valor_envio
+                
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
                 final_cliente_id, error_cliente = gestionar_cliente(c_nombre, c_correo, c_telefono, c_rut, c_direccion, c_id)
@@ -895,15 +935,15 @@ def mostrar_caja():
                     st.error(error_cliente)
                 else:
                     # Determinamos si hay una ID de venta anterior para fusionar
-                    v_id_fusión = None
+                    v_id_fusion = None
                     if modo_envio == "Añadir a compra anterior" and 'v_id_asociada' in locals():
-                        v_id_fusión = int(v_id_asociada)
+                        v_id_fusion = int(v_id_asociada)
                         
                     exito, err = procesar_venta_carrito(
                         st.session_state.carrito_caja, final_cliente_id, valor_envio, 
                         metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
                         estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, 
-                        asignacion_id_target, v_id_fusión 
+                        tipo_cobro_envio, asignacion_id_target, v_id_fusion 
                     )
                     if exito: 
                         if 'sel_cliente_caja' in st.session_state:
@@ -965,25 +1005,24 @@ def mostrar_caja():
                 if nombre_mes_actual in opciones_mes:
                     default_index = opciones_mes.index(nombre_mes_actual)
                 # 3. Se lo pasamos como valor inicial al selectbox
-                col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-                mes_seleccionado = col_f1.selectbox(
-                    "Filtrar por Mes:", 
-                    options=opciones_mes,
-                    index=default_index # <-- LA MAGIA OCURRE AQUÍ
-                )
-                
-                clientes_hist = ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist())
-                cliente_filtro = col_f2.selectbox("Filtrar Cliente:", clientes_hist)
-                estados_hist = ["Todos"] + sorted(df_ventas['estado'].unique().tolist())
-                estado_filtro = col_f3.selectbox("Filtrar Estado:", estados_hist)
+                col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns(5)
+                mes_seleccionado = col_f1.selectbox("Filtrar por Mes:", options=opciones_mes, index=default_index)
+                cliente_filtro = col_f2.selectbox("Filtrar Cliente:", ["Todos"] + sorted(df_ventas['cliente_nombre'].unique().tolist()))
+                estado_filtro = col_f3.selectbox("Filtrar Estado:", ["Todos"] + sorted(df_ventas['estado'].unique().tolist()))
                 estado_pago_filtro = col_f4.selectbox("Filtrar Pago:", ["Todos", "PAGADO", "PENDIENTE"])
+                
+                if 'tipo_cobro_envio' in df_ventas.columns:
+                    tipo_cobro_opciones = ["Todos"] + sorted(df_ventas['tipo_cobro_envio'].dropna().unique().tolist())
+                else:
+                    tipo_cobro_opciones = ["Todos", "retiro", "envio por pagar", "envio pagado"]
+                tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", opciones=tipo_cobro_opciones)
                 
                 st.markdown("---")
                 solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
                 
                 st.markdown("---")
-                columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
-                columnas_por_defecto = ['venta_id', 'fecha_venta', 'cliente_nombre', 'libros_vendidos', 'monto_final', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
+                columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'valor_envio', 'tipo_cobro_envio', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
+                columnas_por_defecto = ['venta_id', 'fecha_venta', 'cliente_nombre', 'libros_vendidos', 'monto_final', 'valor_envio', 'tipo_cobro_envio', 'abono', 'deuda', 'estado', 'estado_pago', 'fecha_pago']
                 columnas_a_mostrar = st.multiselect("👀 Mostrar / Ocultar Columnas en Tabla", columnas_hist_todas, default=columnas_por_defecto)
                 
             df_filtrado_general = df_ventas.copy()
@@ -1013,7 +1052,9 @@ def mostrar_caja():
             st.session_state.historial_original = df_mostrar.copy()
             
             config_cols_hist = {
-                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f"),
+                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f", disabled=True), # Auto-calculado
+                "valor_envio": st.column_config.NumberColumn("Valor Envío 🚚", format="$%.0f", step=500.0), # ¡Editable!
+                "tipo_cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 💳", options=["retiro", "envio por pagar", "envio pagado"], required=True),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),
                 "deuda": st.column_config.NumberColumn("Deuda", format="$%.0f", disabled=True),
                 "utilidad": st.column_config.NumberColumn("Utilidad", format="$%.0f", disabled=True),
@@ -1032,7 +1073,6 @@ def mostrar_caja():
                 "cliente_telefono": st.column_config.TextColumn("Teléfono Cliente")
             }
             
-                        # 🌟 CORRECCIÓN: Slicing visual (Cargar solo un lote ligero de 100 en la UI para no saturar)
             limite_actual = st.session_state.caja_limit_view
             total_ventas_filtradas = len(df_mostrar)
             df_paginado = df_mostrar.head(limite_actual)
@@ -1118,7 +1158,7 @@ def mostrar_caja():
                                 opciones_cajas = [f"Suscripción {c['mes']} - {c.get('estado_envio','')} (ID: {c['asignacion_id']})" for c in cajas_abiertas]
                                 caja_sel = col_mod2.selectbox("3. Selecciona la Caja de Suscripción abierta:", opciones_cajas)
                                 if caja_sel:
-                                    asig_id_target = int(caja_sel.split("(ID: ")[1].strip(")"))
+                                    asig_id_target = int(caja_sel.split("(ID: ")[-1].strip(")"))
                                     st.success(f"✅ ¡Perfecto! Los libros se sumarán automáticamente como Extras a la cajita del mes.")
                             else:
                                 col_mod2.warning("⚠️ El cliente no registra cajitas de suscripción abiertas actualmente para añadir.")
@@ -1197,8 +1237,7 @@ def mostrar_caja():
         ].copy()
         
         if not df_olvidados.empty:
-                    col_c_b1, col_c_b2 = st.columns([1, 2.5])
-        if not df_olvidados.empty:
+            col_c_b1, col_c_b2 = st.columns([1, 2.5])
             with col_c_b1:
                 st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster.png", width=180)
             with col_c_b2:
@@ -1217,6 +1256,7 @@ def mostrar_caja():
                     unsafe_allow_html=True
                 )
         else:
+            col_c_b1, col_c_b2 = st.columns([1, 2.5])
             with col_c_b1:
                 st.image("https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamsterfeliz.jpg", width=180)
             with col_c_b2:
@@ -1228,7 +1268,7 @@ def mostrar_caja():
                             Ivonne, tienes todo en orden, puedes dormir pero que no se te olvide trabajar tampoco.
                         </p>
                         <p style="color:#333; margin:4px 0 0 0; font-size:14px;">
-                            No tienes ningún paquete demorado en bodega. ¡Excelente trabajo de organization! 🌟📦
+                            No tienes ningún paquete demorado en bodega. ¡Excelente trabajo de organización! 🌟📦
                         </p>
                     </div>
                     """, 
@@ -1243,7 +1283,6 @@ def mostrar_caja():
             df_alertas_temporal = df_ventas_global.copy()
             df_alertas_temporal['fecha_dt'] = pd.to_datetime(df_alertas_temporal['fecha_venta'], errors='coerce')
             hoy_datetime = datetime.now()
-            
             df_alertas_temporal['dias_antiguedad'] = (hoy_datetime - df_alertas_temporal['fecha_dt']).dt.days
             
             # Filtro: Ventas mayores a 5 días cuyo estado NO sea "PAQUETE LISTO" ni "FINALIZADO"
@@ -1276,7 +1315,7 @@ def mostrar_caja():
                         
                         with col_card_info:
                             st.markdown(f"#### 📦 Venta #{v_id} - {c_nombre}")
-                            st.markdown(f"💀 **¡LLeva {dias} días sin prepararse!** *(Creado el {row.get('fecha_venta')})*")
+                            st.markdown(f"💀 **¡Lleva {dias} días sin prepararse!** *(Creado el {row.get('fecha_venta')})*")
                             st.markdown(f"📚 **Libros requeridos:** `{libros_str}`")
                             st.markdown(f"⚙️ **Estado de la Venta actual:** `{estado_v}`")
                             
@@ -1299,10 +1338,10 @@ def mostrar_caja():
                                 
                             # 2. Redacción del mensaje de autopresión para armar paquetes
                             msg_recordatorio = (
-                                f"🚨 RECORDATORIO INTERNO ALBA LIBRERÍA 🚨\\n\\n"
-                                f"Hola Ivonne, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\\n"
-                                f"⏳ ¡Lleva {dias} días de retraso!\\n"
-                                f"📚 Libros a empacar: {libros_str}\\n\\n"
+                                f"🚨 RECORDATORIO INTERNO ALBA LIBRERÍA 🚨\n\n"
+                                f"Hola Ivonne, recuerda que tienes pendiente armar la orden #{v_id} para {c_nombre}.\n"
+                                f"⏳ ¡Lleva {dias} días de retraso!\n"
+                                f"📚 Libros a empacar: {libros_str}\n\n"
                                 f"Por favor, prepáralo y luego márcalo como '¡YA LO ARMÉ!' en la app."
                             )
                             msg_encoded = urllib.parse.quote(msg_recordatorio)
