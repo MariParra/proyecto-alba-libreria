@@ -12,27 +12,19 @@ def obtener_unicos(df, columna):
 def cargar_datos_completos():
     """
     Carga todos los datos de la tabla 'libros' desde Supabase en bloques de 1.000,
-    calculando el rango dinámicamente según la fecha de inicio, y calcula dinámicamente 
-    si los libros tienen un descuento activo de forma segura.
+    ordenados por la clave primaria 'libro_id', y calcula dinámicamente si los 
+    libros tienen un descuento activo de forma segura, autocorrigiendo expirados.
     """
     conn = get_db_connection()
     
     try:
-        # 1. Calculamos meses transcurridos desde Octubre 2025 hasta hoy
-        fecha_inicio_proyecto = datetime(2025, 10, 1)
-        hoy_dt = datetime.now()
-        meses_transcurridos = (hoy_dt.year - fecha_inicio_proyecto.year) * 12 + (hoy_dt.month - fecha_inicio_proyecto.month) + 1
-        
-        # Límite dinámico (100 libros nuevos/mes, piso mínimo de 1.000)
-        limite_dinamico_libros = max(1000, meses_transcurridos * 100)
-        
-        # 2. 🚀 Bucle acotado de paginación para traer todo el catálogo sin riesgo de truncado
+        # 1. 🚀 Bucle acotado de paginación para traer todo el catálogo sin riesgo de truncado (Bypass 1000 registros)
         all_data = []
         chunk_size = 1000
-        for bloque in range(3): # Soporta hasta 3.000 títulos en catálogo (Varios años de crecimiento)
+        for bloque in range(100): 
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            response = conn.table("libros").select("*").order("libro_id", desc=True).range(start, end).execute()
+            response = conn.table("libros").select("*").order("libro_id").range(start, end).execute()
             if response.data:
                 all_data.extend(response.data)
                 if len(response.data) < chunk_size:
@@ -46,7 +38,7 @@ def cargar_datos_completos():
         # Creamos el DataFrame definitivo con el 100% de los libros descargados
         df = pd.DataFrame(all_data)
     
-        # 🌟 CORRECCIÓN: Procesamos directamente el DataFrame unificado (Sin sobreescrituras destructivas)
+        # Procesamos directamente el DataFrame unificado
         columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
         for col in columnas_texto:
             if col in df.columns:
@@ -86,6 +78,38 @@ def cargar_datos_completos():
             df['f_ini_dt'] = pd.to_datetime(df['descuento_inicio'], errors='coerce') 
             df['f_fin_dt'] = pd.to_datetime(df['descuento_fin'], errors='coerce')
             
+            # 🔴 AUTOCORRECCIÓN PROACTIVA EN CALIENTE
+            mask_expirado = (
+                (df['precio_original'] > df['precio']) & 
+                (
+                    ((df['f_ini_dt'].notna()) & (df['f_ini_dt'] > hoy)) | 
+                    ((df['f_fin_dt'].notna()) & (df['f_fin_dt'] < hoy))
+                )
+            )
+            
+            # Restauramos en memoria para visualización inmediata correcta
+            if mask_expirado.any():
+                df.loc[mask_expirado, 'precio'] = df.loc[mask_expirado, 'precio_original']
+                
+                # Sincronizamos en segundo plano a Supabase
+                try:
+                    libros_a_restaurar = df.loc[mask_expirado, ['libro_id', 'precio_original']].copy()
+                    libros_a_restaurar.rename(columns={'precio_original': 'precio'}, inplace=True)
+                    libros_a_restaurar['libro_id'] = libros_a_restaurar['libro_id'].astype(int)
+                    libros_a_restaurar['precio'] = libros_a_restaurar['precio'].astype(float)
+                    
+                    datos_restaurar = libros_a_restaurar.to_dict(orient='records')
+                    if datos_restaurar:
+                        conn.table("libros").upsert(datos_restaurar, on_conflict='libro_id').execute()
+                except Exception as ex_db:
+                    log_error(
+                        vista="vista_inventario",
+                        funcion="cargar_datos_completos (restaurar_expirados)",
+                        error=f"Error al sincronizar restauración de precios en Supabase: {ex_db}",
+                        email_usuario=st.session_state.get('email_usuario', 'Sistema')
+                    )
+            
+            # Volvemos a calcular la máscara de descuentos activos reales
             mask_dcto = (
                 (df['precio_original'] > df['precio']) & 
                 (df['precio_original'] > 0) & 
@@ -107,28 +131,19 @@ def cargar_datos_completos():
         log_error("vista_inventario", "cargar_datos_completos", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
 
-
 def actualizar_destacados_batch(df_con_cambios):
-    """
-    Actualiza el estado 'destacado' de los libros en la base de datos.
-    Recibe un DataFrame con las columnas 'libro_id' y 'destacado'.
-    """
+    """Actualiza el estado 'destacado' de los libros en la base de datos."""
     conn = get_db_connection()
     updates_count = 0
-    
-    # Prepara los datos en el formato que Supabase espera para un 'upsert'
-    # Esto es más eficiente que hacer un bucle de updates.
     datos_para_actualizar = df_con_cambios[['libro_id', 'destacado']].to_dict(orient='records')
     
     if not datos_para_actualizar:
         return 0
 
     try:
-        # 'upsert' intentará actualizar. Si la fila no existe, la insertaría (aunque aquí siempre existirá)
-        # on_conflict='libro_id' le dice que la columna 'libro_id' es la clave para encontrar el registro.
         conn.table("libros").upsert(datos_para_actualizar, on_conflict='libro_id').execute()
         updates_count = len(datos_para_actualizar)
-        cargar_datos_completos.clear() # Limpiamos la caché para que se vean los cambios
+        cargar_datos_completos.clear()
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
@@ -144,7 +159,6 @@ def actualizar_destacados_batch(df_con_cambios):
 
 def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True):
     conn = get_db_connection()
-    
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
     autor_limpio = limpiar_texto_para_busqueda(autor)
 
@@ -193,12 +207,7 @@ def actualizar_un_libro(libro_id, datos):
         return True, ""
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        error_detalle = (
-            f"Fallo al actualizar el libro ID {libro_id}. "
-            f"Datos intentados: {str(datos)}. Detalle: {e}"
-        )
-        
+        error_detalle = f"Fallo al actualizar el libro ID {libro_id}. Datos intentados: {str(datos)}. Detalle: {e}"
         log_error(
             vista="vista_inventario",
             funcion="actualizar_un_libro",
@@ -209,7 +218,6 @@ def actualizar_un_libro(libro_id, datos):
 
 def actualizar_libros_batch(df_original, df_editado):
     if df_original.empty or df_editado.empty: return 0
-    
     if 'libro_id' not in df_original.columns or 'libro_id' not in df_editado.columns:
         return 0
         
@@ -239,25 +247,17 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'destacado' in row: datos['destacado'] = bool(row['destacado'])
             if 'visible_catalogo' in row: datos['visible_catalogo'] = bool(row['visible_catalogo'])
             
-            # 🔴 LÓGICA DE RECALCULO DE PRECIOS AUTOMÁTICA
-            # Si cambiaron el precio_original, recalculamos el precio de oferta (si lo tenía)
             if 'precio_original' in row and pd.notna(row['precio_original']):
                 nuevo_precio_orig = float(row['precio_original'])
                 datos['precio_original'] = nuevo_precio_orig
-                
-                # Rescatamos el porcentaje de descuento actual desde el df original
                 porcentaje_dcto_actual = float(df_original_comp.loc[libro_id].get('Dcto %', 0))
                 
                 if porcentaje_dcto_actual > 0:
-                    # Aplica el mismo % de descuento sobre el nuevo precio original
                     factor = 1.0 - (porcentaje_dcto_actual / 100.0)
                     datos['precio'] = round(nuevo_precio_orig * factor, 0)
                 else:
-                    # Si no tenía descuento, igualamos ambos
                     datos['precio'] = nuevo_precio_orig
             
-            # Si el usuario modificó manualmente la columna "precio" en lugar de "precio_original"
-            # (sobreescribe la regla anterior para darte libertad absoluta)
             if 'precio' in row and pd.notna(row['precio']):
                 if 'precio' not in datos or datos['precio'] != float(row['precio']):
                     datos['precio'] = float(row['precio'])
@@ -266,7 +266,6 @@ def actualizar_libros_batch(df_original, df_editado):
                 conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
                 updates_count += 1
         except Exception as e:
-            
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
                 vista="vista_inventario",
@@ -274,7 +273,6 @@ def actualizar_libros_batch(df_original, df_editado):
                 error=f"Error actualizando libro {libro_id}. Detalle: {e}",
                 email_usuario=email_usuario
             )
-            
             print(f"Error actualizando libro {libro_id}: {e}")
             continue
             
@@ -291,11 +289,7 @@ def eliminar_libro(libro_id):
         return True, ""
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        error_detalle = (
-            f"Fallo al intentar ELIMINAR el libro ID {libro_id}. Detalle: {e}"
-        )
-        
+        error_detalle = f"Fallo al intentar ELIMINAR el libro ID {libro_id}. Detalle: {e}"
         log_error(
             vista="vista_inventario",
             funcion="eliminar_libro",
@@ -336,12 +330,7 @@ def aplicar_descuento_masivo(lista_ids, porcentaje, fecha_inicio=None, fecha_fin
         return True, f"Se actualizó el precio de {actualizados} libros con un {porcentaje}% de descuento."
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-        
-        error_detalle = (
-            f"Fallo en descuento masivo del {porcentaje}%. "
-            f"Error en el bucle de actualización. Detalle: {e}"
-        )
-        
+        error_detalle = f"Fallo en descuento masivo del {porcentaje}%. Error en el bucle de actualización. Detalle: {e}"
         log_error(
             vista="vista_inventario",
             funcion="aplicar_descuento_masivo",
@@ -351,9 +340,6 @@ def aplicar_descuento_masivo(lista_ids, porcentaje, fecha_inicio=None, fecha_fin
         return False, str(e)
 
 def actualizar_visibilidad_batch(df_con_cambios):
-    """
-    Actualiza la visibilidad en catálogo ('visible_catalogo') de los libros en masa.
-    """
     conn = get_db_connection()
     datos_para_actualizar = df_con_cambios[['libro_id', 'visible_catalogo']].to_dict(orient='records')
     if not datos_para_actualizar: return 0
@@ -419,7 +405,6 @@ def mostrar_inventario():
 
     df_filtrado = df_inventario.copy()
 
-    # Búsqueda por título con normalización
     if busqueda_titulo: 
         busqueda_limpia = limpiar_texto_para_busqueda(busqueda_titulo)
         df_filtrado = df_filtrado[
@@ -435,7 +420,6 @@ def mostrar_inventario():
     if encuadernaciones_seleccionadas: 
         df_filtrado = df_filtrado[df_filtrado['encuadernacion'].isin(encuadernaciones_seleccionadas)]
     
-    # Aplicación de rangos con índices explícitos [0] y [1]
     if not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['precio'].between(rango_precio[0], rango_precio[1])]
         df_filtrado = df_filtrado[df_filtrado['stock'].between(rango_stock[0], rango_stock[1])]
@@ -449,16 +433,13 @@ def mostrar_inventario():
         if 'apto_cajita' in df_filtrado.columns:
             df_filtrado = df_filtrado[df_filtrado['apto_cajita'] == True]
 
-    # Contadores de Inventario dinámicos en la cabecera
     st.markdown("### 📊 Métricas del Stock")
-    
     st.info("""
     ℹ️ **¿Cómo se calculan los indicadores de este panel?**
     * **Libros Distintos:** Cantidad de títulos únicos registrados bajo la selección y filtros activos actuales.
     * **Unidades en Stock:** Suma total de ejemplares físicos disponibles en el inventario para todos los libros listados.
     * **Valor de Venta Estimado:** Representa el ingreso total potencial de los ejemplares físicos si se liquidaran hoy al público, calculado bajo la fórmula:
     $$\\text{Valor de Venta Estimado} = \\sum (\\text{Stock de cada libro} \\times \\text{Precio de venta actual})$$
-    *(Nota: Si un libro tiene una oferta vigente por rango de fechas, este cálculo asume automáticamente su precio rebajado).*
     """)
     
     m1, m2, m3 = st.columns(3)
@@ -471,11 +452,9 @@ def mostrar_inventario():
     m3.metric("Valor del Inventario (P. Venta)", f"${valor_inventario_filtrado:,.0f}")
     st.markdown("---")
     
-    # Tabs de navegación
     tab_catalogo, tab_editar, tab_crear, tab_desc, tab_eliminar = st.tabs([
         "📋 Catálogo", "✏️ Editar", "➕ Crear", "📉 Descuentos", "🗑️ Eliminar"
     ])
-
 
     with tab_catalogo:
         st.markdown(f"### 📋 Catálogo ({len(df_filtrado)} libros)")
@@ -485,33 +464,26 @@ def mostrar_inventario():
         columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
         columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
-        favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles] # <-- FILTRO DE SEGURIDAD
+        favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles]
         
         columnas_extra_seleccionadas = st.multiselect(
             "Añadir/Quitar columnas de la tabla:", 
             options=columnas_opcionales_disponibles, 
-            default=favoritos_disponibles # <-- Ahora este parámetro es 100% inmune
+            default=favoritos_disponibles
         )
         
         columnas_a_mostrar = columnas_fijas + columnas_extra_seleccionadas
         
         def estilizar_catalogo(data):
-            # Creamos un DataFrame vacío para almacenar los estilos CSS
             estilos = pd.DataFrame('', index=data.index, columns=data.columns)
-
             con_stock = df_filtrado.loc[data.index, 'stock'] > 0
-
             for col in data.columns:
                 estilos.loc[con_stock, col] = 'background-color: #d7edd2; color: #75956f; font-weight: bold'
             return estilos
-
             
         df_mostrar_tabla = df_filtrado[columnas_a_mostrar]
-        
-        # Paginación visual en catálogo (Cortar el DataFrame para renderizar solo los más recientes)
         limite_actual = st.session_state.inventario_limit_view
         total_libros_filtrados = len(df_mostrar_tabla)
-        
         df_paginado = df_mostrar_tabla.head(limite_actual)
         
         if 'Oferta' in df_paginado.columns:
@@ -528,7 +500,6 @@ def mostrar_inventario():
         st.caption(f"Mostrando los **{len(df_paginado)}** libros más recientes de un total de **{total_libros_filtrados}** encontrados.")
         st.dataframe(df_estilizado, hide_index=True, use_container_width=True, column_config=config_cols_catalogo)
 
-        # Botón dinámico para expandir la tabla de 100 en 100
         if total_libros_filtrados > limite_actual:
             col_pag1, col_pag2, col_pag3 = st.columns([1, 2, 1])
             with col_pag2:
@@ -536,26 +507,23 @@ def mostrar_inventario():
                     st.session_state.inventario_limit_view += 100
                     st.rerun()
         else:
-            # Si se aplicaron filtros y el total es menor al límite, restablecemos el paginador
             st.session_state.inventario_limit_view = 100
+
     with tab_editar:
         st.markdown("#### ✏️ Modificar Libro")
         modo_edicion = st.radio("Elige la vista de edición:", ["📱 Vista Móvil (Formulario)", "💻 Vista PC (Tabla Editable)"], horizontal=True)
         st.write("")
         
         if modo_edicion == "📱 Vista Móvil (Formulario)":
-            
-            # 1. Creamos un diccionario que une el ID único con el Título {15: "El Principito"}
             dict_libros = dict(zip(df_filtrado['libro_id'], df_filtrado['titulo']))
             
-            # 2. Creamos la lista de opciones usando los IDs (agregando None al principio para que quede vacío por defecto)
-            opciones_ids = [None] + list(dict_libros.keys())
-            
-            # 3. El selectbox usa los IDs, pero MUESTRA los títulos gracias a format_func
+            # UX: Configuración con index=None y placeholder nativo para evitar buscadores pegados
             libro_id_a_editar = st.selectbox(
                 "Busca y selecciona un libro para editar:", 
-                options=opciones_ids,
-                format_func=lambda x: "" if x is None else dict_libros[x],
+                options=list(dict_libros.keys()),
+                format_func=lambda x: dict_libros[x],
+                index=None,
+                placeholder="Busca y selecciona un libro de la lista...",
                 key="sel_editar_id"
             )
             
@@ -563,13 +531,12 @@ def mostrar_inventario():
                 filas_encontradas = df_filtrado[df_filtrado['libro_id'] == libro_id_a_editar]
                 
                 if filas_encontradas.empty:
-                    st.warning("⚠️ El libro seleccionado ya no está disponible en los filtros actuales. Por favor, refresca la página.")
+                    st.warning("⚠️ El libro seleccionado ya no está disponible en los filtros actuales.")
                 else:
                     libro = filas_encontradas.iloc[0]
                     with st.container(border=True):
                         nuevo_titulo = st.text_input("Título:", value=libro['titulo'])
                         
-                        # Cargamos opciones y añadimos la opción de crear
                         opciones_autor = ["➕ Escribir nuevo..."] + obtener_unicos(df_inventario, 'autor')
                         opciones_editorial = ["➕ Escribir nueva..."] + obtener_unicos(df_inventario, 'editorial')
                         opciones_genero = ["➕ Escribir nuevo..."] + obtener_unicos(df_inventario, 'genero')
@@ -577,7 +544,6 @@ def mostrar_inventario():
                         
                         col1, col2 = st.columns(2)
                         
-                        # --- AUTOR ---
                         idx_autor = opciones_autor.index(libro['autor']) if libro['autor'] in opciones_autor else 0
                         sel_autor = col1.selectbox("Autor:", opciones_autor, index=idx_autor)
                         if sel_autor == "➕ Escribir nuevo...":
@@ -585,7 +551,6 @@ def mostrar_inventario():
                         else:
                             nuevo_autor = sel_autor
                             
-                        # --- EDITORIAL ---
                         idx_editorial = opciones_editorial.index(libro['editorial']) if libro['editorial'] in opciones_editorial else 0
                         sel_editorial = col2.selectbox("Editorial:", opciones_editorial, index=idx_editorial)
                         if sel_editorial == "➕ Escribir nueva...":
@@ -595,7 +560,6 @@ def mostrar_inventario():
                             
                         col3, col4 = st.columns(2)
                         
-                        # --- GÉNERO ---
                         idx_genero = opciones_genero.index(libro['genero']) if libro['genero'] in opciones_genero else 0
                         sel_genero = col3.selectbox("Género:", opciones_genero, index=idx_genero)
                         if sel_genero == "➕ Escribir nuevo...":
@@ -603,7 +567,6 @@ def mostrar_inventario():
                         else:
                             nuevo_genero = sel_genero
                             
-                        # --- ENCUADERNACIÓN ---
                         idx_enc = opciones_enc.index(libro['encuadernacion']) if libro['encuadernacion'] in opciones_enc else 0
                         sel_enc = col4.selectbox("Encuadernación:", opciones_enc, index=idx_enc)
                         if sel_enc == "➕ Escribir nueva...":
@@ -611,7 +574,6 @@ def mostrar_inventario():
                         else:
                             nueva_encuadernacion = sel_enc
                             
-                        # --- STOCK Y PRECIOS ---
                         col5, col6, col7 = st.columns(3)
                         nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
@@ -624,7 +586,6 @@ def mostrar_inventario():
                         nuevo_f_ini = col_ed_f1.date_input("Fecha Inicio:", value=f_ini_val, key="edit_f_ini")
                         nuevo_f_fin = col_ed_f2.date_input("Fecha Fin:", value=f_fin_val, key="edit_f_fin")
 
-                        
                         check_col1, check_col2, check_col3 = st.columns(3)
                         nuevo_apto_cajita = check_col1.checkbox("🎁 Apto Cajitas", value=bool(libro.get('apto_cajita', True)))
                         nuevo_destacado = check_col2.checkbox("⭐ Destacado", value=bool(libro.get('destacado', False)))
@@ -637,20 +598,20 @@ def mostrar_inventario():
                                 st.error("⚠️ El Título, Autor y Editorial no pueden estar vacíos.")
                             else:
                                 datos_actualizados = {
-                                        "titulo": limpiar_texto_para_busqueda(nuevo_titulo),
-                                        "autor": limpiar_texto_para_busqueda(nuevo_autor), 
-                                        "editorial": limpiar_texto_para_busqueda(nueva_editorial), 
-                                        "genero": limpiar_texto_para_busqueda(nuevo_genero), 
-                                        "encuadernacion": limpiar_texto_para_busqueda(nueva_encuadernacion), 
-                                        "stock": nuevo_stock, 
-                                        "costo": nuevo_costo, 
-                                        "precio_original": nuevo_precio_original,
-                                        "descuento_inicio": nuevo_f_ini.strftime("%Y-%m-%d"),
-                                        "descuento_fin": nuevo_f_fin.strftime("%Y-%m-%d"),
-                                        "apto_cajita": nuevo_apto_cajita,
-                                        "destacado": nuevo_destacado,
-                                        "visible_catalogo": nuevo_visible
-                                    }
+                                    "titulo": limpiar_texto_para_busqueda(nuevo_titulo),
+                                    "autor": limpiar_texto_para_busqueda(nuevo_autor), 
+                                    "editorial": limpiar_texto_para_busqueda(nueva_editorial), 
+                                    "genero": limpiar_texto_para_busqueda(nuevo_genero), 
+                                    "encuadernacion": limpiar_texto_para_busqueda(nueva_encuadernacion), 
+                                    "stock": nuevo_stock, 
+                                    "costo": nuevo_costo, 
+                                    "precio_original": nuevo_precio_original,
+                                    "descuento_inicio": nuevo_f_ini.strftime("%Y-%m-%d"),
+                                    "descuento_fin": nuevo_f_fin.strftime("%Y-%m-%d"),
+                                    "apto_cajita": nuevo_apto_cajita,
+                                    "destacado": nuevo_destacado,
+                                    "visible_catalogo": nuevo_visible
+                                }
                                 
                                 pct_dcto = float(libro.get('Dcto %', 0))
                                 if pct_dcto > 0:
@@ -662,6 +623,9 @@ def mostrar_inventario():
                                 if exito:
                                     st.success("¡Libro actualizado correctamente!")
                                     st.snow()
+                                    # UX: Autolimpieza de widgets del selectbox de edición de sesión antes de st.rerun
+                                    if 'sel_editar_id' in st.session_state:
+                                        del st.session_state['sel_editar_id']
                                     time.sleep(1.5)
                                     st.rerun()
                                 else:
@@ -683,9 +647,7 @@ def mostrar_inventario():
                 )
             
             columnas_finales = columnas_base + columnas_a_mostrar
-            
             df_mostrar = df_filtrado[columnas_finales].copy().reset_index(drop=True)
-            
             st.session_state.df_original_para_editar = df_mostrar
             
             autores_unicos = obtener_unicos(df_inventario, 'autor')
@@ -708,7 +670,6 @@ def mostrar_inventario():
             }
             
             disabled_finales = [c for c in ["libro_id"] if c in df_mostrar.columns]
-            
             df_editado = st.data_editor(
                 df_mostrar, use_container_width=True, hide_index=True, 
                 disabled=disabled_finales, column_config=config_columnas
@@ -718,7 +679,6 @@ def mostrar_inventario():
             
             if st.button("💾 Guardar Cambios en Tabla", type="primary", use_container_width=True, disabled=not hay_cambios):
                 with st.spinner("Actualizando datos..."):
-                    # Mandamos al procesador tanto df_filtrado original (para que lea el Dcto %) como el editado
                     num_actualizados = actualizar_libros_batch(df_filtrado, df_editado)
                     st.success(f"¡Se actualizaron {num_actualizados} libros!")
                     st.snow()
@@ -728,18 +688,44 @@ def mostrar_inventario():
     with tab_crear:
         with st.form("form_nuevo_libro", clear_on_submit=False):
             val_titulo = st.text_input("Título:", key="n_tit")
-            opciones_autor = [""] + obtener_unicos(df_inventario, 'autor')
-            val_autor_ex = st.selectbox("Autor (Existente):", options=opciones_autor, key="n_aut_ex")
+            
+            # UX: index=None y placeholder nativo para selectboxes de creación
+            val_autor_ex = st.selectbox(
+                "Autor (Existente):", 
+                options=obtener_unicos(df_inventario, 'autor'), 
+                index=None, 
+                placeholder="Busca y selecciona un autor...", 
+                key="n_aut_ex"
+            )
             val_autor_nu = st.text_input("O escribe un nuevo Autor:", key="n_aut_nu")
-            opciones_editorial = [""] + obtener_unicos(df_inventario, 'editorial')
-            val_edit_ex = st.selectbox("Editorial (Existente):", options=opciones_editorial, key="n_edi_ex")
+            
+            val_edit_ex = st.selectbox(
+                "Editorial (Existente):", 
+                options=obtener_unicos(df_inventario, 'editorial'), 
+                index=None, 
+                placeholder="Busca y selecciona una editorial...", 
+                key="n_edi_ex"
+            )
             val_edit_nu = st.text_input("O escribe una nueva Editorial:", key="n_edi_nu")
-            opciones_genero = [""] + obtener_unicos(df_inventario, 'genero')
-            val_gen_ex = st.selectbox("Género (Existente):", options=opciones_genero, key="n_gen_ex")
+            
+            val_gen_ex = st.selectbox(
+                "Género (Existente):", 
+                options=obtener_unicos(df_inventario, 'genero'), 
+                index=None, 
+                placeholder="Busca y selecciona un género...", 
+                key="n_gen_ex"
+            )
             val_gen_nu = st.text_input("O escribe un nuevo Género:", key="n_gen_nu")
-            opciones_enc = [""] + obtener_unicos(df_inventario, 'encuadernacion')
-            val_enc_ex = st.selectbox("Encuadernación (Existente):", options=opciones_enc, key="n_enc_ex")
+            
+            val_enc_ex = st.selectbox(
+                "Encuadernación (Existente):", 
+                options=obtener_unicos(df_inventario, 'encuadernacion'), 
+                index=None, 
+                placeholder="Busca y selecciona una encuadernación...", 
+                key="n_enc_ex"
+            )
             val_enc_nu = st.text_input("O escribe una nueva Encuadernación:", key="n_enc_nu")
+            
             c1, c2, c3 = st.columns(3)
             val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
             val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
@@ -782,10 +768,14 @@ def mostrar_inventario():
                     )
 
                     if success:
-                        st.success("🎉 ¡Libro creado exitosamente!"); st.snow()
+                        st.success("🎉 ¡Libro creado exitosamente!")
+                        st.snow()
+                        
+                        # UX: Limpieza de widgets del formulario de creación antes de st.rerun
                         for key in claves_formulario:
                             if key in st.session_state: del st.session_state[key]
-                        time.sleep(1.5); st.rerun()
+                        time.sleep(1.5)
+                        st.rerun()
                     else: st.error(f"❌ {error}")
                 else: st.warning("⚠️ Título, Autor y Editorial son obligatorios.")
 
@@ -810,22 +800,39 @@ def mostrar_inventario():
                 with st.spinner("Aplicando descuento..."):
                     success, mensaje = aplicar_descuento_masivo(lista_ids, porcentaje, fecha_inicio, fecha_fin)
                 if success:
-                    st.success(mensaje); st.snow()
-                    time.sleep(2); st.rerun()
+                    st.success(mensaje)
+                    st.snow()
+                    
+                    # UX: Limpieza de inputs del descuento masivo antes de st.rerun
+                    if 'slider_descuento' in st.session_state: del st.session_state['slider_descuento']
+                    time.sleep(2)
+                    st.rerun()
                 else: st.error(f"Error al aplicar descuento: {mensaje}")
 
     with tab_eliminar:
         st.markdown("#### 🗑️ Borrar del Catálogo")
         st.warning("⚠️ Atención: Esta acción no se puede deshacer.")
-        titulos_filtrados = [""] + df_filtrado['titulo'].tolist()
-        titulo_a_eliminar = st.selectbox("Selecciona un libro de la lista filtrada:", titulos_filtrados)
+        titulos_filtrados = df_filtrado['titulo'].tolist()
+        
+        # UX: index=None y placeholder nativo
+        titulo_a_eliminar = st.selectbox(
+            "Selecciona un libro de la lista filtrada:", 
+            options=titulos_filtrados,
+            index=None,
+            placeholder="Escribe para buscar el libro a eliminar...",
+            key="sel_eliminar_tit"
+        )
         if titulo_a_eliminar:
             libro_id = int(df_filtrado[df_filtrado['titulo'] == titulo_a_eliminar].iloc[0]['libro_id'])
             if st.button(f"Eliminar '{titulo_a_eliminar}' permanentemente", type="primary", use_container_width=True):
                 success, error = eliminar_libro(libro_id)
                 if success: 
                     st.success("El libro fue eliminado de la base de datos.")
-                    time.sleep(1.5); st.rerun()
+                    
+                    # UX: Limpieza de widgets antes de st.rerun
+                    if 'sel_eliminar_tit' in st.session_state: del st.session_state['sel_eliminar_tit']
+                    time.sleep(1.5)
+                    st.rerun()
                 else: st.error(f"Error: {error}")
 
 if __name__ == "__main__":
