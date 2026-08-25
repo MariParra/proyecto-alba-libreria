@@ -23,7 +23,7 @@ def cargar_clientes_suscritos():
 def cargar_valores_suscripcion():
     conn = get_db_connection()
     try:
-        res = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
+        res = conn.table("suscripciones").select("cliente_id, valor_suscripcion, metodo_entrega").execute()
         return pd.DataFrame(res.data)
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -232,11 +232,12 @@ def cargar_asignaciones_mes(ano, mes):
 
         columnas_esperadas = [
             'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
-            'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'comentario', 
+            'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'cobro_envio', 'comentario', 
             'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'rut', 
             'fecha_actualizacion_librero', 'generos_preferencia', 'metodo_entrega',
             'fecha_pago'
         ]
+        
         for col in columnas_esperadas:
             if col not in df_merged.columns:
                 df_merged[col] = None
@@ -335,13 +336,36 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
         try:
             c_id = int(cliente['cliente_id'])
             val_sub = 0.0
+            metodo_entrega_cliente = ""
+            
             if not df_valores.empty and c_id in df_valores['cliente_id'].values:
-                val_sub = float(df_valores[df_valores['cliente_id'] == c_id]['valor_suscripcion'].iloc[0])
+                fila_susc = df_valores[df_valores['cliente_id'] == c_id].iloc[0]
+                val_sub = float(fila_susc['valor_suscripcion'])
+                metodo_entrega_cliente = str(fila_susc.get('metodo_entrega', '')).strip().upper()
+            
+            # 🚚 Clasificación automática basada en el método de entrega
+            if "RETIRO" in metodo_entrega_cliente:
+                cobro_envio_inicial = "RETIRO EN TIENDA"
+                envio_pagado_inicial = "NO APLICA"
+            elif "PAKET" in metodo_entrega_cliente:
+                cobro_envio_inicial = "PAGADO"
+                envio_pagado_inicial = "NO"
+            else:
+                # Caso contrario: Queda vacío (NULL) para ser llenado manualmente en el data_editor
+                cobro_envio_inicial = None  
+                envio_pagado_inicial = "NO"
             
             datos = {
-                "cliente_id": c_id, "ano": int(ano), "mes": int(mes),
-                "estado_envio": "PENDIENTE PREPARACION", "pagado": "NO", "envio_pagado": "NO",
-                "valor_envio": 0.0, "valor_extras": 0.0, "monto_total": val_sub,
+                "cliente_id": c_id, 
+                "ano": int(ano), 
+                "mes": int(mes),
+                "estado_envio": "PENDIENTE PREPARACION", 
+                "pagado": "NO", 
+                "envio_pagado": envio_pagado_inicial,
+                "cobro_envio": cobro_envio_inicial,
+                "valor_envio": 0.0, 
+                "valor_extras": 0.0, 
+                "monto_total": val_sub,
                 "costo_caja": 10000.0, 
                 "fecha_asignacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -692,14 +716,23 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             costo_c = float(row.get('costo_caja', 10000.0) or 10000.0) 
             m_total = val_sub + v_envio + v_extras 
             
+            c_envio = str(row.get('cobro_envio', 'PAGADO')).upper().strip()
+            e_pagado = str(row['envio_pagado']).upper().strip()
+            if c_envio in ["POR PAGAR", "RETIRO EN TIENDA"]:
+                e_pagado = "NO APLICA"
+            
             datos = {
-                "estado_envio": str(row['estado_envio']).upper(), "pagado": str(row['pagado']).upper(),
-                "envio_pagado": str(row['envio_pagado']).upper(), "extras": str(row.get('extras', '')).upper(),
+                "estado_envio": str(row['estado_envio']).upper(), 
+                "pagado": str(row['pagado']).upper(),
+                "envio_pagado": e_pagado, 
+                "cobro_envio": c_envio,
+                "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')),
                 "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total,
                 "costo_caja": costo_c,
                 "preferencia_mensual": str(row.get('preferencia_mensual', ''))
             }
+            
             conn.table("asignaciones").update(datos).eq("asignacion_id", int(a_id)).execute()
             updates += 1
         except Exception as e: 
@@ -928,9 +961,22 @@ def mostrar_asignaciones():
     # Procesamos y normalizamos los datos del mes actual
     if not df_mes.empty:
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
-        df_mes['envio_pagado'] = df_mes['envio_pagado'].apply(mapear_sino)
+        
+        # 1. Normalizar y rellenar cobro_envio en caso de nulos
+        if 'cobro_envio' not in df_mes.columns:
+            df_mes['cobro_envio'] = "PAGADO"
+        df_mes['cobro_envio'] = df_mes['cobro_envio'].fillna("PAGADO").astype(str).str.upper().str.strip()
+        
+        # 2. Regla auto-curativa en memoria: Si es POR PAGAR o RETIRO, envio_pagado es NO APLICA
+        mask_no_aplica = df_mes['cobro_envio'].isin(["POR PAGAR", "RETIRO EN TIENDA"])
+        df_mes.loc[mask_no_aplica, 'envio_pagado'] = "NO APLICA"
+        
+        # Para los despachos tradicionales pagados, normalizar pago a SI/NO
+        df_mes.loc[~mask_no_aplica, 'envio_pagado'] = df_mes.loc[~mask_no_aplica, 'envio_pagado'].apply(mapear_sino)
+        
         df_mes['estado_envio'] = df_mes['estado_envio'].apply(lambda x: str(x).upper())
         df_mes['extras'] = df_mes['extras'].fillna("").astype(str)
+        
         df_mes['comentario'] = df_mes['comentario'].apply(lambda x: "" if pd.isna(x) or str(x).upper() == "NONE" else str(x))
         
         df_mes['valor_envio'] = pd.to_numeric(df_mes.get('valor_envio', 0), errors='coerce').fillna(0.0)
@@ -964,13 +1010,13 @@ def mostrar_asignaciones():
     # ==========================================================
     if opcion_menu == "📋 Gestión (Tabla Editable)":
         if not mes_esta_cerrado:
-            st.info(
-                "💡 **GUÍA RÁPIDA: Gestión de Preferencias Mensuales**\n\n"
-                "1. **¿Qué es?** Aquí puedes registrar el género que una clienta pidió **específicamente para este mes** (ej: 'Terror').\n"
-                "2. **¿Cómo funciona?** Escribe el o los géneros en la columna `Preferencia Mensual`. Si dejas la celda vacía, el sistema usará las preferencias de siempre de la clienta.\n"
-                "3. **Prioridad:** Lo que escribas aquí **siempre tendrá prioridad** sobre los gustos históricos de la clienta al momento de asignar libros.\n"
-                "4. **Guardado:** Haz doble clic en una celda para editar y luego presiona `💾 Guardar Cambios Manuales` al final de la tabla."
-            )
+            with st.expander("💡 GUÍA RÁPIDA: Gestión de Preferencias Mensuales", expanded=False):
+                st.info(
+                    "1. **¿Qué es?** Aquí puedes registrar el género que una clienta pidió **específicamente para este mes** (ej: 'Terror').\n\n"
+                    "2. **¿Cómo funciona?** Escribe el o los géneros en la columna `Preferencia Mensual`. Si dejas la celda vacía, el sistema usará las preferencias de siempre de la clienta.\n\n"
+                    "3. **Prioridad:** Lo que escribas aquí **siempre tendrá prioridad** sobre los gustos históricos de la clienta al momento de asignar libros.\n\n"
+                    "4. **Guardado:** Haz doble clic en una celda para editar y luego presiona `💾 Guardar Cambios Manuales` al final de la tabla."
+                )
             
             # --- HERRAMIENTA DE ASIGNACIÓN DE PREFERENCIAS ---
             with st.container(border=True):
@@ -1098,11 +1144,13 @@ def mostrar_asignaciones():
                     st.markdown("---")
 
                     # 🔴 Fila 2: Filtros de estados y envío
-                    col_fa4, col_fa5, col_fa6, col_fa7 = st.columns(4)
+                    col_fa4, col_fa5, col_fa5_2, col_fa6, col_fa7 = st.columns(5)
                     with col_fa4:
                         filtro_estado = st.selectbox("📦 Estado Envío:", ["Todos"] + df_mes['estado_envio'].unique().tolist())
                     with col_fa5:
                         filtro_pagado = st.selectbox("💳 Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
+                    with col_fa5_2:
+                        filtro_cobro_envio = st.selectbox("🚚 Cobro Envío:", ["Todos"] + df_mes['cobro_envio'].unique().tolist())
                     with col_fa6:
                         filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
                     with col_fa7:
@@ -1114,7 +1162,7 @@ def mostrar_asignaciones():
                     
                     # 🔴 Fila 3: Visibilidad de Columnas
                     columnas_opcionales = [
-                        'pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 
+                        'pagado', 'envio_pagado', 'cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 
                         'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'metodo_entrega',
                         'preferencia_mensual' 
                     ]
@@ -1122,11 +1170,11 @@ def mostrar_asignaciones():
                     columnas_visibles = st.multiselect(
                         "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
                         options=columnas_opcionales, 
-                        default=['pagado', 'envio_pagado', 'nombre', 'titulo_libro', 'estado_envio', 'preferencia_mensual'],
+                        default=['pagado', 'envio_pagado', 'cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 'preferencia_mensual'],
                         help="Quita las columnas que no necesites ver para tener una vista más limpia."
                     )
 
-                            # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
+                # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
                 df_filtrado = df_mes.copy()
                 
                 # Buscador de Nombres (usa la lista del multiselect 'filtro_nombres_sel')
@@ -1148,7 +1196,8 @@ def mostrar_asignaciones():
                     df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
                 elif filtro_libro == "Con Libro": 
                     df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
-                    
+                if filtro_cobro_envio != "Todos":
+                    df_filtrado = df_filtrado[df_filtrado['cobro_envio'] == filtro_cobro_envio]   
                 if filtro_metodo_envio:
                     df_filtrado = df_filtrado[df_filtrado['metodo_entrega'].isin(filtro_metodo_envio)]
 
@@ -1191,7 +1240,8 @@ def mostrar_asignaciones():
                     "asignacion_id": None,
                     "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                     "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
-                    "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado", options=["SI", "NO", "NO APLICA"], required=True),
+                    "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado 💳", options=["SI", "NO", "NO APLICA"], required=True),
+                    "cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=True),
                     "costo_caja": st.column_config.NumberColumn("Costo Caja Fijo ($)", format="$%.0f"),
                     "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                     "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
