@@ -585,7 +585,9 @@ def asegurar_fuente_comprobante(nombre_fuente):
 
     formatos_url = [
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/static/{nombre_limpio}-Regular.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_fuente.replace(' ', '')}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/static/{nombre_fuente.replace(' ', '')}-Regular.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/apache/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf"
     ]
@@ -602,9 +604,24 @@ def asegurar_fuente_comprobante(nombre_fuente):
             
     return None
 
+def find_any_system_ttf():
+    """
+    Escaner de fuentes del sistema en caliente para evitar renderizado en load_default()
+    cuando no hay conexión a internet o falla la descarga de GitHub.
+    """
+    import glob
+    for path in ["/usr/share/fonts/**/*.ttf", "/usr/share/fonts/**/*.otf", "/usr/local/share/fonts/**/*.ttf"]:
+        found = glob.glob(path, recursive=True)
+        if found:
+            for f in found:
+                if "regular" in f.lower() or "regular" in f or ("dejavu" in f.lower() and "sans" in f.lower() and "bold" not in f.lower()):
+                    return f
+            return found[0]
+    return None
+
 def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
     """
-    Obtiene fuentes TrueType dinámicas con soporte excelente de fallback local.
+    Obtiene fuentes TrueType dinámicas con soporte excelente de fallback local y de sistema.
     """
     ruta_google = asegurar_fuente_comprobante(nombre_fuente)
     
@@ -616,20 +633,59 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
         "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
+        "/usr/share/fonts/GoogleSans-Regular.ttf",
         "arialbd.ttf" if bold else "arial.ttf",
         "Arial.ttf"
     ])
     
     for ruta in candidatas:
         try:
-            if os.path.exists(ruta) or not ruta.endswith('.ttf'):
+            if os.path.exists(ruta):
                 return ImageFont.truetype(ruta, tamanio)
         except Exception:
             continue
+            
+    # Fallback total: Buscar cualquier TTF del sistema para conservar soporte Unicode
+    sys_ttf = find_any_system_ttf()
+    if sys_ttf:
+        try:
+            return ImageFont.truetype(sys_ttf, tamanio)
+        except Exception:
+            pass
+            
     try:
         return ImageFont.load_default(size=tamanio)
     except:
         return ImageFont.load_default()
+
+def extraer_pago_y_comentario(comentario_raw):
+    """
+    Limpia y estructura de forma robusta la fusión de compras
+    extrayendo el método de pago y el comentario libre libre de newlines y pipes.
+    """
+    comentario_raw = str(comentario_raw).strip().replace("\\n", " ").replace("\\r", " ").replace("\n", " ").replace("\r", " ")
+    
+    match = re.search(r"Pago:\s*([^.]+)\.", comentario_raw, re.IGNORECASE)
+    if match:
+        pago = match.group(1).strip()
+        resto = re.sub(r"Pago:\s*[^.]+\.\s*", "", comentario_raw, flags=re.IGNORECASE).strip()
+    else:
+        pago = "N/A"
+        for kw in ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito", "Débito", "Crédito"]:
+            if kw.lower() in comentario_raw.lower():
+                pago = kw
+                break
+        resto = comentario_raw
+        
+    resto_limpio = resto
+    # Limpieza quirúrgica de prefijos del sistema
+    resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\.?\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\s*Pago:\s*[^.]+\.\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\s*\|?\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Comentario:\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = resto_limpio.strip(" |")
+    
+    return pago, resto_limpio
 
 def generar_comprobante(
     carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
@@ -637,7 +693,8 @@ def generar_comprobante(
 ):
     """
     Genera un comprobante premium sobre plantilla con márgenes alineados al cuaderno.
-    Utiliza Albert Sans para texto regular y Shadows Into Light para títulos destacados.
+    Utiliza Dancing Script para los títulos caligráficos y Lato para los textos de datos.
+    Conserva la resolución física de 800x1200 para máxima nitidez sin requerir zoom en pantalla.
     """
     # Intentar descargar el fondo oficial del comprobante
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
@@ -661,19 +718,19 @@ def generar_comprobante(
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    # Fuentes Premium de Google Fonts
-    font_title = obtener_fuente_comprobante("Dancing Script", 32, bold=True)
-    font_section = obtener_fuente_comprobante("Dancing Script", 22, bold=True)
-    font_body = obtener_fuente_comprobante("Lato", 15)
-    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_price_accent = obtener_fuente_comprobante("Lato", 17, bold=True)
-    font_footer = obtener_fuente_comprobante("Dancing Script", 20, bold=True)
+    # 🌟 FUENTES PREMIUM AUMENTADAS (Para legibilidad extrema y nítida sin zoom)
+    font_title = obtener_fuente_comprobante("Dancing Script", 38, bold=True)
+    font_section = obtener_fuente_comprobante("Dancing Script", 26, bold=True)
+    font_body = obtener_fuente_comprobante("Lato", 18)
+    font_body_bold = obtener_fuente_comprobante("Lato", 18, bold=True)
+    font_price_accent = obtener_fuente_comprobante("Lato", 20, bold=True)
+    font_footer = obtener_fuente_comprobante("Dancing Script", 24, bold=True)
     
     # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
     x_margin = 130
     x_right = 740
     
-    # 1. CABECERA (Shadows Into Light)
+    # 1. CABECERA (Dancing Script)
     draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
     
     id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
@@ -682,53 +739,65 @@ def generar_comprobante(
     # Línea divisoria
     draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
     
-    # 2. SECCIÓN: DATOS DEL CLIENTE (Shadows Into Light)
+    # 2. SECCIÓN: DATOS DEL CLIENTE (Dancing Script)
     draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
     
-    # Limpieza de redundancias en texto de Pago
-    metodo_pago_limpio = str(metodo_pago).strip()
-    if metodo_pago_limpio.lower().startswith("pago:"):
-        metodo_pago_limpio = metodo_pago_limpio[5:].strip()
-        
-    # Datos de cliente alineados en 2 columnas
+    # Limpieza robusta del pago y comentario
+    pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
+    
+    # Datos de cliente alineados en 2 columnas (Lato) con margen extendido a 100px para evitar colisiones
     # Columna Izquierda: Cliente, RUT, Email, Teléfono, Dirección
-    draw.text((x_margin, 190), "Cliente:", fill='#777777', font=font_body_bold)
-    draw.text((x_margin + 80, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
+    draw.text((x_margin, 200), "Cliente:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 100, 200), str(cliente_nombre).upper(), fill='#333333', font=font_body)
     
-    draw.text((x_margin, 220), "RUT:", fill='#777777', font=font_body_bold)
-    draw.text((x_margin + 80, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
+    draw.text((x_margin, 235), "RUT:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 100, 235), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
     
-    draw.text((x_margin, 250), "Email:", fill='#777777', font=font_body_bold)
-    draw.text((x_margin + 80, 250), str(cliente_email or 'No registrado'), fill='#333333', font=font_body)
+    email_c = str(cliente_email or 'No registrado')
+    if len(email_c) > 24:
+        email_c = email_c[:21] + "..."
+    draw.text((x_margin, 270), "Email:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 100, 270), email_c, fill='#333333', font=font_body)
     
-    draw.text((x_margin, 280), "Teléfono:", fill='#777777', font=font_body_bold)
-    draw.text((x_margin + 80, 280), str(cliente_telefono or 'No registrado'), fill='#333333', font=font_body)
+    draw.text((x_margin, 305), "Teléfono:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 100, 305), str(cliente_telefono or 'No registrado'), fill='#333333', font=font_body)
     
     direccion_c = str(cliente_direccion or 'No especificado')
-    if len(direccion_c) > 30:
-        direccion_c = direccion_c[:27] + "..."
-    draw.text((x_margin, 310), "Dirección:", fill='#777777', font=font_body_bold)
-    draw.text((x_margin + 80, 310), direccion_c, fill='#333333', font=font_body)
+    if len(direccion_c) > 24:
+        direccion_c = direccion_c[:21] + "..."
+    draw.text((x_margin, 340), "Dirección:", fill='#777777', font=font_body_bold)
+    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
     
-    # Columna Derecha: Fecha, Envío, Pago
-    x_col2 = 470
-    draw.text((x_col2, 190), "Fecha:", fill='#777777', font=font_body_bold)
-    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
+    # Columna Derecha: Fecha, Envío, Pago, Nota (Comentario Limpio y Truncado)
+    x_col2 = 460
+    draw.text((x_col2, 200), "Fecha:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 200), str(fecha), fill='#333333', font=font_body)
     
-    draw.text((x_col2, 220), "Envío:", fill='#777777', font=font_body_bold)
-    draw.text((x_col2 + 80, 220), str(metodo_envio), fill='#333333', font=font_body)
+    envio_c = str(metodo_envio)
+    if len(envio_c) > 20:
+        envio_c = envio_c[:17] + "..."
+    draw.text((x_col2, 235), "Envío:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 235), envio_c, fill='#333333', font=font_body)
     
-    draw.text((x_col2, 250), "Pago:", fill='#777777', font=font_body_bold)
-    draw.text((x_col2 + 80, 250), metodo_pago_limpio, fill='#333333', font=font_body)
+    draw.text((x_col2, 270), "Pago:", fill='#777777', font=font_body_bold)
+    draw.text((x_col2 + 80, 270), str(pago_limpio).upper(), fill='#333333', font=font_body)
+    
+    # Si hay nota/comentario, lo colocamos en la columna derecha debajo de Pago de forma alineada
+    if comentario_limpio:
+        nota_c = str(comentario_limpio).upper()
+        if len(nota_c) > 20:
+            nota_c = nota_c[:17] + "..."
+        draw.text((x_col2, 305), "Nota:", fill='#777777', font=font_body_bold)
+        draw.text((x_col2 + 80, 305), nota_c, fill='#333333', font=font_body)
     
     # Línea divisoria
-    draw.line([x_margin, 350, x_right, 350], fill='#BA96A5', width=2)
+    draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
     
-    # 3. SECCIÓN: DETALLE DE PRODUCTOS (Shadows Into Light)
-    draw.text((x_margin, 365), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
+    # 3. SECCIÓN: DETALLE DE PRODUCTOS (Dancing Script)
+    draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
     
-    # Encabezados de la Tabla de Productos
-    y_table = 405
+    # Encabezados de la Tabla de Productos (Lato)
+    y_table = 440
     draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_body_bold)
     draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
@@ -736,7 +805,7 @@ def generar_comprobante(
     
     draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
     
-    # Renglones de Libros Vendidos (Albert Sans)
+    # Renglones de Libros Vendidos (Lato)
     y_item = y_table + 35
     for item in carrito:
         qty_str = str(item.get('cantidad', 1))
@@ -754,9 +823,9 @@ def generar_comprobante(
         subtotal_val = float(item.get('subtotal', 0.0))
         draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
         
-        y_item += 32
+        y_item += 35
         if y_item > 850:
-            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos por espacio)", fill='#777777', font=font_body)
+            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
             break
             
     # Línea divisoria antes de totales
@@ -769,7 +838,7 @@ def generar_comprobante(
     # Tarjeta Principal
     draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill='#FFFFFF', outline='#7C0C3F', width=2)
     
-    # Dibujar Valores alineados dentro de la tarjeta de forma simétrica
+    # Dibujar Valores alineados dentro de la tarjeta de forma simétrica (Lato)
     def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, color_lbl='#555555'):
         draw.text((box_x1 + 20, y_pos), label, fill=color_lbl, font=font_lbl)
         val_str = f"${val_float:,.0f}"
@@ -777,7 +846,7 @@ def generar_comprobante(
             x0, y0, x1, y1 = draw.textbbox((0, 0), val_str, font=font_val)
             w_val = x1 - x0
         except Exception:
-            w_val = len(val_str) * 9
+            w_val = len(val_str) * 11
         draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
         
     draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body, font_body, '#333333')
@@ -786,18 +855,12 @@ def generar_comprobante(
     draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32')
     draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828')
     
-    # 5. PIE DE PÁGINA (Shadows Into Light)
+    # 5. PIE DE PÁGINA (Dancing Script)
     draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería ✨📚", fill='#7C0C3F', font=font_footer, anchor="mm")
     
-    try:
-        resample_filter = Image.Resampling.LANCZOS
-    except AttributeError:
-        resample_filter = Image.ANTIALIAS
-        
-    img_resized = img.resize((480, 720), resample_filter)
-    
+    # Retornamos los bytes del JPEG original de alta definición (800x1200) para máxima nitidez
     buf = io.BytesIO()
-    img_resized.save(buf, format='JPEG', quality=95)
+    img.save(buf, format='JPEG', quality=95)
     return buf.getvalue()
 
 # ==========================================
@@ -1200,7 +1263,8 @@ def mostrar_caja():
                         abono=abono_inicial,
                         deuda=monto_final - abono_inicial
                     )
-                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", width=480)
+                    # Envoltura en BytesIO con ancho en pantalla de 550px para perfecta nitidez sin hacer zoom
+                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", width=550)
                     st.download_button(
                         label="📥 Descargar Comprobante (JPG)",
                         data=img_bytes_preview,
@@ -1773,8 +1837,8 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
-                        # Uso de BytesIO y use_column_width=True para máxima compatibilidad
-                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", width=480)
+                        # Ancho en pantalla de 550px para perfecta nitidez sin hacer zoom
+                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", width=550)
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                             data=img_bytes_abierta,
