@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import time
+import io
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 def unificar_formatos_fecha(serie_fechas):
@@ -1091,7 +1092,7 @@ def mostrar_caja():
                         abono=abono_inicial,
                         deuda=monto_final - abono_inicial
                     )
-                    st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_container_width=True)
+                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_column_width=True)
                     st.download_button(
                         label="📥 Descargar Comprobante (JPG)",
                         data=img_bytes_preview,
@@ -1664,7 +1665,7 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
-                        st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_column_width=True)
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                             data=img_bytes_abierta,
