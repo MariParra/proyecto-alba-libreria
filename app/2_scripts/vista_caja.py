@@ -1015,7 +1015,7 @@ def mostrar_caja():
                     tipo_cobro_opciones = ["Todos"] + sorted(df_ventas['tipo_cobro_envio'].dropna().unique().tolist())
                 else:
                     tipo_cobro_opciones = ["Todos", "retiro", "envio por pagar", "envio pagado"]
-                tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", opciones=tipo_cobro_opciones)
+                tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", options=tipo_cobro_opciones)
                 
                 st.markdown("---")
                 solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
