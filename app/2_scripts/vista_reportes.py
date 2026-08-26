@@ -9,6 +9,21 @@ from utilidades import get_db_connection, log_error
 # --- FUNCIÓN DE UTILIDAD PARA GENERAR EXCEL ---
 # ====================================================
 
+def limpiar_ids_a_enteros(lista_ids):
+    """Limpia y convierte a enteros seguros una lista de IDs, descartando 'None' o nulos."""
+    enteros_limpios = []
+    if lista_ids is None:
+        return enteros_limpios
+    for x in lista_ids:
+        try:
+            if pd.notna(x):
+                str_val = str(x).strip().upper()
+                if str_val not in ('NONE', 'NAN', '', 'NULL'):
+                    enteros_limpios.append(int(float(x)))
+        except (ValueError, TypeError):
+            pass
+    return list(set(enteros_limpios))
+
 def limpiar_df_para_excel(df):
     """
     Limpia el DataFrame antes de exportarlo a Excel:
@@ -113,12 +128,20 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res_asig = (conn.table("asignaciones")
-                .select("*")
-                .eq("ano", ano)
-                .in_("mes", lista_meses)
+            
+            # Construcción dinámica con bypass de filtros si 'Todos' está seleccionado
+            query = conn.table("asignaciones").select("*")
+            
+            if not todos_los_anos:
+                query = query.eq("ano", ano)
+                
+            if not todos_los_meses:
+                query = query.in_("mes", lista_meses)
+                
+            res_asig = (query
                 .order("asignacion_id")
                 .range(start, end).execute())
+                
             if res_asig.data:
                 all_asig.extend(res_asig.data)
                 if len(res_asig.data) < chunk_size:
@@ -129,7 +152,8 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
         if not all_asig: return pd.DataFrame()
         df_asig = pd.DataFrame(all_asig)
         
-        ids_clientes = df_asig['cliente_id'].dropna().unique().tolist()
+        # SANEAMIENTO CON NUESTRA UTILIDAD PENDIENTE
+        ids_clientes = limpiar_ids_a_enteros(df_asig['cliente_id'].dropna().unique().tolist())
         df_clientes = pd.DataFrame()
         if ids_clientes:
             client_data = []
@@ -140,7 +164,7 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
                     client_data.extend(res_cli.data)
             df_clientes = pd.DataFrame(client_data) if client_data else pd.DataFrame()
         
-        ids_libros = [int(x) for x in df_asig['libro_suscripcion_id'].dropna().unique() if pd.notna(x)]
+        ids_libros = limpiar_ids_a_enteros(df_asig['libro_suscripcion_id'].dropna().unique().tolist())
         df_libros = pd.DataFrame()
         if ids_libros:
             book_data = []
@@ -185,7 +209,7 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
         return pd.DataFrame()
 
 def obtener_reporte_envios_pendientes():
-    """Genera reporte paginado consolidando envíos del suscripción y de ventas."""
+    """Genera reporte paginado consolidando envíos del club y de caja."""
     conn = get_db_connection()
     try:
         # Asignaciones (Paginado)
@@ -235,7 +259,7 @@ def obtener_reporte_envios_pendientes():
         df_pendientes = pd.concat([df_asig, df_ventas], ignore_index=True)
         if df_pendientes.empty: return pd.DataFrame()
             
-        ids_clientes = [int(x) for x in df_pendientes['cliente_id'].dropna().unique()]
+        ids_clientes = limpiar_ids_a_enteros(df_pendientes['cliente_id'].dropna().unique().tolist())
         if not ids_clientes: return pd.DataFrame()
             
         client_data = []
@@ -283,7 +307,7 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
             res_ventas = (conn.table("registro_ventas")
                 .select("cliente_id, fecha_venta, monto_final, libros_vendidos")
                 .gte('fecha_venta', f'{ano}-{mes_str}-01')
-                .transparent_range('fecha_venta', f'{ano}-{mes_str}-31T23:59:59') # placeholder range
+                .lte('fecha_venta', f'{ano}-{mes_str}-31T23:59:59')
                 .order("venta_id")
                 .range(start, end).execute())
             if res_ventas.data:
@@ -296,7 +320,7 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
         if not all_ventas: return pd.DataFrame()
         df_ventas = pd.DataFrame(all_ventas)
 
-        ids_clientes = [int(x) for x in df_ventas['cliente_id'].dropna().unique()]
+        ids_clientes = limpiar_ids_a_enteros(df_ventas['cliente_id'].dropna().unique().tolist())
         client_data = []
         for idx in range(0, len(ids_clientes), 1000):
             chunk = ids_clientes[idx:idx + 1000]
@@ -407,7 +431,7 @@ def obtener_reporte_pendientes_consolidado():
             
         # Enriquecer df_ventas con nombres de clientes
         if not df_ventas.empty:
-            ids_clientes_v = df_ventas['cliente_id'].dropna().unique().tolist()
+            ids_clientes_v = limpiar_ids_a_enteros(df_ventas['cliente_id'].dropna().unique().tolist())
             if ids_clientes_v:
                 client_data_v = []
                 for idx in range(0, len(ids_clientes_v), 1000):
@@ -422,7 +446,7 @@ def obtener_reporte_pendientes_consolidado():
 
         # Enriquecer df_asig con nombres de clientes
         if not df_asig.empty:
-            ids_clientes_a = df_asig['cliente_id'].dropna().unique().tolist()
+            ids_clientes_a = limpiar_ids_a_enteros(df_asig['cliente_id'].dropna().unique().tolist())
             if ids_clientes_a:
                 client_data_a = []
                 for idx in range(0, len(ids_clientes_a), 1000):
@@ -633,7 +657,7 @@ def mostrar_reportes():
                     total_pendientes = len(df_caja_pend) + len(df_asig_pend)
                     
                     if total_pendientes == 0:
-                        st.success("🎉 ¡Todo está ok! No hay ventas de caja ni suscripciones")
+                        st.success("🎉 ¡Todo está ok! No hay ventas de caja ni suscripciones pendientes.")
                     else:
                         st.warning(f"Se encontraron {total_pendientes} registros pendientes ({len(df_caja_pend)} en Caja y {len(df_asig_pend)} en Asignaciones).")
                         
@@ -727,7 +751,6 @@ def mostrar_reportes():
                             st.rerun()
                     else:
                         st.warning("No se encontraron registros de asignación para los filtros seleccionados.")
-
 
         # --- REPORTE 4: ENVÍOS PENDIENTES ---
         with st.container(border=True):
