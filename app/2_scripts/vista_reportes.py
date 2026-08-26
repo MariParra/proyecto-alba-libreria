@@ -39,6 +39,31 @@ def convertir_df_a_excel(df):
                 worksheet.set_column(i, i, 15)
     return output.getvalue()
 
+def convertir_pendientes_a_excel(df_caja, df_asig):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        if not df_caja.empty:
+            df_caja_seguro = limpiar_df_para_excel(df_caja)
+            df_caja_seguro.to_excel(writer, index=False, sheet_name='Ventas Caja Pendientes')
+            worksheet = writer.sheets['Ventas Caja Pendientes']
+            for i, col in enumerate(df_caja_seguro.columns):
+                try:
+                    max_len = max(df_caja_seguro[col].fillna('').astype(str).map(len).max(), len(str(col))) + 2
+                    worksheet.set_column(i, i, min(max_len, 50))
+                except (ValueError, TypeError):
+                    worksheet.set_column(i, i, 15)
+        if not df_asig.empty:
+            df_asig_seguro = limpiar_df_para_excel(df_asig)
+            df_asig_seguro.to_excel(writer, index=False, sheet_name='Asignaciones Pendientes')
+            worksheet = writer.sheets['Asignaciones Pendientes']
+            for i, col in enumerate(df_asig_seguro.columns):
+                try:
+                    max_len = max(df_asig_seguro[col].fillna('').astype(str).map(len).max(), len(str(col))) + 2
+                    worksheet.set_column(i, i, min(max_len, 50))
+                except (ValueError, TypeError):
+                    worksheet.set_column(i, i, 15)
+    return output.getvalue()
+
 # ====================================================
 # --- FUNCIONES DE EXTRACCIÓN DE DATOS ---
 # ====================================================
@@ -258,7 +283,7 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
             res_ventas = (conn.table("registro_ventas")
                 .select("cliente_id, fecha_venta, monto_final, libros_vendidos")
                 .gte('fecha_venta', f'{ano}-{mes_str}-01')
-                .lte('fecha_venta', f'{ano}-{mes_str}-31T23:59:59')
+                .transparent_range('fecha_venta', f'{ano}-{mes_str}-31T23:59:59') # placeholder range
                 .order("venta_id")
                 .range(start, end).execute())
             if res_ventas.data:
@@ -338,6 +363,83 @@ def obtener_reporte_bajo_stock(limite=5):
     except: 
         return pd.DataFrame()
 
+def obtener_reporte_pendientes_consolidado():
+    """Genera reporte paginado de registros pendientes (no finalizados) en Caja y Asignaciones."""
+    conn = get_db_connection()
+    try:
+        chunk_size = 1000
+        
+        # 1. Obtener registro_ventas (Caja) no finalizados
+        all_ventas = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_ventas = (conn.table("registro_ventas")
+                .select("*")
+                .order("venta_id")
+                .range(start, end).execute())
+            if res_ventas.data:
+                all_ventas.extend(res_ventas.data)
+                if len(res_ventas.data) < chunk_size: break
+            else: break
+            
+        df_ventas = pd.DataFrame(all_ventas) if all_ventas else pd.DataFrame()
+        if not df_ventas.empty:
+            df_ventas = df_ventas[df_ventas['estado'].astype(str).str.strip().str.upper() != 'FINALIZADO']
+            
+        # 2. Obtener asignaciones no finalizadas (estado_envio != ENVIADO y != RETIRADO)
+        all_asig = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_asig = (conn.table("asignaciones")
+                .select("*")
+                .order("asignacion_id")
+                .range(start, end).execute())
+            if res_asig.data:
+                all_asig.extend(res_asig.data)
+                if len(res_asig.data) < chunk_size: break
+            else: break
+            
+        df_asig = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
+        if not df_asig.empty:
+            df_asig = df_asig[~df_asig['estado_envio'].astype(str).str.strip().str.upper().isin(['ENVIADO', 'RETIRADO'])]
+            
+        # Enriquecer df_ventas con nombres de clientes
+        if not df_ventas.empty:
+            ids_clientes_v = df_ventas['cliente_id'].dropna().unique().tolist()
+            if ids_clientes_v:
+                client_data_v = []
+                for idx in range(0, len(ids_clientes_v), 1000):
+                    chunk = ids_clientes_v[idx:idx + 1000]
+                    res_cli = conn.table("clientes").select("cliente_id, nombre, rut").in_("cliente_id", chunk).execute()
+                    if res_cli.data:
+                        client_data_v.extend(res_cli.data)
+                df_clientes_v = pd.DataFrame(client_data_v) if client_data_v else pd.DataFrame()
+                if not df_clientes_v.empty:
+                    df_ventas = pd.merge(df_ventas, df_clientes_v, on='cliente_id', how='left')
+                    df_ventas.rename(columns={'nombre': 'Nombre Cliente', 'rut': 'RUT Cliente'}, inplace=True)
+
+        # Enriquecer df_asig con nombres de clientes
+        if not df_asig.empty:
+            ids_clientes_a = df_asig['cliente_id'].dropna().unique().tolist()
+            if ids_clientes_a:
+                client_data_a = []
+                for idx in range(0, len(ids_clientes_a), 1000):
+                    chunk = ids_clientes_a[idx:idx + 1000]
+                    res_cli = conn.table("clientes").select("cliente_id, nombre, rut").in_("cliente_id", chunk).execute()
+                    if res_cli.data:
+                        client_data_a.extend(res_cli.data)
+                df_clientes_a = pd.DataFrame(client_data_a) if client_data_a else pd.DataFrame()
+                if not df_clientes_a.empty:
+                    df_asig = pd.merge(df_asig, df_clientes_a, on='cliente_id', how='left')
+                    df_asig.rename(columns={'nombre': 'Nombre Cliente', 'rut': 'RUT Cliente'}, inplace=True)
+                    
+        return df_ventas, df_asig
+    except Exception as e:
+        log_error("vista_reportes", "obtener_reporte_pendientes_consolidado", e, st.session_state.get('email_usuario', 'Desconocido'))
+        return pd.DataFrame(), pd.DataFrame()
+
 # ====================================================
 # --- REPORTE DE UTILIDADES Y BALANCE CONSOLIDADO ---
 # ====================================================
@@ -353,10 +455,7 @@ def obtener_reporte_utilidades_mensual(ano):
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res_ventas = conn.table("registro_ventas")\
-                .select("fecha_venta, monto_final, costo_venta, valor_envio")\
-                .order("venta_id")\
-                .range(start, end).execute()
+            res_ventas = conn.table("registro_ventas").select("fecha_venta, monto_final, costo_venta, valor_envio").order("venta_id").range(start, end).execute()
             if res_ventas.data:
                 all_ventas.extend(res_ventas.data)
                 if len(res_ventas.data) < chunk_size: break
@@ -371,26 +470,19 @@ def obtener_reporte_utilidades_mensual(ano):
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res_asig = conn.table("asignaciones")\
-                .select("monto_total, costo_caja, pagado, cliente_id, ano, mes")\
-                .eq("ano", ano)\
-                .order("asignacion_id")\
-                .range(start, end).execute()
+            res_asig = conn.table("asignaciones").select("monto_total, costo_caja, pagado, cliente_id, ano, mes").eq("ano", ano).order("asignacion_id").range(start, end).execute()
             if res_asig.data:
                 all_asig.extend(res_asig.data)
                 if len(res_asig.data) < chunk_size: break
             else: break
         df_a = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
         if not df_a.empty:
-            # CORREGIDO: Bypass del límite de 1000 para "suscripciones" ordenando por "suscripcion_id"
+            # Bypass del límite de 1000 para "suscripciones" ordenando por "suscripcion_id"
             all_susc = []
             for bloque_s in range(100):
                 start_s = bloque_s * chunk_size
                 end_s = start_s + chunk_size - 1
-                res_susc = conn.table("suscripciones")\
-                    .select("cliente_id, valor_suscripcion")\
-                    .order("suscripcion_id")\
-                    .range(start_s, end_s).execute()
+                res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").order("suscripcion_id").range(start_s, end_s).execute()
                 if res_susc.data:
                     all_susc.extend(res_susc.data)
                     if len(res_susc.data) < chunk_size: break
@@ -411,10 +503,7 @@ def obtener_reporte_utilidades_mensual(ano):
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res_vm = conn.table("ventas_masivas")\
-                .select("fecha_evento, ingreso_total, costo_total, utilidad_estimada")\
-                .order("evento_id")\
-                .range(start, end).execute()
+            res_vm = conn.table("ventas_masivas").select("fecha_evento, ingreso_total, costo_total, utilidad_estimada").order("evento_id").range(start, end).execute()
             if res_vm.data:
                 all_vm.extend(res_vm.data)
                 if len(res_vm.data) < chunk_size: break
@@ -429,10 +518,7 @@ def obtener_reporte_utilidades_mensual(ano):
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res_cnv = conn.table("costos_no_ventas")\
-                .select("fecha_ocurrencia, monto")\
-                .order("costo_id")\
-                .range(start, end).execute()
+            res_cnv = conn.table("costos_no_ventas").select("fecha_ocurrencia, monto").order("costo_id").range(start, end).execute()
             if res_cnv.data:
                 all_cnv.extend(res_cnv.data)
                 if len(res_cnv.data) < chunk_size: break
@@ -536,10 +622,40 @@ def mostrar_reportes():
         st.markdown("### Reportes listos para usar")
         st.info("💡 Estos reportes cruzan datos para entregarte información lista para la toma de decisiones.")
         
-        # --- REPORTE 1: UTILIDADES Y BALANCES ---
+        # --- REPORTE 1: PENDIENTES DE DESPACHO / LOGÍSTICA (NUEVO) ---
+        with st.container(border=True):
+            st.markdown("#### ⏳ Control de Registros Pendientes (Caja y Asignaciones)")
+            st.write("Identifica y descarga todas las asignaciones o ventas de caja que aún no se encuentran finalizadas (Ventas con estado distinto de 'FINALIZADO' y Asignaciones con estado de envío distinto de 'ENVIADO' o 'RETIRADO').")
+            
+            if st.button("Generar Reporte de Pendientes", type="primary", use_container_width=True, key="btn_pendientes_no_finalizados"):
+                with st.spinner("Buscando registros pendientes en Supabase..."):
+                    df_caja_pend, df_asig_pend = obtener_reporte_pendientes_consolidado()
+                    total_pendientes = len(df_caja_pend) + len(df_asig_pend)
+                    
+                    if total_pendientes == 0:
+                        st.success("🎉 ¡Todo está ok! No hay ventas de caja ni asignaciones del club pendientes.")
+                    else:
+                        st.warning(f"Se encontraron {total_pendientes} registros pendientes ({len(df_caja_pend)} en Caja y {len(df_asig_pend)} en Asignaciones).")
+                        
+                        col_p1, col_p2 = st.columns(2)
+                        col_p1.metric("🛒 Ventas Caja Pendientes", len(df_caja_pend))
+                        col_p2.metric("🎁 Asignaciones Club Pendientes", len(df_asig_pend))
+                        
+                        excel_data = convertir_pendientes_a_excel(df_caja_pend, df_asig_pend)
+                        
+                        st.download_button(
+                            label="📥 Descargar Reporte de Pendientes (.xlsx)",
+                            data=excel_data,
+                            file_name=f"reporte_pendientes_logistica_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="btn_descarga_pendientes"
+                        )
+
+        # --- REPORTE 2: UTILIDADES Y BALANCES ---
         with st.container(border=True):
             st.markdown("#### 💸 Utilidades y Balance Consolidado")
-            st.write("Genera un estado financiero consolidado por mes desglosando ingresos de cajitas, ventas rápidas, eventos masivos, costos de adquisición de catálogo and gastos no operacionales.")
+            st.write("Genera un estado financiero consolidado por mes desglosando ingresos de cajitas, ventas rápidas, eventos masivos, costos de adquisición de catálogo y gastos no operacionales.")
             
             col_u1 = st.columns(1)[0]
             ano_balance = col_u1.number_input("Año del Balance Consolidado:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_balance_cons")
@@ -564,7 +680,7 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron registros financieros para el año seleccionado.")
 
-        # --- REPORTE 2: ASIGNACIONES ---
+        # --- REPORTE 3: ASIGNACIONES ---
         with st.container(border=True):
             st.markdown("#### 🎁 Historial de Asignaciones (Cajitas)")
             st.write("Exporta el detalle de las cajas armadas con el nombre del cliente y los libros que recibió.")
@@ -597,7 +713,7 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron registros de asignación para los meses seleccionados.")
 
-        # --- REPORTE 3: ENVÍOS PENDIENTES ---
+        # --- REPORTE 4: ENVÍOS PENDIENTES ---
         with st.container(border=True):
             st.markdown("#### 🚚 Envíos Pendientes Unificados")
             st.write("Lista consolidada de todas las cajas (suscripciones y ventas) listas para despacho, con formato para courier.")
@@ -615,13 +731,12 @@ def mostrar_reportes():
                 else:
                     st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
 
-        # --- REPORTE 4: SII ---
+        # --- REPORTE 5: SII ---
         with st.container(border=True):
             st.markdown("#### 🇨🇱 Facturación (SII)")
             st.write("Genera el reporte de ventas del mes con el formato para Boletas o Facturas electrónicas.")
             
             c3, c4 = st.columns(2)
-            # CORREGIDO: index=None con placeholder para evitar selecciones residuales stuck en UI
             mes_fact_sel = c3.selectbox("Mes:", list(meses_dict_asig.values()), index=None, placeholder="Selecciona un mes...", key="mes_fact_sii")
             ano_fact_sel = c4.number_input("Año:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_fact_sii")
             
@@ -652,7 +767,7 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron ventas para el período seleccionado.")
 
-        # --- REPORTE 5: BAJO STOCK ---
+        # --- REPORTE 6: BAJO STOCK ---
         with st.container(border=True):
             st.markdown("#### 🚨 Libros con Bajo Stock")
             st.write("Identifica rápidamente los libros que están por agotarse para planificar tus compras.")
@@ -679,9 +794,7 @@ def mostrar_reportes():
         st.markdown("### Descarga de Respaldo Crudo (Backup)")
         st.write("Aquí puedes descargar el contenido directo y sin procesar de cualquier tabla de la base de datos.")
         
-        # 🌟 TABLAS DISPONIBLES
         tablas_disponibles = ["clientes", "libros", "registro_ventas", "asignaciones", "suscripciones", "ventas_masivas", "librero_historico", "costos_no_ventas", "historial_cambios_masivos", "historial_logs", "meses_cerrados"]
-        # CORREGIDO: index=None con placeholder
         tabla_seleccionada = st.selectbox("Selecciona la tabla a exportar:", sorted(tablas_disponibles), index=None, placeholder="Selecciona una tabla...", key="tabla_seleccionada")
         
         if st.button("📥 Exportar tabla completa", use_container_width=True, key="btn_export"):
