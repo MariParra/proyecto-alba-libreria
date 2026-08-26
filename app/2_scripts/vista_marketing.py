@@ -461,72 +461,48 @@ def mostrar_generador_marketing():
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
         
         # =========================================================================
-        # 📥 DESCARGA MASIVA ZIP REUBICADA DEBAJO DE LAS IMÁGENES
+        # 📥 DESCARGA MASIVA COMPLETA (ZIP & PDF)
         # =========================================================================
-        with st.expander("Ver y Descargar las Hojas Generadas Individualmente", expanded=True):
-            columnas_render = st.columns(3)
-            for idx, (titulo_hoja, img_obj) in enumerate(hojas):
-                col = columnas_render[idx % 3]
-                with col:
-                    buf = io.BytesIO()
-                    img_obj.save(buf, format="PNG")
-                    img_bytes = buf.getvalue()
-                    
-                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                    # Diseño CSS/HTML Premium
-                    html_str = f"""
-                    <div style="
-                        text-align: center; 
-                        margin-bottom: 12px; 
-                        color: {config_diseno_final.get('color_primary_books', '#7C0C3F')}; 
-                        font-family: 'Helvetica Neue', Arial, sans-serif;
-                        font-size: 18px; 
-                        font-weight: bold; 
-                        letter-spacing: 1px;
-                        text-transform: uppercase;
-                        text-shadow: 1px 1px 2px rgba(0,0,0,0.08);
-                        border-bottom: 2px solid {config_diseno_final.get('color_accent', '#DB2777')};
-                        padding-bottom: 6px;
-                    ">
-                        ✨ {titulo_hoja} ✨
-                    </div>
-                    <div style="
-                        border-radius: 12px; 
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
-                        overflow: hidden; 
-                        margin-bottom: 15px;
-                        transition: transform 0.3s ease-in-out;
-                    " onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
-                        <img src="data:image/png;base64,{b64_img}" style="width: 100%; display: block;">
-                    </div>
-                    """
-                    st.markdown(html_str, unsafe_allow_html=True)
-                    
-                    st.download_button(
-                        label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
-                        file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
-                        mime="image/png", key=f"dl_btn_{idx}", use_container_width=True
-                    )
-            
-            # 🌟 NUEVA UBICACIÓN: Botón de descarga masiva ZIP al final del Expander
-            st.markdown("---")
-            st.markdown("#### 📦 Descarga Masiva del Catálogo Completo")
-            st.caption("Usa este botón para descargar todas las hojas generadas comprimidas en un único archivo ZIP en un clic.")
-            
-            zip_buf = io.BytesIO()
-            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                for t_hoja, i_obj in hojas:
-                    buf_img = io.BytesIO()
-                    i_obj.save(buf_img, format="PNG")
-                    img_bytes = buf_img.getvalue()
-                    file_name = f"Catalogo_{t_hoja.replace(' ', '_').replace('/', '-')}.png"
-                    zip_file.writestr(file_name, img_bytes)
-                    
+        st.markdown("---")
+        st.markdown("#### 📦 Descarga Masiva del Catálogo Completo")
+        st.caption("Usa estos botones para descargar todas las hojas generadas de forma conjunta.")
+        
+        # 1. Generación del Archivo ZIP
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for t_hoja, i_obj in hojas:
+                buf_img = io.BytesIO()
+                i_obj.save(buf_img, format="PNG")
+                img_bytes = buf_img.getvalue()
+                file_name = f"Catalogo_{t_hoja.replace(' ', '_').replace('/', '-')}.png"
+                zip_file.writestr(file_name, img_bytes)
+        
+        # 2. Generación del Documento PDF consolidado
+        pdf_buf = io.BytesIO()
+        if hojas:
+            first_img = hojas[0][1].convert("RGB")
+            other_imgs = [item[1].convert("RGB") for item in hojas[1:]]
+            first_img.save(pdf_buf, format="PDF", save_all=True, append_images=other_imgs)
+        
+        # Renderizado de botones en columnas simétricas
+        col_zip, col_pdf = st.columns(2)
+        
+        with col_zip:
             st.download_button(
                 label="📥 Descargar Catálogo Completo (ZIP)",
                 data=zip_buf.getvalue(),
                 file_name="Catalogo_Completo_Alba_Libreria.zip",
                 mime="application/zip",
+                use_container_width=True,
+                type="primary"
+            )
+            
+        with col_pdf:
+            st.download_button(
+                label="📥 Descargar Catálogo Completo (PDF)",
+                data=pdf_buf.getvalue(),
+                file_name="Catalogo_Completo_Alba_Libreria.pdf",
+                mime="application/pdf",
                 use_container_width=True,
                 type="primary"
             )
