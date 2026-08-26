@@ -132,6 +132,9 @@ def mostrar_generador_marketing():
 
     # Cargar configuraciones guardadas o por defecto
     config_default = cargar_configuracion_marketing()
+    
+    # 🌟 ROBUSTEZ: Inicializar config_diseno_final en el ámbito superior de la función
+    config_diseno_final = config_default.copy()
 
     df_libros = cargar_libros_para_marketing()
     if df_libros.empty:
@@ -231,7 +234,7 @@ def mostrar_generador_marketing():
         c_badge_bg = cc8.color_picker("Fondo de Etiqueta", value=config_default.get("color_badge_bg", "#DB2777"))
         c_badge_text = cc9.color_picker("Texto de Etiqueta", value=config_default.get("color_badge_text", "#FFFFFF"))
 
-        config_diseno_final = {
+        config_diseno_final.update({
             "font_family_header": font_h_sel,
             "font_family_books": font_b_sel,
             "bold_header": bold_h,
@@ -254,7 +257,7 @@ def mostrar_generador_marketing():
             "color_badge_bg": c_badge_bg,
             "color_badge_text": c_badge_text,
             "libros_por_pagina": libros_por_pag
-        }
+        })
 
         # =========================================================================
         # 🌟 PREVISUALIZADOR PREMIUM EN TIEMPO REAL (DISEÑO ALINEADO 3x3)
@@ -461,7 +464,7 @@ def mostrar_generador_marketing():
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
         
         # =========================================================================
-        # 👁️ VER Y DESCARGAR LAS HOJAS GENERADAS INDIVIDUALMENTE (VISTA PREVIA REESTABLECIDA)
+        # 👁️ VER Y DESCARGAR LAS HOJAS GENERADAS INDIVIDUALMENTE
         # =========================================================================
         with st.expander("Ver y Descargar las Hojas Generadas Individualmente", expanded=True):
             columnas_render = st.columns(3)
@@ -509,51 +512,67 @@ def mostrar_generador_marketing():
                     )
 
         # =========================================================================
-        # 📥 DESCARGA MASIVA COMPLETA (ZIP & PDF)
+        # 📥 DESCARGA MASIVA COMPLETA (ZIP & PDF) - TRATAMIENTO SEGURO CONTRA INCIDENCIAS
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 📦 Descarga Masiva del Catálogo Completo")
         st.caption("Usa estos botones para descargar todas las hojas generadas de forma conjunta.")
         
-        # 1. Generación del Archivo ZIP
+        # 1. Generación del Archivo ZIP Seguro
         zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for t_hoja, i_obj in hojas:
-                buf_img = io.BytesIO()
-                i_obj.save(buf_img, format="PNG")
-                img_bytes = buf_img.getvalue()
-                file_name = f"Catalogo_{t_hoja.replace(' ', '_').replace('/', '-')}.png"
-                zip_file.writestr(file_name, img_bytes)
+        try:
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for t_hoja, i_obj in hojas:
+                    buf_img = io.BytesIO()
+                    i_obj.save(buf_img, format="PNG")
+                    img_bytes = buf_img.getvalue()
+                    file_name = f"Catalogo_{t_hoja.replace(' ', '_').replace('/', '-')}.png"
+                    zip_file.writestr(file_name, img_bytes)
+            zip_data = zip_buf.getvalue()
+        except Exception as e:
+            st.error(f"Error al estructurar el archivo ZIP: {e}")
+            zip_data = None
         
-        # 2. Generación del Documento PDF consolidado
+        # 2. Generación del Documento PDF Seguro
         pdf_buf = io.BytesIO()
-        if hojas:
-            first_img = hojas[0][1].convert("RGB")
-            other_imgs = [item[1].convert("RGB") for item in hojas[1:]]
-            first_img.save(pdf_buf, format="PDF", save_all=True, append_images=other_imgs)
+        try:
+            if hojas:
+                first_img = hojas[0][1].convert("RGB")
+                other_imgs = [item[1].convert("RGB") for item in hojas[1:]]
+                first_img.save(pdf_buf, format="PDF", save_all=True, append_images=other_imgs)
+            pdf_data = pdf_buf.getvalue()
+        except Exception as e:
+            st.error(f"Error al estructurar el documento PDF consolidado: {e}")
+            pdf_data = None
         
         # Renderizado de botones en columnas simétricas
         col_zip, col_pdf = st.columns(2)
         
         with col_zip:
-            st.download_button(
-                label="📥 Descargar Catálogo Completo (ZIP)",
-                data=zip_buf.getvalue(),
-                file_name="Catalogo_Completo_Alba_Libreria.zip",
-                mime="application/zip",
-                use_container_width=True,
-                type="primary"
-            )
+            if zip_data:
+                st.download_button(
+                    label="📥 Descargar Catálogo Completo (ZIP)",
+                    data=zip_data,
+                    file_name="Catalogo_Completo_Alba_Libreria.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    type="primary"
+                )
+            else:
+                st.warning("El archivo ZIP no está disponible debido a un error.")
             
         with col_pdf:
-            st.download_button(
-                label="📥 Descargar Catálogo Completo (PDF)",
-                data=pdf_buf.getvalue(),
-                file_name="Catalogo_Completo_Alba_Libreria.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary"
-            )
+            if pdf_data:
+                st.download_button(
+                    label="📥 Descargar Catálogo Completo (PDF)",
+                    data=pdf_data,
+                    file_name="Catalogo_Completo_Alba_Libreria.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
+            else:
+                st.warning("El archivo PDF no está disponible debido a un error.")
 
 if __name__ == "__main__":
     mostrar_generador_marketing()
