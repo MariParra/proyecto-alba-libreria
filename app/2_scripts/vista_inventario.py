@@ -434,13 +434,15 @@ def mostrar_inventario():
             df_filtrado = df_filtrado[df_filtrado['apto_cajita'] == True]
 
     st.markdown("### 📊 Métricas del Stock")
-    st.info("""
-    ℹ️ **¿Cómo se calculan los indicadores de este panel?**
-    * **Libros Distintos:** Cantidad de títulos únicos registrados bajo la selección y filtros activos actuales.
-    * **Unidades en Stock:** Suma total de ejemplares físicos disponibles en el inventario para todos los libros listados.
-    * **Valor de Venta Estimado:** Representa el ingreso total potencial de los ejemplares físicos si se liquidaran hoy al público, calculado bajo la fórmula:
-    $$\\text{Valor de Venta Estimado} = \\sum (\\text{Stock de cada libro} \\times \\text{Precio de venta actual})$$
-    """)
+    
+    with st.expander("📢 General & Monitoreo", expanded=False):
+        st.info("""
+        ℹ️ **¿Cómo se calculan los indicadores de este panel?**
+        * **Libros Distintos:** Cantidad de títulos únicos registrados bajo la selección y filtros activos actuales.
+        * **Unidades en Stock:** Suma total de ejemplares físicos disponibles en el inventario para todos los libros listados.
+        * **Valor de Venta Estimado:** Representa el ingreso total potencial de los ejemplares físicos si se liquidaran hoy al público, calculado bajo la fórmula:
+        $$\\text{Valor de Venta Estimado} = \\sum (\\text{Stock de cada libro} \\times \\text{Precio de venta actual})$$
+        """)
     
     m1, m2, m3 = st.columns(3)
     total_titulos_filtrados = len(df_filtrado)
