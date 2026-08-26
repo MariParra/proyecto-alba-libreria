@@ -377,7 +377,11 @@ def procesar_actualizacion_clientes(df, progress_bar=None, status_text=None):
                     valor_celda = normalizar_celda_excel(fila[col])
                     if valor_celda != '':
                         if col == 'rut':
+                            # RUT Limpio (sin puntos, guiones y en mayúsculas)
                             val_uploaded = re.sub(r'[^0-9kK]', '', valor_celda).upper()
+                        elif col == 'telefono':
+                            # Saneamiento de teléfono: elimina todo tipo de espacios en blanco
+                            val_uploaded = re.sub(r'\s+', '', valor_celda)
                         else:
                             val_uploaded = valor_celda
                             
