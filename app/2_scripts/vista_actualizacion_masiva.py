@@ -163,16 +163,19 @@ def generar_plantilla_actualizacion_costos():
 # 📥 FUNCIONES DE PROCESAMIENTO Y ACTUALIZACIÓN EN BD
 # ==========================================================
 
-def procesar_actualizacion_libros(df):
+def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
     conn = get_db_connection()
-    updates, errores = 0, []
+    updates = 0
+    sin_cambios = 0
+    no_encontrados = 0
+    errores = []
     
     columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
     columnas_float = ['precio', 'costo', 'precio_original']
     columnas_bool = ['apto_cajita', 'destacado', 'visible_catalogo']
     columnas_fecha = ['descuento_inicio', 'descuento_fin']
 
-    # Robustez para obtener IDs de libros existentes
+    # Filtrar IDs de libros del archivo
     ids_libros = []
     for val in df['libro_id'].dropna():
         try:
@@ -182,25 +185,31 @@ def procesar_actualizacion_libros(df):
         except:
             pass
 
-    df_original = pd.DataFrame()
+    # Descargar datos existentes en BD en bloques para comparación
+    existing_books_data = []
     if ids_libros:
-        original_data = []
         for idx in range(0, len(ids_libros), 1000):
             chunk = ids_libros[idx:idx + 1000]
-            res_original = conn.table('libros').select('libro_id, precio, precio_original').in_('libro_id', chunk).execute()
+            res_original = (conn.table('libros')
+                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin')
+                .in_('libro_id', chunk)
+                .execute())
             if res_original.data:
-                original_data.extend(res_original.data)
+                existing_books_data.extend(res_original.data)
                 
-        if original_data:
-            df_original = pd.DataFrame(original_data).set_index('libro_id')
-            df_original['Dcto %'] = 0.0
-            mask_dcto = (df_original['precio_original'] > df_original['precio']) & (df_original['precio_original'] > 0)
-            df_original.loc[mask_dcto, 'Dcto %'] = (((df_original.loc[mask_dcto, 'precio_original'] - df_original.loc[mask_dcto, 'precio']) / df_original.loc[mask_dcto, 'precio_original']) * 100)
+    existing_books_dict = {r['libro_id']: r for r in existing_books_data}
+    total_filas = len(df)
 
     for i, fila in df.iterrows():
+        # Actualización de la barra de progreso
+        if progress_bar and status_text:
+            progress_bar.progress((i + 1) / total_filas)
+            status_text.text(f"📖 Procesando libro {i+1} de {total_filas}...")
+
         try:
             # Omitir filas vacías silenciosamente
             if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                sin_cambios += 1
                 continue
 
             if 'libro_id' not in fila or pd.isna(fila['libro_id']):
@@ -211,54 +220,93 @@ def procesar_actualizacion_libros(df):
                 continue
                 
             libro_id = int(float(libro_id_str))
+            
+            if libro_id not in existing_books_dict:
+                no_encontrados += 1
+                errores.append(f'Fila {i+2} (ID Libro: {libro_id}): El libro no existe en la base de datos.')
+                continue
+                
+            db_row = existing_books_dict[libro_id]
             datos_update = {}
             
+            # Comparación de diferencias columna por columna
             for col in df.columns:
                 if col in fila and pd.notna(fila[col]) and col != 'libro_id':
                     valor_celda = normalizar_celda_excel(fila[col])
                     if valor_celda != '':
+                        val_converted = None
                         if col in columnas_texto:
-                            datos_update[col] = limpiar_texto_para_busqueda(valor_celda)
+                            val_converted = limpiar_texto_para_busqueda(valor_celda)
                         elif col == 'stock':
-                            datos_update[col] = int(float(valor_celda))
+                            val_converted = int(float(valor_celda))
                         elif col in columnas_float:
-                            datos_update[col] = float(valor_celda)
+                            val_converted = float(valor_celda)
                         elif col in columnas_bool:
-                            val_lower = valor_celda.lower().strip()
-                            datos_update[col] = val_lower in ['true', '1', 'si', 'sí', 'yes', 'y']
+                            val_converted = valor_celda.lower().strip() in ['true', '1', 'si', 'sí', 'yes', 'y']
                         elif col in columnas_fecha:
                             try:
-                                datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
+                                val_converted = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
                             except:
+                                val_converted = None
                                 errores.append(f'Fila {i+2}: Formato de fecha inválido en {col}.')
+                        
+                        if val_converted is not None:
+                            db_val = db_row.get(col)
+                            is_different = False
+                            if col in columnas_bool:
+                                is_different = (val_converted != bool(db_val))
+                            elif col == 'stock':
+                                is_different = (val_converted != (int(db_val) if db_val is not None else 0))
+                            elif col in columnas_float:
+                                is_different = (abs(val_converted - (float(db_val) if db_val is not None else 0.0)) > 1e-4)
+                            else:
+                                db_val_str = "" if db_val is None else str(db_val).strip()
+                                is_different = (str(val_converted).strip() != db_val_str)
+                                
+                            if is_different:
+                                datos_update[col] = val_converted
 
-            # Lógica de Recálculo de Precios
-            if 'precio_original' in datos_update and not df_original.empty and libro_id in df_original.index:
+            # Lógica de Recálculo de Precios basados en el descuento actual
+            if 'precio_original' in datos_update:
                 nuevo_precio_orig = float(datos_update['precio_original'])
-                porcentaje_dcto_actual = float(df_original.loc[libro_id].get('Dcto %', 0))
+                db_precio_orig = float(db_row.get('precio_original') or 0.0)
+                db_precio = float(db_row.get('precio') or 0.0)
+                porcentaje_dcto_actual = 0.0
+                if db_precio_orig > db_precio and db_precio_orig > 0:
+                    porcentaje_dcto_actual = ((db_precio_orig - db_precio) / db_precio_orig) * 100.0
                 
                 if porcentaje_dcto_actual > 0:
                     factor = 1.0 - (porcentaje_dcto_actual / 100.0)
-                    datos_update['precio'] = round(nuevo_precio_orig * factor, 0)
+                    calculated_precio = round(nuevo_precio_orig * factor, 0)
+                    if 'precio' not in datos_update:
+                        datos_update['precio'] = calculated_precio
                 else:
-                    datos_update['precio'] = nuevo_precio_orig
+                    if 'precio' not in datos_update:
+                        datos_update['precio'] = nuevo_precio_orig
             
             if 'precio' in fila and pd.notna(fila['precio']):
                 precio_val = normalizar_celda_excel(fila['precio'])
-                if precio_val != '' and ('precio' not in datos_update or datos_update['precio'] != float(precio_val)):
-                    datos_update['precio'] = float(precio_val)
+                if precio_val != '':
+                    precio_float = float(precio_val)
+                    if abs(precio_float - (float(db_row.get('precio') or 0.0))) > 1e-4:
+                        datos_update['precio'] = precio_float
 
             if datos_update:
                 conn.table('libros').update(datos_update).eq('libro_id', libro_id).execute()
                 updates += 1
+            else:
+                sin_cambios += 1
         except Exception as e:
             errores.append(f'Fila {i+2} (ID Libro: {fila.get("libro_id", "N/A")}): {str(e)}')
             
-    return updates, errores
+    return updates, sin_cambios, no_encontrados, errores
 
-def procesar_actualizacion_clientes(df):
+def procesar_actualizacion_clientes(df, progress_bar=None, status_text=None):
     conn = get_db_connection()
-    updates, errores = 0, []
+    updates = 0
+    sin_cambios = 0
+    no_encontrados = 0
+    errores = []
     
     df.columns = df.columns.str.lower().str.strip()
     
@@ -267,10 +315,41 @@ def procesar_actualizacion_clientes(df):
         
     columnas_permitidas = ['rut', 'direccion', 'email', 'telefono', 'instagram', 'nombre', 'status']
 
+    # Obtener IDs del archivo Excel
+    ids_clientes = []
+    for val in df['cliente_id'].dropna():
+        try:
+            val_norm = normalizar_celda_excel(val)
+            if val_norm:
+                ids_clientes.append(int(val_norm))
+        except:
+            pass
+
+    # Descargar datos existentes en BD en bloques de 1000
+    existing_data = []
+    if ids_clientes:
+        for idx in range(0, len(ids_clientes), 1000):
+            chunk = ids_clientes[idx:idx + 1000]
+            res_original = (conn.table('clientes')
+                .select('cliente_id, nombre, rut, email, telefono, instagram, direccion, status')
+                .in_('cliente_id', chunk)
+                .execute())
+            if res_original.data:
+                existing_data.extend(res_original.data)
+                
+    existing_dict = {r['cliente_id']: r for r in existing_data}
+    total_filas = len(df)
+
     for i, fila in df.iterrows():
+        # Actualización de la barra de progreso
+        if progress_bar and status_text:
+            progress_bar.progress((i + 1) / total_filas)
+            status_text.text(f"👥 Procesando cliente {i+1} de {total_filas}...")
+
         try:
             # Omitir filas vacías silenciosamente
             if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                sin_cambios += 1
                 continue
 
             if 'cliente_id' not in fila or pd.isna(fila['cliente_id']):
@@ -279,42 +358,97 @@ def procesar_actualizacion_clientes(df):
             
             cliente_id_str = normalizar_celda_excel(fila['cliente_id'])
             if not cliente_id_str:
-                errores.append(f'Fila {i+2}: El "cliente_id" es vacío o inválido.')
+                errores.append(f'Fila {i+2}: El ID de cliente es vacío o inválido.')
                 continue
                 
             cliente_id = int(cliente_id_str)
+            
+            if cliente_id not in existing_dict:
+                no_encontrados += 1
+                errores.append(f'Fila {i+2} (ID Cliente: {cliente_id}): El cliente no existe en la base de datos.')
+                continue
+                
+            db_row = existing_dict[cliente_id]
             datos_update = {}
             
+            # Comparar solo lo que sea diferente
             for col in columnas_permitidas:
                 if col in fila and pd.notna(fila[col]):
                     valor_celda = normalizar_celda_excel(fila[col])
                     if valor_celda != '':
                         if col == 'rut':
-                            # RUT Limpio (UPPER y sin caracteres especiales)
-                            datos_update[col] = re.sub(r'[^0-9kK]', '', valor_celda).upper()
+                            val_uploaded = re.sub(r'[^0-9kK]', '', valor_celda).upper()
                         else:
-                            datos_update[col] = valor_celda
+                            val_uploaded = valor_celda
+                            
+                        # Limpiar valor existente de DB para comparación exacta
+                        val_db = db_row.get(col)
+                        val_db_str = "" if val_db is None else str(val_db).strip()
+                        if val_db_str.endswith(".0"):
+                            val_db_str = val_db_str[:-2]
+                        if val_db_str.lower() in ["nan", "none"]:
+                            val_db_str = ""
+                            
+                        # Si es diferente, se agrega para actualizar
+                        if val_uploaded != val_db_str:
+                            datos_update[col] = val_uploaded
 
             if datos_update:
                 conn.table('clientes').update(datos_update).eq('cliente_id', cliente_id).execute()
                 updates += 1
+            else:
+                sin_cambios += 1
         except Exception as e:
             errores.append(f'Fila {i+2} (ID Cliente: {fila.get("cliente_id", "N/A")}): {str(e)}')
             
-    return updates, errores
+    return updates, sin_cambios, no_encontrados, errores
 
-def procesar_actualizacion_costos(df):
+def procesar_actualizacion_costos(df, progress_bar=None, status_text=None):
     """Procesa y actualiza en caliente los costos no operacionales en Supabase."""
     conn = get_db_connection()
-    updates, errores = 0, []
+    updates = 0
+    sin_cambios = 0
+    no_encontrados = 0
+    errores = []
     
     df.columns = df.columns.str.lower().str.strip()
     columnas_permitidas = ['fecha_ocurrencia', 'tipo_costo', 'monto', 'comentario']
 
+    # Filtrar IDs del archivo
+    ids_costos = []
+    for val in df['costo_id'].dropna():
+        try:
+            val_norm = normalizar_celda_excel(val)
+            if val_norm:
+                ids_costos.append(int(float(val_norm)))
+        except:
+            pass
+
+    # Descargar datos existentes de BD en bloques
+    existing_costos_data = []
+    if ids_costos:
+        for idx in range(0, len(ids_costos), 1000):
+            chunk = ids_costos[idx:idx + 1000]
+            res_original = (conn.table('costos_no_ventas')
+                .select('costo_id, fecha_ocurrencia, tipo_costo, monto, comentario')
+                .in_('costo_id', chunk)
+                .execute())
+            if res_original.data:
+                existing_costos_data.extend(res_original.data)
+                
+    existing_costos_dict = {r['costo_id']: r for r in existing_costos_data}
+    total_filas = len(df)
+
     for i, fila in df.iterrows():
+        # Barra de progreso
+        if progress_bar and status_text:
+            progress_bar.progress((i + 1) / total_filas)
+            status_text.text(f"💸 Procesando costo {i+1} de {total_filas}...")
+
         try:
             # Omitir filas vacías silenciosamente
             if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                sin_cambios += 1
                 continue
 
             if 'costo_id' not in fila or pd.isna(fila['costo_id']):
@@ -327,29 +461,52 @@ def procesar_actualizacion_costos(df):
                 continue
                 
             costo_id = int(float(costo_id_str))
+            
+            if costo_id not in existing_costos_dict:
+                no_encontrados += 1
+                errores.append(f'Fila {i+2} (ID Costo: {costo_id}): El registro de costo no existe en la base de datos.')
+                continue
+                
+            db_row = existing_costos_dict[costo_id]
             datos_update = {}
             
             for col in columnas_permitidas:
                 if col in fila and pd.notna(fila[col]):
                     valor_celda = normalizar_celda_excel(fila[col])
                     if valor_celda != '':
+                        val_converted = None
                         if col == 'monto':
-                            datos_update[col] = float(valor_celda)
+                            val_converted = float(valor_celda)
                         elif col == 'fecha_ocurrencia':
                             try:
-                                datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
+                                val_converted = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
                             except:
+                                val_converted = None
                                 errores.append(f'Fila {i+2}: Formato de fecha de costo inválido.')
                         else:
-                            datos_update[col] = limpiar_texto_para_busqueda(valor_celda).upper() if col == 'tipo_costo' else valor_celda
+                            val_converted = limpiar_texto_para_busqueda(valor_celda).upper() if col == 'tipo_costo' else valor_celda
+
+                        if val_converted is not None:
+                            db_val = db_row.get(col)
+                            is_different = False
+                            if col == 'monto':
+                                is_different = (abs(val_converted - (float(db_val) if db_val is not None else 0.0)) > 1e-4)
+                            else:
+                                db_val_str = "" if db_val is None else str(db_val).strip()
+                                is_different = (str(val_converted).strip() != db_val_str)
+                                
+                            if is_different:
+                                datos_update[col] = val_converted
 
             if datos_update:
                 conn.table('costos_no_ventas').update(datos_update).eq('costo_id', costo_id).execute()
                 updates += 1
+            else:
+                sin_cambios += 1
         except Exception as e:
             errores.append(f'Fila {i+2} (ID Costo: {fila.get("costo_id", "N/A")}): {str(e)}')
             
-    return updates, errores
+    return updates, sin_cambios, no_encontrados, errores
 
 # ==========================================================
 # 🎨 INTERFAZ GRÁFICA DE USUARIO (UX/UI)
@@ -394,19 +551,37 @@ def mostrar_actualizacion_masiva():
         
         if archivo_libros:
             if st.button('🚀 Aplicar Cambios en Libros', type='primary', use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 with st.spinner('Actualizando catálogo de libros en Supabase...'):
                     try:
                         df = pd.read_excel(archivo_libros) if archivo_libros.name.endswith('.xlsx') else pd.read_csv(archivo_libros)
-                        updates, errores = procesar_actualizacion_libros(df)
+                        updates, sin_cambios, no_encontrados, errores = procesar_actualizacion_libros(df, progress_bar, status_text)
                         
+                        # Remover widgets de progreso al finalizar
+                        progress_bar.empty()
+                        status_text.empty()
+
+                        # Resumen Métrico
+                        st.markdown("### 📊 Resumen de la Actualización")
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("Filas Analizadas", len(df))
+                        m2.metric("Con Cambios (Actualizados)", updates, delta=f"+{updates}" if updates > 0 else None)
+                        m3.metric("Sin Cambios (Ignorados)", sin_cambios)
+                        m4.metric("No Encontrados (En BD)", no_encontrados)
+                        m5.metric("Errores / Alertas", len(errores))
+
                         if updates > 0:
                             st.success(f'✅ ¡Se actualizaron {updates} libros exitosamente!')
                             st.balloons()
-                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            st.cache_data.clear()
+                        else:
+                            st.info('ℹ️ No se detectaron cambios pendientes en los libros comparados con la base de datos.')
                             
                         if errores:
-                            st.error(f'⚠️ Se presentaron {len(errores)} errores durante la actualización:')
-                            for err in errores: st.write(err)
+                            st.error(f'⚠️ Se presentaron {len(errores)} advertencias durante la actualización:')
+                            with st.expander("Ver Detalles de Advertencias/Errores"):
+                                for err in errores: st.write(f"- {err}")
                         
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -456,19 +631,37 @@ def mostrar_actualizacion_masiva():
         
         if archivo_clientes:
             if st.button('🚀 Aplicar Cambios en Clientes', type='primary', use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 with st.spinner('Actualizando datos de clientes en Supabase...'):
                     try:
                         df_cli = pd.read_excel(archivo_clientes, dtype=str) if archivo_clientes.name.endswith('.xlsx') else pd.read_csv(archivo_clientes, dtype=str)
-                        updates_cli, errores_cli = procesar_actualizacion_clientes(df_cli)
+                        updates_cli, sin_cambios_cli, no_encontrados_cli, errores_cli = procesar_actualizacion_clientes(df_cli, progress_bar, status_text)
                         
+                        # Remover widgets de progreso al finalizar
+                        progress_bar.empty()
+                        status_text.empty()
+
+                        # Resumen Métrico
+                        st.markdown("### 📊 Resumen de la Actualización")
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("Filas Analizadas", len(df_cli))
+                        m2.metric("Con Cambios (Actualizados)", updates_cli, delta=f"+{updates_cli}" if updates_cli > 0 else None)
+                        m3.metric("Sin Cambios (Ignorados)", sin_cambios_cli)
+                        m4.metric("No Encontrados (En BD)", no_encontrados_cli)
+                        m5.metric("Errores / Alertas", len(errores_cli))
+
                         if updates_cli > 0:
                             st.success(f'✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!')
                             st.balloons()
-                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            st.cache_data.clear()
+                        else:
+                            st.info('ℹ️ No se detectaron cambios en los clientes comparados con la base de datos actual.')
                             
                         if errores_cli:
                             st.error(f'⚠️ Se presentaron {len(errores_cli)} errores durante la actualización:')
-                            for err in errores_cli: st.write(err)
+                            with st.expander("Ver Detalles de los Errores"):
+                                for err in errores_cli: st.write(f"- {err}")
                         
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -518,19 +711,37 @@ def mostrar_actualizacion_masiva():
         
         if archivo_costos:
             if st.button('🚀 Aplicar Cambios en Costos', type='primary', use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 with st.spinner('Actualizando datos de costos en Supabase...'):
                     try:
                         df_cos = pd.read_excel(archivo_costos, dtype=str) if archivo_costos.name.endswith('.xlsx') else pd.read_csv(archivo_costos, dtype=str)
-                        updates_cos, errores_cos = procesar_actualizacion_costos(df_cos)
+                        updates_cos, sin_cambios_cos, no_encontrados_cos, errores_cos = procesar_actualizacion_costos(df_cos, progress_bar, status_text)
                         
+                        # Remover widgets de progreso al finalizar
+                        progress_bar.empty()
+                        status_text.empty()
+
+                        # Resumen Métrico
+                        st.markdown("### 📊 Resumen de la Actualización")
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("Filas Analizadas", len(df_cos))
+                        m2.metric("Con Cambios (Actualizados)", updates_cos, delta=f"+{updates_cos}" if updates_cos > 0 else None)
+                        m3.metric("Sin Cambios (Ignorados)", sin_cambios_cos)
+                        m4.metric("No Encontrados (En BD)", no_encontrados_cos)
+                        m5.metric("Errores / Alertas", len(errores_cos))
+
                         if updates_cos > 0:
                             st.success(f'✅ ¡Se actualizaron {updates_cos} registros de costos exitosamente!')
                             st.balloons()
-                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            st.cache_data.clear()
+                        else:
+                            st.info('ℹ️ No se detectaron cambios en el archivo de costos comparado con la base de datos actual.')
                             
                         if errores_cos:
                             st.error(f'⚠️ Se presentaron {len(errores_cos)} errores durante la actualización:')
-                            for err in errores_cos: st.write(err)
+                            with st.expander("Ver Detalles de los Errores"):
+                                for err in errores_cos: st.write(f"- {err}")
                         
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
