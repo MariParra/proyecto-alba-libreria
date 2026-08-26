@@ -816,10 +816,10 @@ def generar_comprobante(
     draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
     
     direccion_c = str(cliente_direccion or 'No especificado')
-    if len(direccion_c) > 31:
-        direccion_c = direccion_c[:28] + "..."
-    draw.text((x_margin, 310), "Dirección:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 310), direccion_c, fill='#333333', font=font_body)
+    if len(direccion_c) > 65:
+        direccion_c = direccion_c[:62] + "..."
+    draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
     
     # Columna Derecha (Lato) - X movido a 510 para dar más espacio horizontal a la Columna 1
     x_col2 = 510
@@ -827,8 +827,8 @@ def generar_comprobante(
     draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
     
     envio_c = str(metodo_envio)
-    if len(envio_c) > 20:
-        envio_c = envio_c[:17] + "..."
+    if len(envio_c) > 30:
+        envio_c = envio_c[:27] + "..."
     draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
     
