@@ -369,6 +369,8 @@ def mostrar_generador_marketing():
         if st.button("💾 Guardar Ajustes como Predeterminados", type="primary", use_container_width=True):
             if guardar_configuracion_marketing(config_diseno_final):
                 st.success("✅ ¡Ajustes guardados como predeterminados con éxito!")
+                time.sleep(1)
+                st.rerun()
             else:
                 st.error("❌ No se pudieron guardar los ajustes.")
 
