@@ -588,9 +588,11 @@ def asegurar_fuente_comprobante(nombre_fuente):
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/static/{nombre_limpio}-Regular.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_fuente.replace(' ', '')}-Regular.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/static/{nombre_fuente.replace(' ', '')}-Regular.ttf",
+        f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}-VariableFont_wght.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/ofl/{nombre_limpio.lower()}/{nombre_limpio}.ttf",
         f"https://raw.githubusercontent.com/google/fonts/main/apache/{nombre_limpio.lower()}/{nombre_limpio}-Regular.ttf"
     ]
+
     
     for url in formatos_url:
         try:
@@ -662,6 +664,7 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
 
     # 3. Candidatas locales estándar
     candidatas = [
+        "assets/Lato.ttf",
         "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
