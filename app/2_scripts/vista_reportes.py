@@ -185,7 +185,7 @@ def obtener_reporte_asignaciones(ano, lista_meses):
         return pd.DataFrame()
 
 def obtener_reporte_envios_pendientes():
-    """Genera reporte paginado consolidando envíos del club y de caja."""
+    """Genera reporte paginado consolidando envíos del suscripción y de ventas."""
     conn = get_db_connection()
     try:
         # Asignaciones (Paginado)
@@ -633,13 +633,13 @@ def mostrar_reportes():
                     total_pendientes = len(df_caja_pend) + len(df_asig_pend)
                     
                     if total_pendientes == 0:
-                        st.success("🎉 ¡Todo está ok! No hay ventas de caja ni asignaciones del club pendientes.")
+                        st.success("🎉 ¡Todo está ok! No hay ventas de caja ni suscripciones")
                     else:
                         st.warning(f"Se encontraron {total_pendientes} registros pendientes ({len(df_caja_pend)} en Caja y {len(df_asig_pend)} en Asignaciones).")
                         
                         col_p1, col_p2 = st.columns(2)
                         col_p1.metric("🛒 Ventas Caja Pendientes", len(df_caja_pend))
-                        col_p2.metric("🎁 Asignaciones Club Pendientes", len(df_asig_pend))
+                        col_p2.metric("🎁 Asignaciones Suscripción Pendientes", len(df_asig_pend))
                         
                         excel_data = convertir_pendientes_a_excel(df_caja_pend, df_asig_pend)
                         
@@ -680,38 +680,54 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron registros financieros para el año seleccionado.")
 
-        # --- REPORTE 3: ASIGNACIONES ---
+        # --- REPORTE 3: HISTORIAL DE ASIGNACIONES (CAJITAS) (CON SELECCIÓN TODOS AÑOS Y MESES) ---
         with st.container(border=True):
             st.markdown("#### 🎁 Historial de Asignaciones (Cajitas)")
             st.write("Exporta el detalle de las cajas armadas con el nombre del cliente y los libros que recibió.")
             
             c1, c2 = st.columns(2)
-            ano_asig = c1.number_input("Año del reporte:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_asig")
+            
+            # --- MEJORA: Seleccionar todos los años o año específico ---
+            todos_anos = c1.checkbox("Seleccionar todos los años", value=False, key="chk_todos_anos")
+            if not todos_anos:
+                ano_asig = c1.number_input("Año del reporte:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_asig")
+            else:
+                ano_asig = None
+                
+            # --- MEJORA: Seleccionar todos los meses o meses específicos ---
+            todos_meses = c2.checkbox("Seleccionar todos los meses", value=False, key="chk_todos_meses")
             meses_dict_asig = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
-            meses_asig_nombres = c2.multiselect("Selecciona los meses a incluir:", list(meses_dict_asig.values()), default=[meses_dict_asig[datetime.now().month]], key="meses_asig")
+            
+            if not todos_meses:
+                meses_asig_nombres = c2.multiselect("Selecciona los meses a incluir:", list(meses_dict_asig.values()), default=[meses_dict_asig[datetime.now().month]], key="meses_asig")
+            else:
+                meses_asig_nombres = list(meses_dict_asig.values())
             
             if st.button("Generar Reporte de Asignaciones", type="primary", use_container_width=True, key="btn_asig"):
-                if not meses_asig_nombres:
+                if not todos_meses and not meses_asig_nombres:
                     st.error("Debes seleccionar al menos un mes.")
                 else:
                     meses_asig_nums = [list(meses_dict_asig.keys())[list(meses_dict_asig.values()).index(m)] for m in meses_asig_nombres]
-                    df_asig_reporte = obtener_reporte_asignaciones(ano_asig, meses_asig_nums)
+                    df_asig_reporte = obtener_reporte_asignaciones(ano_asig, meses_asig_nums, todos_los_anos=todos_anos, todos_los_meses=todos_meses)
                     if not df_asig_reporte.empty:
-                        st.success("¡Reporte de asignaciones generado exitosamente!")
+                        st.success(f"¡Reporte de asignaciones generado exitosamente! ({len(df_asig_reporte)} registros)")
+                        
+                        nombre_archivo = f"reporte_asignaciones_{'todos_los_anos' if todos_anos else ano_asig}.xlsx"
                         st.download_button(
                             label=f"Descargar Asignaciones ({len(df_asig_reporte)} registros) (.xlsx)", 
                             data=convertir_df_a_excel(df_asig_reporte), 
-                            file_name=f"reporte_asignaciones_{ano_asig}.xlsx",
+                            file_name=nombre_archivo,
                             use_container_width=True,
                             key="btn_descarga_asig"
                         )
                         if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_asig"):
-                            for k in ["ano_asig", "meses_asig"]:
+                            for k in ["ano_asig", "meses_asig", "chk_todos_anos", "chk_todos_meses"]:
                                 if k in st.session_state:
                                     del st.session_state[k]
                             st.rerun()
                     else:
-                        st.warning("No se encontraron registros de asignación para los meses seleccionados.")
+                        st.warning("No se encontraron registros de asignación para los filtros seleccionados.")
+
 
         # --- REPORTE 4: ENVÍOS PENDIENTES ---
         with st.container(border=True):
