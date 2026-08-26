@@ -643,43 +643,36 @@ def find_any_system_ttf():
     return None
 
 def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
-    """
-    Obtiene fuentes TrueType vectoriales con soporte garantizado de tildes latinas y bold real.
-    """
+    # 1. Intentar descargar desde Google Fonts
     ruta_google = asegurar_fuente_comprobante(nombre_fuente)
-    
-    candidatas = []
-    if ruta_google:
-        candidatas.append(ruta_google)
-        
-    candidatas.extend([
+    if ruta_google and os.path.exists(ruta_google):
+        try:
+            return ImageFont.truetype(ruta_google, tamanio)
+        except Exception:
+            pass
+
+    # 2. 🌟 BYPASS ULTRA-SEGURO: Carga local desde Matplotlib (100% compatible con tildes)
+    try:
+        import matplotlib
+        mpl_ttf = os.path.join(matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")
+        if os.path.exists(mpl_ttf):
+            return ImageFont.truetype(mpl_ttf, tamanio)
+    except Exception:
+        pass
+
+    # 3. Candidatas locales estándar
+    candidatas = [
         "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
-        "/usr/share/fonts/GoogleSans-Regular.ttf",
-        "arialbd.ttf" if bold else "arial.ttf",
         "Arial.ttf"
-    ])
-    
+    ]
     for ruta in candidatas:
         try:
             if os.path.exists(ruta):
                 return ImageFont.truetype(ruta, tamanio)
         except Exception:
             continue
-            
-    # Fallback total: Buscar cualquier TTF del sistema para conservar soporte Unicode
-    sys_ttf = find_any_system_ttf()
-    if sys_ttf:
-        try:
-            if bold:
-                # Intenta cargar la versión bold del mismo directorio
-                bold_sys_ttf = sys_ttf.replace("Regular", "Bold").replace("regular", "bold").replace("Regular", "Bold").replace(".ttf", "-Bold.ttf")
-                if os.path.exists(bold_sys_ttf):
-                    return ImageFont.truetype(bold_sys_ttf, tamanio)
-            return ImageFont.truetype(sys_ttf, tamanio)
-        except Exception:
-            pass
             
     try:
         return ImageFont.load_default(size=tamanio)
@@ -746,13 +739,13 @@ def generar_comprobante(
     width, height = img.size
     draw = ImageDraw.Draw(img)
     
-    # 🌟 FUENTES PREMIUM VECTORIALES (Aseguran renderizado sin tildes rotas)
-    font_title = obtener_fuente_comprobante("Dancing Script", 38, bold=True)
-    font_section = obtener_fuente_comprobante("Dancing Script", 26, bold=True)
-    font_body = obtener_fuente_comprobante("Lato", 18)
-    font_body_bold = obtener_fuente_comprobante("Lato", 18, bold=True)
-    font_price_accent = obtener_fuente_comprobante("Lato", 20, bold=True)
-    font_footer = obtener_fuente_comprobante("Dancing Script", 24, bold=True)
+    # Fuentes Premium de Google Fonts
+    font_title = obtener_fuente_comprobante("Dancing Script", 36, bold=True)
+    font_section = obtener_fuente_comprobante("Dancing Script", 24, bold=True)
+    font_body = obtener_fuente_comprobante("Lato", 15)
+    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
+    font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
+    font_footer = obtener_fuente_comprobante("Dancing Script", 22, bold=True)
     
     # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
     x_margin = 130
@@ -767,56 +760,56 @@ def generar_comprobante(
     # Línea divisoria
     draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
     
-    # 2. SECCIÓN: DATOS DEL CLIENTE (Dancing Script)
+    # 2. SECCIÓN: DATOS DEL CLIENTE
     draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
     
-    # Limpieza robusta del pago y comentario
     pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
     
-    # 🌟 CORREGIDO: Las etiquetas de cliente ahora están en NEGRITA (font_body_bold) y color BURDEOS (#7C0C3F)
-    # Columna Izquierda: Cliente, RUT, Email, Teléfono, Dirección
-    draw.text((x_margin, 200), "Cliente:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 200), str(cliente_nombre).upper(), fill='#333333', font=font_body)
+    # Columna Izquierda (Lato) - Etiquetas en Negrita y color Burdeos
+    draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
     
-    draw.text((x_margin, 235), "RUT:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 235), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
+    draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
     
     email_c = str(cliente_email or 'No registrado')
-    if len(email_c) > 24:
-        email_c = email_c[:21] + "..."
-    draw.text((x_margin, 270), "Email:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 270), email_c, fill='#333333', font=font_body)
+    if len(email_c) > 31:
+        email_c = email_c[:28] + "..."
+    draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
     
-    draw.text((x_margin, 305), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 305), str(cliente_telefono or 'No registrado'), fill='#333333', font=font_body)
+    tel_c = str(cliente_telefono or 'No registrado')
+    if len(tel_c) > 31:
+        tel_c = tel_c[:28] + "..."
+    draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
     
     direccion_c = str(cliente_direccion or 'No especificado')
-    if len(direccion_c) > 24:
-        direccion_c = direccion_c[:21] + "..."
-    draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
+    if len(direccion_c) > 31:
+        direccion_c = direccion_c[:28] + "..."
+    draw.text((x_margin, 310), "Dirección:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 310), direccion_c, fill='#333333', font=font_body)
     
-    # Columna Derecha (Lato) - Etiquetas en NEGRITA (font_body_bold) y BURDEOS (#7C0C3F)
-    x_col2 = 460
-    draw.text((x_col2, 200), "Fecha:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 200), str(fecha), fill='#333333', font=font_body)
+    # Columna Derecha (Lato) - X movido a 510 para dar más espacio horizontal a la Columna 1
+    x_col2 = 510
+    draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
     
     envio_c = str(metodo_envio)
     if len(envio_c) > 20:
         envio_c = envio_c[:17] + "..."
-    draw.text((x_col2, 235), "Envío:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 235), envio_c, fill='#333333', font=font_body)
+    draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
     
-    draw.text((x_col2, 270), "Pago:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 270), str(pago_limpio).upper(), fill='#333333', font=font_body)
+    draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
     
-    # Si hay nota/comentario, lo colocamos en la columna derecha debajo de Pago de forma alineada
     if comentario_limpio:
         nota_c = str(comentario_limpio).upper()
         if len(nota_c) > 20:
             nota_c = nota_c[:17] + "..."
-        draw.text((x_col2, 305), "Nota:", fill='#7C0C3F', font=font_body_bold)
-        draw.text((x_col2 + 80, 305), nota_c, fill='#333333', font=font_body)
+        draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
     
     # Línea divisoria
     draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
@@ -861,14 +854,15 @@ def generar_comprobante(
     
     # 4. CARD DE TOTALES Y FINANZAS A LA DERECHA (con Sombra y formato Premium)
     # 🌟 CORREGIDO: fill=None hace transparente la tarjeta para revelar las líneas de fondo del cuaderno
+        # 4. CARD DE TOTALES Y FINANZAS A LA DERECHA (con Doble Borde de Sombra Transparente)
     box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
-    # Sombra transparente (solo borde rosa offset)
+    # Sombra transparente (borde rosa con desplazamiento de 6px)
     draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
-    # Tarjeta Principal transparente
+    # Caja principal transparente
     draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
     
     # Dibujar Valores alineados dentro de la tarjeta de forma simétrica (Lato)
-    # 🌟 CORREGIDO: Las etiquetas antes de los dos puntos ahora están en negrita (font_body_bold)
+    # Las etiquetas antes de los dos puntos se renderizan con font_body_bold
     def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, color_lbl='#555555'):
         draw.text((box_x1 + 20, y_pos), label, fill=color_lbl, font=font_lbl)
         val_str = f"${val_float:,.0f}"
@@ -876,7 +870,7 @@ def generar_comprobante(
             x0, y0, x1, y1 = draw.textbbox((0, 0), val_str, font=font_val)
             w_val = x1 - x0
         except Exception:
-            w_val = len(val_str) * 11
+            w_val = len(val_str) * 9
         draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
         
     draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body_bold, font_body, '#333333')
@@ -884,9 +878,9 @@ def generar_comprobante(
     draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', color_lbl='#7C0C3F')
     draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32')
     draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828')
+
     
-    # 5. PIE DE PÁGINA (Dancing Script)
-    # 🌟 CORREGIDO: Removidos emojis para evitar cajas [x] y agregados signos de exclamación nativos sin error de tildes
+    # 5. PIE DE PÁGINA (Dancing Script sin emojis para evitar cajas [x])
     draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
     
     # Retornamos los bytes del JPEG original de alta definición (800x1200) para máxima nitidez
