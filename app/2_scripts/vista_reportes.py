@@ -104,7 +104,7 @@ def obtener_tabla(nombre_tabla):
         log_error("vista_reportes", "obtener_tabla", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame()
 
-def obtener_reporte_asignaciones(ano, lista_meses):
+def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_los_meses=False):
     """Genera reporte paginado de asignaciones del periodo cruzando tablas sin límites."""
     conn = get_db_connection()
     try:
