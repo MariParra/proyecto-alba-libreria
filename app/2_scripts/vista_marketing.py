@@ -72,12 +72,12 @@ def cargar_libros_para_marketing():
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res = conn.table("libros")\
-                .select("libro_id, titulo, autor, precio, precio_original, genero, stock")\
-                .eq("visible_catalogo", True)\
-                .gt("precio", 0)\
-                .order("libro_id")\
-                .range(start, end).execute()
+            res = (conn.table("libros")
+                .select("libro_id, titulo, autor, precio, precio_original, genero, stock")
+                .eq("visible_catalogo", True)
+                .gt("precio", 0)
+                .order("libro_id")
+                .range(start, end).execute())
             if res.data:
                 all_books.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -210,7 +210,7 @@ def mostrar_generador_marketing():
         pad_y = c_pad2.slider("Ajuste Alto (Padding Y):", 5, 80, int(config_default.get("header_pad_y", 20)))
 
         st.markdown("---")
-        # 🌟 MEJORA UX: Alineación de Paleta de Colores en Cuadrícula 3x3 Perfecta con etiquetas concisas
+        # 🌟 MEJORA UX: Paleta de Colores en Cuadrícula 3x3 Perfecta
         st.markdown("#### 🎨 Paleta de Colores (HEX)")
         
         # Fila 1: Lienzo y Tarjetas
@@ -261,7 +261,7 @@ def mostrar_generador_marketing():
         # =========================================================================
         st.markdown("---")
         st.markdown("#### 👁️ Previsualización del Diseño en Tiempo Real")
-        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales con todos sus componentes.")
+        st.caption("Esta tarjeta simula en vivo cómo se renderizarán el género y los libros en tus collages finales.")
         
         import_font_h = font_h_sel.replace(" ", "+")
         import_font_b = font_b_sel.replace(" ", "+")
@@ -461,6 +461,54 @@ def mostrar_generador_marketing():
         st.success(f"¡Se generaron {len(hojas)} hojas con éxito!")
         
         # =========================================================================
+        # 👁️ VER Y DESCARGAR LAS HOJAS GENERADAS INDIVIDUALMENTE (VISTA PREVIA REESTABLECIDA)
+        # =========================================================================
+        with st.expander("Ver y Descargar las Hojas Generadas Individualmente", expanded=True):
+            columnas_render = st.columns(3)
+            for idx, (titulo_hoja, img_obj) in enumerate(hojas):
+                col = columnas_render[idx % 3]
+                with col:
+                    buf = io.BytesIO()
+                    img_obj.save(buf, format="PNG")
+                    img_bytes = buf.getvalue()
+                    
+                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                    # Diseño CSS/HTML Premium
+                    html_str = f"""
+                    <div style="
+                        text-align: center; 
+                        margin-bottom: 12px; 
+                        color: {config_diseno_final.get('color_primary_books', '#7C0C3F')}; 
+                        font-family: 'Helvetica Neue', Arial, sans-serif;
+                        font-size: 18px; 
+                        font-weight: bold; 
+                        letter-spacing: 1px;
+                        text-transform: uppercase;
+                        text-shadow: 1px 1px 2px rgba(0,0,0,0.08);
+                        border-bottom: 2px solid {config_diseno_final.get('color_accent', '#DB2777')};
+                        padding-bottom: 6px;
+                    ">
+                        ✨ {titulo_hoja} ✨
+                    </div>
+                    <div style="
+                        border-radius: 12px; 
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
+                        overflow: hidden; 
+                        margin-bottom: 15px;
+                        transition: transform 0.3s ease-in-out;
+                    " onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                        <img src="data:image/png;base64,{b64_img}" style="width: 100%; display: block;">
+                    </div>
+                    """
+                    st.markdown(html_str, unsafe_allow_html=True)
+                    
+                    st.download_button(
+                        label=f"📥 Descargar {titulo_hoja}", data=img_bytes,
+                        file_name=f"Catalogo_{titulo_hoja.replace(' ', '_').replace('/', '-')}.png",
+                        mime="image/png", key=f"dl_btn_{idx}", use_container_width=True
+                    )
+
+        # =========================================================================
         # 📥 DESCARGA MASIVA COMPLETA (ZIP & PDF)
         # =========================================================================
         st.markdown("---")
@@ -506,3 +554,6 @@ def mostrar_generador_marketing():
                 use_container_width=True,
                 type="primary"
             )
+
+if __name__ == "__main__":
+    mostrar_generador_marketing()
