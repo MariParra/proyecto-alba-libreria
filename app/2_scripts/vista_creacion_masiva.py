@@ -7,6 +7,79 @@ import time
 import re
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
+# ==========================================================
+# 🧹 FUNCIONES AUXILIARES DE LIMPIEZA Y SANEAMIENTO
+# ==========================================================
+
+def normalizar_celda_excel(val):
+    """
+    Normaliza valores leídos de Excel/CSV para eliminar .0 de enteros,
+    manejar de forma segura valores nulos y eliminar espacios en blanco.
+    """
+    if pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    if val_str.lower() in ["nan", "none", "<na>"]:
+        return ""
+    return val_str
+
+def sanear_numero(val):
+    """
+    Sanea de manera robusta valores numéricos con formatos latinoamericanos o de miles
+    (ej: '$15.000', '15,000.50', '15.000,50') convirtiéndolos a flotante.
+    """
+    if pd.isna(val):
+        return 0.0
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    # Remover símbolos de moneda y espacios
+    val_str = re.sub(r'[^\d.,-]', '', val_str)
+    if not val_str:
+        return 0.0
+    
+    # Procesar separadores de miles y decimales
+    if ',' in val_str and '.' in val_str:
+        if val_str.find('.') < val_str.find(','):
+            val_str = val_str.replace('.', '').replace(',', '.')
+        else:
+            val_str = val_str.replace(',', '')
+    elif ',' in val_str:
+        parts = val_str.split(',')
+        if len(parts[-1]) == 3: # separador de miles
+            val_str = val_str.replace(',', '')
+        else:
+            val_str = val_str.replace(',', '.')
+    elif '.' in val_str:
+        parts = val_str.split('.')
+        if len(parts[-1]) == 3: # separador de miles
+            val_str = val_str.replace('.', '')
+            
+    try:
+        return float(val_str)
+    except:
+        return 0.0
+
+def sanear_telefono(valor_celda):
+    """
+    Sanea números de teléfono removiendo espacios en blanco,
+    asegurando código de país +56 de forma inteligente.
+    """
+    # 1. Elimina todo tipo de espacios en blanco
+    tel_limpio = re.sub(r'\s+', '', valor_celda)
+    
+    # 2. Si comienza con '56' pero no con '+', prependemos el '+'
+    if tel_limpio.startswith('56') and not tel_limpio.startswith('+'):
+        tel_limpio = '+' + tel_limpio
+    
+    # 3. Si el número tiene 9 dígitos y empieza con 9 (ej: '985330568'), agregamos '+56'
+    elif len(tel_limpio) == 9 and tel_limpio.startswith('9'):
+        tel_limpio = '+56' + tel_limpio
+        
+    return tel_limpio
+
 # ====================================================
 # --- LÓGICA 1: CREACIÓN DE CLIENTES NUEVOS ---
 # ====================================================
@@ -53,7 +126,12 @@ def procesar_clientes_masivos(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f'Procesando cliente {indice + 1}/{total_filas}...')
         
-        nombre_limpio = limpiar_texto_para_busqueda(fila.get('nombre', ''))
+        # Omitir filas vacías silenciosamente (filas fantasma de Excel)
+        if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+            continue
+
+        nombre_raw = normalizar_celda_excel(fila.get('nombre', ''))
+        nombre_limpio = limpiar_texto_para_busqueda(nombre_raw)
         
         if not nombre_limpio:
             errores.append(f'Fila {indice + 2}: Falta el "nombre". Es obligatorio.')
@@ -61,28 +139,32 @@ def procesar_clientes_masivos(df):
             
         if nombre_limpio in catalogo_actual:
             duplicados += 1
-            errores.append(f'Fila {indice + 2}: El cliente "{nombre_limpio}" ya existe.')
+            errores.append(f'Fila {indice + 2}: El cliente "{nombre_raw}" ya existe.')
             continue
             
         try:
-            status_val = str(fila.get('status', 'CLIENTE REGULAR')).strip().upper()
-            if not status_val or pd.isna(fila.get('status')):
+            status_val = normalizar_celda_excel(fila.get('status')).upper()
+            if not status_val:
                 status_val = 'CLIENTE REGULAR'
                 
-            rut_raw = str(fila.get('rut', '')) if pd.notna(fila.get('rut')) else ''
-            rut_limpio = re.sub(r'[^0-9kK]', '', rut_raw).upper()
+            rut_raw = normalizar_celda_excel(fila.get('rut'))
+            rut_limpio = re.sub(r'[^0-9kK]', '', rut_raw).upper() if rut_raw else None
 
             nuevo_cliente = {
                 'status': status_val,
-                'rut': rut_limpio if rut_limpio else None
+                'rut': rut_limpio
             }
             
             for col in df.columns:
                 if col not in ['status', 'rut'] and pd.notna(fila[col]):
-                    if col in columnas_texto:
-                        nuevo_cliente[col] = limpiar_texto_para_busqueda(str(fila[col]))
-                    else:
-                        nuevo_cliente[col] = fila[col]
+                    valor_celda = normalizar_celda_excel(fila[col])
+                    if valor_celda != '':
+                        if col == 'telefono':
+                            nuevo_cliente[col] = sanear_telefono(valor_celda)
+                        elif col in columnas_texto:
+                            nuevo_cliente[col] = limpiar_texto_para_busqueda(valor_celda)
+                        else:
+                            nuevo_cliente[col] = valor_celda
             
             if 'nombre' in nuevo_cliente:
                 nuevo_cliente['nombre'] = limpiar_texto_para_busqueda(nuevo_cliente['nombre'])
@@ -92,7 +174,7 @@ def procesar_clientes_masivos(df):
             catalogo_actual.append(nombre_limpio)
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-            error_detalle = f'Fallo en creación masiva en Fila {indice + 2} ("{nombre_limpio}"). Detalle: {e}'
+            error_detalle = f'Fallo en creación masiva en Fila {indice + 2} ("{nombre_raw}"). Detalle: {e}'
             
             log_error(
                 vista='vista_creacion_masiva',
@@ -101,10 +183,11 @@ def procesar_clientes_masivos(df):
                 email_usuario=email_usuario
             )
             
-            errores.append(f'Fila {indice + 2} ("{nombre_limpio}"): Error -> {str(e)}')
-            continue
+            errores.append(f'Fila {indice + 2} ("{nombre_raw}"): Error -> {str(e)}')
             
     barra_progreso.progress(1.0, text='¡Carga finalizada!')
+    if exitos > 0:
+        st.cache_data.clear()
     return exitos, duplicados, errores
 
 # ====================================================
@@ -159,8 +242,15 @@ def procesar_nuevos_libros(df):
     for indice, fila in df.iterrows():
         barra_progreso.progress((indice + 1) / total_filas, text=f'Procesando libro {indice + 1} de {total_filas}...')
         
-        titulo_limpio = limpiar_texto_para_busqueda(fila.get('titulo', ''))
-        autor_limpio = limpiar_texto_para_busqueda(fila.get('autor', ''))
+        # Omitir filas vacías silenciosamente
+        if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+            continue
+
+        titulo_raw = normalizar_celda_excel(fila.get('titulo', ''))
+        autor_raw = normalizar_celda_excel(fila.get('autor', ''))
+        
+        titulo_limpio = limpiar_texto_para_busqueda(titulo_raw)
+        autor_limpio = limpiar_texto_para_busqueda(autor_raw)
         
         if not titulo_limpio:
             errores.append(f'Fila {indice + 2}: Falta el "titulo". Es obligatorio.')
@@ -168,7 +258,7 @@ def procesar_nuevos_libros(df):
             
         if (titulo_limpio, autor_limpio) in catalogo_actual:
             duplicados += 1
-            errores.append(f'Fila {indice + 2}: El libro "{titulo_limpio}" ya existe.')
+            errores.append(f'Fila {indice + 2}: El libro "{titulo_raw}" (Autor: {autor_raw}) ya existe.')
             continue
             
         try:
@@ -176,44 +266,50 @@ def procesar_nuevos_libros(df):
             # 1. Columnas de texto
             for col in columnas_texto:
                 if col in fila and pd.notna(fila[col]):
-                    nuevo_libro[col] = limpiar_texto_para_busqueda(str(fila[col]))
+                    valor_celda = normalizar_celda_excel(fila[col])
+                    if valor_celda != '':
+                        nuevo_libro[col] = limpiar_texto_para_busqueda(valor_celda)
             
             # 2. Columnas numéricas
             for col in columnas_numericas:
                 if col in fila and pd.notna(fila[col]):
-                    try:
-                        nuevo_libro[col] = float(fila[col])
-                    except (ValueError, TypeError):
-                        errores.append(f'Fila {indice + 2}: Valor no numérico en columna "{col}". Se omitió.')
-                        continue
+                    val_clean = sanear_numero(fila[col])
+                    nuevo_libro[col] = val_clean
             
             encuadernacion = nuevo_libro.get('encuadernacion', '').upper()
             
             if 'apto_cajita' in fila and pd.notna(fila['apto_cajita']):
-                nuevo_libro['apto_cajita'] = bool(fila['apto_cajita'])
+                val_bool = normalizar_celda_excel(fila['apto_cajita']).lower()
+                nuevo_libro['apto_cajita'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
             else:
                 nuevo_libro['apto_cajita'] = False if encuadernacion == 'TAPA DURA' else True
             
             if 'destacado' in fila and pd.notna(fila['destacado']):
-                nuevo_libro['destacado'] = bool(fila['destacado'])
+                val_bool = normalizar_celda_excel(fila['destacado']).lower()
+                nuevo_libro['destacado'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
             else:
                 nuevo_libro['destacado'] = False
             
             if 'visible_catalogo' in fila and pd.notna(fila['visible_catalogo']):
-                nuevo_libro['visible_catalogo'] = bool(fila['visible_catalogo'])
+                val_bool = normalizar_celda_excel(fila['visible_catalogo']).lower()
+                nuevo_libro['visible_catalogo'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
             else:
                 nuevo_libro['visible_catalogo'] = True
                 
             if 'descuento_inicio_YYYY_MM_DD' in fila and pd.notna(fila['descuento_inicio_YYYY_MM_DD']):
-                try:
-                    nuevo_libro['descuento_inicio'] = pd.to_datetime(fila['descuento_inicio_YYYY_MM_DD']).strftime('%Y-%m-%d')
-                except:
-                    errores.append(f'Fila {indice + 2}: Formato de "descuento_inicio" inválido.')
+                val_fecha = normalizar_celda_excel(fila['descuento_inicio_YYYY_MM_DD'])
+                if val_fecha:
+                    try:
+                        nuevo_libro['descuento_inicio'] = pd.to_datetime(val_fecha).strftime('%Y-%m-%d')
+                    except:
+                        errores.append(f'Fila {indice + 2}: Formato de "descuento_inicio" inválido.')
             if 'descuento_fin_YYYY_MM_DD' in fila and pd.notna(fila['descuento_fin_YYYY_MM_DD']):
-                try:
-                    nuevo_libro['descuento_fin'] = pd.to_datetime(fila['descuento_fin_YYYY_MM_DD']).strftime('%Y-%m-%d')
-                except:
-                    errores.append(f'Fila {indice + 2}: Formato de "descuento_fin" inválido.')
+                val_fecha = normalizar_celda_excel(fila['descuento_fin_YYYY_MM_DD'])
+                if val_fecha:
+                    try:
+                        nuevo_libro['descuento_fin'] = pd.to_datetime(val_fecha).strftime('%Y-%m-%d')
+                    except:
+                        errores.append(f'Fila {indice + 2}: Formato de "descuento_fin" inválido.')
             
             if 'titulo' in nuevo_libro:
                 nuevo_libro['portada_last_updated'] = 'now()'
@@ -223,11 +319,13 @@ def procesar_nuevos_libros(df):
 
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-            error_detalle = f'Fallo en creación masiva en Fila {indice + 2} ("{titulo_limpio}"). Detalle: {e}'
+            error_detalle = f'Fallo en creación masiva en Fila {indice + 2} ("{titulo_raw}"). Detalle: {e}'
             log_error(vista='vista_creacion_masiva', funcion='procesar_nuevos_libros', error=error_detalle, email_usuario=email_usuario)
-            errores.append(f'Fila {indice + 2} ("{titulo_limpio}"): Error -> {str(e)}')
+            errores.append(f'Fila {indice + 2} ("{titulo_raw}"): Error -> {str(e)}')
             
     barra_progreso.progress(1.0, text='¡Carga finalizada!')
+    if exitos > 0:
+        st.cache_data.clear()
     return exitos, duplicados, errores
 
 # ====================================================
@@ -247,6 +345,12 @@ def generar_plantilla_ventas():
 def procesar_ventas_masivas(df):
     conn = get_db_connection()
     exitos, errores = 0, []
+
+    # Omitir filas vacías silenciosamente
+    df = df[~(df.dropna(how='all').empty or df.apply(lambda row: all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in row.values), axis=1))]
+
+    if df.empty:
+        return 0, []
 
     df['Fecha_Venta_YYYY_MM_DD'] = pd.to_datetime(df['Fecha_Venta_YYYY_MM_DD'], errors='coerce')
     filas_con_fecha_invalida = df[df['Fecha_Venta_YYYY_MM_DD'].isna()]
@@ -293,11 +397,14 @@ def procesar_ventas_masivas(df):
             
     map_libros = {limpiar_texto_para_busqueda(l['titulo']): l for l in all_books} if all_books else {}
 
-    df['Valor_Envio'] = pd.to_numeric(df['Valor_Envio'], errors='coerce').fillna(0)
-    df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(1)
-    df['Precio_Unitario'] = pd.to_numeric(df['Precio_Unitario'], errors='coerce').fillna(0)
-    df['Abono'] = pd.to_numeric(df.get('Abono'), errors='coerce').fillna(0)
-    
+    df['Valor_Envio'] = df['Valor_Envio'].apply(sanear_numero).fillna(0)
+    df['Cantidad'] = df['Cantidad'].apply(sanear_numero).fillna(1)
+    df['Precio_Unitario'] = df['Precio_Unitario'].apply(sanear_numero).fillna(0)
+    if 'Abono' in df.columns:
+        df['Abono'] = df['Abono'].apply(sanear_numero).fillna(0)
+    else:
+        df['Abono'] = 0.0
+
     grupos = df.groupby(['Fecha_Venta_YYYY_MM_DD', 'Nombre_Cliente'])
     barra_progreso = st.progress(0, text='Procesando ventas...')
     total_grupos, actual = len(grupos), 0
@@ -369,6 +476,8 @@ def procesar_ventas_masivas(df):
             errores.append(f'Error en Venta de {cliente_nombre} ({fecha_dt.strftime("%Y-%m-%d")}): {str(e)}')
 
     barra_progreso.progress(1.0, text='¡Carga finalizada!')
+    if exitos > 0:
+        st.cache_data.clear()
     return exitos, errores
 
 # ====================================================
@@ -430,9 +539,15 @@ def procesar_suscripciones_masivas(df):
     conn = get_db_connection()
     actualizados, creados, errores = 0, 0, []
 
-    df.dropna(subset=['valor_suscripcion'], inplace=True)
-    df['valor_suscripcion'] = pd.to_numeric(df['valor_suscripcion'], errors='coerce')
-    df.dropna(subset=['valor_suscripcion'], inplace=True)
+    # Omitir filas vacías silenciosamente
+    df = df[~(df.dropna(how='all').empty or df.apply(lambda row: all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in row.values), axis=1))]
+
+    if df.empty:
+        return 0, 0, []
+
+    df['valor_suscripcion'] = df['valor_suscripcion'].apply(sanear_numero)
+    # Filtramos filas donde valor_suscripcion sea 0 o inválido
+    df = df[df['valor_suscripcion'] > 0]
 
     barra_progreso = st.progress(0, text='Procesando suscripciones...')
     total_filas = len(df)
@@ -440,19 +555,28 @@ def procesar_suscripciones_masivas(df):
     for i, fila in df.iterrows():
         barra_progreso.progress((i + 1) / total_filas, text=f'Procesando cliente {i+1}/{total_filas}...')
         try:
-            cliente_id = int(fila['cliente_id'])
+            if 'cliente_id' not in fila or pd.isna(fila['cliente_id']):
+                errores.append(f'Fila {i+2}: Falta la columna "cliente_id".')
+                continue
+                
+            cliente_id_str = normalizar_celda_excel(fila['cliente_id'])
+            if not cliente_id_str:
+                errores.append(f'Fila {i+2}: El "cliente_id" es vacío o inválido.')
+                continue
+                
+            cliente_id = int(float(cliente_id_str))
             valor = float(fila['valor_suscripcion'])
-            fecha_pago = str(fila['fecha_pago']).strip() if ('fecha_pago' in fila and pd.notna(fila['fecha_pago'])) else None
-            metodo_entrega = str(fila['metodo_entrega']).strip().upper() if ('metodo_entrega' in fila and pd.notna(fila['metodo_entrega'])) else None
-            generos_preferencia = str(fila['generos_preferencia']).strip() if ('generos_preferencia' in fila and pd.notna(fila['generos_preferencia'])) else None
+            fecha_pago = normalizar_celda_excel(fila.get('fecha_pago'))
+            metodo_entrega = normalizar_celda_excel(fila.get('metodo_entrega')).upper()
+            generos_preferencia = normalizar_celda_excel(fila.get('generos_preferencia'))
 
             res = conn.table('suscripciones').select('suscripcion_id').eq('cliente_id', cliente_id).execute()
             datos = {
                 'cliente_id': cliente_id, 
                 'valor_suscripcion': valor,
-                'fecha_pago': fecha_pago,
-                'metodo_entrega': metodo_entrega,
-                'generos_preferencia': generos_preferencia
+                'fecha_pago': fecha_pago if fecha_pago else None,
+                'metodo_entrega': metodo_entrega if metodo_entrega else None,
+                'generos_preferencia': generos_preferencia if generos_preferencia else None
             }
 
             if res.data:
@@ -465,6 +589,8 @@ def procesar_suscripciones_masivas(df):
             errores.append(f'Fila {i+2}: Error con cliente ID {fila.get("cliente_id", "N/A")} -> {str(e)}')
 
     barra_progreso.progress(1.0, text='¡Carga finalizada!')
+    if actualizados > 0 or creados > 0:
+        st.cache_data.clear()
     return actualizados, creados, errores
 
 # ====================================================
@@ -488,6 +614,12 @@ def procesar_costos_masivos(df):
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     exitos, errores = 0, []
     
+    # Omitir filas vacías silenciosamente
+    df = df[~(df.dropna(how='all').empty or df.apply(lambda row: all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in row.values), axis=1))]
+
+    if df.empty:
+        return 0, []
+
     barra_progreso = st.progress(0, text='Iniciando procesamiento de costos...')
     total_filas = len(df)
     
@@ -516,7 +648,7 @@ def procesar_costos_masivos(df):
             continue
             
         try:
-            monto_clean = float(monto_val)
+            monto_clean = sanear_numero(monto_val)
             if monto_clean <= 0:
                 errores.append(f'Fila {i+2}: El monto debe ser un valor mayor a $0.')
                 continue
@@ -540,6 +672,8 @@ def procesar_costos_masivos(df):
             continue
             
     barra_progreso.progress(1.0, text='¡Carga finalizada!')
+    if exitos > 0:
+        st.cache_data.clear()
     return exitos, errores
 
 # ==========================================
@@ -558,10 +692,10 @@ def mostrar_creacion_masiva():
         with st.container(border=True):
             st.markdown('### Paso 1: Descarga la Plantilla de Clientes')
             st.info(
-                'ℹ/ **Formato Esperado en Excel:**\n'
-                '- **nombre:** (Obligatorio) No importa si usas mayúsculas o tildes, el sistema lo limpiará automáticamente. Se usa para evitar duplicados.\n'
-                '- **email, telefono, direccion, instagram:** (Opcionales) Se guardarán tal como los escribas.\n'
-                '- **rut:** (Recomendado) RUT del cliente para facturación e identificador único.\n'
+                'ℹ **Formato Esperado en Excel:**\\n'
+                '- **nombre:** (Obligatorio) No importa si usas mayúsculas o tildes, el sistema lo limpiará automáticamente. Se usa para evitar duplicados.\\n'
+                '- **email, telefono, direccion, instagram:** (Opcionales) Se guardarán tal como los escribas.\\n'
+                '- **rut:** (Recomendado) RUT del cliente para facturación e identificador único.\\n'
                 '- **status:** (Opcional) Por defecto "CLIENTE REGULAR". Escribe "SUSCRITO" para miembros del club.'
             )
             st.download_button(
@@ -605,13 +739,13 @@ def mostrar_creacion_masiva():
         with st.container(border=True):
             st.markdown('### Paso 1: Descarga la Plantilla de Libros')
             st.info(
-                'ℹ/ **Formato Esperado en Excel:**\n'
-                '- **titulo y autor:** (Obligatorios) El sistema los limpiará (mayúsculas, sin tilde) y los usará combinados para detectar si el libro ya existe.\n'
-                '- **genero, editorial, encuadernacion:** (Opcionales) Texto libre.\n'
-                '- **stock, precio, precio_original, costo:** (Obligatorios numéricos) Deben ser números puros. **NO escribas** el signo "$" ni letras. Ej: Escribe "15000", no "$15.000".\n'
-                '- **apto_cajita:** (Opcional) Escribe `TRUE` o `FALSE`. Si lo dejas en blanco, se detectará automáticamente.\n'
-                '- **destacado:** (Opcional) Escribe `TRUE` para que aparezca en el carrusel de destacados. Por defecto es `FALSE`.\n'
-                '- **visible_catalogo:** (Opcional) Escribe `FALSE` para ocultar el libro del catálogo público. Por defecto es `TRUE`.\n'
+                'ℹ **Formato Esperado en Excel:**\\n'
+                '- **titulo y autor:** (Obligatorios) El sistema los limpiará (mayúsculas, sin tilde) y los usará combinados para detectar si el libro ya existe.\\n'
+                '- **genero, editorial, encuadernacion:** (Opcionales) Texto libre.\\n'
+                '- **stock, precio, precio_original, costo:** (Obligatorios numéricos) Deben ser números puros. **NO escribas** el signo "$" ni letras. Ej: Escribe "15000", no "$15.000".\\n'
+                '- **apto_cajita:** (Opcional) Escribe `TRUE` o `FALSE`. Si lo dejas en blanco, se detectará automáticamente.\\n'
+                '- **destacado:** (Opcional) Escribe `TRUE` para que aparezca en el carrusel de destacados. Por defecto es `FALSE`.\\n'
+                '- **visible_catalogo:** (Opcional) Escribe `FALSE` para ocultar el libro del catálogo público. Por defecto es `TRUE`.\\n'
                 '- **descuento_inicio_YYYY_MM_DD / descuento_fin_YYYY_MM_DD:** (Opcionales) Fechas de inicio y fin del descuento comercial del libro.'
             )
             st.download_button(
@@ -655,12 +789,12 @@ def mostrar_creacion_masiva():
                 'que vas a reportar YA EXISTAN en tu base de datos. Si un cliente o libro no existe, la fila será rechazada.'
             )
             st.info(
-                'ℹ/ **Formato Esperado en Excel:**\n'
-                '- **Fecha_Venta_YYYY_MM_DD:** El sistema soporta formatos normales (ej: 25/08/2026, 2026-08-25). Celdas vacías o texto inválido se omitirán.\n'
-                '- **Nombre_Cliente y Titulo_Libro:** Deben coincidir con los nombres en tu base de datos (no te preocupes por tildes o mayúsculas).\n'
-                '- **Cantidad, Precio_Unitario, Valor_Envio, Abono:** Deben ser **números puros**, sin símbolos.\n'
-                '- **Estado:** Escribe estados como "FINALIZADO" o "PENDIENTE PAGO" (por defecto será "FINALIZADO").\n'
-                '- **Tipo_Cobro_Envio:** (Opcional) Indica si el envío es cobrado, gratis o diferido.\n'
+                'ℹ **Formato Esperado en Excel:**\\n'
+                '- **Fecha_Venta_YYYY_MM_DD:** El sistema soporta formatos normales (ej: 25/08/2026, 2026-08-25). Celdas vacías o texto inválido se omitirán.\\n'
+                '- **Nombre_Cliente y Titulo_Libro:** Deben coincidir con los nombres en tu base de datos (no te preocupes por tildes o mayúsculas).\\n'
+                '- **Cantidad, Precio_Unitario, Valor_Envio, Abono:** Deben ser **números puros**, sin símbolos.\\n'
+                '- **Estado:** Escribe estados como "FINALIZADO" o "PENDIENTE PAGO" (por defecto será "FINALIZADO").\\n'
+                '- **Tipo_Cobro_Envio:** (Opcional) Indica si el envío es cobrado, gratis o diferido.\\n'
                 '💡 **Tip UX:** Si una clienta compró 3 libros el mismo día, usa 3 filas en el Excel con la misma fecha y cliente. El sistema las agrupará en una sola Venta automáticamente.'
             )
             st.download_button(
@@ -701,10 +835,10 @@ def mostrar_creacion_masiva():
         with st.container(border=True):
             st.markdown('### Paso 1: Descarga la Plantilla Inteligente')
             st.info(
-                'La plantilla se generará automáticamente con el ID y Nombre de todos tus clientes actuales.\n\n'
-                'ℹ/ **Formato Esperado en Excel:**\n'
-                '- **No modifiques** las columnas `cliente_id` ni `nombre`.\n'
-                '- **valor_suscripcion:** Escribe el precio como un número puro (ej: 18500), sin puntos, comas, ni signos de $.\n'
+                'La plantilla se generará automáticamente con el ID y Nombre de todos tus clientes actuales.\\n\\n'
+                'ℹ **Formato Esperado en Excel:**\\n'
+                '- **No modifiques** las columnas `cliente_id` ni `nombre`.\\n'
+                '- **valor_suscripcion:** Escribe el precio como un número puro (ej: 18500), sin puntos, comas, ni signos de $.\\n'
                 '- **fecha_pago / metodo_entrega / generos_preferencia:** (Opcionales) Rellena los datos de la membresía del cliente.'
             )
             st.download_button(
@@ -749,10 +883,10 @@ def mostrar_creacion_masiva():
         with st.container(border=True):
             st.markdown('### Paso 1: Descarga la Plantilla de Costos')
             st.info(
-                'ℹ/ **Formato Esperado en Excel:**\n'
-                '- **fecha_ocurrencia_YYYY_MM_DD:** (Obligatorio) Formatos estándar (ej: 25/08/2026, 2026-08-25). Celdas vacías se omitirán.\n'
-                '- **tipo_costo:** (Obligatorio) Tipo o categoría de gasto (ej: Contadora, Publicidad, Insumos, Personal).\n'
-                '- **monto:** (Obligatorio numérico) Escribe números puros sin letras ni símbolos (ej: escribe "150000", no "$150.000").\n'
+                'ℹ **Formato Esperado en Excel:**\\n'
+                '- **fecha_ocurrencia_YYYY_MM_DD:** (Obligatorio) Formatos estándar (ej: 25/08/2026, 2026-08-25). Celdas vacías se omitirán.\\n'
+                '- **tipo_costo:** (Obligatorio) Tipo o categoría de gasto (ej: Contadora, Publicidad, Insumos, Personal).\\n'
+                '- **monto:** (Obligatorio numérico) Escribe números puros sin letras ni símbolos (ej: escribe "150000", no "$150.000").\\n'
                 '- **comentario:** (Opcional) Texto explicativo del costo.'
             )
             st.download_button(
@@ -781,7 +915,6 @@ def mostrar_creacion_masiva():
                             if exitos_cos > 0:
                                 st.balloons()
                                 st.success('¡Registros de costos importados exitosamente!')
-                                st.cache_data.clear()
                             if errores_cos:
                                 with st.expander('Ver lista de conflictos'):
                                     for err in errores_cos: st.write(err)
