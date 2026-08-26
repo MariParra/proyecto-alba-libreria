@@ -5,6 +5,24 @@ import re
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 # ==========================================================
+# 🧹 FUNCIONES AUXILIARES DE LIMPIEZA
+# ==========================================================
+
+def normalizar_celda_excel(val):
+    """
+    Normaliza valores leídos de Excel/CSV para eliminar .0 de enteros,
+    manejar de forma segura valores nulos y eliminar espacios en blanco.
+    """
+    if pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    if val_str.lower() in ["nan", "none", "<na>"]:
+        return ""
+    return val_str
+
+# ==========================================================
 # 🛠️ FUNCIONES DE GENERACIÓN DE PLANTILLAS (EXCEL)
 # ==========================================================
 
@@ -154,7 +172,16 @@ def procesar_actualizacion_libros(df):
     columnas_bool = ['apto_cajita', 'destacado', 'visible_catalogo']
     columnas_fecha = ['descuento_inicio', 'descuento_fin']
 
-    ids_libros = df['libro_id'].dropna().astype(int).tolist()
+    # Robustez para obtener IDs de libros existentes
+    ids_libros = []
+    for val in df['libro_id'].dropna():
+        try:
+            val_norm = normalizar_celda_excel(val)
+            if val_norm:
+                ids_libros.append(int(float(val_norm)))
+        except:
+            pass
+
     df_original = pd.DataFrame()
     if ids_libros:
         original_data = []
@@ -172,27 +199,36 @@ def procesar_actualizacion_libros(df):
 
     for i, fila in df.iterrows():
         try:
+            # Omitir filas vacías silenciosamente
+            if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                continue
+
             if 'libro_id' not in fila or pd.isna(fila['libro_id']):
                 continue
             
-            libro_id = int(fila['libro_id'])
+            libro_id_str = normalizar_celda_excel(fila['libro_id'])
+            if not libro_id_str:
+                continue
+                
+            libro_id = int(float(libro_id_str))
             datos_update = {}
             
             for col in df.columns:
                 if col in fila and pd.notna(fila[col]) and col != 'libro_id':
-                    if col in columnas_texto:
-                        datos_update[col] = limpiar_texto_para_busqueda(str(fila[col]))
-                    elif col == 'stock':
-                        datos_update[col] = int(float(fila[col]))
-                    elif col in columnas_float:
-                        datos_update[col] = float(fila[col])
-                    elif col in columnas_bool:
-                        datos_update[col] = bool(fila[col])
-                    elif col in columnas_fecha:
-                        val_str = str(fila[col]).strip()
-                        if val_str and val_str.lower() != 'nan':
+                    valor_celda = normalizar_celda_excel(fila[col])
+                    if valor_celda != '':
+                        if col in columnas_texto:
+                            datos_update[col] = limpiar_texto_para_busqueda(valor_celda)
+                        elif col == 'stock':
+                            datos_update[col] = int(float(valor_celda))
+                        elif col in columnas_float:
+                            datos_update[col] = float(valor_celda)
+                        elif col in columnas_bool:
+                            val_lower = valor_celda.lower().strip()
+                            datos_update[col] = val_lower in ['true', '1', 'si', 'sí', 'yes', 'y']
+                        elif col in columnas_fecha:
                             try:
-                                datos_update[col] = pd.to_datetime(val_str).strftime('%Y-%m-%d')
+                                datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
                             except:
                                 errores.append(f'Fila {i+2}: Formato de fecha inválido en {col}.')
 
@@ -208,8 +244,9 @@ def procesar_actualizacion_libros(df):
                     datos_update['precio'] = nuevo_precio_orig
             
             if 'precio' in fila and pd.notna(fila['precio']):
-                if 'precio' not in datos_update or datos_update['precio'] != float(fila['precio']):
-                    datos_update['precio'] = float(fila['precio'])
+                precio_val = normalizar_celda_excel(fila['precio'])
+                if precio_val != '' and ('precio' not in datos_update or datos_update['precio'] != float(precio_val)):
+                    datos_update['precio'] = float(precio_val)
 
             if datos_update:
                 conn.table('libros').update(datos_update).eq('libro_id', libro_id).execute()
@@ -232,17 +269,26 @@ def procesar_actualizacion_clientes(df):
 
     for i, fila in df.iterrows():
         try:
+            # Omitir filas vacías silenciosamente
+            if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                continue
+
             if 'cliente_id' not in fila or pd.isna(fila['cliente_id']):
                 errores.append(f'Fila {i+2}: Falta la columna "cliente_id".')
                 continue
             
-            cliente_id = int(fila['cliente_id'])
+            cliente_id_str = normalizar_celda_excel(fila['cliente_id'])
+            if not cliente_id_str:
+                errores.append(f'Fila {i+2}: El "cliente_id" es vacío o inválido.')
+                continue
+                
+            cliente_id = int(cliente_id_str)
             datos_update = {}
             
             for col in columnas_permitidas:
                 if col in fila and pd.notna(fila[col]):
-                    valor_celda = str(fila[col]).strip()
-                    if valor_celda.lower() != 'nan' and valor_celda != '':
+                    valor_celda = normalizar_celda_excel(fila[col])
+                    if valor_celda != '':
                         if col == 'rut':
                             # RUT Limpio (UPPER y sin caracteres especiales)
                             datos_update[col] = re.sub(r'[^0-9kK]', '', valor_celda).upper()
@@ -267,21 +313,33 @@ def procesar_actualizacion_costos(df):
 
     for i, fila in df.iterrows():
         try:
+            # Omitir filas vacías silenciosamente
+            if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
+                continue
+
             if 'costo_id' not in fila or pd.isna(fila['costo_id']):
                 errores.append(f'Fila {i+2}: Falta la columna obligatoria "costo_id".')
                 continue
             
-            costo_id = int(float(fila['costo_id']))
+            costo_id_str = normalizar_celda_excel(fila['costo_id'])
+            if not costo_id_str:
+                errores.append(f'Fila {i+2}: El "costo_id" es vacío o inválido.')
+                continue
+                
+            costo_id = int(float(costo_id_str))
             datos_update = {}
             
             for col in columnas_permitidas:
                 if col in fila and pd.notna(fila[col]):
-                    valor_celda = str(fila[col]).strip()
-                    if valor_celda.lower() != 'nan' and valor_celda != '':
+                    valor_celda = normalizar_celda_excel(fila[col])
+                    if valor_celda != '':
                         if col == 'monto':
                             datos_update[col] = float(valor_celda)
                         elif col == 'fecha_ocurrencia':
-                            datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
+                            try:
+                                datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
+                            except:
+                                errores.append(f'Fila {i+2}: Formato de fecha de costo inválido.')
                         else:
                             datos_update[col] = limpiar_texto_para_busqueda(valor_celda).upper() if col == 'tipo_costo' else valor_celda
 
@@ -344,13 +402,12 @@ def mostrar_actualizacion_masiva():
                         if updates > 0:
                             st.success(f'✅ ¡Se actualizaron {updates} libros exitosamente!')
                             st.balloons()
+                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            
                         if errores:
                             st.error(f'⚠️ Se presentaron {len(errores)} errores durante la actualización:')
                             for err in errores: st.write(err)
                         
-                        if updates > 0 and not errores:
-                            st.cache_data.clear()
-                            
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
@@ -407,13 +464,12 @@ def mostrar_actualizacion_masiva():
                         if updates_cli > 0:
                             st.success(f'✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!')
                             st.balloons()
+                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            
                         if errores_cli:
                             st.error(f'⚠️ Se presentaron {len(errores_cli)} errores durante la actualización:')
                             for err in errores_cli: st.write(err)
                         
-                        if updates_cli > 0 and not errores_cli:
-                            st.cache_data.clear()
-                            
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
@@ -470,13 +526,12 @@ def mostrar_actualizacion_masiva():
                         if updates_cos > 0:
                             st.success(f'✅ ¡Se actualizaron {updates_cos} registros de costos exitosamente!')
                             st.balloons()
+                            st.cache_data.clear()  # Limpieza de caché garantizada siempre que existan actualizaciones exitosas
+                            
                         if errores_cos:
                             st.error(f'⚠️ Se presentaron {len(errores_cos)} errores durante la actualización:')
                             for err in errores_cos: st.write(err)
                         
-                        if updates_cos > 0 and not errores_cos:
-                            st.cache_data.clear()
-                            
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
