@@ -644,19 +644,48 @@ def find_any_system_ttf():
             
     return None
 
-def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
-    # 1. Intentar descargar desde Google Fonts
-    ruta_google = asegurar_fuente_comprobante(nombre_fuente)
-    if ruta_google and os.path.exists(ruta_google):
+def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False):
+    # 1. Determinar variante de estilo
+    estilo = "Regular"
+    if bold and italic:
+        estilo = "BoldItalic"
+    elif bold:
+        estilo = "Bold"
+    elif italic:
+        estilo = "Italic"
+        
+    nombre_limpio = "Lato"  # Forzamos el uso de Lato de forma corporativa
+    ruta_local = os.path.join("assets", f"{nombre_limpio}-{estilo}.ttf")
+    
+    # Intentar descargar la variante si no existe en local
+    if not os.path.exists(ruta_local):
+        url = f"https://raw.githubusercontent.com/google/fonts/main/ofl/lato/{nombre_limpio}-{estilo}.ttf"
         try:
-            return ImageFont.truetype(ruta_google, tamanio)
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                with open(ruta_local, "wb") as f:
+                    f.write(response.read())
         except Exception:
             pass
 
-    # 2. 🌟 BYPASS ULTRA-SEGURO: Carga local desde Matplotlib (100% compatible con tildes)
+    if os.path.exists(ruta_local):
+        try:
+            return ImageFont.truetype(ruta_local, tamanio)
+        except Exception:
+            pass
+
+    # 2. 🌟 BYPASS ULTRA-SEGURO: Carga local desde Matplotlib con el estilo correspondiente
     try:
         import matplotlib
-        mpl_ttf = os.path.join(matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")
+        font_name_mpl = "DejaVuSans.ttf"
+        if bold and italic:
+            font_name_mpl = "DejaVuSans-BoldOblique.ttf"
+        elif bold:
+            font_name_mpl = "DejaVuSans-Bold.ttf"
+        elif italic:
+            font_name_mpl = "DejaVuSans-Oblique.ttf"
+            
+        mpl_ttf = os.path.join(matplotlib.get_data_path(), "fonts", "ttf", font_name_mpl)
         if os.path.exists(mpl_ttf):
             return ImageFont.truetype(mpl_ttf, tamanio)
     except Exception:
@@ -664,10 +693,8 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False):
 
     # 3. Candidatas locales estándar
     candidatas = [
-        "assets/Lato.ttf",
-        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
+        os.path.join("assets", "Lato-Regular.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf" if italic else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "Arial.ttf"
     ]
     for ruta in candidatas:
@@ -743,12 +770,13 @@ def generar_comprobante(
     draw = ImageDraw.Draw(img)
     
     # Fuentes Premium de Google Fonts
-    font_title = obtener_fuente_comprobante("Dancing Script", 36, bold=True)
-    font_section = obtener_fuente_comprobante("Dancing Script", 24, bold=True)
+    font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
+    font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
     font_body = obtener_fuente_comprobante("Lato", 15)
     font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
     font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_footer = obtener_fuente_comprobante("Dancing Script", 22, bold=True)
+    font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
+
     
     # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
     x_margin = 130
