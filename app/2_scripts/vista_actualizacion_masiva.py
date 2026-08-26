@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
 # ==========================================================
@@ -10,19 +11,20 @@ from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 def generar_plantilla_actualizacion_libros():
     """
     Genera una plantilla Excel con TODOS los libros y sus datos actuales,
-    incluyendo los nuevos campos booleanos, superando la limitación de 1000.
+    incluyendo los nuevos campos del esquema (descuentos, visible_catalogo, etc.), superando la limitación de 1000.
     """
     conn = get_db_connection()
     try:
         all_books = []
         chunk_size = 1000
-        # Bucle dinámico ilimitado (hasta 100.000 libros)
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res = conn.table("libros").select(
-                "libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo"
-            ).order("libro_id").range(start, end).execute()
+            res = (conn.table('libros')
+                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin')
+                .order('libro_id')
+                .range(start, end)
+                .execute())
             
             if res.data:
                 all_books.extend(res.data)
@@ -45,12 +47,12 @@ def generar_plantilla_actualizacion_libros():
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
-            vista="vista_actualizacion_masiva", 
-            funcion="generar_plantilla_actualizacion_libros",
+            vista='vista_actualizacion_masiva', 
+            funcion='generar_plantilla_actualizacion_libros',
             error=e,
             email_usuario=email_usuario
         )
-        st.error(f"Error generando plantilla de libros: {e}")
+        st.error(f'Error generando plantilla de libros: {e}')
         return None
 
 def generar_plantilla_actualizacion_clientes():
@@ -59,14 +61,14 @@ def generar_plantilla_actualizacion_clientes():
     try:
         all_clients = []
         chunk_size = 1000
-        # Bucle dinámico ilimitado (hasta 100.000 clientes)
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res = conn.table("clientes")\
-                .select("cliente_id, nombre, rut, email, telefono, instagram, direccion, status")\
-                .order("cliente_id")\
-                .range(start, end).execute()
+            res = (conn.table('clientes')
+                .select('cliente_id, nombre, rut, email, telefono, instagram, direccion, status')
+                .order('cliente_id')
+                .range(start, end)
+                .execute())
             if res.data:
                 all_clients.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -88,28 +90,28 @@ def generar_plantilla_actualizacion_clientes():
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
-            vista="vista_actualizacion_masiva", 
-            funcion="generar_plantilla_actualizacion_clientes",
+            vista='vista_actualizacion_masiva', 
+            funcion='generar_plantilla_actualizacion_clientes',
             error=e,
             email_usuario=email_usuario
         )
-        st.error(f"Error generando plantilla de clientes: {e}")
+        st.error(f'Error generando plantilla de clientes: {e}')
         return None
 
 def generar_plantilla_actualizacion_costos():
-    """Genera una plantilla Excel con TODOS los costos no de ventas actuales, superando la limitación de 1000 de Supabase."""
+    """Genera una plantilla Excel con TODOS los costos no de ventas actuales, superando la limitación de 1000."""
     conn = get_db_connection()
     try:
         all_costs = []
         chunk_size = 1000
-        # Bucle dinámico seguro (hasta 100.000 costos) con bypass
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            res = conn.table("costos_no_ventas")\
-                .select("costo_id, fecha_ocurrencia, tipo_costo, monto, comentario, creado_por")\
-                .order("costo_id")\
-                .range(start, end).execute()
+            res = (conn.table('costos_no_ventas')
+                .select('costo_id, fecha_ocurrencia, tipo_costo, monto, comentario, creado_por')
+                .order('costo_id')
+                .range(start, end)
+                .execute())
             if res.data:
                 all_costs.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -131,12 +133,12 @@ def generar_plantilla_actualizacion_costos():
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
-            vista="vista_actualizacion_masiva", 
-            funcion="generar_plantilla_actualizacion_costos",
+            vista='vista_actualizacion_masiva', 
+            funcion='generar_plantilla_actualizacion_costos',
             error=e,
             email_usuario=email_usuario
         )
-        st.error(f"Error generando plantilla de costos: {e}")
+        st.error(f'Error generando plantilla de costos: {e}')
         return None
 
 # ==========================================================
@@ -150,15 +152,15 @@ def procesar_actualizacion_libros(df):
     columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
     columnas_float = ['precio', 'costo', 'precio_original']
     columnas_bool = ['apto_cajita', 'destacado', 'visible_catalogo']
+    columnas_fecha = ['descuento_inicio', 'descuento_fin']
 
-    # Cargar datos originales para la lógica de precios
     ids_libros = df['libro_id'].dropna().astype(int).tolist()
     df_original = pd.DataFrame()
     if ids_libros:
         original_data = []
         for idx in range(0, len(ids_libros), 1000):
             chunk = ids_libros[idx:idx + 1000]
-            res_original = conn.table("libros").select("libro_id, precio, precio_original").in_("libro_id", chunk).execute()
+            res_original = conn.table('libros').select('libro_id, precio, precio_original').in_('libro_id', chunk).execute()
             if res_original.data:
                 original_data.extend(res_original.data)
                 
@@ -186,6 +188,13 @@ def procesar_actualizacion_libros(df):
                         datos_update[col] = float(fila[col])
                     elif col in columnas_bool:
                         datos_update[col] = bool(fila[col])
+                    elif col in columnas_fecha:
+                        val_str = str(fila[col]).strip()
+                        if val_str and val_str.lower() != 'nan':
+                            try:
+                                datos_update[col] = pd.to_datetime(val_str).strftime('%Y-%m-%d')
+                            except:
+                                errores.append(f'Fila {i+2}: Formato de fecha inválido en {col}.')
 
             # Lógica de Recálculo de Precios
             if 'precio_original' in datos_update and not df_original.empty and libro_id in df_original.index:
@@ -203,10 +212,10 @@ def procesar_actualizacion_libros(df):
                     datos_update['precio'] = float(fila['precio'])
 
             if datos_update:
-                conn.table("libros").update(datos_update).eq("libro_id", libro_id).execute()
+                conn.table('libros').update(datos_update).eq('libro_id', libro_id).execute()
                 updates += 1
         except Exception as e:
-            errores.append(f"Fila {i+2} (ID Libro: {fila.get('libro_id', 'N/A')}): {str(e)}")
+            errores.append(f'Fila {i+2} (ID Libro: {fila.get("libro_id", "N/A")}): {str(e)}')
             
     return updates, errores
 
@@ -224,7 +233,7 @@ def procesar_actualizacion_clientes(df):
     for i, fila in df.iterrows():
         try:
             if 'cliente_id' not in fila or pd.isna(fila['cliente_id']):
-                errores.append(f"Fila {i+2}: Falta la columna 'cliente_id'.")
+                errores.append(f'Fila {i+2}: Falta la columna "cliente_id".')
                 continue
             
             cliente_id = int(fila['cliente_id'])
@@ -234,13 +243,17 @@ def procesar_actualizacion_clientes(df):
                 if col in fila and pd.notna(fila[col]):
                     valor_celda = str(fila[col]).strip()
                     if valor_celda.lower() != 'nan' and valor_celda != '':
-                        datos_update[col] = valor_celda
+                        if col == 'rut':
+                            # RUT Limpio (UPPER y sin caracteres especiales)
+                            datos_update[col] = re.sub(r'[^0-9kK]', '', valor_celda).upper()
+                        else:
+                            datos_update[col] = valor_celda
 
             if datos_update:
-                conn.table("clientes").update(datos_update).eq("cliente_id", cliente_id).execute()
+                conn.table('clientes').update(datos_update).eq('cliente_id', cliente_id).execute()
                 updates += 1
         except Exception as e:
-            errores.append(f"Fila {i+2} (ID Cliente: {fila.get('cliente_id', 'N/A')}): {str(e)}")
+            errores.append(f'Fila {i+2} (ID Cliente: {fila.get("cliente_id", "N/A")}): {str(e)}')
             
     return updates, errores
 
@@ -255,7 +268,7 @@ def procesar_actualizacion_costos(df):
     for i, fila in df.iterrows():
         try:
             if 'costo_id' not in fila or pd.isna(fila['costo_id']):
-                errores.append(f"Fila {i+2}: Falta la columna obligatoria 'costo_id'.")
+                errores.append(f'Fila {i+2}: Falta la columna obligatoria "costo_id".')
                 continue
             
             costo_id = int(float(fila['costo_id']))
@@ -268,15 +281,15 @@ def procesar_actualizacion_costos(df):
                         if col == 'monto':
                             datos_update[col] = float(valor_celda)
                         elif col == 'fecha_ocurrencia':
-                            datos_update[col] = pd.to_datetime(valor_celda).strftime("%Y-%m-%d")
+                            datos_update[col] = pd.to_datetime(valor_celda).strftime('%Y-%m-%d')
                         else:
                             datos_update[col] = limpiar_texto_para_busqueda(valor_celda).upper() if col == 'tipo_costo' else valor_celda
 
             if datos_update:
-                conn.table("costos_no_ventas").update(datos_update).eq("costo_id", costo_id).execute()
+                conn.table('costos_no_ventas').update(datos_update).eq('costo_id', costo_id).execute()
                 updates += 1
         except Exception as e:
-            errores.append(f"Fila {i+2} (ID Costo: {fila.get('costo_id', 'N/A')}): {str(e)}")
+            errores.append(f'Fila {i+2} (ID Costo: {fila.get("costo_id", "N/A")}): {str(e)}')
             
     return updates, errores
 
@@ -289,50 +302,50 @@ def mostrar_actualizacion_masiva():
     st.markdown("Modifica registros de forma masiva subiendo un archivo Excel/CSV. **La columna ID es obligatoria** para aplicar los cambios.")
     
     tab_libros, tab_clientes, tab_costos = st.tabs([
-        "📚 Actualizar Libros", "👥 Actualizar Clientes", "💸 Actualizar Costos"
+        '📚 Actualizar Libros', '👥 Actualizar Clientes', '💸 Actualizar Costos'
     ])
     
     # ---------------- TAB: LIBROS ----------------
     with tab_libros:
-        st.markdown("### 1. Descarga el Inventario Actual")
-        st.caption("Obtén el archivo Excel con tus libros actuales, modifícalo en tu equipo y súbelo abajo.")
+        st.markdown('### 1. Descarga el Inventario Actual')
+        st.caption('Obtén el archivo Excel con tus libros actuales, modifícalo en tu equipo y súbelo abajo.')
         
         try:
             plantilla_libros = generar_plantilla_actualizacion_libros()
             if plantilla_libros:
                 st.download_button(
-                    label="📥 Descargar Inventario de Libros (.xlsx)",
+                    label='📥 Descargar Inventario de Libros (.xlsx)',
                     data=plantilla_libros,
-                    file_name="inventario_libros_actualizar.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    file_name='inventario_libros_actualizar.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     use_container_width=True
                 )
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
-                vista="vista_actualizacion_masiva", 
-                funcion="generar_plantilla_actualizacion_libros",
+                vista='vista_actualizacion_masiva', 
+                funcion='generar_plantilla_actualizacion_libros',
                 error=e,
                 email_usuario=email_usuario
             )
-            st.error(f"Error al generar la plantilla de libros: {e}")
+            st.error(f'Error al generar la plantilla de libros: {e}')
             
-        st.markdown("---")
-        st.markdown("### 2. Sube tus Modificaciones")
-        archivo_libros = st.file_uploader("Sube el archivo Excel modificado de Libros", type=['xlsx', 'csv'], key="up_libros")
+        st.markdown('---')
+        st.markdown('### 2. Sube tus Modificaciones')
+        archivo_libros = st.file_uploader('Sube el archivo Excel modificado de Libros', type=['xlsx', 'csv'], key='up_libros')
         
         if archivo_libros:
-            if st.button("🚀 Aplicar Cambios en Libros", type="primary", use_container_width=True):
-                with st.spinner("Actualizando catálogo de libros en Supabase..."):
+            if st.button('🚀 Aplicar Cambios en Libros', type='primary', use_container_width=True):
+                with st.spinner('Actualizando catálogo de libros en Supabase...'):
                     try:
                         df = pd.read_excel(archivo_libros) if archivo_libros.name.endswith('.xlsx') else pd.read_csv(archivo_libros)
                         updates, errores = procesar_actualizacion_libros(df)
                         
                         if updates > 0:
-                            st.success(f"✅ ¡Se actualizaron {updates} libros exitosamente!")
+                            st.success(f'✅ ¡Se actualizaron {updates} libros exitosamente!')
                             st.balloons()
                         if errores:
-                            st.error(f"⚠️ Se presentaron {len(errores)} errores durante la actualización:")
+                            st.error(f'⚠️ Se presentaron {len(errores)} errores durante la actualización:')
                             for err in errores: st.write(err)
                         
                         if updates > 0 and not errores:
@@ -341,127 +354,145 @@ def mostrar_actualizacion_masiva():
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
-                            vista="vista_actualizacion_masiva", 
-                            funcion="procesar_actualizacion_libros",
+                            vista='vista_actualizacion_masiva', 
+                            funcion='procesar_actualizacion_libros',
                             error=e,
                             email_usuario=email_usuario
                         )
-                        st.error(f"Error al procesar el archivo: {e}")
-                        st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
+                        st.error(f'Error al procesar el archivo: {e}')
+                        st.caption('Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.')
+            
+            # Botón de autolimpieza de estado de Streamlit
+            if st.button('🧹 Limpiar Archivo Cargado', use_container_width=True, key='btn_clean_up_libros'):
+                if 'up_libros' in st.session_state:
+                    del st.session_state['up_libros']
+                st.rerun()
 
     # ---------------- TAB: CLIENTES ----------------
     with tab_clientes:
-        st.markdown("### 1. Descarga el Listado de Clientes Actual")
-        st.caption("Obtén el archivo Excel con tus clientes actuales, edita su RUT, dirección o correo y súbelo abajo.")
+        st.markdown('### 1. Descarga el Listado de Clientes Actual')
+        st.caption('Obtén el archivo Excel con tus clientes actuales, edita su RUT, dirección o correo y súbelo abajo.')
         
         try:
             plantilla_clientes = generar_plantilla_actualizacion_clientes()
             if plantilla_clientes:
                 st.download_button(
-                    label="📥 Descargar Listado de Clientes (.xlsx)",
+                    label='📥 Descargar Listado de Clientes (.xlsx)',
                     data=plantilla_clientes,
-                    file_name="listado_clientes_actualizar.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    file_name='listado_clientes_actualizar.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     use_container_width=True
                 )
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
-                vista="vista_actualizacion_masiva", 
-                funcion="generar_plantilla_actualizacion_clientes",
+                vista='vista_actualizacion_masiva', 
+                funcion='generar_plantilla_actualizacion_clientes',
                 error=e,
                 email_usuario=email_usuario
             )
-            st.error(f"Error al generar la plantilla de clientes: {e}")
+            st.error(f'Error al generar la plantilla de clientes: {e}')
             
-        st.markdown("---")
-        st.markdown("### 2. Sube tus Modificaciones")
-        archivo_clientes = st.file_uploader("Sube el archivo Excel modificado de Clientes", type=['xlsx', 'csv'], key="up_clientes")
+        st.markdown('---')
+        st.markdown('### 2. Sube tus Modificaciones')
+        archivo_clientes = st.file_uploader('Sube el archivo Excel modificado de Clientes', type=['xlsx', 'csv'], key='up_clientes')
         
         if archivo_clientes:
-            if st.button("🚀 Aplicar Cambios en Clientes", type="primary", use_container_width=True):
-                with st.spinner("Actualizando datos de clientes en Supabase..."):
+            if st.button('🚀 Aplicar Cambios en Clientes', type='primary', use_container_width=True):
+                with st.spinner('Actualizando datos de clientes en Supabase...'):
                     try:
                         df_cli = pd.read_excel(archivo_clientes, dtype=str) if archivo_clientes.name.endswith('.xlsx') else pd.read_csv(archivo_clientes, dtype=str)
                         updates_cli, errores_cli = procesar_actualizacion_clientes(df_cli)
                         
                         if updates_cli > 0:
-                            st.success(f"✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!")
+                            st.success(f'✅ ¡Se actualizaron {updates_cli} perfiles de clientes exitosamente!')
                             st.balloons()
                         if errores_cli:
-                            st.error(f"⚠️ Se presentaron {len(errores_cli)} errores durante la actualización:")
+                            st.error(f'⚠️ Se presentaron {len(errores_cli)} errores durante la actualización:')
                             for err in errores_cli: st.write(err)
                         
                         if updates_cli > 0 and not errores_cli:
                             st.cache_data.clear()
-
+                            
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
-                            vista="vista_actualizacion_masiva", 
-                            funcion="procesar_actualizacion_clientes",
+                            vista='vista_actualizacion_masiva', 
+                            funcion='procesar_actualizacion_clientes',
                             error=e,
                             email_usuario=email_usuario
                         )
-                        st.error(f"Error al procesar el archivo de clientes: {e}")
-                        st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
+                        st.error(f'Error al procesar el archivo de clientes: {e}')
+                        st.caption('Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.')
+            
+            # Botón de autolimpieza de estado de Streamlit
+            if st.button('🧹 Limpiar Archivo Cargado', use_container_width=True, key='btn_clean_up_clientes'):
+                if 'up_clientes' in st.session_state:
+                    del st.session_state['up_clientes']
+                st.rerun()
 
     # ---------------- TAB: COSTOS NO VENTAS ----------------
     with tab_costos:
-        st.markdown("### 1. Descarga el Listado de Costos Actual")
-        st.caption("Obtén el archivo Excel con tus costos no operacionales actuales, edita su monto, tipo de costo o comentario y súbelo abajo.")
+        st.markdown('### 1. Descarga el Listado de Costos Actual')
+        st.caption('Obtén el archivo Excel con tus costos no operacionales actuales, edita su monto, tipo de costo o comentario y súbelo abajo.')
         
         try:
             plantilla_costos = generar_plantilla_actualizacion_costos()
             if plantilla_costos:
                 st.download_button(
-                    label="📥 Descargar Listado de Costos (.xlsx)",
+                    label='📥 Descargar Listado de Costos (.xlsx)',
                     data=plantilla_costos,
-                    file_name="listado_costos_actualizar.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    file_name='listado_costos_actualizar.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     use_container_width=True
                 )
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
-                vista="vista_actualizacion_masiva", 
-                funcion="generar_plantilla_actualizacion_costos",
+                vista='vista_actualizacion_masiva', 
+                funcion='generar_plantilla_actualizacion_costos',
                 error=e,
                 email_usuario=email_usuario
             )
-            st.error(f"Error al generar la plantilla de costos: {e}")
+            st.error(f'Error al generar la plantilla de costos: {e}')
             
-        st.markdown("---")
-        st.markdown("### 2. Sube tus Modificaciones")
-        archivo_costos = st.file_uploader("Sube el archivo Excel modificado de Costos", type=['xlsx', 'csv'], key="up_costos")
+        st.markdown('---')
+        st.markdown('### 2. Sube tus Modificaciones')
+        archivo_costos = st.file_uploader('Sube el archivo Excel modificado de Costos', type=['xlsx', 'csv'], key='up_costos')
         
         if archivo_costos:
-            if st.button("🚀 Aplicar Cambios en Costos", type="primary", use_container_width=True):
-                with st.spinner("Actualizando datos de costos en Supabase..."):
+            if st.button('🚀 Aplicar Cambios en Costos', type='primary', use_container_width=True):
+                with st.spinner('Actualizando datos de costos en Supabase...'):
                     try:
                         df_cos = pd.read_excel(archivo_costos, dtype=str) if archivo_costos.name.endswith('.xlsx') else pd.read_csv(archivo_costos, dtype=str)
                         updates_cos, errores_cos = procesar_actualizacion_costos(df_cos)
                         
                         if updates_cos > 0:
-                            st.success(f"✅ ¡Se actualizaron {updates_cos} registros de costos exitosamente!")
+                            st.success(f'✅ ¡Se actualizaron {updates_cos} registros de costos exitosamente!')
                             st.balloons()
                         if errores_cos:
-                            st.error(f"⚠️ Se presentaron {len(errores_cos)} errores durante la actualización:")
+                            st.error(f'⚠️ Se presentaron {len(errores_cos)} errores durante la actualización:')
                             for err in errores_cos: st.write(err)
                         
                         if updates_cos > 0 and not errores_cos:
                             st.cache_data.clear()
-
+                            
                     except Exception as e:
                         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
                         log_error(
-                            vista="vista_actualizacion_masiva", 
-                            funcion="procesar_actualizacion_costos",
+                            vista='vista_actualizacion_masiva', 
+                            funcion='procesar_actualizacion_costos',
                             error=e,
                             email_usuario=email_usuario
                         )
-                        st.error(f"Error al procesar el archivo de costos: {e}")
-                        st.caption("Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.")
+                        st.error(f'Error al procesar el archivo de costos: {e}')
+                        st.caption('Verifica que el formato del archivo sea correcto y que las columnas no hayan sido modificadas.')
+            
+            # Botón de autolimpieza de estado de Streamlit
+            if st.button('🧹 Limpiar Archivo Cargado', use_container_width=True, key='btn_clean_up_costos'):
+                if 'up_costos' in st.session_state:
+                    del st.session_state['up_costos']
+                st.rerun()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     mostrar_actualizacion_masiva()

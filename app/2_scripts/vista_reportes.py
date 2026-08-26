@@ -382,8 +382,20 @@ def obtener_reporte_utilidades_mensual(ano):
             else: break
         df_a = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
         if not df_a.empty:
-            res_susc = conn.table("suscripciones").select("cliente_id, valor_suscripcion").execute()
-            df_susc = pd.DataFrame(res_susc.data) if res_susc.data else pd.DataFrame()
+            # CORREGIDO: Bypass del límite de 1000 para "suscripciones" ordenando por "suscripcion_id"
+            all_susc = []
+            for bloque_s in range(100):
+                start_s = bloque_s * chunk_size
+                end_s = start_s + chunk_size - 1
+                res_susc = conn.table("suscripciones")\
+                    .select("cliente_id, valor_suscripcion")\
+                    .order("suscripcion_id")\
+                    .range(start_s, end_s).execute()
+                if res_susc.data:
+                    all_susc.extend(res_susc.data)
+                    if len(res_susc.data) < chunk_size: break
+                else: break
+            df_susc = pd.DataFrame(all_susc) if all_susc else pd.DataFrame()
             if not df_susc.empty:
                 df_a = pd.merge(df_a, df_susc, on="cliente_id", how="left")
             else:
@@ -524,10 +536,10 @@ def mostrar_reportes():
         st.markdown("### Reportes listos para usar")
         st.info("💡 Estos reportes cruzan datos para entregarte información lista para la toma de decisiones.")
         
-        # --- REPORTE 1: UTILIDADES Y BALANCES (NUEVO) ---
+        # --- REPORTE 1: UTILIDADES Y BALANCES ---
         with st.container(border=True):
             st.markdown("#### 💸 Utilidades y Balance Consolidado")
-            st.write("Genera un estado financiero consolidado por mes desglosando ingresos de cajitas, ventas rápidas, eventos masivos, costos de adquisición de catálogo y gastos no operacionales.")
+            st.write("Genera un estado financiero consolidado por mes desglosando ingresos de cajitas, ventas rápidas, eventos masivos, costos de adquisición de catálogo and gastos no operacionales.")
             
             col_u1 = st.columns(1)[0]
             ano_balance = col_u1.number_input("Año del Balance Consolidado:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_balance_cons")
@@ -536,13 +548,19 @@ def mostrar_reportes():
                 with st.spinner("Compilando balances financieros de Supabase..."):
                     df_balance = obtener_reporte_utilidades_mensual(ano_balance)
                     if not df_balance.empty:
+                        st.success("¡Balance generado exitosamente!")
                         st.download_button(
                             label=f"Descargar Balance Anual {ano_balance} (.xlsx)", 
                             data=convertir_df_a_excel(df_balance), 
                             file_name=f"balance_consolidado_utilidades_{ano_balance}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
+                            use_container_width=True,
+                            key="btn_descarga_balance"
                         )
+                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_balance"):
+                            if "ano_balance_cons" in st.session_state:
+                                del st.session_state["ano_balance_cons"]
+                            st.rerun()
                     else:
                         st.warning("No se encontraron registros financieros para el año seleccionado.")
 
@@ -563,7 +581,19 @@ def mostrar_reportes():
                     meses_asig_nums = [list(meses_dict_asig.keys())[list(meses_dict_asig.values()).index(m)] for m in meses_asig_nombres]
                     df_asig_reporte = obtener_reporte_asignaciones(ano_asig, meses_asig_nums)
                     if not df_asig_reporte.empty:
-                        st.download_button(label=f"Descargar Asignaciones ({len(df_asig_reporte)} registros) (.xlsx)", data=convertir_df_a_excel(df_asig_reporte), file_name=f"reporte_asignaciones_{ano_asig}.xlsx")
+                        st.success("¡Reporte de asignaciones generado exitosamente!")
+                        st.download_button(
+                            label=f"Descargar Asignaciones ({len(df_asig_reporte)} registros) (.xlsx)", 
+                            data=convertir_df_a_excel(df_asig_reporte), 
+                            file_name=f"reporte_asignaciones_{ano_asig}.xlsx",
+                            use_container_width=True,
+                            key="btn_descarga_asig"
+                        )
+                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_asig"):
+                            for k in ["ano_asig", "meses_asig"]:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+                            st.rerun()
                     else:
                         st.warning("No se encontraron registros de asignación para los meses seleccionados.")
 
@@ -574,7 +604,14 @@ def mostrar_reportes():
             if st.button("Generar Reporte de Envíos", type="primary", use_container_width=True, key="btn_envios"):
                 df_envios = obtener_reporte_envios_pendientes()
                 if not df_envios.empty:
-                    st.download_button(label=f"Descargar {len(df_envios)} Envíos Pendientes (.xlsx)", data=convertir_df_a_excel(df_envios), file_name="envios_pendientes.xlsx")
+                    st.success("¡Reporte de envíos generado exitosamente!")
+                    st.download_button(
+                        label=f"Descargar {len(df_envios)} Envíos Pendientes (.xlsx)", 
+                        data=convertir_df_a_excel(df_envios), 
+                        file_name="envios_pendientes.xlsx",
+                        use_container_width=True,
+                        key="btn_descarga_envios"
+                    )
                 else:
                     st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
 
@@ -584,18 +621,36 @@ def mostrar_reportes():
             st.write("Genera el reporte de ventas del mes con el formato para Boletas o Facturas electrónicas.")
             
             c3, c4 = st.columns(2)
-            mes_fact_sel = c3.selectbox("Mes:", list(meses_dict_asig.values()), index=datetime.now().month - 1, key="mes_fact_sii")
+            # CORREGIDO: index=None con placeholder para evitar selecciones residuales stuck en UI
+            mes_fact_sel = c3.selectbox("Mes:", list(meses_dict_asig.values()), index=None, placeholder="Selecciona un mes...", key="mes_fact_sii")
             ano_fact_sel = c4.number_input("Año:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_fact_sii")
             
-            tipo_dte_sel = st.selectbox("Selecciona el tipo de documento a generar:", ["Boleta", "Factura"])
+            tipo_dte_sel = st.selectbox("Selecciona el tipo de documento a generar:", ["Boleta", "Factura"], index=None, placeholder="Selecciona Tipo DTE...", key="tipo_dte_sel")
             
-            if st.button(f"Generar Reporte SII para {tipo_dte_sel}s", type="primary", use_container_width=True, key="btn_sii"):
-                mes_fact_num = list(meses_dict_asig.keys())[list(meses_dict_asig.values()).index(mes_fact_sel)]
-                df_sii = obtener_reporte_sii(ano_fact_sel, mes_fact_num, tipo_dte_sel)
-                if not df_sii.empty:
-                    st.download_button(label=f"Descargar {tipo_dte_sel}s de {mes_fact_sel}-{ano_fact_sel} (.xlsx)", data=convertir_df_a_excel(df_sii), file_name=f"reporte_sii_{tipo_dte_sel.lower()}_{ano_fact_sel}_{mes_fact_num}.xlsx")
+            if st.button("Generar Reporte SII", type="primary", use_container_width=True, key="btn_sii"):
+                if not mes_fact_sel:
+                    st.error("Debes seleccionar un mes.")
+                elif not tipo_dte_sel:
+                    st.error("Debes seleccionar un tipo de DTE.")
                 else:
-                    st.warning("No se encontraron ventas para el período seleccionado.")
+                    mes_fact_num = list(meses_dict_asig.keys())[list(meses_dict_asig.values()).index(mes_fact_sel)]
+                    df_sii = obtener_reporte_sii(ano_fact_sel, mes_fact_num, tipo_dte_sel)
+                    if not df_sii.empty:
+                        st.success(f"¡Reporte SII de {tipo_dte_sel}s generado exitosamente!")
+                        st.download_button(
+                            label=f"Descargar {tipo_dte_sel}s de {mes_fact_sel}-{ano_fact_sel} (.xlsx)", 
+                            data=convertir_df_a_excel(df_sii), 
+                            file_name=f"reporte_sii_{tipo_dte_sel.lower()}_{ano_fact_sel}_{mes_fact_num}.xlsx",
+                            use_container_width=True,
+                            key="btn_descarga_sii"
+                        )
+                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_sii"):
+                            for k in ["mes_fact_sii", "ano_fact_sii", "tipo_dte_sel"]:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+                            st.rerun()
+                    else:
+                        st.warning("No se encontraron ventas para el período seleccionado.")
 
         # --- REPORTE 5: BAJO STOCK ---
         with st.container(border=True):
@@ -605,7 +660,18 @@ def mostrar_reportes():
             if st.button("Generar Reporte de Stock", type="primary", use_container_width=True, key="btn_stock"):
                 df_stock = obtener_reporte_bajo_stock(limite_stock)
                 if not df_stock.empty:
-                    st.download_button(label=f"Descargar Reporte ({len(df_stock)} libros) (.xlsx)", data=convertir_df_a_excel(df_stock), file_name="reporte_bajo_stock.xlsx")
+                    st.success("¡Reporte de stock generado exitosamente!")
+                    st.download_button(
+                        label=f"Descargar Reporte ({len(df_stock)} libros) (.xlsx)", 
+                        data=convertir_df_a_excel(df_stock), 
+                        file_name="reporte_bajo_stock.xlsx",
+                        use_container_width=True,
+                        key="btn_descarga_stock"
+                    )
+                    if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_stock"):
+                        if "limite_stock_reporte" in st.session_state:
+                            del st.session_state["limite_stock_reporte"]
+                        st.rerun()
                 else:
                     st.success("¡Excelente! No tienes libros con stock crítico.")
 
@@ -613,17 +679,33 @@ def mostrar_reportes():
         st.markdown("### Descarga de Respaldo Crudo (Backup)")
         st.write("Aquí puedes descargar el contenido directo y sin procesar de cualquier tabla de la base de datos.")
         
-        # 🌟 TABLAS DISPONIBLES AMPLIADAS CON LA TABLA DE GASTOS ADM
+        # 🌟 TABLAS DISPONIBLES
         tablas_disponibles = ["clientes", "libros", "registro_ventas", "asignaciones", "suscripciones", "ventas_masivas", "librero_historico", "costos_no_ventas", "historial_cambios_masivos", "historial_logs", "meses_cerrados"]
-        tabla_seleccionada = st.selectbox("Selecciona la tabla a exportar:", sorted(tablas_disponibles))
+        # CORREGIDO: index=None con placeholder
+        tabla_seleccionada = st.selectbox("Selecciona la tabla a exportar:", sorted(tablas_disponibles), index=None, placeholder="Selecciona una tabla...", key="tabla_seleccionada")
         
-        if st.button(f"📥 Exportar tabla '{tabla_seleccionada}' completa", use_container_width=True, key="btn_export"):
-            with st.spinner(f"Extrayendo y formateando datos de {tabla_seleccionada}..."):
-                df_tabla = obtener_tabla(tabla_seleccionada)
-                if not df_tabla.empty:
-                    st.download_button(label="✅ Haz clic aquí para descargar el archivo .xlsx", data=convertir_df_a_excel(df_tabla), file_name=f"backup_{tabla_seleccionada}_{datetime.now().strftime('%Y%m%d')}.xlsx", type="primary")
-                else:
-                    st.warning("La tabla seleccionada está vacía.")
+        if st.button("📥 Exportar tabla completa", use_container_width=True, key="btn_export"):
+            if not tabla_seleccionada:
+                st.error("Debes seleccionar una tabla para exportar.")
+            else:
+                with st.spinner(f"Extrayendo y formateando datos de {tabla_seleccionada}..."):
+                    df_tabla = obtener_tabla(tabla_seleccionada)
+                    if not df_tabla.empty:
+                        st.success(f"¡Tabla '{tabla_seleccionada}' extraída con éxito!")
+                        st.download_button(
+                            label="✅ Haz clic aquí para descargar el archivo .xlsx", 
+                            data=convertir_df_a_excel(df_tabla), 
+                            file_name=f"backup_{tabla_seleccionada}_{datetime.now().strftime('%Y%m%d')}.xlsx", 
+                            type="primary",
+                            use_container_width=True,
+                            key="btn_descarga_backup"
+                        )
+                        if st.button("🧹 Nueva Exportación (Limpiar)", use_container_width=True, key="btn_limpiar_backup"):
+                            if "tabla_seleccionada" in st.session_state:
+                                del st.session_state["tabla_seleccionada"]
+                            st.rerun()
+                    else:
+                        st.warning("La tabla seleccionada está vacía.")
 
 if __name__ == "__main__":
     mostrar_reportes()
