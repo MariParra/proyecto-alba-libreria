@@ -435,7 +435,7 @@ def mostrar_inventario():
 
     st.markdown("### 📊 Métricas del Stock")
     
-    with st.expander("📢 General & Monitoreo", expanded=False):
+    with st.expander("📲 Cálculo de métricas", expanded=False):
         st.info("""
         ℹ️ **¿Cómo se calculan los indicadores de este panel?**
         * **Libros Distintos:** Cantidad de títulos únicos registrados bajo la selección y filtros activos actuales.
