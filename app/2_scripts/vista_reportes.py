@@ -128,7 +128,7 @@ def parse_direccion_expert(direccion):
         
         pos = best_match.start()
         calle = main_address[:pos].strip().strip(',').strip('#').strip()
-        extra = main_address[best_match.end():].strip().strip(',').strip()
+        extra = main_address[number_match.end():].strip().strip(',').strip()
         if extra:
             if depto:
                 depto = f"{depto} {extra}"
@@ -155,7 +155,7 @@ def parse_direccion_expert(direccion):
                         comuna = part_clean
                         break
 
-    # Normalizar nombres de regiones exigidos por la plantilla masiva de Bluexpress
+    # Normalize Region names for Bluexpress
     if "metropolitana" in region_lower or "santiago" in region_lower:
         region = "Región Metropolitana"
     elif "valparaiso" in region_lower or "valparaíso" in region_lower:
@@ -198,18 +198,23 @@ def parse_direccion_expert(direccion):
         'referencia': referencia
     }
 
-def procesar_reportes_envios(df_pendientes):
+def procesar_reportes_envios_separados(df_pendientes):
     """
     Recorre el consolidado crudo de despachos pendientes y construye
-    los dos sets de datos limpios siguiendo las estructuras exactas de Paket y Bluexpress.
+    los sets de datos limpios divididos por courier y origen.
     """
-    paket_rows = []
-    blue_rows = []
+    asig_paket = []
+    ventas_paket = []
+    asig_blue = []
+    ventas_blue = []
     
-    blue_idx = 1
+    blue_asig_idx = 1
+    blue_ventas_idx = 1
+    
     for idx, row in df_pendientes.iterrows():
         metodo = row.get('metodo_envio') or ''
         courier = clasificar_courier(metodo)
+        origen = row.get('origen') or ''
         
         nombre_completo = row.get('Nombre Cliente') or ''
         direccion_completa = row.get('Dirección Completa') or ''
@@ -220,8 +225,7 @@ def procesar_reportes_envios(df_pendientes):
         tel_saneado = sanear_telefono(telefono_raw)
         
         if courier == "PAKET":
-            # Formato Oficial de Paket
-            paket_rows.append({
+            row_dict = {
                 'Cliente': nombre_completo,
                 'Direccion': direccion_completa,
                 'Telefono': tel_saneado,
@@ -232,80 +236,144 @@ def procesar_reportes_envios(df_pendientes):
                 'Excede': 'NO',
                 'Referencia opcional': '',
                 'Declarado': 85000
-            })
+            }
+            if origen == 'Suscripción':
+                asig_paket.append(row_dict)
+            else:
+                ventas_paket.append(row_dict)
+                
         elif courier == "BLUE":
-            # Formato Oficial de Bluexpress
             first_name, last_name = split_name(nombre_completo)
-            blue_rows.append({
-                'N°': blue_idx,
-                'Nombre*': first_name,
-                'Apellido*': last_name,
-                'Telefono*': tel_saneado,
-                'Correo*': email,
-                'Tipo Entrega*': 'Domicilio',
-                'Región*': addr_parsed['region'],
-                'Comuna*': addr_parsed['comuna'].upper(),
-                'Nombre Calle*': addr_parsed['calle'].title(),
-                'N° Domicilio *': addr_parsed['numero'],
-                'Dpto / Oficina': addr_parsed['depto'],
-                'Referencia Ayuda': '',
-                'Descripción Contenido*': 'LIBROS',
-                'Valor Contenido*': 80000,
-                'Garantía*': 'No',
-                'N° Boleta / Factura': '',
-                'Tamaño*': 'XS'
-            })
-            blue_idx += 1
-            
-    df_paket = pd.DataFrame(paket_rows) if paket_rows else pd.DataFrame()
-    df_blue = pd.DataFrame(blue_rows) if blue_rows else pd.DataFrame()
+            if origen == 'Suscripción':
+                row_dict = {
+                    'N°': blue_asig_idx,
+                    'Nombre*': first_name,
+                    'Apellido*': last_name,
+                    'Telefono*': tel_saneado,
+                    'Correo*': email,
+                    'Tipo Entrega*': 'Domicilio',
+                    'Región*': addr_parsed['region'],
+                    'Comuna*': addr_parsed['comuna'].upper(),
+                    'Nombre Calle*': addr_parsed['calle'].title(),
+                    'N° Domicilio *': addr_parsed['numero'],
+                    'Dpto / Oficina': addr_parsed['depto'],
+                    'Referencia Ayuda': '',
+                    'Descripción Contenido*': 'LIBROS',
+                    'Valor Contenido*': 80000,
+                    'Garantía*': 'No',
+                    'N° Boleta / Factura': '',
+                    'Tamaño*': 'XS'
+                }
+                asig_blue.append(row_dict)
+                blue_asig_idx += 1
+            else:
+                row_dict = {
+                    'N°': blue_ventas_idx,
+                    'Nombre*': first_name,
+                    'Apellido*': last_name,
+                    'Telefono*': tel_saneado,
+                    'Correo*': email,
+                    'Tipo Entrega*': 'Domicilio',
+                    'Región*': addr_parsed['region'],
+                    'Comuna*': addr_parsed['comuna'].upper(),
+                    'Nombre Calle*': addr_parsed['calle'].title(),
+                    'N° Domicilio *': addr_parsed['numero'],
+                    'Dpto / Oficina': addr_parsed['depto'],
+                    'Referencia Ayuda': '',
+                    'Descripción Contenido*': 'LIBROS',
+                    'Valor Contenido*': 80000,
+                    'Garantía*': 'No',
+                    'N° Boleta / Factura': '',
+                    'Tamaño*': 'XS'
+                }
+                ventas_blue.append(row_dict)
+                blue_ventas_idx += 1
+                
+    df_asig_p = pd.DataFrame(asig_paket) if asig_paket else pd.DataFrame()
+    df_ventas_p = pd.DataFrame(ventas_paket) if ventas_paket else pd.DataFrame()
+    df_asig_b = pd.DataFrame(asig_blue) if asig_blue else pd.DataFrame()
+    df_ventas_b = pd.DataFrame(ventas_blue) if ventas_blue else pd.DataFrame()
     
-    return df_paket, df_blue
+    return df_asig_p, df_ventas_p, df_asig_b, df_ventas_b
 
-def generar_excel_bluexpress(df_blue):
-    """Genera el Excel oficial de Bluexpress con sus 3 filas de cabeceras de metadatos."""
+# Excel Generator for Paket with two sheets
+def generar_excel_paket_separado(df_asig_paket, df_ventas_paket):
+    """Genera el Excel de Paket con pestañas separadas para Suscripción y Ventas Caja."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        sheet_name = 'Carga_Masiva'
-        workbook  = writer.book
-        worksheet = workbook.add_worksheet(sheet_name)
-        writer.sheets[sheet_name] = worksheet
-        
-        # Formatos de Celda
+        if not df_asig_paket.empty:
+            df_asig_paket.to_excel(writer, index=False, sheet_name='Asignaciones Suscripcion')
+            worksheet = writer.sheets['Asignaciones Suscripcion']
+            for i, col in enumerate(df_asig_paket.columns):
+                max_len = max(df_asig_paket[col].fillna('').astype(str).map(len).max(), len(str(col))) + 2
+                worksheet.set_column(i, i, min(max_len, 50))
+        else:
+            pd.DataFrame(columns=['Mensaje']).to_excel(writer, index=False, sheet_name='Asignaciones Suscripcion')
+            
+        if not df_ventas_paket.empty:
+            df_ventas_paket.to_excel(writer, index=False, sheet_name='Ventas Caja')
+            worksheet = writer.sheets['Ventas Caja']
+            for i, col in enumerate(df_ventas_paket.columns):
+                max_len = max(df_ventas_paket[col].fillna('').astype(str).map(len).max(), len(str(col))) + 2
+                worksheet.set_column(i, i, min(max_len, 50))
+        else:
+            pd.DataFrame(columns=['Mensaje']).to_excel(writer, index=False, sheet_name='Ventas Caja')
+            
+    return output.getvalue()
+
+# Excel Generator for Bluexpress with two sheets, both carrying metadata headers
+def generar_excel_blue_separado(df_asig_blue, df_ventas_blue):
+    """Genera el Excel de Bluexpress con pestañas separadas y cabecera de metadatos en cada hoja."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
         header_format = workbook.add_format({
             'bold': True,
             'bg_color': '#D3D3D3',
             'border': 1
         })
         
-        # Escritura manual de metadatos de Bluexpress
-        worksheet.write(0, 1, "Debes ingresas los datos del destinatario: MÁXIMO 50 ENVIOS CON DESTINO DOMICILIO")
-        worksheet.write(1, 1, "Versión")
-        worksheet.write(1, 2, "1.03")
-        worksheet.write(2, 1, "Datos destinatario")
-        worksheet.write(2, 5, "Datos Entrega Envío: Sólo Entrega Domicilio para Carga Masiva")
-        worksheet.write(2, 12, "¿Qué estás enviando?")
-        
-        # Encabezados en Fila 4 (Índice 3)
         headers = [
             "N°", "Nombre*", "Apellido*", "Telefono*", "Correo*", "Tipo Entrega*", "Región*", "Comuna*", 
             "Nombre Calle*", "N° Domicilio *", "Dpto / Oficina", "Referencia Ayuda", "Descripción Contenido*", 
             "Valor Contenido*", "Garantía*", "N° Boleta / Factura", "Tamaño*"
         ]
-        for col_num, header in enumerate(headers):
-            worksheet.write(3, col_num, header, header_format)
+        
+        sheets_to_process = [
+            ('Asignaciones Suscripcion', df_asig_blue),
+            ('Ventas Caja', df_ventas_blue)
+        ]
+        
+        for sheet_name, df_data in sheets_to_process:
+            worksheet = workbook.add_worksheet(sheet_name)
+            writer.sheets[sheet_name] = worksheet
             
-        # Insertar los registros a partir de la Fila 5
-        for row_num, row_data in enumerate(df_blue.values):
-            for col_num, val in enumerate(row_data):
-                if pd.isna(val) or val is None:
-                    val = ""
-                worksheet.write(row_num + 4, col_num, val)
+            # Escritura de metadatos en cada pestaña
+            worksheet.write(0, 1, "Debes ingresas los datos del destinatario: MÁXIMO 50 ENVIOS CON DESTINO DOMICILIO")
+            worksheet.write(1, 1, "Versión")
+            worksheet.write(1, 2, "1.03")
+            worksheet.write(2, 1, "Datos destinatario")
+            worksheet.write(2, 5, "Datos Entrega Envío: Sólo Entrega Domicilio para Carga Masiva")
+            worksheet.write(2, 12, "¿Qué estás enviando?")
+            
+            # Encabezados
+            for col_num, header in enumerate(headers):
+                worksheet.write(3, col_num, header, header_format)
                 
-        # Autoajuste de Ancho
-        for i, header in enumerate(headers):
-            worksheet.set_column(i, i, 18)
-            
+            # Escribir filas si hay data
+            if not df_data.empty:
+                for row_num, row_data in enumerate(df_data.values):
+                    for col_num, val in enumerate(row_data):
+                        if pd.isna(val) or val is None:
+                            val = ""
+                        worksheet.write(row_num + 4, col_num, val)
+            else:
+                worksheet.write(4, 1, "No hay envíos pendientes para esta categoría.")
+                
+            # Ajustar ancho de columnas
+            for i in range(len(headers)):
+                worksheet.set_column(i, i, 18)
+                
     return output.getvalue()
 
 
@@ -503,13 +571,12 @@ def obtener_reporte_envios_pendientes():
     """Genera reporte paginado consolidando envíos pendientes del club y de caja."""
     conn = get_db_connection()
     try:
-        # 1. Asignaciones (Paginado)
+        # 1. Asignaciones (Paginado) - Excluyendo los estados finales "ENVIADO" y "RETIRADO"
         all_asig = []
         chunk_size = 1000
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            # 🌟 CORE FIX: Filtro optimizado del lado de Supabase excluyendo ENVIADO y RETIRADO
             res_asig = (conn.table("asignaciones")
                 .select("cliente_id, estado_envio")
                 .not_.in_("estado_envio", ["ENVIADO", "RETIRADO"])
@@ -542,12 +609,11 @@ def obtener_reporte_envios_pendientes():
             map_metodo_susc = {s['cliente_id']: s['metodo_entrega'] for s in all_susc} if all_susc else {}
             df_asig['metodo_envio'] = df_asig['cliente_id'].map(map_metodo_susc)
         
-        # 2. Ventas directas (Paginado)
+        # 2. Ventas directas (Paginado) - Excluyendo el estado final "FINALIZADO"
         all_ventas = []
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
-            # 🌟 CORE FIX: Filtro optimizado en base excluyendo Ventas ya FINALIZADAS
             res_ventas = (conn.table("registro_ventas")
                 .select("cliente_id, estado, metodo_envio")
                 .neq("estado", "FINALIZADO")
@@ -1023,56 +1089,87 @@ def mostrar_reportes():
                     else:
                         st.warning("No se encontraron registros de asignación para los filtros seleccionados.")
 
-        # --- REPORTE 4: ENVÍOS PENDIENTES CON HOJAS DE RUTA INDEPENDIENTES ---
+        # --- REPORTE 4: ENVÍOS PENDIENTES CON HOJAS DE RUTA INDEPENDIENTES (REFACTURADO CON HOJAS SEPARADAS) ---
         with st.container(border=True):
             st.markdown("#### 🚚 Despachos Pendientes Unificados (Paket & Bluexpress)")
-            st.write("Genera listas de despacho separadas y pre-formateadas según las plantillas oficiales de **Paket** y **Bluexpress**.")
+            st.write("Genera listas de despacho separadas y pre-formateadas según las plantillas oficiales de **Paket** y **Bluexpress**, con pestañas independientes para **Caja** y **Suscripciones**.")
             
             if st.button("Generar Reportes de Despacho", type="primary", use_container_width=True, key="btn_envios"):
                 with st.spinner("Consolidando despachos pendientes desde Supabase..."):
                     df_envios = obtener_reporte_envios_pendientes()
                     
                     if not df_envios.empty:
-                        # Procesar y dividir los envíos pendientes
-                        df_paket, df_blue = procesar_reportes_envios(df_envios)
+                        # Procesar y dividir los envíos pendientes de forma separada por courier y por origen (Suscripción vs Caja)
+                        df_asig_p, df_ventas_p, df_asig_b, df_ventas_b = procesar_reportes_envios_separados(df_envios)
                         
-                        st.success("¡Despachos pendientes agrupados exitosamente!")
+                        # Guardar los bytes de los archivos Excel en st.session_state para evitar que desaparezcan al descargar (Bypass Streamlit State Loss!)
+                        st.session_state['excel_paket_bytes'] = generar_excel_paket_separado(df_asig_p, df_ventas_p)
+                        st.session_state['excel_blue_bytes'] = generar_excel_blue_separado(df_asig_b, df_ventas_b)
                         
-                        col_e1, col_e2 = st.columns(2)
+                        st.session_state['count_paket_asig'] = len(df_asig_p)
+                        st.session_state['count_paket_ventas'] = len(df_ventas_p)
+                        st.session_state['count_blue_asig'] = len(df_asig_b)
+                        st.session_state['count_blue_ventas'] = len(df_ventas_b)
                         
-                        with col_e1:
-                            st.markdown("##### 📦 Envíos por Paket")
-                            if not df_paket.empty:
-                                st.metric("Envíos por Paket", len(df_paket))
-                                excel_paket = convertir_df_a_excel(df_paket)
-                                st.download_button(
-                                    label=f"📥 Descargar {len(df_paket)} Envíos Paket (.xlsx)",
-                                    data=excel_paket,
-                                    file_name=f"despacho_paket_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True,
-                                    key="btn_descarga_paket"
-                                )
-                            else:
-                                st.info("No hay despachos pendientes para Paket.")
-                                
-                        with col_e2:
-                            st.markdown("##### 🔵 Envíos por Bluexpress")
-                            if not df_blue.empty:
-                                st.metric("Envíos por Bluexpress", len(df_blue))
-                                excel_blue = generar_excel_bluexpress(df_blue)
-                                st.download_button(
-                                    label=f"📥 Descargar {len(df_blue)} Envíos Bluexpress (.xlsx)",
-                                    data=excel_blue,
-                                    file_name=f"despacho_bluexpress_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True,
-                                    key="btn_descarga_blue"
-                                )
-                            else:
-                                st.info("No hay despachos pendientes para Bluexpress.")
+                        st.success("¡Despachos pendientes compilados exitosamente!")
                     else:
+                        st.session_state['excel_paket_bytes'] = None
+                        st.session_state['excel_blue_bytes'] = None
                         st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
+
+            # Mostrar los botones de descarga de forma persistente si los bytes existen en session_state (Bypass Streamlit State Loss)
+            if st.session_state.get('excel_paket_bytes') is not None or st.session_state.get('excel_blue_bytes') is not None:
+                st.markdown("##### 📁 Archivos de Despacho Consolidados")
+                col_e1, col_e2 = st.columns(2)
+                
+                with col_e1:
+                    st.markdown("##### 📦 Envíos por Paket")
+                    excel_paket = st.session_state.get('excel_paket_bytes')
+                    count_p_asig = st.session_state.get('count_paket_asig', 0)
+                    count_p_ventas = st.session_state.get('count_paket_ventas', 0)
+                    total_p = count_p_asig + count_p_ventas
+                    
+                    if total_p > 0 and excel_paket:
+                        st.metric("Total Paket", total_p)
+                        st.caption(f"🎁 {count_p_asig} Suscripciones | 🛒 {count_p_ventas} Caja")
+                        st.download_button(
+                            label=f"📥 Descargar {total_p} Envíos Paket (.xlsx)",
+                            data=excel_paket,
+                            file_name=f"despacho_paket_separado_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="btn_descarga_paket"
+                        )
+                    else:
+                        st.info("No hay despachos pendientes para Paket.")
+                        
+                with col_e2:
+                    st.markdown("##### 🔵 Envíos por Bluexpress")
+                    excel_blue = st.session_state.get('excel_blue_bytes')
+                    count_b_asig = st.session_state.get('count_blue_asig', 0)
+                    count_b_ventas = st.session_state.get('count_blue_ventas', 0)
+                    total_b = count_b_asig + count_b_ventas
+                    
+                    if total_b > 0 and excel_blue:
+                        st.metric("Total Bluexpress", total_b)
+                        st.caption(f"🎁 {count_b_asig} Suscripciones | 🛒 {count_b_ventas} Caja")
+                        st.download_button(
+                            label=f"📥 Descargar {total_b} Envíos Bluexpress (.xlsx)",
+                            data=excel_blue,
+                            file_name=f"despacho_bluexpress_separado_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="btn_descarga_blue"
+                        )
+                    else:
+                        st.info("No hay despachos pendientes para Bluexpress.")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                # Botón de autolimpieza de estado
+                if st.button("🧹 Limpiar Archivos Generados", use_container_width=True, key="btn_limpiar_logistica_bytes"):
+                    st.session_state['excel_paket_bytes'] = None
+                    st.session_state['excel_blue_bytes'] = None
+                    st.rerun()
 
         # --- REPORTE 5: SII ---
         with st.container(border=True):
