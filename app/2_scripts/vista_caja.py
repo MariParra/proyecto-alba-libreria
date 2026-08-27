@@ -1191,7 +1191,7 @@ def mostrar_caja():
         asignacion_id_target = None
         
         # 🌟 TAREA 1: El ticket (checkbox) de envío por pagar no aparece para retiros o consolidaciones
-        mostrar_ticket_cobro = modo_envio not in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción"]
+        mostrar_ticket_cobro = modo_envio not in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción", "Paket"]
         es_por_pagar = False
         
         if mostrar_ticket_cobro:
