@@ -2,11 +2,315 @@ import streamlit as st
 import pandas as pd
 import io
 import json
+import re
 from datetime import datetime
 from utilidades import get_db_connection, log_error
 
+# ==========================================================
+# 🧹 FUNCIONES AUXILIARES DE LOGÍSTICA Y PARSING DE DIRECCIONES
+# ==========================================================
+
+def split_name(full_name):
+    """Divide un nombre completo en Nombre y Apellido de forma segura."""
+    if not full_name:
+        return "", ""
+    parts = str(full_name).strip().split(' ', 1)
+    if len(parts) == 2:
+        return parts[0].title(), parts[1].title()
+    return parts[0].title(), ""
+
+def sanear_telefono(valor_celda):
+    """Sanea números de teléfono removiendo espacios y asegurando el prefijo +56."""
+    if pd.isna(valor_celda) or not valor_celda:
+        return ""
+    tel_limpio = re.sub(r'\s+', '', str(valor_celda).strip())
+    if tel_limpio.startswith('56') and not tel_limpio.startswith('+'):
+        tel_limpio = '+' + tel_limpio
+    elif len(tel_limpio) == 9 and tel_limpio.startswith('9'):
+        tel_limpio = '+56' + tel_limpio
+    return tel_limpio
+
+def clasificar_courier(metodo):
+    """Clasifica dinámicamente el método de envío ingresado."""
+    if not metodo or not isinstance(metodo, str):
+        return "OTRO"
+    metodo_upper = metodo.strip().upper()
+    if "PAKET" in metodo_upper:
+        return "PAKET"
+    elif "BLUE" in metodo_upper:
+        return "BLUE"
+    elif "RETIRO" in metodo_upper:
+        return "RETIRO"
+    else:
+        return "OTRO"
+
+def parse_direccion_expert(direccion):
+    """
+    Desagrega de forma inteligente direcciones unificadas de texto libre,
+    extrayendo Calle, Número, Depto, Comuna y Región para Bluexpress.
+    Soporta formatos en cualquier orden (Región al principio, comuna al final, etc.).
+    """
+    if not direccion or not isinstance(direccion, str) or str(direccion).strip().lower() in ['null', 'none', '']:
+        return {
+            'calle': '', 'numero': '', 'depto': '', 'comuna': '', 'region': '', 'referencia': ''
+        }
+    
+    calle = ""
+    numero = ""
+    depto = ""
+    comuna = ""
+    region = ""
+    referencia = ""
+    
+    # 1. Normalizar espacios y remover puntos en abreviaciones comunes
+    dir_str = re.sub(r'\s+', ' ', str(direccion)).strip()
+    abbrevs = ["av", "dpto", "depto", "of", "psj", "pje", "cl", "dr", "dra", "sta", "san", "sto", "copec"]
+    for abb in abbrevs:
+        dir_str = re.sub(r'\b' + re.escape(abb) + r'\.', abb, dir_str, flags=re.IGNORECASE)
+    
+    # Proteger punto seguido de espacio -> convertir a coma
+    dir_str = re.sub(r'\.\s+', ', ', dir_str)
+    
+    # Separar por comas
+    parts = [p.strip() for p in dir_str.split(',') if p.strip()]
+    
+    region_keywords = [
+        "metropolitana", "santiago", "valparaiso", "valparaíso", "maule", "ñuble", 
+        "biobío", "bio bio", "bío bío", "araucanía", "araucania", "los lagos", "los ríos", "los rios", 
+        "antofagasta", "atacama", "coquimbo", "tarapaca", "tarapacá", "arica", "aysen", "aysén", 
+        "magallanes", "ohiggins", "o'higgins", "los rios", "los lagos", "valparaiso", "lagos", "rios"
+    ]
+    
+    # Escanear partes de derecha a izquierda para extraer la región sin importar su posición
+    region_index = -1
+    for idx in range(len(parts)-1, -1, -1):
+        part_lower = parts[idx].lower()
+        if "region" in part_lower or "región" in part_lower or any(kw in part_lower for kw in region_keywords):
+            region = parts[idx]
+            region_index = idx
+            break
+            
+    if region_index != -1:
+        parts.pop(region_index)
+        
+    # Extraer Comuna (último elemento restante que no tenga dígitos)
+    if parts:
+        last_part = parts[-1]
+        last_part_clean = re.sub(r'\(.*?\)', '', last_part).strip()
+        if not re.search(r'\d', last_part_clean) and len(last_part_clean) < 30:
+            comuna = last_part_clean
+            parts.pop()
+            
+    main_address = ", ".join(parts).strip()
+    main_address = re.sub(r'\(.*?\)', '', main_address).strip()
+    
+    # Extraer Depto / Oficina / Casa / Block
+    depto_patterns = [
+        r'\b(depto|dpto|dept|departamento|apto|apt|block|casa|local|oficina|of)\b\.?\s*([a-zA-Z0-9\-]+)',
+        r'\b(depto|dpto|dept|departamento|apto|apt|block|casa|local|oficina|of)\b\s*([a-zA-Z0-9\-]+)',
+        r'\b(depto|dpto)\b\s*(.*)$'
+    ]
+    
+    for pat in depto_patterns:
+        match = re.search(pat, main_address, re.IGNORECASE)
+        if match:
+            depto = match.group(0).strip()
+            main_address = main_address.replace(match.group(0), "").strip()
+            break
+            
+    # Extraer Número domiciliario (secuencia de dígitos)
+    number_matches = list(re.finditer(r'\b(?:#\s*|N°\s*|N\s*)?(\d+)\s*([a-zA-Z])?\b', main_address))
+    if number_matches:
+        best_match = number_matches[-1]
+        num_str = best_match.group(1)
+        suffix = best_match.group(2) or ""
+        numero = num_str + suffix
+        
+        pos = best_match.start()
+        calle = main_address[:pos].strip().strip(',').strip('#').strip()
+        extra = main_address[best_match.end():].strip().strip(',').strip()
+        if extra:
+            if depto:
+                depto = f"{depto} {extra}"
+            else:
+                depto = extra
+    else:
+        calle = main_address
+
+    calle = re.sub(r'\s+', ' ', calle).strip().strip(',').strip()
+    depto = re.sub(r'\s+', ' ', depto).strip().strip(',').strip()
+    comuna = re.sub(r'\s+', ' ', comuna).strip().strip(',').strip()
+    region = re.sub(r'\s+', ' ', region).strip().strip(',').strip()
+    
+    # Fallback si no logramos extraer comuna por comas
+    region_lower = region.lower()
+    if not comuna and ',' in str(direccion):
+        p = [x.strip() for x in str(direccion).split(',')]
+        if len(p) >= 2:
+            for part in p:
+                part_clean = re.sub(r'\(.*?\)', '', part).strip()
+                if not re.search(r'\d', part_clean) and not any(kw in part_clean.lower() for kw in region_keywords):
+                    part_lower = part_clean.lower()
+                    if "region" not in part_lower and "región" not in part_lower and part_clean != calle:
+                        comuna = part_clean
+                        break
+
+    # Normalizar nombres de regiones exigidos por la plantilla masiva de Bluexpress
+    if "metropolitana" in region_lower or "santiago" in region_lower:
+        region = "Región Metropolitana"
+    elif "valparaiso" in region_lower or "valparaíso" in region_lower:
+        region = "Región de Valparaíso"
+    elif "lagos" in region_lower:
+        region = "Región de los Lagos"
+    elif "ríos" in region_lower or "rios" in region_lower:
+        region = "Región de los Ríos"
+    elif "araucanía" in region_lower or "araucania" in region_lower:
+        region = "Región de la Araucanía"
+    elif "maule" in region_lower:
+        region = "Región del Maule"
+    elif "biobío" in region_lower or "bio bio" in region_lower or "bío bío" in region_lower:
+        region = "Región del Biobío"
+    elif "antofagasta" in region_lower:
+        region = "Región de Antofagasta"
+    elif "atacama" in region_lower:
+        region = "Región de Atacama"
+    elif "coquimbo" in region_lower:
+        region = "Región de Coquimbo"
+    elif "tarapaca" in region_lower or "tarapacá" in region_lower:
+        region = "Región de Tarapacá"
+    elif "arica" in region_lower:
+        region = "Región de Arica y Parinacota"
+    elif "aysen" in region_lower or "aysén" in region_lower:
+        region = "Región de Aysén"
+    elif "magallanes" in region_lower:
+        region = "Región de Magallanes"
+    elif "ohiggins" in region_lower or "o'higgins" in region_lower:
+        region = "Región de O'Higgins"
+    elif "ñuble" in region_lower:
+        region = "Región de Ñuble"
+        
+    return {
+        'calle': calle or main_address,
+        'numero': numero,
+        'depto': depto,
+        'comuna': comuna,
+        'region': region,
+        'referencia': referencia
+    }
+
+def procesar_reportes_envios(df_pendientes):
+    """
+    Recorre el consolidado crudo de despachos pendientes y construye
+    los dos sets de datos limpios siguiendo las estructuras exactas de Paket y Bluexpress.
+    """
+    paket_rows = []
+    blue_rows = []
+    
+    blue_idx = 1
+    for idx, row in df_pendientes.iterrows():
+        metodo = row.get('metodo_envio') or ''
+        courier = clasificar_courier(metodo)
+        
+        nombre_completo = row.get('Nombre Cliente') or ''
+        direccion_completa = row.get('Dirección Completa') or ''
+        telefono_raw = row.get('Telefono') or ''
+        email = row.get('Email') or ''
+        
+        addr_parsed = parse_direccion_expert(direccion_completa)
+        tel_saneado = sanear_telefono(telefono_raw)
+        
+        if courier == "PAKET":
+            # Formato Oficial de Paket
+            paket_rows.append({
+                'Cliente': nombre_completo,
+                'Direccion': direccion_completa,
+                'Telefono': tel_saneado,
+                'Nota opcional': addr_parsed['depto'],
+                'Bultos': 1,
+                'Cambio': 'NO',
+                'Fragil': 'SI',
+                'Excede': 'NO',
+                'Referencia opcional': '',
+                'Declarado': 85000
+            })
+        elif courier == "BLUE":
+            # Formato Oficial de Bluexpress
+            first_name, last_name = split_name(nombre_completo)
+            blue_rows.append({
+                'N°': blue_idx,
+                'Nombre*': first_name,
+                'Apellido*': last_name,
+                'Telefono*': tel_saneado,
+                'Correo*': email,
+                'Tipo Entrega*': 'Domicilio',
+                'Región*': addr_parsed['region'],
+                'Comuna*': addr_parsed['comuna'].upper(),
+                'Nombre Calle*': addr_parsed['calle'].title(),
+                'N° Domicilio *': addr_parsed['numero'],
+                'Dpto / Oficina': addr_parsed['depto'],
+                'Referencia Ayuda': '',
+                'Descripción Contenido*': 'LIBROS',
+                'Valor Contenido*': 80000,
+                'Garantía*': 'No',
+                'N° Boleta / Factura': '',
+                'Tamaño*': 'XS'
+            })
+            blue_idx += 1
+            
+    df_paket = pd.DataFrame(paket_rows) if paket_rows else pd.DataFrame()
+    df_blue = pd.DataFrame(blue_rows) if blue_rows else pd.DataFrame()
+    
+    return df_paket, df_blue
+
+def generar_excel_bluexpress(df_blue):
+    """Genera el Excel oficial de Bluexpress con sus 3 filas de cabeceras de metadatos."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        sheet_name = 'Carga_Masiva'
+        workbook  = writer.book
+        worksheet = workbook.add_worksheet(sheet_name)
+        writer.sheets[sheet_name] = worksheet
+        
+        # Formatos de Celda
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#D3D3D3',
+            'border': 1
+        })
+        
+        # Escritura manual de metadatos de Bluexpress
+        worksheet.write(0, 1, "Debes ingresas los datos del destinatario: MÁXIMO 50 ENVIOS CON DESTINO DOMICILIO")
+        worksheet.write(1, 1, "Versión")
+        worksheet.write(1, 2, "1.03")
+        worksheet.write(2, 1, "Datos destinatario")
+        worksheet.write(2, 5, "Datos Entrega Envío: Sólo Entrega Domicilio para Carga Masiva")
+        worksheet.write(2, 12, "¿Qué estás enviando?")
+        
+        # Encabezados en Fila 4 (Índice 3)
+        headers = [
+            "N°", "Nombre*", "Apellido*", "Telefono*", "Correo*", "Tipo Entrega*", "Región*", "Comuna*", 
+            "Nombre Calle*", "N° Domicilio *", "Dpto / Oficina", "Referencia Ayuda", "Descripción Contenido*", 
+            "Valor Contenido*", "Garantía*", "N° Boleta / Factura", "Tamaño*"
+        ]
+        for col_num, header in enumerate(headers):
+            worksheet.write(3, col_num, header, header_format)
+            
+        # Insertar los registros a partir de la Fila 5
+        for row_num, row_data in enumerate(df_blue.values):
+            for col_num, val in enumerate(row_data):
+                if pd.isna(val) or val is None:
+                    val = ""
+                worksheet.write(row_num + 4, col_num, val)
+                
+        # Autoajuste de Ancho
+        for i, header in enumerate(headers):
+            worksheet.set_column(i, i, 18)
+            
+    return output.getvalue()
+
+
 # ====================================================
-# --- FUNCIÓN DE UTILIDAD PARA GENERAR EXCEL ---
+# --- LÓGICA DE EXTRACCIÓN Y LIMPIEZA ADICIONAL ---
 # ====================================================
 
 def limpiar_ids_a_enteros(lista_ids):
@@ -25,11 +329,7 @@ def limpiar_ids_a_enteros(lista_ids):
     return list(set(enteros_limpios))
 
 def limpiar_df_para_excel(df):
-    """
-    Limpia el DataFrame antes de exportarlo a Excel:
-    1. Convierte diccionarios y listas (JSONB) a strings.
-    2. Remueve las zonas horarias (tz) de las fechas.
-    """
+    """Convierte diccionarios/listas a string y remueve tz de fechas."""
     df_limpio = df.copy()
     for col in df_limpio.columns:
         if df_limpio[col].apply(lambda x: isinstance(x, (dict, list))).any():
@@ -79,10 +379,6 @@ def convertir_pendientes_a_excel(df_caja, df_asig):
                     worksheet.set_column(i, i, 15)
     return output.getvalue()
 
-# ====================================================
-# --- FUNCIONES DE EXTRACCIÓN DE DATOS ---
-# ====================================================
-
 def obtener_tabla(nombre_tabla):
     """Descarga de forma dinámica y paginada el 100% de una tabla para backup sin límite de 1000."""
     conn = get_db_connection()
@@ -90,7 +386,6 @@ def obtener_tabla(nombre_tabla):
         all_data = []
         chunk_size = 1000
         
-        # Mapeamos la columna ID correcta según la tabla para un ordenamiento consistente
         order_col = "id"
         if nombre_tabla == "clientes": order_col = "cliente_id"
         elif nombre_tabla == "libros": order_col = "libro_id"
@@ -129,12 +424,9 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
             start = bloque * chunk_size
             end = start + chunk_size - 1
             
-            # Construcción dinámica con bypass de filtros si 'Todos' está seleccionado
             query = conn.table("asignaciones").select("*")
-            
             if not todos_los_anos:
                 query = query.eq("ano", ano)
-                
             if not todos_los_meses:
                 query = query.in_("mes", lista_meses)
                 
@@ -152,7 +444,6 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
         if not all_asig: return pd.DataFrame()
         df_asig = pd.DataFrame(all_asig)
         
-        # SANEAMIENTO CON NUESTRA UTILIDAD PENDIENTE
         ids_clientes = limpiar_ids_a_enteros(df_asig['cliente_id'].dropna().unique().tolist())
         df_clientes = pd.DataFrame()
         if ids_clientes:
@@ -209,18 +500,19 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
         return pd.DataFrame()
 
 def obtener_reporte_envios_pendientes():
-    """Genera reporte paginado consolidando envíos del club y de caja."""
+    """Genera reporte paginado consolidando envíos pendientes del club y de caja."""
     conn = get_db_connection()
     try:
-        # Asignaciones (Paginado)
+        # 1. Asignaciones (Paginado)
         all_asig = []
         chunk_size = 1000
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
+            # 🌟 CORE FIX: Filtro optimizado del lado de Supabase excluyendo ENVIADO y RETIRADO
             res_asig = (conn.table("asignaciones")
                 .select("cliente_id, estado_envio")
-                .in_("estado_envio", ["POR ENVIAR", "POR RETIRAR"])
+                .not_.in_("estado_envio", ["ENVIADO", "RETIRADO"])
                 .order("asignacion_id")
                 .range(start, end).execute())
             if res_asig.data:
@@ -233,16 +525,32 @@ def obtener_reporte_envios_pendientes():
         if not df_asig.empty:
             df_asig['origen'] = 'Suscripción'
             df_asig.rename(columns={'estado_envio': 'estado'}, inplace=True)
+            
+            # --- BYPASS 1000 REGISTROS: Mapear el método de entrega de su suscripción ---
+            all_susc = []
+            for b_s in range(100):
+                s_start = b_s * chunk_size
+                s_end = s_start + chunk_size - 1
+                res_susc = (conn.table("suscripciones")
+                    .select("cliente_id, metodo_entrega")
+                    .order("suscripcion_id")
+                    .range(s_start, s_end).execute())
+                if res_susc.data:
+                    all_susc.extend(res_susc.data)
+                    if len(res_susc.data) < chunk_size: break
+                else: break
+            map_metodo_susc = {s['cliente_id']: s['metodo_entrega'] for s in all_susc} if all_susc else {}
+            df_asig['metodo_envio'] = df_asig['cliente_id'].map(map_metodo_susc)
         
-        # Ventas directas (Paginado)
+        # 2. Ventas directas (Paginado)
         all_ventas = []
-        estados_venta = ["LISTO / PENDIENTE PAGO", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO"]
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
+            # 🌟 CORE FIX: Filtro optimizado en base excluyendo Ventas ya FINALIZADAS
             res_ventas = (conn.table("registro_ventas")
                 .select("cliente_id, estado, metodo_envio")
-                .in_("estado", estados_venta)
+                .neq("estado", "FINALIZADO")
                 .order("venta_id")
                 .range(start, end).execute())
             if res_ventas.data:
@@ -278,16 +586,7 @@ def obtener_reporte_envios_pendientes():
             'telefono': 'Telefono', 'direccion': 'Dirección Completa'
         }, inplace=True)
         
-        # Añadir columnas estándar para la empresa de courier
-        df_reporte['Comuna'] = ''
-        df_reporte['Detalle/Depto'] = ''
-        df_reporte['Largo(cm)'] = 25
-        df_reporte['Ancho(cm)'] = 20
-        df_reporte['Alto(cm)'] = 10
-        df_reporte['Peso(kg)'] = 1
-        
-        columnas_finales = ['Nombre Cliente', 'RUT', 'Email', 'Telefono', 'Dirección Completa', 'Comuna', 'Detalle/Depto', 'Largo(cm)', 'Ancho(cm)', 'Alto(cm)', 'Peso(kg)', 'origen', 'estado']
-        return df_reporte[columnas_finales]
+        return df_reporte
     except Exception as e:
         st.error(f"Error generando reporte de envíos: {e}")
         return pd.DataFrame()
@@ -298,7 +597,6 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
     try:
         mes_str = f"{mes:02d}"
         
-        # Ventas (Paginado)
         all_ventas = []
         chunk_size = 1000
         for bloque in range(100):
@@ -347,8 +645,8 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
             df_reporte['Fecha Emisin'] = pd.to_datetime(df_reporte['fecha_venta']).dt.strftime('%d-%m-%Y')
             df_reporte['RUT Empresa Receptor'] = df_reporte['rut']
             df_reporte['Razon Social'] = df_reporte['nombre']
-            df_reporte['Giro Comercial'] = '' # Campo manual
-            df_reporte['Comuna Receptor'] = '' # Campo manual
+            df_reporte['Giro Comercial'] = ''
+            df_reporte['Comuna Receptor'] = ''
             df_reporte['Direccin Receptor'] = df_reporte['direccion']
             df_reporte['Detalle Item'] = df_reporte['libros_vendidos'].apply(lambda x: ", ".join([f"{item['cantidad']}x {item['titulo']}" for item in json.loads(x)]) if isinstance(x, str) and x.startswith('[') else x)
             df_reporte['Cantidad'] = 1
@@ -360,7 +658,7 @@ def obtener_reporte_sii(ano, mes, tipo_dte):
 
         return df_reporte[columnas_finales]
     except Exception as e:
-        st.error(f"Error generando reporte SII: {e}")
+        st.error(f"Error generating reporte SII: {e}")
         return pd.DataFrame()
 
 def obtener_reporte_bajo_stock(limite=5):
@@ -393,13 +691,14 @@ def obtener_reporte_pendientes_consolidado():
     try:
         chunk_size = 1000
         
-        # 1. Obtener registro_ventas (Caja) no finalizados
+        # 1. Obtener registro_ventas (Caja) no finalizados (estado != FINALIZADO)
         all_ventas = []
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res_ventas = (conn.table("registro_ventas")
                 .select("*")
+                .neq("estado", "FINALIZADO")
                 .order("venta_id")
                 .range(start, end).execute())
             if res_ventas.data:
@@ -408,8 +707,6 @@ def obtener_reporte_pendientes_consolidado():
             else: break
             
         df_ventas = pd.DataFrame(all_ventas) if all_ventas else pd.DataFrame()
-        if not df_ventas.empty:
-            df_ventas = df_ventas[df_ventas['estado'].astype(str).str.strip().str.upper() != 'FINALIZADO']
             
         # 2. Obtener asignaciones no finalizadas (estado_envio != ENVIADO y != RETIRADO)
         all_asig = []
@@ -418,6 +715,7 @@ def obtener_reporte_pendientes_consolidado():
             end = start + chunk_size - 1
             res_asig = (conn.table("asignaciones")
                 .select("*")
+                .not_.in_("estado_envio", ["ENVIADO", "RETIRADO"])
                 .order("asignacion_id")
                 .range(start, end).execute())
             if res_asig.data:
@@ -426,8 +724,6 @@ def obtener_reporte_pendientes_consolidado():
             else: break
             
         df_asig = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
-        if not df_asig.empty:
-            df_asig = df_asig[~df_asig['estado_envio'].astype(str).str.strip().str.upper().isin(['ENVIADO', 'RETIRADO'])]
             
         # Enriquecer df_ventas con nombres de clientes
         if not df_ventas.empty:
@@ -464,10 +760,6 @@ def obtener_reporte_pendientes_consolidado():
         log_error("vista_reportes", "obtener_reporte_pendientes_consolidado", e, st.session_state.get('email_usuario', 'Desconocido'))
         return pd.DataFrame(), pd.DataFrame()
 
-# ====================================================
-# --- REPORTE DE UTILIDADES Y BALANCE CONSOLIDADO ---
-# ====================================================
-
 def obtener_reporte_utilidades_mensual(ano):
     """Genera reporte paginado anual consolidando ingresos, costos y utilidades por mes."""
     conn = get_db_connection()
@@ -501,7 +793,6 @@ def obtener_reporte_utilidades_mensual(ano):
             else: break
         df_a = pd.DataFrame(all_asig) if all_asig else pd.DataFrame()
         if not df_a.empty:
-            # Bypass del límite de 1000 para "suscripciones" ordenando por "suscripcion_id"
             all_susc = []
             for bloque_s in range(100):
                 start_s = bloque_s * chunk_size
@@ -518,14 +809,13 @@ def obtener_reporte_utilidades_mensual(ano):
                 df_a['valor_suscripcion'] = 18500.0
             df_a['valor_suscripcion'] = pd.to_numeric(df_a['valor_suscripcion'], errors='coerce').fillna(18500.0)
             df_a['costo_caja'] = pd.to_numeric(df_a['costo_caja'], errors='coerce').fillna(10000.0)
-            # Filtrar solo asignaciones pagadas
             df_a['pagado_clean'] = df_a['pagado'].apply(lambda x: "SI" if str(x).upper() in ["TRUE", "T", "1", "SI"] else "NO")
             df_a = df_a[df_a['pagado_clean'] == 'SI']
 
         # 3. Cargar Ventas Masivas
         all_vm = []
-        for bloque in range(100):
-            start = bloque * chunk_size
+        for bloques in range(100):
+            start = bloques * chunk_size
             end = start + chunk_size - 1
             res_vm = conn.table("ventas_masivas").select("fecha_evento, ingreso_total, costo_total, utilidad_estimada").order("evento_id").range(start, end).execute()
             if res_vm.data:
@@ -552,7 +842,6 @@ def obtener_reporte_utilidades_mensual(ano):
             df_cnv['fecha_ocurrencia'] = pd.to_datetime(df_cnv['fecha_ocurrencia'], errors='coerce')
             df_cnv = df_cnv[df_cnv['fecha_ocurrencia'].dt.year == ano]
 
-        # Construcción del balance mes por mes
         meses_nombres = {
             1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
             7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
@@ -560,7 +849,6 @@ def obtener_reporte_utilidades_mensual(ano):
         filas_reporte = []
 
         for m_num, m_nom in meses_nombres.items():
-            # Canal 1: Suscripciones (Cajitas)
             if not df_a.empty:
                 a_mes = df_a[df_a['mes'] == m_num]
                 ing_a = pd.to_numeric(a_mes['valor_suscripcion'], errors='coerce').sum()
@@ -569,7 +857,6 @@ def obtener_reporte_utilidades_mensual(ano):
             else:
                 ing_a, costo_a, util_a = 0.0, 0.0, 0.0
 
-            # Canal 2: Ventas Directas
             if not df_v.empty:
                 v_mes = df_v[df_v['fecha_venta'].dt.month == m_num]
                 ing_v = pd.to_numeric(v_mes['monto_final'], errors='coerce').sum()
@@ -579,7 +866,6 @@ def obtener_reporte_utilidades_mensual(ano):
             else:
                 ing_v, costo_v, env_v, util_v = 0.0, 0.0, 0.0, 0.0
 
-            # Canal 3: Ventas Masivas (Eventos)
             if not df_vm.empty:
                 vm_mes = df_vm[df_vm['fecha_evento'].dt.month == m_num]
                 ing_vm = pd.to_numeric(vm_mes['ingreso_total'], errors='coerce').sum()
@@ -588,14 +874,12 @@ def obtener_reporte_utilidades_mensual(ano):
             else:
                 ing_vm, costo_vm, util_vm = 0.0, 0.0, 0.0
 
-            # Gastos Operacionales (No de ventas)
             if not df_cnv.empty:
                 cnv_mes = df_cnv[df_cnv['fecha_ocurrencia'].dt.month == m_num]
                 gasto_cnv = pd.to_numeric(cnv_mes['monto'], errors='coerce').sum()
             else:
                 gasto_cnv = 0.0
 
-            # Balance Total
             total_ingresos = ing_a + ing_v + ing_vm
             total_costos_ventas = costo_a + costo_v + costo_vm
             utilidad_pre_operacional = util_a + util_v + util_vm
@@ -622,7 +906,6 @@ def obtener_reporte_utilidades_mensual(ano):
 
         df_balance = pd.DataFrame(filas_reporte)
         
-        # Generar Fila de Totales Consolidados
         suma_totales = df_balance.select_dtypes(include='number').sum()
         suma_totales['Mes'] = "TOTAL ANUAL"
         suma_totales['Año'] = ano
@@ -636,6 +919,7 @@ def obtener_reporte_utilidades_mensual(ano):
 # ====================================================
 # --- VISTA PRINCIPAL ---
 # ====================================================
+
 def mostrar_reportes():
     st.title("📥 Reportes y Descargas")
     st.markdown("Genera reportes estratégicos o descarga la información bruta de tu base de datos.")
@@ -646,10 +930,10 @@ def mostrar_reportes():
         st.markdown("### Reportes listos para usar")
         st.info("💡 Estos reportes cruzan datos para entregarte información lista para la toma de decisiones.")
         
-        # --- REPORTE 1: PENDIENTES DE DESPACHO / LOGÍSTICA (NUEVO) ---
+        # --- REPORTE 1: PENDIENTES DE DESPACHO / LOGÍSTICA ---
         with st.container(border=True):
             st.markdown("#### ⏳ Control de Registros Pendientes (Caja y Asignaciones)")
-            st.write("Identifica y descarga todas las asignaciones o ventas de caja que aún no se encuentran finalizadas (Ventas con estado distinto de 'FINALIZADO' y Asignaciones con estado de envío distinto de 'ENVIADO' o 'RETIRADO').")
+            st.write("Identifica y descarga todas las asignaciones o ventas de caja que aún no se encuentran finalizadas.")
             
             if st.button("Generar Reporte de Pendientes", type="primary", use_container_width=True, key="btn_pendientes_no_finalizados"):
                 with st.spinner("Buscando registros pendientes en Supabase..."):
@@ -697,28 +981,21 @@ def mostrar_reportes():
                             use_container_width=True,
                             key="btn_descarga_balance"
                         )
-                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_balance"):
-                            if "ano_balance_cons" in st.session_state:
-                                del st.session_state["ano_balance_cons"]
-                            st.rerun()
                     else:
                         st.warning("No se encontraron registros financieros para el año seleccionado.")
 
-        # --- REPORTE 3: HISTORIAL DE ASIGNACIONES (CAJITAS) (CON SELECCIÓN TODOS AÑOS Y MESES) ---
+        # --- REPORTE 3: HISTORIAL DE ASIGNACIONES (CAJITAS) ---
         with st.container(border=True):
             st.markdown("#### 🎁 Historial de Asignaciones (Cajitas)")
             st.write("Exporta el detalle de las cajas armadas con el nombre del cliente y los libros que recibió.")
             
             c1, c2 = st.columns(2)
-            
-            # --- MEJORA: Seleccionar todos los años o año específico ---
             todos_anos = c1.checkbox("Seleccionar todos los años", value=False, key="chk_todos_anos")
             if not todos_anos:
                 ano_asig = c1.number_input("Año del reporte:", min_value=2020, max_value=2050, value=datetime.now().year, step=1, key="ano_asig")
             else:
                 ano_asig = None
                 
-            # --- MEJORA: Seleccionar todos los meses o meses específicos ---
             todos_meses = c2.checkbox("Seleccionar todos los meses", value=False, key="chk_todos_meses")
             meses_dict_asig = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
             
@@ -735,7 +1012,6 @@ def mostrar_reportes():
                     df_asig_reporte = obtener_reporte_asignaciones(ano_asig, meses_asig_nums, todos_los_anos=todos_anos, todos_los_meses=todos_meses)
                     if not df_asig_reporte.empty:
                         st.success(f"¡Reporte de asignaciones generado exitosamente! ({len(df_asig_reporte)} registros)")
-                        
                         nombre_archivo = f"reporte_asignaciones_{'todos_los_anos' if todos_anos else ano_asig}.xlsx"
                         st.download_button(
                             label=f"Descargar Asignaciones ({len(df_asig_reporte)} registros) (.xlsx)", 
@@ -744,31 +1020,59 @@ def mostrar_reportes():
                             use_container_width=True,
                             key="btn_descarga_asig"
                         )
-                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_asig"):
-                            for k in ["ano_asig", "meses_asig", "chk_todos_anos", "chk_todos_meses"]:
-                                if k in st.session_state:
-                                    del st.session_state[k]
-                            st.rerun()
                     else:
                         st.warning("No se encontraron registros de asignación para los filtros seleccionados.")
 
-        # --- REPORTE 4: ENVÍOS PENDIENTES ---
+        # --- REPORTE 4: ENVÍOS PENDIENTES CON HOJAS DE RUTA INDEPENDIENTES ---
         with st.container(border=True):
-            st.markdown("#### 🚚 Envíos Pendientes Unificados")
-            st.write("Lista consolidada de todas las cajas (suscripciones y ventas) listas para despacho, con formato para courier.")
-            if st.button("Generar Reporte de Envíos", type="primary", use_container_width=True, key="btn_envios"):
-                df_envios = obtener_reporte_envios_pendientes()
-                if not df_envios.empty:
-                    st.success("¡Reporte de envíos generado exitosamente!")
-                    st.download_button(
-                        label=f"Descargar {len(df_envios)} Envíos Pendientes (.xlsx)", 
-                        data=convertir_df_a_excel(df_envios), 
-                        file_name="envios_pendientes.xlsx",
-                        use_container_width=True,
-                        key="btn_descarga_envios"
-                    )
-                else:
-                    st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
+            st.markdown("#### 🚚 Despachos Pendientes Unificados (Paket & Bluexpress)")
+            st.write("Genera listas de despacho separadas y pre-formateadas según las plantillas oficiales de **Paket** y **Bluexpress**.")
+            
+            if st.button("Generar Reportes de Despacho", type="primary", use_container_width=True, key="btn_envios"):
+                with st.spinner("Consolidando despachos pendientes desde Supabase..."):
+                    df_envios = obtener_reporte_envios_pendientes()
+                    
+                    if not df_envios.empty:
+                        # Procesar y dividir los envíos pendientes
+                        df_paket, df_blue = procesar_reportes_envios(df_envios)
+                        
+                        st.success("¡Despachos pendientes agrupados exitosamente!")
+                        
+                        col_e1, col_e2 = st.columns(2)
+                        
+                        with col_e1:
+                            st.markdown("##### 📦 Envíos por Paket")
+                            if not df_paket.empty:
+                                st.metric("Envíos por Paket", len(df_paket))
+                                excel_paket = convertir_df_a_excel(df_paket)
+                                st.download_button(
+                                    label=f"📥 Descargar {len(df_paket)} Envíos Paket (.xlsx)",
+                                    data=excel_paket,
+                                    file_name=f"despacho_paket_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True,
+                                    key="btn_descarga_paket"
+                                )
+                            else:
+                                st.info("No hay despachos pendientes para Paket.")
+                                
+                        with col_e2:
+                            st.markdown("##### 🔵 Envíos por Bluexpress")
+                            if not df_blue.empty:
+                                st.metric("Envíos por Bluexpress", len(df_blue))
+                                excel_blue = generar_excel_bluexpress(df_blue)
+                                st.download_button(
+                                    label=f"📥 Descargar {len(df_blue)} Envíos Bluexpress (.xlsx)",
+                                    data=excel_blue,
+                                    file_name=f"despacho_bluexpress_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True,
+                                    key="btn_descarga_blue"
+                                )
+                            else:
+                                st.info("No hay despachos pendientes para Bluexpress.")
+                    else:
+                        st.success("✅ ¡Todo despachado! No hay envíos pendientes.")
 
         # --- REPORTE 5: SII ---
         with st.container(border=True):
@@ -798,11 +1102,6 @@ def mostrar_reportes():
                             use_container_width=True,
                             key="btn_descarga_sii"
                         )
-                        if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_sii"):
-                            for k in ["mes_fact_sii", "ano_fact_sii", "tipo_dte_sel"]:
-                                if k in st.session_state:
-                                    del st.session_state[k]
-                            st.rerun()
                     else:
                         st.warning("No se encontraron ventas para el período seleccionado.")
 
@@ -822,10 +1121,6 @@ def mostrar_reportes():
                         use_container_width=True,
                         key="btn_descarga_stock"
                     )
-                    if st.button("🧹 Nueva Consulta (Limpiar Filtros)", use_container_width=True, key="btn_limpiar_stock"):
-                        if "limite_stock_reporte" in st.session_state:
-                            del st.session_state["limite_stock_reporte"]
-                        st.rerun()
                 else:
                     st.success("¡Excelente! No tienes libros con stock crítico.")
 
@@ -852,10 +1147,6 @@ def mostrar_reportes():
                             use_container_width=True,
                             key="btn_descarga_backup"
                         )
-                        if st.button("🧹 Nueva Exportación (Limpiar)", use_container_width=True, key="btn_limpiar_backup"):
-                            if "tabla_seleccionada" in st.session_state:
-                                del st.session_state["tabla_seleccionada"]
-                            st.rerun()
                     else:
                         st.warning("La tabla seleccionada está vacía.")
 
