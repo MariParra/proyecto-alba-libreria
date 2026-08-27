@@ -290,7 +290,7 @@ def check_elegibilidad_cliente_cupon(cliente_id, df_clientes, df_ventas_global, 
     if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
         df_cli_ventas = df_ventas_global[df_ventas_global['cliente_id'] == int(cliente_id)].copy()
         if not df_cli_ventas.empty:
-            df_cli_ventas['fecha_dt'] = pd.to_datetime(df_cli_ventas['fecha_venta'], errors='coerce')
+            df_cli_ventas['fecha_dt'] = unificar_formatos_fecha(df_cli_ventas['fecha_venta'])
             df_cli_ventas = df_cli_ventas.dropna(subset=['fecha_dt'])
             
             # Quitar offsets
@@ -2079,7 +2079,7 @@ CREATE TABLE IF NOT EXISTS cupones (
                     if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
                         df_cli_v = df_ventas_global[df_ventas_global['cliente_id'] == c_id_val].copy()
                         if not df_cli_v.empty:
-                            df_cli_v['fecha_dt'] = pd.to_datetime(df_cli_v['fecha_venta'], errors='coerce')
+                            df_cli_v['fecha_dt'] = unificar_formatos_fecha(df_cli_v['fecha_venta'])
                             df_cli_v = df_cli_v.dropna(subset=['fecha_dt'])
                             
                             def safe_to_naive_calc(val):
