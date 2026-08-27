@@ -1846,6 +1846,25 @@ def mostrar_caja():
     with tab_cupones:
         st.markdown("### 🎟️ Panel de Cupones y Fidelización Premium")
         
+        # --- GUÍA DE USO INTERACTIVA (UX EXCLUSIVA DE ALBA LIBRERÍA) ---
+        with st.expander("📖 Manual de Uso Integrado: ¿Cómo funcionan mis cupones?", expanded=True):
+            st.markdown("#### 1️⃣ Módulo de Cupones del Sistema (Cupones creados en Base de Datos)")
+            
+            st.info("""
+            💡 **¿Cómo funciona el Límite de Usos?**
+            * **Límite = 1 (De un solo uso absoluto):** Es un cupón de "primer canje". El primer cliente que lo utilice en caja se lo "queda" y lo quema. El sistema registrará `Usado: 1/1` e invalidará el código inmediatamente para todo el mundo (incluyendo al emisor). *Ideal para: Compensaciones, regalos de cumpleaños o sorteos rápidos.*
+            * **Límite = 1000 (Masivo público):** El cupón puede ser canjeado un total de 1000 veces en la tienda en total. Cualquier cliente puede usarlo, e incluso una misma clienta puede usarlo en varias ventas distintas, siempre y cuando no se supere el límite global de 1000 usos.
+            * **Límite = N + Cliente Exclusivo:** Si creas un cupón con límite de usos (ej: 1 o 5) y seleccionas un cliente específico, **solo ese cliente podrá validarlo**. Nadie más tendrá acceso a ese descuento.
+            """)
+            
+            st.markdown("#### 2️⃣ Módulo de Fidelización (Compras Acumuladas)")
+            
+            st.info("""
+            ⏳ **¿Desde qué fecha se calculan los 365 días de acumulación?**
+            * **La Ventana Flotante:** El plazo (ej: 365 días) se calcula **dinámicamente hacia atrás desde el día de hoy**. Es decir, si hoy es 25 de Agosto de 2026, el sistema sumará las compras realizadas desde el 25 de Agosto de 2025 hasta hoy. Las compras que tengan más de un año de antigüedad van "expirando" de la suma acumulada de forma automática todos los días.
+            * **El Reinicio por Canje (Frontera de Tiempo):** En el momento en que confirmas el canje de una clienta, el sistema guarda la fecha actual en su perfil de Supabase (`CANJE_CUPON: 2026-08-25`). A partir de ese segundo, el motor de base de datos **ignora por completo todas las ventas anteriores a esa fecha**, reiniciando su acumulado a $0 para que pueda empezar a juntar compras para su próximo cupón desde mañana.
+            """)
+            
         # --- VERIFICACIÓN DE LA EXISTENCIA DE LA TABLA EN SUPABASE ---
         if df_cupones.empty:
             st.warning("⚠️ No se han encontrado cupones registrados. Si es tu primera vez ejecutando este módulo, asegúrate de haber creado la tabla 'cupones' en Supabase.")
