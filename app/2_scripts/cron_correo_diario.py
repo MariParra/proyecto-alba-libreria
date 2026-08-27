@@ -74,8 +74,6 @@ EMAIL_EMISOR = st_secrets.get("email", {}).get("remitente") or os.environ.get("E
 EMAIL_RECEPTOR = st_secrets.get("email", {}).get("dest_admin") or os.environ.get("EMAIL_RECEPTOR")
 EMAIL_PASSWORD = st_secrets.get("email", {}).get("password") or os.environ.get("EMAIL_PASSWORD")
 
-EMAIL_PASSWORD")
-
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
