@@ -232,7 +232,7 @@ def cargar_asignaciones_mes(ano, mes):
 
         columnas_esperadas = [
             'asignacion_id', 'cliente_id', 'libro_suscripcion_id', 'nombre', 'titulo_libro', 'ano', 'mes', 
-            'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'cobro_envio', 'comentario', 
+            'extras', 'fecha_asignacion', 'estado_envio', 'pagado', 'envio_pagado', 'tipo_cobro_envio', 'comentario', 
             'valor_envio', 'monto_total', 'valor_extras', 'costo_caja', 'rut', 
             'fecha_actualizacion_librero', 'generos_preferencia', 'metodo_entrega',
             'fecha_pago'
@@ -332,7 +332,7 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
     creados, errores_visibles = 0, []
     total_a_crear = len(df_faltantes)
     
-    # 📅 Calcular mes anterior para heredar cobro_envio
+    # 📅 Calcular mes anterior para heredar tipo_cobro_envio
     if int(mes) == 1:
         mes_ant = 12
         ano_ant = int(ano) - 1
@@ -340,13 +340,13 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
         mes_ant = int(mes) - 1
         ano_ant = int(ano)
         
-    cobro_envio_ant_dict = {}
+    tipo_cobro_envio_ant_dict = {}
     try:
-        res_ant = conn.table("asignaciones").select("cliente_id, cobro_envio").eq("ano", ano_ant).eq("mes", mes_ant).execute()
+        res_ant = conn.table("asignaciones").select("cliente_id, tipo_cobro_envio").eq("ano", ano_ant).eq("mes", mes_ant).execute()
         if res_ant.data:
-            cobro_envio_ant_dict = {item['cliente_id']: item['cobro_envio'] for item in res_ant.data if item.get('cliente_id') is not None}
+            tipo_cobro_envio_ant_dict = {item['cliente_id']: item['tipo_cobro_envio'] for item in res_ant.data if item.get('cliente_id') is not None}
     except Exception as e:
-        print(f"Error cargando cobro_envio del mes anterior: {e}")
+        print(f"Error cargando tipo_cobro_envio del mes anterior: {e}")
 
     creados, errores_visibles = 0, []
     total_a_crear = len(df_faltantes)
@@ -365,23 +365,23 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
                 metodo_entrega_cliente = str(fila_susc.get('metodo_entrega', '')).strip().upper()
             
             # 🚚 Clasificación automática basada en el método de entrega del mes anterior o actual
-            if c_id in cobro_envio_ant_dict:
-                cobro_envio_inicial = cobro_envio_ant_dict[c_id]
-                if cobro_envio_inicial in ["POR PAGAR", "RETIRO EN TIENDA"]:
+            if c_id in tipo_cobro_envio_ant_dict:
+                tipo_cobro_envio_inicial = tipo_cobro_envio_ant_dict[c_id]
+                if tipo_cobro_envio_inicial in ["POR PAGAR", "RETIRO EN TIENDA"]:
                     envio_pagado_inicial = "NO APLICA"
                 else:
                     envio_pagado_inicial = "NO"
             else:
                 # Fallback: Clasificación basada en el método de entrega actual
                 if "RETIRO" in metodo_entrega_cliente:
-                    cobro_envio_inicial = "RETIRO EN TIENDA"
+                    tipo_cobro_envio_inicial = "RETIRO EN TIENDA"
                     envio_pagado_inicial = "NO APLICA"
                 elif "PAKET" in metodo_entrega_cliente:
-                    cobro_envio_inicial = "PAGADO"
+                    tipo_cobro_envio_inicial = "PAGADO"
                     envio_pagado_inicial = "NO"
                 else:
                     # Caso contrario: Queda vacío (NULL) para ser llenado manualmente en el data_editor
-                    cobro_envio_inicial = None  
+                    tipo_cobro_envio_inicial = None  
                     envio_pagado_inicial = "NO"
             
             datos = {
@@ -391,7 +391,7 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
                 "estado_envio": "PENDIENTE PREPARACION", 
                 "pagado": "NO", 
                 "envio_pagado": envio_pagado_inicial,
-                "cobro_envio": cobro_envio_inicial,
+                "tipo_cobro_envio": tipo_cobro_envio_inicial,
                 "valor_envio": 0.0, 
                 "valor_extras": 0.0, 
                 "monto_total": val_sub,
@@ -745,7 +745,7 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
             costo_c = float(row.get('costo_caja', 10000.0) or 10000.0) 
             m_total = val_sub + v_envio + v_extras 
             
-            c_envio_raw = row.get('cobro_envio')
+            c_envio_raw = row.get('tipo_cobro_envio')
             c_envio = str(c_envio_raw).upper().strip() if pd.notna(c_envio_raw) else ""
             if c_envio in ["", "NONE"]:
                 c_envio_db = None
@@ -760,7 +760,7 @@ def actualizar_asignaciones_batch(df_editado, df_mes_completo):
                 "estado_envio": str(row['estado_envio']).upper(), 
                 "pagado": str(row['pagado']).upper(),
                 "envio_pagado": e_pagado, 
-                "cobro_envio": c_envio_db,
+                "tipo_cobro_envio": c_envio_db,
                 "extras": str(row.get('extras', '')).upper(),
                 "comentario": str(row.get('comentario', '')),
                 "valor_envio": v_envio, "valor_extras": v_extras, "monto_total": m_total,
@@ -808,12 +808,12 @@ def actualizar_asignaciones_masivo(lista_asignacion_ids, columna, nuevo_valor):
         datos_update = {}
         
         # 🚚 Lógica auto-curativa y conversión a NULL
-        if columna == "cobro_envio":
+        if columna == "tipo_cobro_envio":
             val_str = str(nuevo_valor).upper().strip() if pd.notna(nuevo_valor) else ""
             if val_str in ["", "NONE"]:
-                datos_update["cobro_envio"] = None  # Guardar como NULL en Supabase
+                datos_update["tipo_cobro_envio"] = None  # Guardar como NULL en Supabase
             else:
-                datos_update["cobro_envio"] = val_str
+                datos_update["tipo_cobro_envio"] = val_str
                 
             # Si el tipo de envío es por pagar o retiro, forzamos "NO APLICA"
             if val_str in ["POR PAGAR", "RETIRO EN TIENDA"]:
@@ -1008,13 +1008,13 @@ def mostrar_asignaciones():
     if not df_mes.empty:
         df_mes['pagado'] = df_mes['pagado'].apply(mapear_sino)
         
-        # 1. Normalizar y rellenar cobro_envio en caso de nulos
-        if 'cobro_envio' not in df_mes.columns:
-            df_mes['cobro_envio'] = ""
-        df_mes['cobro_envio'] = df_mes['cobro_envio'].fillna("").astype(str).str.upper().str.strip()
+        # 1. Normalizar y rellenar tipo_cobro_envio en caso de nulos
+        if 'tipo_cobro_envio' not in df_mes.columns:
+            df_mes['tipo_cobro_envio'] = ""
+        df_mes['tipo_cobro_envio'] = df_mes['tipo_cobro_envio'].fillna("").astype(str).str.upper().str.strip()
                 
         # 2. Regla auto-curativa en memoria: Si es POR PAGAR o RETIRO, envio_pagado es NO APLICA
-        mask_no_aplica = df_mes['cobro_envio'].isin(["POR PAGAR", "RETIRO EN TIENDA"])
+        mask_no_aplica = df_mes['tipo_cobro_envio'].isin(["POR PAGAR", "RETIRO EN TIENDA"])
         df_mes.loc[mask_no_aplica, 'envio_pagado'] = "NO APLICA"
         
         # Para los despachos tradicionales pagados, normalizar pago a SI/NO
@@ -1204,7 +1204,7 @@ def mostrar_asignaciones():
                     with col_fa5:
                         filtro_pagado = st.selectbox("💳 Estado de Pago:", ["Todos"] + df_mes['pagado'].unique().tolist())
                     with col_fa5_2:
-                        filtro_cobro_envio = st.selectbox("🚚 Cobro Envío:", ["Todos"] + df_mes['cobro_envio'].unique().tolist())
+                        filtro_tipo_cobro_envio = st.selectbox("🚚 Cobro Envío:", ["Todos"] + df_mes['tipo_cobro_envio'].unique().tolist())
                     with col_fa6:
                         filtro_libro = st.selectbox("📚 Asignación Libro:", ["Todos", "Sin Libro", "Con Libro"])
                     with col_fa7:
@@ -1216,7 +1216,7 @@ def mostrar_asignaciones():
                     
                     # 🔴 Fila 3: Visibilidad de Columnas
                     columnas_opcionales = [
-                        'pagado', 'envio_pagado', 'cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 
+                        'pagado', 'envio_pagado', 'tipo_cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 
                         'costo_caja', 'valor_envio', 'valor_extras', 'monto_total', 'extras', 'comentario', 'metodo_entrega',
                         'preferencia_mensual' 
                     ]
@@ -1224,7 +1224,7 @@ def mostrar_asignaciones():
                     columnas_visibles = st.multiselect(
                         "👁️ Ocultar/Mostrar Columnas en la Tabla:", 
                         options=columnas_opcionales, 
-                        default=['pagado', 'envio_pagado', 'cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 'preferencia_mensual'],
+                        default=['pagado', 'envio_pagado', 'tipo_cobro_envio', 'nombre', 'titulo_libro', 'estado_envio', 'preferencia_mensual'],
                         help="Quita las columnas que no necesites ver para tener una vista más limpia."
                     )
 
@@ -1250,8 +1250,8 @@ def mostrar_asignaciones():
                     df_filtrado = df_filtrado[df_filtrado['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
                 elif filtro_libro == "Con Libro": 
                     df_filtrado = df_filtrado[df_filtrado['titulo_libro'] != "⏳ PENDIENTE DE ASIGNAR"]
-                if filtro_cobro_envio != "Todos":
-                    df_filtrado = df_filtrado[df_filtrado['cobro_envio'] == filtro_cobro_envio]   
+                if filtro_tipo_cobro_envio != "Todos":
+                    df_filtrado = df_filtrado[df_filtrado['tipo_cobro_envio'] == filtro_tipo_cobro_envio]   
                 if filtro_metodo_envio:
                     df_filtrado = df_filtrado[df_filtrado['metodo_entrega'].isin(filtro_metodo_envio)]
 
@@ -1297,7 +1297,7 @@ def mostrar_asignaciones():
                     "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                     "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                     "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado 💳", options=["SI", "NO", "NO APLICA"], required=True),
-                    "cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=False),
+                    "tipo_cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=False),
                     "costo_caja": st.column_config.NumberColumn("Costo Caja Fijo ($)", format="$%.0f"),
                     "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                     "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
@@ -1405,7 +1405,7 @@ def mostrar_asignaciones():
                         col1, col2 = st.columns(2)
                         col1, col2 = st.columns(2)
                         with col1:
-                            columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "cobro_envio", "valor_envio", "comentario"]
+                            columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "tipo_cobro_envio", "valor_envio", "comentario"]
                             columna_a_cambiar = st.selectbox("1. Columna a modificar:", columnas_modificables, key="col_a_cambiar", on_change=forzar_rerun)
                         
                         with col2:
@@ -1413,7 +1413,7 @@ def mostrar_asignaciones():
                                 "estado_envio": ["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"],
                                 "pagado": ["SI", "NO", "ABONO"],
                                 "envio_pagado": ["SI", "NO", "NO APLICA"],
-                                "cobro_envio": ["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"]
+                                "tipo_cobro_envio": ["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"]
                             }
                             if columna_a_cambiar in opciones_desplegables:
                                 nuevo_valor = st.selectbox("2. Nuevo valor:", options=opciones_desplegables[columna_a_cambiar])
@@ -1925,7 +1925,7 @@ def mostrar_asignaciones():
                         row_caja = df_mes[df_mes['asignacion_id'] == id_asig_tmp].iloc[0]
                         
                         st.markdown("#### 🚚 Despacho y Envío")
-                        cobro_envio_manual = st.number_input("Establecer Costo de Envío para esta caja ($):", min_value=0.0, step=500.0, value=float(row_caja.get('valor_envio', 0.0)))
+                        tipo_cobro_envio_manual = st.number_input("Establecer Costo de Envío para esta caja ($):", min_value=0.0, step=500.0, value=float(row_caja.get('valor_envio', 0.0)))
                         
                         st.markdown("#### 📝 Ajuste Manual de Extras (Escape Hatch)")
                         st.warning("⚠️ Modifica estas casillas SOLAMENTE si necesitas corregir un error (ej: si anulaste una venta en caja y necesitas borrar el nombre del libro de esta lista).")
@@ -1934,7 +1934,7 @@ def mostrar_asignaciones():
                         
                         st.markdown("---")
                         if st.button("✅ Guardar Cambios en Logística", type="primary"):
-                            ex, err = guardar_ajustes_logistica(id_asig_tmp, row_caja['cliente_id'], cobro_envio_manual, nuevo_extra_txt, nuevo_valor_ext)
+                            ex, err = guardar_ajustes_logistica(id_asig_tmp, row_caja['cliente_id'], tipo_cobro_envio_manual, nuevo_extra_txt, nuevo_valor_ext)
                             if ex: 
                                 if 'cliente_logistica_sel' in st.session_state: del st.session_state.cliente_logistica_sel
                                 st.success("¡Datos guardados! El Monto Total se recalculó automáticamente.")
