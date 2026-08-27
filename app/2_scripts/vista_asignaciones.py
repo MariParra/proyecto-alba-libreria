@@ -327,6 +327,27 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
         return True, "✅ ¡Todo al día! No se encontraron nuevos clientes activos para agregar al mes."
         
     conn = get_db_connection()
+    
+    
+    creados, errores_visibles = 0, []
+    total_a_crear = len(df_faltantes)
+    
+    # 📅 Calcular mes anterior para heredar cobro_envio
+    if int(mes) == 1:
+        mes_ant = 12
+        ano_ant = int(ano) - 1
+    else:
+        mes_ant = int(mes) - 1
+        ano_ant = int(ano)
+        
+    cobro_envio_ant_dict = {}
+    try:
+        res_ant = conn.table("asignaciones").select("cliente_id, cobro_envio").eq("ano", ano_ant).eq("mes", mes_ant).execute()
+        if res_ant.data:
+            cobro_envio_ant_dict = {item['cliente_id']: item['cobro_envio'] for item in res_ant.data if item.get('cliente_id') is not None}
+    except Exception as e:
+        print(f"Error cargando cobro_envio del mes anterior: {e}")
+
     creados, errores_visibles = 0, []
     total_a_crear = len(df_faltantes)
     
@@ -343,17 +364,25 @@ def comenzar_mes(ano, mes, df_mes_actual, progress_placeholder):
                 val_sub = float(fila_susc['valor_suscripcion'])
                 metodo_entrega_cliente = str(fila_susc.get('metodo_entrega', '')).strip().upper()
             
-            # 🚚 Clasificación automática basada en el método de entrega
-            if "RETIRO" in metodo_entrega_cliente:
-                cobro_envio_inicial = "RETIRO EN TIENDA"
-                envio_pagado_inicial = "NO APLICA"
-            elif "PAKET" in metodo_entrega_cliente:
-                cobro_envio_inicial = "PAGADO"
-                envio_pagado_inicial = "NO"
+            # 🚚 Clasificación automática basada en el método de entrega del mes anterior o actual
+            if c_id in cobro_envio_ant_dict:
+                cobro_envio_inicial = cobro_envio_ant_dict[c_id]
+                if cobro_envio_inicial in ["POR PAGAR", "RETIRO EN TIENDA"]:
+                    envio_pagado_inicial = "NO APLICA"
+                else:
+                    envio_pagado_inicial = "NO"
             else:
-                # Caso contrario: Queda vacío (NULL) para ser llenado manualmente en el data_editor
-                cobro_envio_inicial = None  
-                envio_pagado_inicial = "NO"
+                # Fallback: Clasificación basada en el método de entrega actual
+                if "RETIRO" in metodo_entrega_cliente:
+                    cobro_envio_inicial = "RETIRO EN TIENDA"
+                    envio_pagado_inicial = "NO APLICA"
+                elif "PAKET" in metodo_entrega_cliente:
+                    cobro_envio_inicial = "PAGADO"
+                    envio_pagado_inicial = "NO"
+                else:
+                    # Caso contrario: Queda vacío (NULL) para ser llenado manualmente en el data_editor
+                    cobro_envio_inicial = None  
+                    envio_pagado_inicial = "NO"
             
             datos = {
                 "cliente_id": c_id, 

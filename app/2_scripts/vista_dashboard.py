@@ -160,7 +160,7 @@ def cargar_datos_base():
     except Exception as e:
         log_error("vista_dashboard", "cargar_datos_base_clientes", e)
 
-    # 5. Costos No de Ventas (Paginado)
+    # 5. GASTOS (Paginado)
     df_costos_no_ventas = pd.DataFrame()
     try:
         all_data = []
@@ -445,7 +445,7 @@ def mostrar_dashboard():
     col_c3.metric("Utilidad Eventos", f"${utilidad_vm:,.0f}")
 
     # Línea 4: Costos no Operacionales
-    st.markdown("#### 💸 4. Costos No de Ventas (Gastos Operacionales)")
+    st.markdown("#### 💸 4. GASTOS (Gastos Operacionales)")
     col_cnv1, col_cnv2, col_cnv3 = st.columns(3)
     col_cnv1.metric("Total Gastos No Ventas", f"${costos_no_ventas_total:,.0f}")
     col_cnv2.metric("Cantidad de Registros", f"{len(df_costos_no_v_filt)}" if not df_costos_no_v_filt.empty else "0")
@@ -523,7 +523,7 @@ def mostrar_dashboard():
                 v_costo_agrupado = df_v_paid.groupby(col_agrupa)['costo_venta'].sum().rename("Costo Ventas Directas") if not df_v_paid.empty else pd.Series(name="Costo Ventas Directas", dtype=float)
                 a_costo_agrupado = df_a_paid.groupby(col_agrupa)['costo_caja'].sum().rename("Costo Suscripciones") if not df_a_paid.empty else pd.Series(name="Costo Suscripciones", dtype=float)
                 vm_costo_agrupado = df_vm_paid.groupby(col_agrupa)['costo_total'].sum().rename("Costo Ventas Masivas") if not df_vm_paid.empty else pd.Series(name="Costo Ventas Masivas", dtype=float)
-                cnv_costo_agrupado = df_costos_no_v_filt.groupby(col_agrupa)['monto'].sum().rename("Costos No de Ventas") if not df_costos_no_v_filt.empty else pd.Series(name="Costos No de Ventas", dtype=float)
+                cnv_costo_agrupado = df_costos_no_v_filt.groupby(col_agrupa)['monto'].sum().rename("GASTOS") if not df_costos_no_v_filt.empty else pd.Series(name="GASTOS", dtype=float)
 
                 df_costos_tendencia = pd.concat([v_costo_agrupado, a_costo_agrupado, vm_costo_agrupado, cnv_costo_agrupado], axis=1).fillna(0.0).sort_index()
                 df_costos_tendencia.index = df_costos_tendencia.index.astype(str)

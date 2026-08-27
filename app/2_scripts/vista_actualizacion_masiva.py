@@ -117,7 +117,7 @@ def generar_plantilla_actualizacion_clientes():
         return None
 
 def generar_plantilla_actualizacion_costos():
-    """Genera una plantilla Excel con TODOS los costos no de ventas actuales, superando la limitación de 1000."""
+    """Genera una plantilla Excel con TODOS los GASTOS actuales, superando la limitación de 1000."""
     conn = get_db_connection()
     try:
         all_costs = []

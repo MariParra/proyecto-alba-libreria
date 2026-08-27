@@ -897,7 +897,7 @@ def obtener_reporte_utilidades_mensual(ano):
             df_vm['fecha_evento'] = pd.to_datetime(df_vm['fecha_evento'], errors='coerce')
             df_vm = df_vm[df_vm['fecha_evento'].dt.year == ano]
 
-        # 4. Cargar Costos No de Ventas
+        # 4. Cargar GASTOS
         all_cnv = []
         for bloque in range(100):
             start = bloque * chunk_size

@@ -597,7 +597,7 @@ def procesar_suscripciones_masivas(df):
 # --- LÓGICA 5: CREACIÓN MASIVA DE COSTOS ---
 # ====================================================
 def generar_plantilla_costos():
-    '''Genera la plantilla Excel vacía con el esquema estructurado de costos no de ventas.'''
+    '''Genera la plantilla Excel vacía con el esquema estructurado de GASTOS.'''
     columnas = ['fecha_ocurrencia_YYYY_MM_DD', 'tipo_costo', 'monto', 'comentario']
     df_vacio = pd.DataFrame(columns=columnas)
     output = io.BytesIO()

@@ -29,7 +29,7 @@ def unificar_formatos_fecha(serie_fechas):
 @st.cache_data(ttl=300)
 def cargar_costos_no_ventas():
     """
-    Carga todos los costos no de ventas desde Supabase.
+    Carga todos los GASTOS desde Supabase.
     Bypassea el límite transaccional de 1000 registros utilizando paginación dinámica.
     """
     conn = get_db_connection()
@@ -136,7 +136,7 @@ def mostrar_costos():
     if 'historial_costos_original' not in st.session_state:
         st.session_state.historial_costos_original = pd.DataFrame()
         
-    st.title("💸 Costos No de Ventas")
+    st.title("💸 GASTOS")
     
     df_costos = cargar_costos_no_ventas()
     
@@ -208,7 +208,7 @@ def mostrar_costos():
                         
     # ================= TAB: HISTORIAL Y EDICIÓN =================
     with tab_historial:
-        st.markdown("### 📜 Historial de Costos No de Ventas")
+        st.markdown("### 📜 Historial de GASTOS")
         if df_costos.empty:
             st.info("Aún no hay registros en el historial.")
         else:
