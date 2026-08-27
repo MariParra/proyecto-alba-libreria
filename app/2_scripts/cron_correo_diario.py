@@ -91,6 +91,11 @@ def generar_reporte_empaque():
     dia_semana = hoy.weekday() # Monday is 0, Tuesday is 1, Wednesday is 2
     hora_actual = hoy.hour
 
+    # ================= VALIDACIÓN DE DÍAS LABORALES =================
+    if dia_semana in [5, 6]:  # Sábado (5) y Domingo (6)
+        print("🟢 Fin de semana. Los reportes automáticos únicamente se envían de lunes a viernes.")
+        return
+
     # ================= PARTE 1: CONSULTA DE ENVÍOS PENDIENTES (PAGINADO) =================
     all_data = []
     chunk_size = 1000
@@ -180,7 +185,7 @@ def generar_reporte_empaque():
         border_style = "2px solid #0288d1"
         card_bg = "#e1f5fe"
         msg_titulo = "🕊️ ¡MAÑANA ES DÍA DE FACTURAS! (PAZ ANTES DE LA TORMENTA)"
-        msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌️"
+        msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌"
 
     elif dia_semana == 2: # Miércoles
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20mirando.jpg"
@@ -207,7 +212,7 @@ def generar_reporte_empaque():
             msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. ¡El hámster está llorando en un rincón de la bodega! 🐹💔"
         else:
             msg_titulo = "🚨 RECORDATORIO DIARIO DE PRODUCTIVIDAD 🚨"
-            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
+            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁"
 
     # ================= CONSTRUCCIÓN DEL HTML =================
     html_content = f"""
@@ -255,7 +260,7 @@ def generar_reporte_empaque():
                 </table>
         """
 
-    # --- SECCIÓN 1.2 (NUEVA): POST-ITS PENDIENTES (EN PLAZO / COLOR AZUL) ---
+    # --- SECCIÓN 1.2: POST-ITS PENDIENTES (EN PLAZO / COLOR AZUL) ---
     if not df_notas_pendientes.empty:
         html_content += f"""
                 <h3 style="color: #1565c0; border-bottom: 2px solid #bbdefb; padding-bottom: 5px;">📅 Post-its Pendientes (En Plazo)</h3>
@@ -271,7 +276,6 @@ def generar_reporte_empaque():
                     <tbody>
         """
         for _, row in df_notas_pendientes.iterrows():
-            # Si vence hoy, se resalta en verde negrita para llamar la atención moderadamente
             vence_hoy = row['fecha_limite_dt'] == hoy.date()
             color_fecha = "#2e7d32" if vence_hoy else "#333"
             peso_fecha = "bold" if vence_hoy else "normal"
@@ -336,13 +340,11 @@ def generar_reporte_empaque():
     msg['From'] = EMAIL_EMISOR
     msg['To'] = EMAIL_RECEPTOR
     
-    # Contadores e información para el Asunto
     retrasos = len(df_criticas) + len(df_notas_vencidas)
     pendientes_en_plazo = len(df_notas_pendientes)
     total_alertas = retrasos + pendientes_en_plazo
     
     msg['Subject'] = f"{msg_titulo} ({retrasos} críticos / {total_alertas} total) - {hoy.strftime('%d/%m/%Y')}"
-
     msg.attach(MIMEText(html_content, 'html'))
     
     try:
