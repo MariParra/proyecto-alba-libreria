@@ -113,7 +113,6 @@ def cargar_cupones_caja():
                 break
         return pd.DataFrame(all_data) if all_data else pd.DataFrame()
     except Exception:
-        # Fallback si no han creado la tabla en Supabase aún
         return pd.DataFrame()
 
 @st.cache_data(ttl=300)
@@ -271,13 +270,36 @@ def check_elegibilidad_cliente_cupon(cliente_id, df_clientes, df_ventas_global, 
         except Exception:
             pass
             
-    fecha_limite = datetime.now() - timedelta(days=plazo_dias)
+    # Determinar la fecha base de comparación de forma inteligente (máxima de la base o fallback de desarrollo)
+    if not df_ventas_global.empty:
+        if 'fecha_limpia' in df_ventas_global.columns:
+            ref_date = df_ventas_global['fecha_limpia'].max()
+        else:
+            ref_date = pd.to_datetime(df_ventas_global['fecha_venta'], errors='coerce').max()
+        
+        if pd.isna(ref_date):
+            ref_date = pd.to_datetime("2026-08-27")
+    else:
+        ref_date = pd.to_datetime("2026-08-27")
+        
+    if hasattr(ref_date, 'tz') and ref_date.tz is not None:
+        ref_date = ref_date.tz_localize(None)
+        
+    fecha_limite = ref_date - timedelta(days=plazo_dias)
     
     if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
         df_cli_ventas = df_ventas_global[df_ventas_global['cliente_id'] == int(cliente_id)].copy()
         if not df_cli_ventas.empty:
             df_cli_ventas['fecha_dt'] = pd.to_datetime(df_cli_ventas['fecha_venta'], errors='coerce')
             df_cli_ventas = df_cli_ventas.dropna(subset=['fecha_dt'])
+            
+            # Quitar offsets
+            def safe_to_naive(val):
+                if pd.isna(val): return pd.NaT
+                ts = pd.to_datetime(val)
+                return ts.tz_localize(None) if ts.tz is not None else ts
+                
+            df_cli_ventas['fecha_dt'] = df_cli_ventas['fecha_dt'].apply(safe_to_naive)
             df_cli_ventas = df_cli_ventas[df_cli_ventas['fecha_dt'] >= fecha_limite]
             
             if fecha_canje:
@@ -311,17 +333,14 @@ def validar_cupon_sistema(codigo, cliente_id, df_cupones):
         
     cupon = match.iloc[0]
     
-    # 1. Vigencia / Estado Activo
     if not cupon.get('activo', True):
         return False, "Este cupón ha sido desactivado."
         
-    # 2. Límites de Uso
     usos = int(cupon.get('usos_actuales', 0))
     limite = int(cupon.get('limite_usos', 1))
     if usos >= limite:
         return False, f"Este cupón de un solo uso ya ha sido canjeado ({usos}/{limite})."
         
-    # 3. Rangos de Fecha
     hoy = date.today()
     fi = cupon.get('fecha_inicio')
     ff = cupon.get('fecha_fin')
@@ -342,7 +361,6 @@ def validar_cupon_sistema(codigo, cliente_id, df_cupones):
         except Exception:
             pass
             
-    # 4. Restricción Exclusiva por Cliente
     cliente_exclusivo = cupon.get('cliente_id_exclusivo')
     if pd.notna(cliente_exclusivo) and cliente_exclusivo is not None:
         if cliente_id is None or int(cliente_id) != int(cliente_exclusivo):
@@ -367,7 +385,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         
     subtotal_libros = sum([item['subtotal'] for item in carrito])
     try:
-        # --- CASO FUSIÓN DE VENTAS ---
         if venta_id_asociada:
             res_old = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id_asociada)).execute()
             if not res_old.data:
@@ -409,7 +426,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             }
             conn.table("registro_ventas").update(datos_fusion).eq("venta_id", int(venta_id_asociada)).execute()
             
-        # --- CASO VENTA NORMAL ---
         else:
             monto_final = subtotal_libros + valor_envio if tipo_cobro_envio != "envio por pagar" else subtotal_libros
             datos_venta = {
@@ -812,7 +828,6 @@ def mostrar_caja():
     if 'carrito_caja' not in st.session_state: st.session_state.carrito_caja = []
     if 'historial_original' not in st.session_state: st.session_state.historial_original = pd.DataFrame()
     
-    # Llaves de estado para cupones dinámicos
     if 'aplicar_cupon_sistema_obj' not in st.session_state:
         st.session_state.aplicar_cupon_sistema_obj = None
         
@@ -848,6 +863,7 @@ def mostrar_caja():
     ])
     
     with tab_venta:
+        # --- GUÍA PASO A PASO PARA COBRAR CON DESCUENTO ---
         with st.expander("💡 ¿Cómo aplicar un descuento a esta venta? (Guía Rápida)", expanded=False):
             st.info("""
             📋 **Sigue estos simples pasos para vender con descuento:**
@@ -857,18 +873,19 @@ def mostrar_caja():
                - Marca la casilla *'Aplicar Cupón de Fidelidad del 10% automáticamente'* si deseas usarlo.
             
             2️⃣ **Busca el Libro:**
-                - Elige el libro que vas a vender.
+               - Elige el libro que vas a vender.
             
             3️⃣ **Aplica el Descuento (Despliega la pestaña '🎟️ Descuentos, Fidelidad y Cupones del Sistema'):**
                * **Opción A (Manual / Fidelidad):** Selecciona esta opción si marcaste el cupón automático del cliente, o si quieres inventar un código en el momento (ej: `ALBA10`, escribes `10` en porcentaje).
                * **Opción B (Cupón del Sistema):** Selecciona esta opción si el cliente te muestra un código de base de datos (ej: `ALBA15`). Escríbelo, haz clic en **🔍 Validar Cupón** y el sistema verificará si está vigente y no ha expirado.
             
             4️⃣ **Revisa el 'Precio a Cobrar':**
-                - El sistema recalculará el precio final con el descuento aplicado.
+               - El sistema recalculará el precio final con el descuento aplicado.
             
             5️⃣ **¡Añade al Carrito!**
                - Haz clic en **➕ AÑADIR AL CARRITO** para guardar el libro con su precio rebajado.
             """)
+
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
         
@@ -1030,7 +1047,7 @@ def mostrar_caja():
                         precio_sugerido_con_descuento = precio_base_elegido * (1 - (cupon_porcentaje / 100))
                         st.success(f"💡 Descuento del {cupon_porcentaje}% sugerido. Precio final: **${precio_sugerido_con_descuento:,.0f}**")
                         precio_inicial_caja = precio_sugerido_con_descuento
-                        st.session_state.aplicar_cupon_sistema_obj = None # Limpiar cupones de DB
+                        st.session_state.aplicar_cupon_sistema_obj = None 
                 else:
                     col_validar1, col_validar2 = st.columns([2, 1])
                     codigo_db_input = col_validar1.text_input("Ingresa el código del cupón:", placeholder="Escribe el código aquí...", key="codigo_db_field").upper().strip()
@@ -1334,7 +1351,6 @@ def mostrar_caja():
                             except Exception as ex_incremento:
                                 log_error("vista_caja", "incrementar_uso_cupon_caja", ex_incremento, "system")
                         
-                        # Limpieza de estados Streamlit
                         if 'sel_cliente_caja' in st.session_state:
                             del st.session_state.sel_cliente_caja
                         if 'sel_libro_caja' in st.session_state:
@@ -1352,12 +1368,12 @@ def mostrar_caja():
                     
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
-        with st.expander("💡 **¿Cómo se calculan las finanzas en este panel?** (Guía Rápida)", expanded=False):
-            st.info("""
-            * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
-            * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
-            * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
-            """)
+        st.info("""
+        💡 **¿Cómo se calculan las finanzas en este panel?**
+        * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
+        * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
+        * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
+        """)
         
         df_ventas = df_ventas_global.copy()
         
@@ -1862,31 +1878,28 @@ def mostrar_caja():
                         )
                         
     # =========================================================================
-    # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (CON GESTIÓN CRUD)
+    # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (CON GESTIÓN CRUD COMPLETA)
     # =========================================================================
     with tab_cupones:
         st.markdown("### 🎟️ Panel de Cupones y Fidelización Premium")
         
-        # --- GUÍA DE USO INTERACTIVA (UX EXCLUSIVA DE ALBA LIBRERÍA) ---
+        # --- GUÍA DE USO INTERACTIVA ---
         with st.expander("📖 Manual de Uso Integrado: ¿Cómo funcionan mis cupones?", expanded=True):
             st.markdown("#### 1️⃣ Módulo de Cupones del Sistema (Cupones creados en Base de Datos)")
-            
             st.info("""
             💡 **¿Cómo funciona el Límite de Usos?**
-            * **Límite = 1 (De un solo uso absoluto):** Es un cupón de "primer canje". El primer cliente que lo utilice en caja se lo "queda" y lo quema. El sistema registrará `Usado: 1/1` e invalidará el código inmediatamente para todo el mundo (incluyendo al emisor). *Ideal para: Compensaciones, regalos de cumpleaños o sorteos rápidos.*
+            * **Límite = 1 (De un solo uso absoluto):** Es un cupón de "primer canje". El primer cliente que lo utilice en caja lo consume y lo quema. El sistema registrará `Usado: 1/1` e invalidará el código inmediatamente para todo el mundo. *Ideal para: Compensaciones, regalos de cumpleaños o sorteos rápidos.*
             * **Límite = 1000 (Masivo público):** El cupón puede ser canjeado un total de 1000 veces en la tienda en total. Cualquier cliente puede usarlo, e incluso una misma clienta puede usarlo en varias ventas distintas, siempre y cuando no se supere el límite global de 1000 usos.
             * **Límite = N + Cliente Exclusivo:** Si creas un cupón con límite de usos (ej: 1 o 5) y seleccionas un cliente específico, **solo ese cliente podrá validarlo**. Nadie más tendrá acceso a ese descuento.
             """)
             
             st.markdown("#### 2️⃣ Módulo de Fidelización (Compras Acumuladas)")
-            
             st.info("""
             ⏳ **¿Desde qué fecha se calculan los 365 días de acumulación?**
             * **La Ventana Flotante:** El plazo (ej: 365 días) se calcula **dinámicamente hacia atrás desde el día de hoy**. Es decir, si hoy es 25 de Agosto de 2026, el sistema sumará las compras realizadas desde el 25 de Agosto de 2025 hasta hoy. Las compras que tengan más de un año de antigüedad van "expirando" de la suma acumulada de forma automática todos los días.
             * **El Reinicio por Canje (Frontera de Tiempo):** En el momento en que confirmas el canje de una clienta, el sistema guarda la fecha actual en su perfil de Supabase (`CANJE_CUPON: 2026-08-25`). A partir de ese segundo, el motor de base de datos **ignora por completo todas las ventas anteriores a esa fecha**, reiniciando su acumulado a $0 para que pueda empezar a juntar compras para su próximo cupón desde mañana.
             """)
-            
-        # --- VERIFICACIÓN DE LA EXISTENCIA DE LA TABLA EN SUPABASE ---
+        
         if df_cupones.empty:
             st.warning("⚠️ No se han encontrado cupones registrados. Si es tu primera vez ejecutando este módulo, asegúrate de haber creado la tabla 'cupones' en Supabase.")
             with st.expander("📋 Ver SQL de Creación para Supabase", expanded=False):
@@ -1905,7 +1918,6 @@ CREATE TABLE IF NOT EXISTS cupones (
 );
                 """, language="sql")
                 
-        # Sub-Tab 1: Crear Cupones
         st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
         with st.container(border=True):
             col_nc1, col_nc2, col_nc3 = st.columns(3)
@@ -1917,7 +1929,6 @@ CREATE TABLE IF NOT EXISTS cupones (
             nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
             nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
             
-            # Selectbox de Exclusividad por Cliente
             opciones_cli_excl = ["Ninguno (Cupón Público)"] + sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else ["Ninguno"]
             sel_cli_excl = col_nc6.selectbox(
                 "Cupón exclusivo para un cliente:",
@@ -1955,11 +1966,9 @@ CREATE TABLE IF NOT EXISTS cupones (
                 except Exception as ex_insert_cup:
                     st.error(f"Error al registrar cupón en la base de datos: {ex_insert_cup}")
 
-        # Sub-Tab 2: Lista de cupones activos
         if not df_cupones.empty:
             st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
             
-            # Mapear nombres de clientes exclusivos para la tabla de visualización
             df_cupones_viz = df_cupones.copy()
             if 'cliente_id_exclusivo' in df_cupones_viz.columns and not df_clientes.empty:
                 df_cupones_viz = df_cupones_viz.merge(
@@ -1985,7 +1994,6 @@ CREATE TABLE IF NOT EXISTS cupones (
                 }
             )
             
-            # Acciones Rápidas de Cupones
             st.markdown("##### ⚙️ Acciones Rápidas sobre Cupones")
             col_acc1, col_acc2 = st.columns(2)
             sel_cup_acc = col_acc1.selectbox("Selecciona un cupón para modificar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
@@ -2017,7 +2025,6 @@ CREATE TABLE IF NOT EXISTS cupones (
                     except Exception as e_cup_del:
                         st.error(f"Error al eliminar cupón: {e_cup_del}")
 
-        # Sub-Tab 3: Fidelización de Clientes
         st.markdown("---")
         st.markdown("#### 🏆 Fidelización: Compras Acumuladas por Clientes")
         with st.container(border=True):
@@ -2043,7 +2050,18 @@ CREATE TABLE IF NOT EXISTS cupones (
         else:
             with st.spinner("Analizando compras acumuladas..."):
                 results_cupones = []
-                fecha_limite_calc = datetime.now() - timedelta(days=int(plazo_dias_cfg))
+                
+                if not df_ventas_global.empty:
+                    ref_date_calc = df_ventas_global['fecha_limpia'].max()
+                    if pd.isna(ref_date_calc):
+                        ref_date_calc = pd.to_datetime("2026-08-27")
+                else:
+                    ref_date_calc = pd.to_datetime("2026-08-27")
+                
+                if hasattr(ref_date_calc, 'tz') and ref_date_calc.tz is not None:
+                    ref_date_calc = ref_date_calc.tz_localize(None)
+                    
+                fecha_limite_calc = ref_date_calc - timedelta(days=int(plazo_dias_cfg))
                 
                 for _, cli in df_clientes.iterrows():
                     c_id_val = int(cli['cliente_id'])
@@ -2063,6 +2081,13 @@ CREATE TABLE IF NOT EXISTS cupones (
                         if not df_cli_v.empty:
                             df_cli_v['fecha_dt'] = pd.to_datetime(df_cli_v['fecha_venta'], errors='coerce')
                             df_cli_v = df_cli_v.dropna(subset=['fecha_dt'])
+                            
+                            def safe_to_naive_calc(val):
+                                if pd.isna(val): return pd.NaT
+                                ts = pd.to_datetime(val)
+                                return ts.tz_localize(None) if ts.tz is not None else ts
+                                
+                            df_cli_v['fecha_dt'] = df_cli_v['fecha_dt'].apply(safe_to_naive_calc)
                             df_cli_v = df_cli_v[df_cli_v['fecha_dt'] >= fecha_limite_calc]
                             
                             if fecha_canje_val:
