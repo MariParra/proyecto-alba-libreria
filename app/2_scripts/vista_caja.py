@@ -1240,18 +1240,31 @@ def mostrar_caja():
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
         fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
         
+        porcentaje_descuento_aplicar = 0
+        
+        # 1. Determinar el porcentaje a aplicar desde la sesión
+        if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
+            porcentaje_descuento_aplicar = 10
+        elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
+            porcentaje_descuento_aplicar = int(st.session_state.aplicar_cupon_sistema_obj.get('porcentaje_descuento', 0))
+            
+        # 2. Aplicar descuento STRICTLY al subtotal de los libros
+        subtotal_con_descuento = subtotal_carrito * (1 - (porcentaje_descuento_aplicar / 100))
+
+        # 3. Clasificación de cobro y suma plana de valor_envio al final (libre de descuento)
         if es_por_pagar:
             tipo_cobro_envio = "envio por pagar"
-            monto_final = subtotal_carrito
+            monto_final = subtotal_con_descuento
         else:
             if modo_envio in ["Retiro en tienda", "Añadir a compra anterior", "Añadir a caja de suscripción"]:
                 tipo_cobro_envio = "retiro"
-                monto_final = subtotal_carrito
+                monto_final = subtotal_con_descuento
             else:
                 tipo_cobro_envio = "envio pagado"
-                monto_final = subtotal_carrito + valor_envio
+                monto_final = subtotal_con_descuento + valor_envio  # <--- Envío libre de descuento
         
         abono_default = 0.0
+        
         mensaje_exito = ""
         if estado_venta_sel == "FINALIZADO" or estado_pago_sel == "PAGADO":
             abono_default = monto_final
