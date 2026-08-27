@@ -204,7 +204,7 @@ else:
             
         # Definición de grupos de vistas para la apertura dinámica de los expanders
         grupo_general = ["🚨 ALERTAS PRIORITARIAS", "📌 PIZARRA DE NOTAS", "📋 TABLERO KANBAN", "📊 DASHBOARD"]
-        grupo_ventas = ["🛒 CAJA / VENTAS RÁPIDAS", "🎡 VENTAS MASIVAS", "📦 GESTIÓN DE SUSCRIPCIÓN", "👥 CLIENTES Y LIBRERO", "💸 COSTOS NO DE VENTAS"]
+        grupo_ventas = ["🛒 CAJA / VENTAS RÁPIDAS", "🎡 VENTAS MASIVAS", "📦 GESTIÓN DE SUSCRIPCIÓN", "👥 CLIENTES Y LIBRERO", "💸 GASTOS"]
         grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 GENERADOR CATÁLOGO IG", "🌐 GESTIÓN WEB"]
         grupo_datos = ["🛠️ SINCRONIZACIÓN GOOGLE SHEET", "📔 IMPORTAR LIBREROS", "📥 REPORTES Y DESCARGAS"]
         grupo_soporte = ["✨ CREACIÓN MASIVA", "⚡ ACTUALIZACIÓN MASIVA", "⏪ ROLLBACK BD"]
@@ -245,8 +245,8 @@ else:
                 st.session_state.pagina_actual = "👥 CLIENTES Y LIBRERO"
                 st.rerun()
                 
-            if st.button("💸 COSTOS NO DE VENTAS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "💸 COSTOS NO DE VENTAS" else "secondary"):
-                st.session_state.pagina_actual = "💸 COSTOS NO DE VENTAS"
+            if st.button("💸 GASTOS", use_container_width=True, type="primary" if st.session_state.pagina_actual == "💸 GASTOS" else "secondary"):
+                st.session_state.pagina_actual = "💸 GASTOS"
                 st.rerun()
 
         # --- SECCIÓN 3: CATÁLOGO & INVENTARIO ---
@@ -355,7 +355,7 @@ else:
             mostrar_ventas_masivas()
         elif st.session_state.pagina_actual == "👥 CLIENTES Y LIBRERO":
             mostrar_clientes()
-        elif st.session_state.pagina_actual == "💸 COSTOS NO DE VENTAS":
+        elif st.session_state.pagina_actual == "💸 GASTOS":
             mostrar_costos()
         elif st.session_state.pagina_actual == "📦 GESTIÓN DE SUSCRIPCIÓN":
             mostrar_asignaciones()
