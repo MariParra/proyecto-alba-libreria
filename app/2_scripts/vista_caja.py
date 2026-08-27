@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import json
 import time
 import io
@@ -16,30 +16,22 @@ def unificar_formatos_fecha(serie_fechas):
     múltiples formatos (YYYY-MM-DD y DD-MM-YYYY).
     """
     def parsear_valor(val):
-        # 1. Descartar valores vacíos o nulos
         if pd.isna(val) or not str(val).strip() or str(val).strip().lower() in ['nan', 'nat']:
             return pd.NaT
         
         val_str = str(val).strip()
-        # 2. Lógica inteligente para detectar el formato
         try:
-            # Si la fecha empieza con 4 dígitos, es formato ISO (YYYY-MM-DD)
-            # y el día NO va primero.
             if len(val_str.split('-')[0]) == 4 or len(val_str.split('/')[0]) == 4:
                 return pd.to_datetime(val_str, dayfirst=False, errors='coerce')
-            # Si no, es formato local (DD-MM-YYYY) y el día SÍ va primero.
             else:
                 return pd.to_datetime(val_str, dayfirst=True, errors='coerce')
         except:
-            # Si todo lo demás falla, intenta un último parseo genérico.
             return pd.to_datetime(val_str, errors='coerce')
             
-    # 3. Aplicar la función a toda la columna
     try:
         return serie_fechas.apply(parsear_valor)
     except Exception as e:
         log_error("vista_caja", "unificar_formatos_fecha", f"Error inesperado al parsear fechas. Detalle: {e}", st.session_state.get('email_usuario', 'Desconocido'))
-        # Como último recurso, devuelve la serie original parseada de forma genérica
         return pd.to_datetime(serie_fechas, errors='coerce')
 
 @st.cache_data(ttl=300)
@@ -48,7 +40,6 @@ def cargar_libros_caja():
     try:
         all_data = []
         chunk_size = 1000
-        # Bucle seguro de rango amplio (hasta 100.000 libros) que frena al terminar los datos
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -81,7 +72,6 @@ def cargar_clientes_caja():
     try:
         all_data = []
         chunk_size = 1000
-        # Bucle dinámico seguro (hasta 100.000 clientes)
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -100,6 +90,31 @@ def cargar_clientes_caja():
         log_error("vista_caja", "cargar_clientes_caja", e, st.session_state.get('email_usuario', 'Desconocido'))
         st.error("Error crítico: No se pudo cargar el listado de clientes.")
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
+
+@st.cache_data(ttl=120)
+def cargar_cupones_caja():
+    """Obtiene los cupones desde la base de datos aplicando el bypass de límite de 1000 registros."""
+    conn = get_db_connection()
+    try:
+        all_data = []
+        chunk_size = 1000
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res = conn.table("cupones")\
+                .select("*")\
+                .order("cupon_id")\
+                .range(start, end).execute()
+            if res.data:
+                all_data.extend(res.data)
+                if len(res.data) < chunk_size:
+                    break
+            else:
+                break
+        return pd.DataFrame(all_data) if all_data else pd.DataFrame()
+    except Exception:
+        # Fallback si no han creado la tabla en Supabase aún
+        return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def cargar_listas_desplegables_caja():
@@ -138,7 +153,6 @@ def gestionar_cliente(nombre, correo, telefono, rut, direccion, cliente_id_exist
             conn.table("clientes").update(datos).eq("cliente_id", cliente_id_existente).execute()
             return cliente_id_existente, ""
         else:
-            # VALIDACIÓN ANTI-DUPLICADOS
             res_check = conn.table("clientes").select("cliente_id").eq("nombre", nombre_limpio).execute()
             if res_check.data:
                 return None, f"¡DUPLICADO DETENIDO! Ya existe un cliente registrado con el nombre '{nombre_limpio}'."
@@ -156,8 +170,7 @@ def cargar_historial_completo():
     try:
         all_data = []
         chunk_size = 1000
-        # Bucle dinámico ilimitado que frena de forma asíncrona y robusta
-        for bloque in range(200): # Soporta hasta 200.000 ventas
+        for bloque in range(200): 
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res_ventas = conn.table("registro_ventas")\
@@ -175,7 +188,6 @@ def cargar_historial_completo():
         if not all_data: 
             return pd.DataFrame()
         df_ventas = pd.DataFrame(all_data)
-        # Aplanar los datos del cliente para que queden como columnas en la tabla
         if 'cliente' in df_ventas.columns:
             df_clientes_data = pd.json_normalize(df_ventas['cliente']).add_prefix('cliente_')
             df_ventas = pd.concat([df_ventas.drop(columns=['cliente']), df_clientes_data], axis=1)
@@ -251,7 +263,6 @@ def check_elegibilidad_cliente_cupon(cliente_id, df_clientes, df_ventas_global, 
     cli = cli_rows.iloc[0]
     status_str = str(cli.get('status', ''))
     
-    # Extraer fecha de canje
     fecha_canje = None
     if "CANJE_CUPON:" in status_str:
         try:
@@ -267,15 +278,11 @@ def check_elegibilidad_cliente_cupon(cliente_id, df_clientes, df_ventas_global, 
         if not df_cli_ventas.empty:
             df_cli_ventas['fecha_dt'] = pd.to_datetime(df_cli_ventas['fecha_venta'], errors='coerce')
             df_cli_ventas = df_cli_ventas.dropna(subset=['fecha_dt'])
-            
-            # Rango temporal
             df_cli_ventas = df_cli_ventas[df_cli_ventas['fecha_dt'] >= fecha_limite]
             
-            # Excluir ventas antes de la última redención
             if fecha_canje:
                 df_cli_ventas = df_cli_ventas[df_cli_ventas['fecha_dt'] > fecha_canje]
             
-            # Sumar ventas completadas / pagadas
             df_completas = df_cli_ventas[
                 (df_cli_ventas['estado'] == 'FINALIZADO') | 
                 (df_cli_ventas['estado_pago'] == 'PAGADO')
@@ -290,7 +297,59 @@ def check_elegibilidad_cliente_cupon(cliente_id, df_clientes, df_ventas_global, 
     fecha_canje_label = fecha_canje.strftime("%d/%m/%Y") if fecha_canje else "Nunca"
     
     return clasifica, total_compras, fecha_canje_label
+
+def validar_cupon_sistema(codigo, cliente_id, df_cupones):
+    """Evalúa la validez del cupón respecto al cliente, vigencia y límites."""
+    if df_cupones.empty:
+        return False, "No se encontraron cupones registrados o la tabla no está creada."
+        
+    codigo_limpio = str(codigo).strip().upper()
+    match = df_cupones[df_cupones['codigo'].str.upper() == codigo_limpio]
     
+    if match.empty:
+        return False, f"El cupón '{codigo_limpio}' no existe en el sistema."
+        
+    cupon = match.iloc[0]
+    
+    # 1. Vigencia / Estado Activo
+    if not cupon.get('activo', True):
+        return False, "Este cupón ha sido desactivado."
+        
+    # 2. Límites de Uso
+    usos = int(cupon.get('usos_actuales', 0))
+    limite = int(cupon.get('limite_usos', 1))
+    if usos >= limite:
+        return False, f"Este cupón de un solo uso ya ha sido canjeado ({usos}/{limite})."
+        
+    # 3. Rangos de Fecha
+    hoy = date.today()
+    fi = cupon.get('fecha_inicio')
+    ff = cupon.get('fecha_fin')
+    
+    if pd.notna(fi) and fi:
+        try:
+            fi_dt = pd.to_datetime(fi).date()
+            if hoy < fi_dt:
+                return False, f"Este cupón entra en vigencia el {fi_dt.strftime('%d/%m/%Y')}."
+        except Exception:
+            pass
+            
+    if pd.notna(ff) and ff:
+        try:
+            ff_dt = pd.to_datetime(ff).date()
+            if hoy > ff_dt:
+                return False, f"El cupón expiró el {ff_dt.strftime('%d/%m/%Y')}."
+        except Exception:
+            pass
+            
+    # 4. Restricción Exclusiva por Cliente
+    cliente_exclusivo = cupon.get('cliente_id_exclusivo')
+    if pd.notna(cliente_exclusivo) and cliente_exclusivo is not None:
+        if cliente_id is None or int(cliente_id) != int(cliente_exclusivo):
+            return False, "Este cupón es exclusivo para otra clienta."
+            
+    return True, cupon
+
 def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metodo_pago, comentario, fecha_venta, estado_venta, estado_pago, fecha_pago, abono_venta, tipo_cobro_envio, asignacion_id=None, venta_id_asociada=None):
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -332,7 +391,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             nuevo_subtotal_libros = float(venta_old.get('subtotal_libros', 0.0)) + float(subtotal_libros)
             nuevo_costo_venta = float(venta_old.get('costo_venta', 0.0)) + float(costo_total_venta)
             
-            # Si el origen es 'envio por pagar', el envío acumulado no se suma al monto final
             old_tipo_cobro = venta_old.get('tipo_cobro_envio', 'envio pagado')
             if old_tipo_cobro == "envio por pagar":
                 nuevo_monto_final = nuevo_subtotal_libros
@@ -353,7 +411,6 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             
         # --- CASO VENTA NORMAL ---
         else:
-            # Si es por pagar, el costo de envío NO se suma al monto final a cobrar al cliente
             monto_final = subtotal_libros + valor_envio if tipo_cobro_envio != "envio por pagar" else subtotal_libros
             datos_venta = {
                 "cliente_id": cliente_id, "fecha_venta": fecha_venta.strftime("%Y-%m-%d %H:%M:%S"),
@@ -374,11 +431,9 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                 l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True) )
             else:
                 gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
-                
-                # --- EVITAR STOCK NEGATIVO ---
                 nuevo_stock = item['stock_actual'] - item['cantidad']
                 if item['stock_actual'] <= 0 or nuevo_stock < 0:
-                    nuevo_stock = 0  # Lo topamos en 0 para libros de catálogo
+                    nuevo_stock = 0
                     
                 conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
             
@@ -442,9 +497,8 @@ def anular_venta(venta_id, texto_libros_vendidos):
                     l_id = res_l.data[0]['libro_id']
                     stock_bd = res_l.data[0]['stock']
                     
-                    # --- NO DEVOLVER STOCK SI ES LIBRO DE CATÁLOGO ---
                     if stock_bd <= 0:
-                        nuevo_stock = 0 # Se mantiene en 0
+                        nuevo_stock = 0
                     else:
                         nuevo_stock = stock_bd + cantidad_devuelta
                         
@@ -474,8 +528,6 @@ def actualizar_historial_caja(df_editado):
     for _, row in filas_cambiadas.iterrows():
         try:
             venta_id = int(row['venta_id'])
-            
-            # 1. ACTUALIZACIÓN DE DATOS DEL CLIENTE
             cliente_id = row.get('cliente_cliente_id') 
             if cliente_id and pd.notna(cliente_id):
                 datos_cliente = {
@@ -488,24 +540,20 @@ def actualizar_historial_caja(df_editado):
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
             
-            # 2. ACTUALIZACIÓN Y RECÁLCULO DE DATOS DE LA VENTA
             datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
-            
-            # Recálculo financiero dinámico en base al tipo de cobro y valor de envío
             tipo_cobro = str(datos_venta_raw.get('tipo_cobro_envio', 'envio pagado')).lower().strip()
             subtotal = float(row.get('subtotal_libros', 0.0))
             envio = float(row.get('valor_envio', 0.0))
             
             if tipo_cobro == "envio por pagar":
-                monto_final_actual = subtotal  # El envío no se le cobra al cliente
+                monto_final_actual = subtotal  
             elif tipo_cobro == "retiro":
                 monto_final_actual = subtotal
             else:
-                monto_final_actual = subtotal + envio # En envío pagado, se le cobra el total
+                monto_final_actual = subtotal + envio
                 
             datos_venta_raw['monto_final'] = monto_final_actual
             
-            # Gestión de abonos automáticos
             if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
                 datos_venta_raw['estado_pago'] = 'PAGADO'
                 datos_venta_raw['abono'] = monto_final_actual
@@ -534,14 +582,9 @@ def actualizar_historial_caja(df_editado):
     return updates
 
 def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asignacion_id=None):
-    """
-    Re-ruta de forma segura y en caliente una venta del historial hacia couriers 
-    estandar o consolidándola como extra en la cajita mensual activa del cliente.
-    """
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     try:
-        # 1. Recuperamos la venta en crudo desde Supabase
         res_v = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id)).execute()
         if not res_v.data:
             return False, "No se encontró la venta especificada."
@@ -550,7 +593,6 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
         cliente_id = venta.get("cliente_id")
         subtotal_libros = float(venta.get("subtotal_libros", 0.0))
         
-        # 2. CASO: Añadir a caja de suscripción
         if nuevo_metodo == "Añadir a caja de suscripción" and asignacion_id:
             res_asig = conn.table("asignaciones").select("extras, valor_extras, mes").eq("asignacion_id", int(asignacion_id)).execute()
             if not res_asig.data:
@@ -561,7 +603,6 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
             valor_previo = float(asig_actual.get('valor_extras') or 0.0)
             mes_caja = asig_actual.get("mes", "")
             
-            # Parsear los libros de la venta actual para sumarlos como extras
             libros_raw = venta.get("libros_vendidos", "")
             nuevos_extras_list = []
             if libros_raw:
@@ -571,7 +612,6 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
                 except Exception:
                     nuevos_extras_list = [f"1 x {libros_raw}".upper()]
             
-            # Limpiar y parsear extras anteriores
             lista_extras_previos = []
             if extras_previos_raw:
                 items = extras_previos_raw.replace('\\n', '|').split('|')
@@ -582,18 +622,15 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
                     if item_limpio:
                         lista_extras_previos.append(item_limpio.upper())
             
-            # Concatenar y dar formato enumerado
             lista_completa = lista_extras_previos + nuevos_extras_list
             extras_final_enumerado = "\\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
             valor_final = valor_previo + subtotal_libros
             
-            # Actualizar extras en la tabla asignaciones
             conn.table("asignaciones").update({
                 "extras": extras_final_enumerado,
                 "valor_extras": valor_final
             }).eq("asignacion_id", int(asignacion_id)).execute()
             
-            # Actualizar venta a costo de envío $0 y método 'Agregado a Suscripción [Mes]'
             metodo_envio_final = f"Agregado a Suscripción {mes_caja}"
             monto_final_nuevo = subtotal_libros
             conn.table("registro_ventas").update({
@@ -605,7 +642,6 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
             }).eq("venta_id", int(venta_id)).execute()
             
         else:
-            # 3. CASO: Courier Estándar (Paket, Bluexpress, etc.)
             monto_final_nuevo = subtotal_libros + float(valor_envio)
             conn.table("registro_ventas").update({
                 "metodo_envio": nuevo_metodo,
@@ -620,10 +656,6 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
         return False, str(e)
 
 def asegurar_fuente_comprobante(nombre_fuente):
-    """
-    Descarga dinámicamente cualquier fuente TrueType (.ttf) desde el repositorio
-    oficial de Google Fonts en GitHub y la almacena en caché localmente.
-    """
     if not os.path.exists("assets"):
         os.makedirs("assets")
         
@@ -655,15 +687,9 @@ def asegurar_fuente_comprobante(nombre_fuente):
     return None
 
 def find_any_system_ttf():
-    """
-    Escaner de fuentes del sistema altamente robusto.
-    Busca tanto en el sistema operativo como en las librerías instaladas (como DejaVuSans de matplotlib)
-    para garantizar soporte 100% de tildes latinas y ñ.
-    """
     import glob
     import sys
     
-    # 1. Buscar en directorios de paquetes de Python (Matplotlib posee DejaVuSans vectorial impecable)
     for p in sys.path:
         mpl_path = os.path.join(p, "matplotlib", "mpl-data", "fonts", "ttf")
         if os.path.isdir(mpl_path):
@@ -674,7 +700,6 @@ def find_any_system_ttf():
                         return f
                 return found[0]
                 
-    # 2. Buscar en directorios de fuentes de Debian/Linux estándar
     system_paths = [
         "/usr/share/fonts/**/*.ttf",
         "/usr/share/fonts/**/*.otf",
@@ -693,7 +718,6 @@ def find_any_system_ttf():
     return None
 
 def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False):
-    # 1. Determinar variante de estilo
     estilo = "Regular"
     if bold and italic:
         estilo = "BoldItalic"
@@ -702,10 +726,9 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
     elif italic:
         estilo = "Italic"
         
-    nombre_limpio = "Lato"  # Forzamos el uso de Lato de forma corporativa
+    nombre_limpio = "Lato"  
     ruta_local = os.path.join("assets", f"{nombre_limpio}-{estilo}.ttf")
     
-    # Intentar descargar la variante si no existe en local
     if not os.path.exists(ruta_local):
         url = f"https://raw.githubusercontent.com/google/fonts/main/ofl/lato/{nombre_limpio}-{estilo}.ttf"
         try:
@@ -720,7 +743,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
             return ImageFont.truetype(ruta_local, tamanio)
         except Exception:
             pass
-    # 2. BYPASS ULTRA-SEGURO: Carga local desde Matplotlib con el estilo correspondiente
     try:
         import matplotlib
         font_name_mpl = "DejaVuSans.ttf"
@@ -736,7 +758,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
             return ImageFont.truetype(mpl_ttf, tamanio)
     except Exception:
         pass
-    # 3. Candidatas locales estándar
     candidatas = [
         os.path.join("assets", "Lato-Regular.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf" if italic else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -755,10 +776,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
         return ImageFont.load_default()
 
 def extraer_pago_y_comentario(comentario_raw):
-    """
-    Limpia y estructura de forma robusta la fusión de compras
-    extrayendo el método de pago y el comentario libre libre de newlines y pipes.
-    """
     comentario_raw = str(comentario_raw).strip().replace("\\\\n", " ").replace("\\\\r", " ").replace("\\n", " ").replace("\\r", " ")
     
     match = re.search(r"Pago:\s*([^.]+)\.", comentario_raw, re.IGNORECASE)
@@ -774,7 +791,6 @@ def extraer_pago_y_comentario(comentario_raw):
         resto = comentario_raw
         
     resto_limpio = resto
-    # Limpieza quirúrgica de prefijos del sistema
     resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\.?\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
     resto_limpio = re.sub(r"Fusionada:\s*Pago:\s*[^.]+\.\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
     resto_limpio = re.sub(r"Fusionada:\s*\|?\s*", "", resto_limpio, flags=re.IGNORECASE)
@@ -783,197 +799,28 @@ def extraer_pago_y_comentario(comentario_raw):
     
     return pago, resto_limpio
 
-def generar_comprobante(
-    carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
-    fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
-):
-    """
-    Genera un comprobante premium sobre plantilla con márgenes alineados al cuaderno.
-    Utiliza Dancing Script para los títulos caligráficos y Lato para los textos de datos.
-    Conserva la resolución física de 800x1200 para máxima nitidez sin requerir zoom en pantalla.
-    """
-    # Intentar descargar el fondo oficial del comprobante
-    url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
-    img = None
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3) as r:
-            img = Image.open(io.BytesIO(r.read())).convert('RGB')
-            try:
-                resample_filter = Image.Resampling.LANCZOS
-            except AttributeError:
-                resample_filter = Image.ANTIALIAS
-            img = img.resize((800, 1200), resample_filter)
-    except Exception:
-        pass
-        
-    if img is None:
-        # Hermoso Fallback en la paleta de Alba Librería si falla internet
-        img = Image.new('RGB', (800, 1200), color='#FAF8FC')
-        
-    width, height = img.size
-    draw = ImageDraw.Draw(img)
-    
-    # Fuentes Premium de Google Fonts
-    font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
-    font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
-    font_body = obtener_fuente_comprobante("Lato", 15)
-    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
-    
-    # Margen X de impresión (respetando la línea roja del cuaderno a x = 91)
-    x_margin = 130
-    x_right = 740
-    
-    # 1. CABECERA (Dancing Script)
-    draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
-    
-    id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
-    draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
-    
-    # Línea divisoria
-    draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
-    
-    # 2. SECCIÓN: DATOS DEL CLIENTE
-    draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
-    
-    pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
-    
-    # Columna Izquierda (Lato) - Etiquetas en Negrita y color Burdeos
-    draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
-    
-    draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
-    
-    email_c = str(cliente_email or 'No registrado')
-    if len(email_c) > 31:
-        email_c = email_c[:28] + "..."
-    draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
-    
-    tel_c = str(cliente_telefono or 'No registrado')
-    if len(tel_c) > 31:
-        tel_c = tel_c[:28] + "..."
-    draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
-    
-    direccion_c = str(cliente_direccion or 'No especificado')
-    if len(direccion_c) > 65:
-        direccion_c = direccion_c[:62] + "..."
-    draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
-    
-    # Columna Derecha (Lato) - X movido a 510 para dar más espacio horizontal a la Columna 1
-    x_col2 = 510
-    draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
-    
-    envio_c = str(metodo_envio)
-    if len(envio_c) > 30:
-        envio_c = envio_c[:27] + "..."
-    draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
-    
-    draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
-    
-    if comentario_limpio:
-        nota_c = str(comentario_limpio).upper()
-        if len(nota_c) > 20:
-            nota_c = nota_c[:17] + "..."
-        draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
-        draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
-    
-    # Línea divisoria
-    draw.line([x_margin, 340, x_right, 340], fill='#BA96A5', width=2)
-    
-    # 3. SECCIÓN: DETALLE DE PRODUCTOS (Dancing Script)
-    draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
-    
-    # Encabezados de la Tabla de Productos (Lato)
-    y_table = 440
-    draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_body_bold)
-    draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
-    draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
-    
-    draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
-    
-    # Renglones de Libros Vendidos (Lato)
-    y_item = y_table + 35
-    for item in carrito:
-        qty_str = str(item.get('cantidad', 1))
-        draw.text((x_margin, y_item), qty_str, fill='#333333', font=font_body)
-        
-        titulo = str(item.get('titulo', 'N/A')).upper()
-        if len(titulo) > 28:
-            titulo = titulo[:25] + "..."
-            
-        draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
-        
-        precio_val = float(item.get('precio_cobrado', 0.0))
-        draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
-        
-        subtotal_val = float(item.get('subtotal', 0.0))
-        draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
-        
-        y_item += 35
-        if y_item > 850:
-            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
-            break
-            
-    # Línea divisoria antes de totales
-    draw.line([x_margin, 880, x_right, 880], fill='#BA96A5', width=2)
-    
-    # 4. CARD DE TOTALES Y FINANZAS A LA DERECHA (con Sombra y formato Premium)
-    box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
-    draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
-    draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
-    
-    def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, color_lbl='#555555'):
-        draw.text((box_x1 + 20, y_pos), label, fill=color_lbl, font=font_lbl)
-        val_str = f"${val_float:,.0f}"
-        try:
-            x0, y0, x1, y1 = draw.textbbox((0, 0), val_str, font=font_val)
-            w_val = x1 - x0
-        except Exception:
-            w_val = len(val_str) * 9
-        draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
-        
-    draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body_bold, font_body, '#333333')
-    draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333')
-    draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', color_lbl='#7C0C3F')
-    draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32')
-    draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828')
-    
-    # 5. PIE DE PÁGINA 
-    draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
-    
-    buf = io.BytesIO()
-    img.save(buf, format='JPEG', quality=95)
-    return buf.getvalue()
-
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
 def mostrar_caja():
-    # Inicialización del limitador de ventas en el historial (empieza en 30 y suma 100)
     if 'caja_limit_view' not in st.session_state:
         st.session_state.caja_limit_view = 30
         
-    # Inicialización del limitador de clientes (empieza en 300 y suma 200)
     if 'clientes_limit_view' not in st.session_state:
         st.session_state.clientes_limit_view = 300
         
     if 'carrito_caja' not in st.session_state: st.session_state.carrito_caja = []
     if 'historial_original' not in st.session_state: st.session_state.historial_original = pd.DataFrame()
+    
+    # Llaves de estado para cupones dinámicos
+    if 'aplicar_cupon_sistema_obj' not in st.session_state:
+        st.session_state.aplicar_cupon_sistema_obj = None
         
     st.title("🛒 Caja y Ventas Rápidas")
     
     df_libros = cargar_libros_caja()
     df_clientes = cargar_clientes_caja()
+    df_cupones = cargar_cupones_caja()
     estados_posibles = ["NO COMENZADO", "PENDIENTE STOCK", "PENDIENTE ARMADO PAQUETE", "PAQUETE LISTO", "PENDIENTE PAGO", "FINALIZADO"]
     
     df_ventas_global_raw = cargar_historial_completo()
@@ -1032,7 +879,7 @@ def mostrar_caja():
                     c_rut = datos_c.get('rut', '')
                     c_direccion = datos_c.get('direccion', '')
                     
-                    # --- DETECTAR SI CALIFICA PARA CUPÓN DEL 10% ---
+                    # Fidelización Automática 10%
                     monto_min_cfg = st.session_state.get('monto_minimo_cupon_cfg', 100000.0)
                     plazo_dias_cfg = st.session_state.get('plazo_dias_cupon_cfg', 365)
                     
@@ -1113,7 +960,7 @@ def mostrar_caja():
                             l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0, key="precio_edit_caja_2")
                 else:
                     st.warning("El inventario está vacío.")
-            else: # MODO RÁPIDO
+            else: 
                 es_nuevo = True
                 l_titulo = st.text_input("Título del libro:")
                 col_rap1, col_rap2 = st.columns(2)
@@ -1145,21 +992,47 @@ def mostrar_caja():
                 l_stock_actual = 999  
                 l_precio_original = l_precio_catalogo
 
-            # --- MÓDULO DE DESCUENTOS Y CUPONES (TAREA 1) ---
-            with st.expander("🎟️ Aplicar Cupón / Descuento (Opcional)", expanded=False):
-                col_cup1, col_cup2, col_cup3 = st.columns(3)
-                cupon_codigo = col_cup1.text_input("Código de Cupón:", placeholder="Ej: ALBA10, ALBA15...", key="cupon_codigo_input")
-                cupon_porcentaje = col_cup2.number_input("Porcentaje Descuento (%):", min_value=0, max_value=100, step=5, value=0, key="cupon_porcentaje_input")
-                base_descuento = col_cup3.selectbox("Aplicar sobre:", ["Precio de Catálogo ($)", "Precio Original ($)"], key="base_descuento_input")
+            # --- NUEVO MOTOR AVANZADO DE CUPONES ---
+            precio_inicial_caja = l_precio_catalogo
+            with st.expander("🎟️ Descuentos, Fidelidad y Cupones del Sistema", expanded=False):
+                modo_desc = st.radio("Método de descuento:", ["Manual Libre / Fidelidad", "Validar Cupón del Sistema (DB)"], horizontal=True)
                 
-                precio_base_elegido = l_precio_original if base_descuento == "Precio Original ($)" else l_precio_catalogo
-                
-                if cupon_porcentaje > 0:
-                    precio_sugerido_con_descuento = precio_base_elegido * (1 - (cupon_porcentaje / 100))
-                    st.info(f"💡 Cupón **{cupon_codigo or 'personalizado'}** del {cupon_porcentaje}% sugerido sobre {base_descuento.lower()}. Precio con descuento: **${precio_sugerido_con_descuento:,.0f}**")
-                    precio_inicial_caja = precio_sugerido_con_descuento
+                if modo_desc == "Manual Libre / Fidelidad":
+                    col_cup1, col_cup2, col_cup3 = st.columns(3)
+                    cupon_codigo = col_cup1.text_input("Código o Etiqueta:", placeholder="Ej: ALBA10, ALBA15...", key="cupon_codigo_input")
+                    cupon_porcentaje = col_cup2.number_input("Porcentaje Descuento (%):", min_value=0, max_value=100, step=5, value=0, key="cupon_porcentaje_input")
+                    base_descuento = col_cup3.selectbox("Aplicar sobre:", ["Precio de Catálogo ($)", "Precio Original ($)"], key="base_descuento_input")
+                    
+                    precio_base_elegido = l_precio_original if base_descuento == "Precio Original ($)" else l_precio_catalogo
+                    
+                    if cupon_porcentaje > 0:
+                        precio_sugerido_con_descuento = precio_base_elegido * (1 - (cupon_porcentaje / 100))
+                        st.success(f"💡 Descuento del {cupon_porcentaje}% sugerido. Precio final: **${precio_sugerido_con_descuento:,.0f}**")
+                        precio_inicial_caja = precio_sugerido_con_descuento
+                        st.session_state.aplicar_cupon_sistema_obj = None # Limpiar cupones de DB
                 else:
-                    precio_inicial_caja = l_precio_catalogo
+                    col_validar1, col_validar2 = st.columns([2, 1])
+                    codigo_db_input = col_validar1.text_input("Ingresa el código del cupón:", placeholder="Escribe el código aquí...", key="codigo_db_field").upper().strip()
+                    
+                    if col_validar2.button("🔍 Validar Cupón", use_container_width=True):
+                        if not codigo_db_input:
+                            st.warning("Escribe un código.")
+                        else:
+                            ok_cupon, res_cupon = validar_cupon_sistema(codigo_db_input, c_id, df_cupones)
+                            if ok_cupon:
+                                st.session_state.aplicar_cupon_sistema_obj = res_cupon
+                                st.success(f"✅ ¡Cupón '{codigo_db_input}' VÁLIDO! Otorga un {res_cupon['porcentaje_descuento']}% de descuento.")
+                            else:
+                                st.session_state.aplicar_cupon_sistema_obj = None
+                                st.error(f"❌ {res_cupon}")
+                                
+                    if st.session_state.aplicar_cupon_sistema_obj:
+                        cupon_db = st.session_state.aplicar_cupon_sistema_obj
+                        pct = int(cupon_db['porcentaje_descuento'])
+                        base_desc_db = st.selectbox("Aplicar descuento del cupón sobre:", ["Precio de Catálogo ($)", "Precio Original ($)"])
+                        precio_base_elegido = l_precio_original if base_desc_db == "Precio Original ($)" else l_precio_catalogo
+                        precio_inicial_caja = precio_base_elegido * (1 - (pct / 100))
+                        st.info(f"🏆 Cupón Activo: **{cupon_db['codigo']}** ({pct}% Descuento). Precio sugerido: **${precio_inicial_caja:,.0f}**")
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             permitir_sin_stock = st.checkbox("🔓 Permitir sobreventa (omitir límite de stock disponible)", value=False)
@@ -1412,7 +1285,7 @@ def mostrar_caja():
                         tipo_cobro_envio, asignacion_id_target, v_id_fusion 
                     )
                     if exito: 
-                        # --- AUTOCANJE DE CUPÓN DE FIDELIDAD SI CORRESPONDE ---
+                        # 1. Registrar canje automático si usaba fidelidad
                         if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False) and final_cliente_id:
                             try:
                                 conn = get_db_connection()
@@ -1430,13 +1303,25 @@ def mostrar_caja():
                             except Exception as ex_canje_auto:
                                 log_error("vista_caja", "canje_cupon_auto_checkout", ex_canje_auto, "system")
                         
+                        # 2. Registrar incremento de usos si usaba cupón del sistema
+                        if st.session_state.aplicar_cupon_sistema_obj is not None:
+                            try:
+                                conn = get_db_connection()
+                                c_obj = st.session_state.aplicar_cupon_sistema_obj
+                                nuevos_usos = int(c_obj.get('usos_actuales', 0)) + 1
+                                conn.table("cupones").update({"usos_actuales": nuevos_usos}).eq("cupon_id", int(c_obj['cupon_id'])).execute()
+                            except Exception as ex_incremento:
+                                log_error("vista_caja", "incrementar_uso_cupon_caja", ex_incremento, "system")
+                        
+                        # Limpieza de estados Streamlit
                         if 'sel_cliente_caja' in st.session_state:
                             del st.session_state.sel_cliente_caja
                         if 'sel_libro_caja' in st.session_state:
                             del st.session_state.sel_libro_caja
                         st.session_state.clientes_limit_view = 200
+                        st.session_state.aplicar_cupon_sistema_obj = None
                         
-                        st.success("🎉 ¡Venta registrada y extras agregados (si aplica)!")
+                        st.success("🎉 ¡Venta registrada con éxito!")
                         st.balloons()
                         time.sleep(2)
                         st.session_state.carrito_caja = []
@@ -1451,8 +1336,6 @@ def mostrar_caja():
         * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
         * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
         * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
-        
-        ⚠️ *Las celdas con costo de venta igual a **$0** (libros sin costo asignado) se destacan en **color rojo** para advertir que la utilidad estimada podría estar inflada.*
         """)
         
         df_ventas = df_ventas_global.copy()
@@ -1576,13 +1459,9 @@ def mostrar_caja():
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
                     
-            # =========================================================================
-            # 🚚 MÓDULO DE RE-RUTADO LOGÍSTICO Y VINCULACIÓN DINÁMICA A CAJITAS
-            # =========================================================================
             st.markdown("---")
             with st.expander("🚚 Re-rutar o Vincular Venta Existente a Suscripción/Courier", expanded=False):
                 st.markdown("#### 🔄 Vincular o Cambiar Método de Envío de una Venta")
-                st.info("💡 **Guía UX:** Si una clienta realizó una compra normal y posteriormente decidió consolidarla en su cajita de suscripción mensual activa, puedes gestionarlo de manera segura desde aquí.")
                 
                 df_target_ventas = df_filtrado_general.copy()
                 if solo_costo_cero:
@@ -1962,20 +1841,147 @@ def mostrar_caja():
                         )
                         
     # =========================================================================
-    # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (TAREA 2)
+    # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (CON GESTIÓN CRUD)
     # =========================================================================
     with tab_cupones:
         st.markdown("### 🎟️ Panel de Cupones y Fidelización Premium")
-        st.info("""
-        🏆 **¿Cómo funciona este módulo de fidelidad?**
-        - El sistema analiza automáticamente las compras acumuladas de cada clienta dentro del plazo configurado.
-        - Se consideran únicamente las ventas completadas (**Estado 'FINALIZADO'** o **Pago 'PAGADO'**).
-        - Si un cliente ya ha canjeado su cupón, la fecha de canje queda registrada en su perfil de Supabase y el cálculo de sus compras acumuladas se reinicia automáticamente a partir de esa fecha.
-        """)
         
-        # Configuraciones Editables en Pantalla
+        # --- VERIFICACIÓN DE LA EXISTENCIA DE LA TABLA EN SUPABASE ---
+        if df_cupones.empty:
+            st.warning("⚠️ No se han encontrado cupones registrados. Si es tu primera vez ejecutando este módulo, asegúrate de haber creado la tabla 'cupones' en Supabase.")
+            with st.expander("📋 Ver SQL de Creación para Supabase", expanded=False):
+                st.code("""
+CREATE TABLE IF NOT EXISTS cupones (
+    cupon_id SERIAL PRIMARY KEY,
+    codigo TEXT UNIQUE NOT NULL,
+    porcentaje_descuento INTEGER NOT NULL CHECK (porcentaje_descuento >= 0 AND porcentaje_descuento <= 100),
+    fecha_inicio DATE,
+    fecha_fin DATE,
+    cliente_id_exclusivo INTEGER REFERENCES clientes(cliente_id) ON DELETE SET NULL,
+    limite_usos INTEGER DEFAULT 1,
+    usos_actuales INTEGER DEFAULT 0,
+    activo BOOLEAN DEFAULT TRUE,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+                """, language="sql")
+                
+        # Sub-Tab 1: Crear Cupones
+        st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
         with st.container(border=True):
-            st.markdown("⚙️ **Configuración del Cupón del 10%**")
+            col_nc1, col_nc2, col_nc3 = st.columns(3)
+            nuevo_codigo = col_nc1.text_input("Código del Cupón (Ej: ALBA15):").upper().strip()
+            nuevo_porcentaje = col_nc2.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=15, step=5)
+            nuevo_limite_usos = col_nc3.number_input("Límite de usos totales (1 para un solo canje):", min_value=1, value=1, step=1)
+            
+            col_nc4, col_nc5, col_nc6 = st.columns(3)
+            nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
+            nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
+            
+            # Selectbox de Exclusividad por Cliente
+            opciones_cli_excl = ["Ninguno (Cupón Público)"] + sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else ["Ninguno"]
+            sel_cli_excl = col_nc6.selectbox(
+                "Cupón exclusivo para un cliente:",
+                options=opciones_cli_excl,
+                index=0,
+                placeholder="Selecciona si deseas vincularlo..."
+            )
+            
+            btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
+            if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
+                conn = get_db_connection()
+                cli_excl_id = None
+                if sel_cli_excl != "Ninguno (Cupón Público)" and not df_clientes.empty:
+                    match_cli = df_clientes[df_clientes['nombre'] == sel_cli_excl]
+                    if not match_cli.empty:
+                        cli_excl_id = int(match_cli.iloc[0]['cliente_id'])
+                        
+                datos_cupon_insert = {
+                    "codigo": nuevo_codigo,
+                    "porcentaje_descuento": int(nuevo_porcentaje),
+                    "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
+                    "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
+                    "cliente_id_exclusivo": cli_excl_id,
+                    "limite_usos": int(nuevo_limite_usos),
+                    "usos_actuales": 0,
+                    "activo": True
+                }
+                
+                try:
+                    conn.table("cupones").insert(datos_cupon_insert).execute()
+                    st.success(f"🎉 ¡Cupón '{nuevo_codigo}' creado correctamente!")
+                    st.cache_data.clear()
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as ex_insert_cup:
+                    st.error(f"Error al registrar cupón en la base de datos: {ex_insert_cup}")
+
+        # Sub-Tab 2: Lista de cupones activos
+        if not df_cupones.empty:
+            st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
+            
+            # Mapear nombres de clientes exclusivos para la tabla de visualización
+            df_cupones_viz = df_cupones.copy()
+            if 'cliente_id_exclusivo' in df_cupones_viz.columns and not df_clientes.empty:
+                df_cupones_viz = df_cupones_viz.merge(
+                    df_clientes[['cliente_id', 'nombre']], 
+                    left_on='cliente_id_exclusivo', 
+                    right_on='cliente_id', 
+                    how='left'
+                ).rename(columns={'nombre': 'Exclusivo para'}).drop(columns=['cliente_id', 'cliente_id_exclusivo'], errors='ignore')
+                df_cupones_viz['Exclusivo para'] = df_cupones_viz['Exclusivo para'].fillna('Público / Todos')
+            else:
+                df_cupones_viz['Exclusivo para'] = 'Público / Todos'
+                
+            st.dataframe(
+                df_cupones_viz[['codigo', 'porcentaje_descuento', 'Exclusivo para', 'usos_actuales', 'limite_usos', 'fecha_inicio', 'fecha_fin', 'activo']],
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "codigo": st.column_config.TextColumn("Código"),
+                    "porcentaje_descuento": st.column_config.NumberColumn("Descuento", format="%d%%"),
+                    "usos_actuales": st.column_config.NumberColumn("Usado"),
+                    "limite_usos": st.column_config.NumberColumn("Límite"),
+                    "activo": st.column_config.CheckboxColumn("Activo")
+                }
+            )
+            
+            # Acciones Rápidas de Cupones
+            st.markdown("##### ⚙️ Acciones Rápidas sobre Cupones")
+            col_acc1, col_acc2 = st.columns(2)
+            sel_cup_acc = col_acc1.selectbox("Selecciona un cupón para modificar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
+            
+            if sel_cup_acc:
+                row_cup_acc = df_cupones[df_cupones['codigo'] == sel_cup_acc].iloc[0]
+                estado_actual_bool = bool(row_cup_acc.get('activo', True))
+                label_actividad = "Desactivar Cupón 🟥" if estado_actual_bool else "Activar Cupón 🟩"
+                
+                if col_acc2.button(label_actividad, use_container_width=True):
+                    try:
+                        conn = get_db_connection()
+                        conn.table("cupones").update({"activo": not estado_actual_bool}).eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                        st.success(f"¡Estado del cupón '{sel_cup_acc}' cambiado con éxito!")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e_cup_acc:
+                        st.error(f"Error al cambiar estado del cupón: {e_cup_acc}")
+                        
+                if st.button("🗑️ Eliminar Cupón Permanentemente", type="primary", use_container_width=True):
+                    try:
+                        conn = get_db_connection()
+                        conn.table("cupones").delete().eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                        st.success(f"¡Cupón '{sel_cup_acc}' eliminado de forma permanente!")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e_cup_del:
+                        st.error(f"Error al eliminar cupón: {e_cup_del}")
+
+        # Sub-Tab 3: Fidelización de Clientes
+        st.markdown("---")
+        st.markdown("#### 🏆 Fidelización: Compras Acumuladas por Clientes")
+        with st.container(border=True):
+            st.markdown("⚙️ **Configuración de Fidelidad (Descuento Automático)**")
             col_cfg1, col_cfg2 = st.columns(2)
             monto_min_cfg = col_cfg1.number_input(
                 "Monto mínimo acumulado ($):", 
@@ -1995,7 +2001,7 @@ def mostrar_caja():
         if df_clientes.empty:
             st.warning("No hay clientes registrados en el sistema.")
         else:
-            with st.spinner("Analizando compras acumuladas y clasificaciones..."):
+            with st.spinner("Analizando compras acumuladas..."):
                 results_cupones = []
                 fecha_limite_calc = datetime.now() - timedelta(days=int(plazo_dias_cfg))
                 
@@ -2003,7 +2009,6 @@ def mostrar_caja():
                     c_id_val = int(cli['cliente_id'])
                     status_str = str(cli.get('status', ''))
                     
-                    # Extraer última fecha de canje
                     fecha_canje_val = None
                     if "CANJE_CUPON:" in status_str:
                         try:
@@ -2012,18 +2017,14 @@ def mostrar_caja():
                         except Exception:
                             pass
                             
-                    # Sumar compras acumuladas
                     total_acumulado = 0.0
                     if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
                         df_cli_v = df_ventas_global[df_ventas_global['cliente_id'] == c_id_val].copy()
                         if not df_cli_v.empty:
                             df_cli_v['fecha_dt'] = pd.to_datetime(df_cli_v['fecha_venta'], errors='coerce')
                             df_cli_v = df_cli_v.dropna(subset=['fecha_dt'])
-                            
-                            # Rango temporal
                             df_cli_v = df_cli_v[df_cli_v['fecha_dt'] >= fecha_limite_calc]
                             
-                            # Filtro por última fecha de canje
                             if fecha_canje_val:
                                 df_cli_v = df_cli_v[df_cli_v['fecha_dt'] > fecha_canje_val]
                                 
@@ -2049,7 +2050,6 @@ def mostrar_caja():
                 
             df_clasificados = df_cupones_eval[df_cupones_eval['clasifica'] == True].copy()
             
-            # Sub-apartado: Clientes Clasificados
             st.markdown("#### 🏆 Apartado de Clientes que Clasifican para el Cupón de 10%")
             if df_clasificados.empty:
                 st.success("🟢 Todas las cuentas al día. No hay clientas con cupones acumulados por canjear.")
@@ -2067,8 +2067,7 @@ def mostrar_caja():
                     }
                 )
                 
-                # Registro y reinicio manual del historial
-                st.markdown("##### 🎁 Registrar Canje de Cupón (Reinicio de Historial)")
+                st.markdown("##### 🎁 Registrar Canje de Cupón de Fidelidad (Reinicio de Historial)")
                 sel_cliente_canje = st.selectbox(
                     "Selecciona una clienta para registrar el canje:",
                     options=[""] + df_clasificados['nombre'].tolist(),
@@ -2106,7 +2105,6 @@ def mostrar_caja():
                             log_error("vista_caja", "canje_cupon_manual", e_canje, st.session_state.get('email_usuario', 'Desconocido'))
                             st.error(f"Error al registrar canje en Supabase: {e_canje}")
                             
-            # Sub-apartado: Todos los clientes
             with st.expander("👥 Historial de Compras Acumuladas de todos los Clientes"):
                 st.dataframe(
                     df_cupones_eval.sort_values(by='compras_acumuladas', ascending=False)[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'clasifica']],
