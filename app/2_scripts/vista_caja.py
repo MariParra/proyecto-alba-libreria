@@ -848,6 +848,27 @@ def mostrar_caja():
     ])
     
     with tab_venta:
+        with st.expander("💡 ¿Cómo aplicar un descuento a esta venta? (Guía Rápida)", expanded=False):
+            st.info("""
+            📋 **Sigue estos simples pasos para vender con descuento:**
+            
+            1️⃣ **Selecciona al Cliente:** 
+               - Si el cliente califica para el **10% de Fidelidad**, aparecerá un banner verde brillante.
+               - Marca la casilla *'Aplicar Cupón de Fidelidad del 10% automáticamente'* si deseas usarlo.
+            
+            2️⃣ **Busca el Libro:**
+                - Elige el libro que vas a vender.
+            
+            3️⃣ **Aplica el Descuento (Despliega la pestaña '🎟️ Descuentos, Fidelidad y Cupones del Sistema'):**
+               * **Opción A (Manual / Fidelidad):** Selecciona esta opción si marcaste el cupón automático del cliente, o si quieres inventar un código en el momento (ej: `ALBA10`, escribes `10` en porcentaje).
+               * **Opción B (Cupón del Sistema):** Selecciona esta opción si el cliente te muestra un código de base de datos (ej: `ALBA15`). Escríbelo, haz clic en **🔍 Validar Cupón** y el sistema verificará si está vigente y no ha expirado.
+            
+            4️⃣ **Revisa el 'Precio a Cobrar':**
+                - El sistema recalculará el precio final con el descuento aplicado.
+            
+            5️⃣ **¡Añade al Carrito!**
+               - Haz clic en **➕ AÑADIR AL CARRITO** para guardar el libro con su precio rebajado.
+            """)
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
         
@@ -1331,12 +1352,12 @@ def mostrar_caja():
                     
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
-        st.info("""
-        💡 **¿Cómo se calculan las finanzas en este panel?**
-        * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
-        * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
-        * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
-        """)
+        with st.expander("💡 **¿Cómo se calculan las finanzas en este panel?** (Guía Rápida)", expanded=False):
+            st.info("""
+            * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
+            * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
+            * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
+            """)
         
         df_ventas = df_ventas_global.copy()
         
