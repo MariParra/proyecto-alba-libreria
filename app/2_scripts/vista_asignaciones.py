@@ -1297,7 +1297,7 @@ def mostrar_asignaciones():
                     "estado_envio": st.column_config.SelectboxColumn("Estado", options=["PENDIENTE PREPARACION", "EN PREPARACION", "POR ENVIAR", "POR RETIRAR", "ENVIADO", "RETIRADO", "LIBRO ASIGNADO"], required=True),
                     "pagado": st.column_config.SelectboxColumn("Pagado", options=["SI", "NO", "ABONO"], required=True),
                     "envio_pagado": st.column_config.SelectboxColumn("Envío Pagado 💳", options=["SI", "NO", "NO APLICA"], required=True),
-                    "tipo_cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 🚚", options=["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=False),
+                    "tipo_cobro_envio": st.column_config.SelectboxColumn("Tipo de Cobro Envío 🚚", options=["", "PAGADO", "POR PAGAR", "RETIRO EN TIENDA"], required=False),
                     "costo_caja": st.column_config.NumberColumn("Costo Caja Fijo ($)", format="$%.0f"),
                     "valor_envio": st.column_config.NumberColumn("Valor Envío ($)", format="$%.0f"),
                     "valor_extras": st.column_config.NumberColumn("Valor Extras ($)", format="$%.0f"),
