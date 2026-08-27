@@ -30,6 +30,10 @@ def sanear_telefono(valor_celda):
         tel_limpio = '+56' + tel_limpio
     return tel_limpio
 
+def clasificator_courier(metodo):
+    """Clasifica dinámicamente el método de envío ingresado."""
+    return clasificar_courier(metodo)
+
 def clasificar_courier(metodo):
     """Clasifica dinámicamente el método de envío ingresado."""
     if not metodo or not isinstance(metodo, str):
@@ -128,7 +132,7 @@ def parse_direccion_expert(direccion):
         
         pos = best_match.start()
         calle = main_address[:pos].strip().strip(',').strip('#').strip()
-        extra = main_address[number_match.end():].strip().strip(',').strip()
+        extra = main_address[best_match.end():].strip().strip(',').strip()
         if extra:
             if depto:
                 depto = f"{depto} {extra}"
@@ -827,7 +831,7 @@ def obtener_reporte_pendientes_consolidado():
         return pd.DataFrame(), pd.DataFrame()
 
 def obtener_reporte_utilidades_mensual(ano):
-    """Genera reporte paginado anual consolidando ingresos, costos y utilidades por mes."""
+    """Genera reporte paginado anual consolidando ingresos, costos a utilidades por mes."""
     conn = get_db_connection()
     try:
         chunk_size = 1000
