@@ -74,6 +74,8 @@ EMAIL_EMISOR = st_secrets.get("email", {}).get("remitente") or os.environ.get("E
 EMAIL_RECEPTOR = st_secrets.get("email", {}).get("dest_admin") or os.environ.get("EMAIL_RECEPTOR")
 EMAIL_PASSWORD = st_secrets.get("email", {}).get("password") or os.environ.get("EMAIL_PASSWORD")
 
+EMAIL_PASSWORD")
+
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -165,11 +167,6 @@ def generar_reporte_empaque():
             (df_notes['fecha_limite_dt'] < hoy.date())
         ].copy()
 
-    # Si es un día estándar sin alertas urgentes ni facturación, abortamos para no molestar por gusto
-    if df_criticas.empty and df_notas_vencidas.empty and dia_semana not in [1, 2]:
-        print("🟢 Todo al día. No se requiere enviar reporte de alertas hoy.")
-        return
-
     # ================= PARTE 3: MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
     if not facturas_vencidas_activas.empty:
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/angry%20hamster.jpg"
@@ -179,13 +176,27 @@ def generar_reporte_empaque():
         msg_titulo = "🔥 ¡HÁMSTER FURIOSO: FACTURAS VENCIDAS! 🔥"
         msg_cuerpo = f"¡Ivonne, esto ya es el colmo! Tienes {len(facturas_vencidas_activas)} tarea(s) vieja(s) de facturas pendientes de completar en la pizarra. ¡El hámster está extremadamente enojado y listo para morder! 🐹💢 ¡Ponte a facturar de inmediato!"
 
+    elif df_criticas.empty and df_notas_vencidas.empty and dia_semana not in [1, 2]:
+        # ¡HÁMSTER ZEN / FELIZ!
+        cant_pendientes = len(df_notas_pendientes) if not df_notas_pendientes.empty else 0
+        hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20peace.jpg"
+        header_color = "#2e7d32"
+        border_style = "2px solid #2e7d32"
+        card_bg = "#e8f5e9"
+        msg_titulo = "✨ ¡HÁMSTER FELIZ: BODEGA EN PAZ ZEN! ✨"
+        
+        if cant_pendientes > 0:
+            msg_cuerpo = f"¡Increíble Ivonne! No tienes paquetes demorados ni post-its vencidos en la pizarra. Solo te quedan {cant_pendientes} tarea(s) en plazo para los próximos días (las verás detalladas abajo). El hámster está en su modo zen más pacífico, orgulloso de tu productividad. 🐹🌸 ¡Disfruta el día con tranquilidad!"
+        else:
+            msg_cuerpo = "¡Increíble Ivonne! No tienes paquetes demorados, post-its vencidos ni tareas pendientes en la pizarra. ¡Todo está 100% al día! El hámster está en un estado de iluminación absoluta. 🐹✨ ¡Disfruta tu día libre de pendientes!"
+
     elif dia_semana == 1: # Martes
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20peace.jpg"
         header_color = "#0288d1"
         border_style = "2px solid #0288d1"
         card_bg = "#e1f5fe"
         msg_titulo = "🕊️ ¡MAÑANA ES DÍA DE FACTURAS! (PAZ ANTES DE LA TORMENTA)"
-        msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌"
+        msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌️"
 
     elif dia_semana == 2: # Miércoles
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20mirando.jpg"
@@ -212,7 +223,12 @@ def generar_reporte_empaque():
             msg_cuerpo = f"Hola Ivonne. Vemos que tienes tareas con {max_dias_retraso} días de retraso. ¡El hámster está llorando en un rincón de la bodega! 🐹💔"
         else:
             msg_titulo = "🚨 RECORDATORIO DIARIO DE PRODUCTIVIDAD 🚨"
-            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁"
+            msg_cuerpo = "IVONNE, TIENES TAREAS PENDIENTES POR HACER, PONTE A TRABAJAR LUEGO PODRÁS DORMIR Y TOMAR. 🐹👁️"
+
+    # --- PIE DE PÁGINA DINÁMICO ---
+    footer_text = "*Ivonne, ponte a trabajar duro hoy para que puedas dormir y tomar un copete en la noche con la pizarra limpia. El hámster te vigila.* 🐹👁️"
+    if df_criticas.empty and df_notas_vencidas.empty and dia_semana not in [1, 2]:
+        footer_text = "*¡Salud, Ivonne! Hoy te ganaste ese copete con la frente en alto y la pizarra impecable. El hámster aprueba esto.* 🐹🥂✨"
 
     # ================= CONSTRUCCIÓN DEL HTML =================
     html_content = f"""
@@ -325,10 +341,10 @@ def generar_reporte_empaque():
                 </table>
         """
 
-    html_content += """
+    html_content += f"""
                 <hr style="border: 0; border-top: 1px solid #ccc; margin: 20px 0;">
                 <p style="text-align: center; font-size: 13px; color: #666; font-style: italic;">
-                    *Ivonne, ponte a trabajar duro hoy para que puedas dormir y tomar un copete en la noche con la pizarra limpia. El hámster te vigila.* 🐹👁️
+                    {footer_text}
                 </p>
             </div>
         </body>
