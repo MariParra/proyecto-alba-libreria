@@ -1074,7 +1074,15 @@ def mostrar_asignaciones():
                     
                     # Buscamos las preferencias actuales de ese cliente
                     preferencia_actual_str = df_mes.loc[df_mes['asignacion_id'] == asignacion_id_sel, 'preferencia_mensual'].values[0]
-                    preferencias_actuales = [g.strip() for g in preferencia_actual_str.split(',')] if preferencia_actual_str and isinstance(preferencia_actual_str, str) else []
+                    
+                    # Normalizamos a mayúsculas y filtramos solo los géneros que existen en el catálogo actual para evitar StreamlitAPIException
+                    preferencias_actuales = []
+                    if preferencia_actual_str and isinstance(preferencia_actual_str, str):
+                        preferencias_actuales = [
+                            g.strip().upper() 
+                            for g in preferencia_actual_str.split(',') 
+                            if g.strip().upper() in generos_disponibles
+                        ]
 
                     generos_sel = col_a2.multiselect(
                         "2. Selecciona hasta 3 géneros:",
