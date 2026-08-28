@@ -850,6 +850,19 @@ def extraer_pago_y_comentario(comentario_raw):
     
     return pago, resto_limpio
 
+def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, draw, box_x1, box_x2, color_lbl='#555555'):
+    """
+    Dibuja de forma alineada a la derecha los valores financieros dentro de la tarjeta del comprobante.
+    """
+    draw.text((box_x1 + 20, y_pos), label, fill=color_lbl, font=font_lbl)
+    val_str = f"${val_float:,.0f}"
+    try:
+        x0, y0, x1, y1 = draw.textbbox((0, 0), val_str, font=font_val)
+        w_val = x1 - x0
+    except Exception:
+        w_val = len(val_str) * 9
+    draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
+
 
 def generar_comprobante(
     carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
