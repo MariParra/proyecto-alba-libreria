@@ -2354,7 +2354,7 @@ CREATE TABLE IF NOT EXISTS cupones (
                 st.error(f"Error al registrar cupón: {ex_insert_cup}")
 
 
-                if not df_cupones.empty:
+        if not df_cupones.empty:
             st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
             
             df_cupones_viz = df_cupones.copy()
