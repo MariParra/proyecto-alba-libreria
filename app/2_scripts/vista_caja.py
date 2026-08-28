@@ -1587,6 +1587,7 @@ def mostrar_caja():
                         
                         st.success("🎉 ¡Venta registrada con éxito!")
                         st.balloons()
+                        st.cache_data.clear()
                         time.sleep(2)
                         st.session_state.carrito_caja = []
                         st.rerun()
