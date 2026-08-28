@@ -91,6 +91,41 @@ def cargar_clientes_caja():
         st.error("Error crítico: No se pudo cargar el listado de clientes.")
         return pd.DataFrame(columns=['cliente_id', 'nombre', 'email', 'telefono', 'status', 'rut', 'direccion'])
 
+def check_exclusivity(client_id, exclusive_ids_raw):
+    """
+    Evalúa si un cliente está dentro de la lista de exclusividad del cupón.
+    Soporta formato JSON [1, 2], coma-separado '1, 2' o IDs únicos.
+    """
+    if exclusive_ids_raw is None or str(exclusive_ids_raw).strip() == "" or str(exclusive_ids_raw).lower() == "none":
+        return True  # Es público para todos
+        
+    val_str = str(exclusive_ids_raw).strip()
+    
+    # Intenta parsear como lista JSON
+    if val_str.startswith('[') and val_str.endswith(']'):
+        try:
+            allowed_ids = json.loads(val_str)
+            if isinstance(allowed_ids, list):
+                return int(client_id) in [int(x) for x in allowed_ids]
+        except Exception:
+            pass
+            
+    # Intenta parsear como lista separada por comas
+    if ',' in val_str:
+        try:
+            allowed_ids = [int(x.strip()) for x in val_str.split(',') if x.strip()]
+            return int(client_id) in allowed_ids
+        except Exception:
+            pass
+            
+    # Intenta comparar como ID único
+    try:
+        return int(client_id) == int(float(val_str))
+    except Exception:
+        pass
+        
+    return False
+
 @st.cache_data(ttl=120)
 def cargar_cupones_caja():
     """Obtiene los cupones desde la base de datos aplicando el bypass de límite de 1000 registros."""
@@ -815,6 +850,151 @@ def extraer_pago_y_comentario(comentario_raw):
     
     return pago, resto_limpio
 
+
+def generar_comprobante(
+    carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
+    fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
+):
+    """
+    Genera un comprobante premium sobre plantilla con márgenes alineados al cuaderno.
+    Utiliza Lato para los textos de datos.
+    Conserva la resolución física de 800x1200 para máxima nitidez sin requerir zoom en pantalla.
+    """
+    url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
+    img = None
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            img = Image.open(io.BytesIO(r.read())).convert('RGB')
+            try:
+                resample_filter = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample_filter = Image.ANTIALIAS
+            img = img.resize((800, 1200), resample_filter)
+    except Exception:
+        pass
+        
+    if img is None:
+        img = Image.new('RGB', (800, 1200), color='#FAF8FC')
+        
+    width, height = img.size
+    draw = ImageDraw.Draw(img)
+    
+    font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
+    font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
+    font_body = obtener_fuente_comprobante("Lato", 15)
+    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
+    font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
+    font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
+    
+    x_margin = 130
+    x_right = 740
+    
+    draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
+    
+    id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
+    draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
+    
+    draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
+    draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
+    
+    pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
+    
+    draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
+    
+    draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
+    
+    email_c = str(cliente_email or 'No registrado')
+    if len(email_c) > 31:
+        email_c = email_c[:28] + "..."
+    draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
+    
+    tel_c = str(cliente_telefono or 'No registrado')
+    if len(tel_c) > 31:
+        tel_c = tel_c[:28] + "..."
+    draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
+    
+    direccion_c = str(cliente_direccion or 'No especificado')
+    if len(direccion_c) > 65:
+        direccion_c = direccion_c[:62] + "..."
+    draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
+    
+    x_col2 = 510
+    draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
+    
+    envio_c = str(metodo_envio)
+    if len(envio_c) > 30:
+        envio_c = envio_c[:27] + "..."
+    draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
+    
+    draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
+    
+    if comentario_limpio:
+        nota_c = str(comentario_limpio).upper()
+        if len(nota_c) > 20:
+            nota_c = nota_c[:17] + "..."
+        draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
+    
+    draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
+    draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
+    
+    y_table = 440
+    draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_body_bold)
+    draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
+    draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
+    
+    draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
+    
+    y_item = y_table + 35
+    for item in carrito:
+        qty_str = str(item.get('cantidad', 1))
+        draw.text((x_margin, y_item), qty_str, fill='#333333', font=font_body)
+        
+        titulo = str(item.get('titulo', 'N/A')).upper()
+        if len(titulo) > 28:
+            titulo = titulo[:25] + "..."
+            
+        draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
+        
+        precio_val = float(item.get('precio_cobrado', 0.0))
+        draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
+        
+        subtotal_val = float(item.get('subtotal', 0.0))
+        draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
+        
+        y_item += 35
+        if y_item > 850:
+            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
+            break
+            
+    draw.line([x_margin, 880, x_right, 880], fill='#BA96A5', width=2)
+    
+    box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
+    draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
+    draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
+    
+    draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+    draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+    draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
+    draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
+    draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
+    
+    draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
+    
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', quality=95)
+    return buf.getvalue()
+
 # ==========================================
 # --- VISTA PRINCIPAL (CAJA) ---
 # ==========================================
@@ -937,10 +1117,6 @@ def mostrar_caja():
                             """, 
                             unsafe_allow_html=True
                         )
-                        aplicar_cupon_auto = st.checkbox("🎟️ Aplicar Cupón de Fidelidad del 10% automáticamente a esta venta", value=False, key="chk_aplicar_cupon_fidelidad_auto")
-                        if aplicar_cupon_auto:
-                            st.session_state['cupon_codigo_input'] = "FIDELIDAD10"
-                            st.session_state['cupon_porcentaje_input'] = 10
                     
                     with st.expander(f"✏️ Ver/Editar datos (Status: {datos_c.get('status', 'REGULAR')})", expanded=False):
                         col_cd1, col_cd2 = st.columns(2)
@@ -1032,45 +1208,6 @@ def mostrar_caja():
 
             # --- NUEVO MOTOR AVANZADO DE CUPONES ---
             precio_inicial_caja = l_precio_catalogo
-            with st.expander("🎟️ Descuentos, Fidelidad y Cupones del Sistema", expanded=False):
-                modo_desc = st.radio("Método de descuento:", ["Manual Libre / Fidelidad", "Validar Cupón del Sistema (DB)"], horizontal=True)
-                
-                if modo_desc == "Manual Libre / Fidelidad":
-                    col_cup1, col_cup2, col_cup3 = st.columns(3)
-                    cupon_codigo = col_cup1.text_input("Código o Etiqueta:", placeholder="Ej: ALBA10, ALBA15...", key="cupon_codigo_input")
-                    cupon_porcentaje = col_cup2.number_input("Porcentaje Descuento (%):", min_value=0, max_value=100, step=5, value=0, key="cupon_porcentaje_input")
-                    base_descuento = col_cup3.selectbox("Aplicar sobre:", ["Precio de Catálogo ($)", "Precio Original ($)"], key="base_descuento_input")
-                    
-                    precio_base_elegido = l_precio_original if base_descuento == "Precio Original ($)" else l_precio_catalogo
-                    
-                    if cupon_porcentaje > 0:
-                        precio_sugerido_con_descuento = precio_base_elegido * (1 - (cupon_porcentaje / 100))
-                        st.success(f"💡 Descuento del {cupon_porcentaje}% sugerido. Precio final: **${precio_sugerido_con_descuento:,.0f}**")
-                        precio_inicial_caja = precio_sugerido_con_descuento
-                        st.session_state.aplicar_cupon_sistema_obj = None 
-                else:
-                    col_validar1, col_validar2 = st.columns([2, 1])
-                    codigo_db_input = col_validar1.text_input("Ingresa el código del cupón:", placeholder="Escribe el código aquí...", key="codigo_db_field").upper().strip()
-                    
-                    if col_validar2.button("🔍 Validar Cupón", use_container_width=True):
-                        if not codigo_db_input:
-                            st.warning("Escribe un código.")
-                        else:
-                            ok_cupon, res_cupon = validar_cupon_sistema(codigo_db_input, c_id, df_cupones)
-                            if ok_cupon:
-                                st.session_state.aplicar_cupon_sistema_obj = res_cupon
-                                st.success(f"✅ ¡Cupón '{codigo_db_input}' VÁLIDO! Otorga un {res_cupon['porcentaje_descuento']}% de descuento.")
-                            else:
-                                st.session_state.aplicar_cupon_sistema_obj = None
-                                st.error(f"❌ {res_cupon}")
-                                
-                    if st.session_state.aplicar_cupon_sistema_obj:
-                        cupon_db = st.session_state.aplicar_cupon_sistema_obj
-                        pct = int(cupon_db['porcentaje_descuento'])
-                        base_desc_db = st.selectbox("Aplicar descuento del cupón sobre:", ["Precio de Catálogo ($)", "Precio Original ($)"])
-                        precio_base_elegido = l_precio_original if base_desc_db == "Precio Original ($)" else l_precio_catalogo
-                        precio_inicial_caja = precio_base_elegido * (1 - (pct / 100))
-                        st.info(f"🏆 Cupón Activo: **{cupon_db['codigo']}** ({pct}% Descuento). Precio sugerido: **${precio_inicial_caja:,.0f}**")
             
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             permitir_sin_stock = st.checkbox("🔓 Permitir sobreventa (omitir límite de stock disponible)", value=False)
@@ -1160,6 +1297,70 @@ def mostrar_caja():
                 st.session_state.carrito_caja = []
                 st.rerun()
                 
+        
+        st.markdown("---")
+                # --- MOTOR DE CUPONES CENTRALIZADO AL TOTAL DE LA COMPRA ---
+        with st.expander("🎟️ Aplicar Cupón o Descuento de Fidelidad al Total", expanded=True):
+            eligible_cupones = []
+            if not df_cupones.empty:
+                for _, cp in df_cupones.iterrows():
+                    if not cp.get('activo', True):
+                        continue
+                    if int(cp.get('usos_actuales', 0)) >= int(cp.get('limite_usos', 1)):
+                        continue
+                    hoy_dt = date.today()
+                    fi = cp.get('fecha_inicio')
+                    ff = cp.get('fecha_fin')
+                    if pd.notna(fi) and fi and pd.to_datetime(fi).date() > hoy_dt:
+                        continue
+                    if pd.notna(ff) and ff and pd.to_datetime(ff).date() < hoy_dt:
+                        continue
+                    excl_raw = cp.get('cliente_id_exclusivo')
+                    if excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() != "none":
+                        if c_id is None or not check_exclusivity(c_id, excl_raw):
+                            continue
+                    eligible_cupones.append(cp.to_dict())
+            
+            # Construir opciones del selector
+            coupon_options = ["Sin Cupón"]
+            
+            # Evaluar de forma no intrusiva si el cliente califica para fidelidad
+            clasifica_fidelidad = False
+            if c_id is not None:
+                monto_min_cfg = st.session_state.get('monto_minimo_cupon_cfg', 100000.0)
+                plazo_dias_cfg = st.session_state.get('plazo_dias_cupon_cfg', 365)
+                clasifica_fidelidad, _, _ = check_elegibilidad_cliente_cupon(
+                    c_id, df_clientes, df_ventas_global, monto_min_cfg, plazo_dias_cfg
+                )
+                
+            if clasifica_fidelidad:
+                coupon_options.append("🎟️ CUPÓN FIDELIDAD - 10% Descuento")
+                
+            for cp in eligible_cupones:
+                coupon_options.append(f"🎫 {cp['codigo']} - {cp['porcentaje_descuento']}% Descuento")
+                
+            sel_cup_db = st.selectbox(
+                "Selecciona un cupón disponible para esta venta:",
+                options=coupon_options,
+                index=0,
+                key="sel_cup_db_venta"
+            )
+            
+            # Resetear y asignar estados lógicos según la selección del selectbox
+            st.session_state.aplicar_cupon_sistema_obj = None
+            st.session_state.chk_aplicar_cupon_fidelidad_auto = False
+            
+            if sel_cup_db == "🎟️ CUPÓN FIDELIDAD - 10% Descuento":
+                st.session_state.chk_aplicar_cupon_fidelidad_auto = True
+            elif sel_cup_db != "Sin Cupón":
+                codigo_sel = sel_cup_db.replace("🎫 ", "").split(" - ")[0].strip()
+                for cp in eligible_cupones:
+                    if cp['codigo'] == codigo_sel:
+                        st.session_state.aplicar_cupon_sistema_obj = cp
+                        break
+        st.markdown("---")
+        
+        
         st.markdown("---")
         st.markdown("### 3️⃣ Envío, Pago y Confirmación")
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
@@ -1942,29 +2143,32 @@ CREATE TABLE IF NOT EXISTS cupones (
             nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
             nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
             
-            opciones_cli_excl = ["Ninguno (Cupón Público)"] + sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else ["Ninguno"]
-            sel_cli_excl = col_nc6.selectbox(
-                "Cupón exclusivo para un cliente:",
-                options=opciones_cli_excl,
-                index=0,
-                placeholder="Selecciona si deseas vincularlo..."
+            opciones_cli = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
+            sel_clientes_excl = col_nc6.multiselect(
+                "Cupón exclusivo para (dejar vacío para cupón público):",
+                options=opciones_cli,
+                placeholder="Selecciona una o más clientas..."
             )
             
             btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
             if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
                 conn = get_db_connection()
-                cli_excl_id = None
-                if sel_cli_excl != "Ninguno (Cupón Público)" and not df_clientes.empty:
-                    match_cli = df_clientes[df_clientes['nombre'] == sel_cli_excl]
-                    if not match_cli.empty:
-                        cli_excl_id = int(match_cli.iloc[0]['cliente_id'])
+                cli_excl_ids = []
+                if sel_clientes_excl and not df_clientes.empty:
+                    for name in sel_clientes_excl:
+                        match_cli = df_clientes[df_clientes['nombre'] == name]
+                        if not match_cli.empty:
+                            cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+                
+                # Guardar IDs de forma segura como array JSON en formato string
+                cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
                         
                 datos_cupon_insert = {
                     "codigo": nuevo_codigo,
                     "porcentaje_descuento": int(nuevo_porcentaje),
                     "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
                     "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
-                    "cliente_id_exclusivo": cli_excl_id,
+                    "cliente_id_exclusivo": cliente_id_exclusivo_str,
                     "limite_usos": int(nuevo_limite_usos),
                     "usos_actuales": 0,
                     "activo": True
@@ -2007,36 +2211,84 @@ CREATE TABLE IF NOT EXISTS cupones (
                 }
             )
             
-            st.markdown("##### ⚙️ Acciones Rápidas sobre Cupones")
-            col_acc1, col_acc2 = st.columns(2)
-            sel_cup_acc = col_acc1.selectbox("Selecciona un cupón para modificar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
+            st.markdown("##### ⚙️ Acciones Rápidas / Editar / Eliminar")
+            sel_cup_acc = st.selectbox("Selecciona un cupón para gestionar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
             
             if sel_cup_acc:
                 row_cup_acc = df_cupones[df_cupones['codigo'] == sel_cup_acc].iloc[0]
-                estado_actual_bool = bool(row_cup_acc.get('activo', True))
-                label_actividad = "Desactivar Cupón 🟥" if estado_actual_bool else "Activar Cupón 🟩"
                 
-                if col_acc2.button(label_actividad, use_container_width=True):
-                    try:
-                        conn = get_db_connection()
-                        conn.table("cupones").update({"activo": not estado_actual_bool}).eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
-                        st.success(f"¡Estado del cupón '{sel_cup_acc}' cambiado con éxito!")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e_cup_acc:
-                        st.error(f"Error al cambiar estado del cupón: {e_cup_acc}")
+                # Recuperar nombres de clientes actualmente asociados
+                excl_raw = row_cup_acc.get('cliente_id_exclusivo')
+                current_names = []
+                if excl_raw and not df_clientes.empty:
+                    for _, cl in df_clientes.iterrows():
+                        if check_exclusivity(cl['cliente_id'], excl_raw):
+                            current_names.append(cl['nombre'])
+                
+                with st.form("form_editar_cupon"):
+                    col_ed1, col_ed2, col_ed3 = st.columns(3)
+                    ed_porcentaje = col_ed1.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=int(row_cup_acc['porcentaje_descuento']))
+                    ed_limite = col_ed2.number_input("Límite de Usos Totales:", min_value=1, value=int(row_cup_acc.get('limite_usos', 1)))
+                    ed_activo = col_ed3.toggle("Cupón Activo", value=bool(row_cup_acc.get('activo', True)))
+                    
+                    col_ed4, col_ed5, col_ed6 = st.columns(3)
+                    def safe_parse_date(d_val):
+                        if pd.isna(d_val) or not d_val: return None
+                        return pd.to_datetime(d_val).date()
                         
-                if st.button("🗑️ Eliminar Cupón Permanentemente", type="primary", use_container_width=True):
-                    try:
+                    ed_fecha_inicio = col_ed4.date_input("Fecha Inicio:", value=safe_parse_date(row_cup_acc.get('fecha_inicio')))
+                    ed_fecha_fin = col_ed5.date_input("Fecha Fin:", value=safe_parse_date(row_cup_acc.get('fecha_fin')))
+                    
+                    opciones_cli_ed = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
+                    ed_clientes_excl = col_ed6.multiselect(
+                        "Exclusivo para:",
+                        options=opciones_cli_ed,
+                        default=current_names
+                    )
+                    
+                    col_btn_ed1, col_btn_ed2 = st.columns(2)
+                    btn_guardar_ed = col_btn_ed1.form_submit_button("💾 Guardar Cambios", use_container_width=True)
+                    btn_eliminar_ed = col_btn_ed2.form_submit_button("🗑️ Eliminar Cupón Permanentemente", use_container_width=True)
+                    
+                    if btn_guardar_ed:
                         conn = get_db_connection()
-                        conn.table("cupones").delete().eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
-                        st.success(f"¡Cupón '{sel_cup_acc}' eliminado de forma permanente!")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e_cup_del:
-                        st.error(f"Error al eliminar cupón: {e_cup_del}")
+                        cli_excl_ids = []
+                        if ed_clientes_excl and not df_clientes.empty:
+                            for name in ed_clientes_excl:
+                                match_cli = df_clientes[df_clientes['nombre'] == name]
+                                if not match_cli.empty:
+                                    cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+                                    
+                        cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
+                        
+                        datos_update = {
+                            "porcentaje_descuento": int(ed_porcentaje),
+                            "limite_usos": int(ed_limite),
+                            "activo": ed_activo,
+                            "fecha_inicio": ed_fecha_inicio.isoformat() if ed_fecha_inicio else None,
+                            "fecha_fin": ed_fecha_fin.isoformat() if ed_fecha_fin else None,
+                            "cliente_id_exclusivo": cliente_id_exclusivo_str
+                        }
+                        
+                        try:
+                            conn.table("cupones").update(datos_update).eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                            st.success(f"🎉 ¡Cupón '{sel_cup_acc}' editado con éxito!")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e_up:
+                            st.error(f"Error al editar: {e_up}")
+                            
+                    if btn_eliminar_ed:
+                        conn = get_db_connection()
+                        try:
+                            conn.table("cupones").delete().eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                            st.success(f"🗑️ ¡Cupón '{sel_cup_acc}' eliminado de forma permanente!")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e_del:
+                            st.error(f"Error al eliminar: {e_del}")
 
         st.markdown("---")
         st.markdown("#### 🏆 Fidelización: Compras Acumuladas por Clientes")
