@@ -127,6 +127,50 @@ def check_exclusivity(client_id, exclusive_ids_raw):
         pass
         
     return False
+def evaluar_restricciones_libro(libro_item, cupon):
+    """
+    Evalúa si un libro del carrito cumple con las restricciones del cupón.
+    Retorna True si califica para el descuento, False en caso contrario.
+    """
+    if not cupon:
+        return True
+        
+    # 1. Restricción de Encuadernación
+    enc = str(libro_item.get('encuadernacion', '')).strip().upper()
+    rest_enc = str(cupon.get('restriccion_encuadernacion', 'Todos')).strip().upper()
+    
+    if rest_enc == "SOLO TAPA BLANDA" and enc != "TAPA BLANDA":
+        return False
+    if rest_enc == "SOLO TAPA DURA" and enc != "TAPA DURA":
+        return False
+    if rest_enc == "EXCLUIR TAPA DURA" and enc == "TAPA DURA":
+        return False
+        
+    # 2. Restricción de Editorial (Soporta una o múltiples editoriales guardadas como JSON list)
+    rest_edit_raw = cupon.get('restriccion_editorial')
+    if rest_edit_raw and str(rest_edit_raw).strip() != "" and str(rest_edit_raw).lower() not in ["none", "nan", "null"]:
+        try:
+            allowed_edits = json.loads(rest_edit_raw)
+            if isinstance(allowed_edits, list) and allowed_edits:
+                item_edit = str(libro_item.get('editorial', '')).strip().upper()
+                if item_edit not in [str(e).strip().upper() for e in allowed_edits]:
+                    return False
+        except Exception:
+            pass
+            
+    # 3. Restricción de Autor (Soporta uno o múltiples autores guardados como JSON list)
+    rest_autor_raw = cupon.get('restriccion_autor')
+    if rest_autor_raw and str(rest_autor_raw).strip() != "" and str(rest_autor_raw).lower() not in ["none", "nan", "null"]:
+        try:
+            allowed_autores = json.loads(rest_autor_raw)
+            if isinstance(allowed_autores, list) and allowed_autores:
+                item_autor = str(libro_item.get('autor', '')).strip().upper()
+                if item_autor not in [str(a).strip().upper() for a in allowed_autores]:
+                    return False
+        except Exception:
+            pass
+            
+    return True
 
 @st.cache_data(ttl=120)
 def cargar_cupones_caja():
@@ -1394,6 +1438,55 @@ def mostrar_caja():
                     if cp['codigo'] == codigo_sel:
                         st.session_state.aplicar_cupon_sistema_obj = cp
                         break
+                    
+                    # =========================================================================
+            # 📊 VISTA PREVIA INTERACTIVA DE DESCUENTOS (TABLA DE CONTROL DE PRECIOS)
+            # =========================================================================
+            pct_preview = 0
+            is_fidelidad = st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False)
+            cupon_obj = st.session_state.get('aplicar_cupon_sistema_obj')
+            
+            if is_fidelidad:
+                pct_preview = 10
+            elif cupon_obj is not None:
+                pct_preview = int(cupon_obj.get('porcentaje_descuento', 0))
+                
+            if pct_preview > 0 and len(st.session_state.carrito_caja) > 0:
+                st.markdown("##### 📊 Desglose de Descuentos en Carrito")
+                preview_rows = []
+                for item in st.session_state.carrito_caja:
+                    sub_original = float(item.get('subtotal', 0.0))
+                    applies = True
+                    
+                    if cupon_obj is not None:
+                        applies = evaluar_restricciones_libro(item, cupon_obj)
+                        
+                    sub_final = sub_original * (1 - (pct_preview / 100)) if applies else sub_original
+                    descuento_monto = sub_original - sub_final
+                    
+                    status_badge = "✅ Aplica" if applies else "❌ No aplica"
+                    
+                    preview_rows.append({
+                        "Libro": item['titulo'].upper(),
+                        "Cantidad": item['cantidad'],
+                        "Precio Normal": f"${sub_original:,.0f}",
+                        "Descuento": f"-${descuento_monto:,.0f}" if applies else "$0",
+                        "Estado": status_badge,
+                        "Precio Final": f"${sub_final:,.0f}"
+                    })
+                
+                df_preview = pd.DataFrame(preview_rows)
+                st.dataframe(
+                    df_preview,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Estado": st.column_config.TextColumn("Estado", width="small"),
+                        "Precio Normal": st.column_config.TextColumn("Precio Normal"),
+                        "Precio Final": st.column_config.TextColumn("Precio Final")
+                    }
+                )
+
         st.markdown("---")
         
         
@@ -1477,18 +1570,32 @@ def mostrar_caja():
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
         fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
         
+                # =========================================================================
+        # 💳 RE-CÁLCULO FINANCIERO TRANSACCIONAL SEGÚN RESTRICCIONES
+        # =========================================================================
         porcentaje_descuento_aplicar = 0
-        
-        # 1. Determinar el porcentaje a aplicar desde la sesión
         if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
             porcentaje_descuento_aplicar = 10
         elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
             porcentaje_descuento_aplicar = int(st.session_state.aplicar_cupon_sistema_obj.get('porcentaje_descuento', 0))
             
-        # 2. Aplicar descuento STRICTLY al subtotal de los libros
-        subtotal_con_descuento = subtotal_carrito * (1 - (porcentaje_descuento_aplicar / 100))
+        subtotal_con_descuento = 0.0
+        
+        for item in st.session_state.carrito_caja:
+            item_subtotal = float(item.get('subtotal', 0.0))
+            if porcentaje_descuento_aplicar > 0:
+                # Fidelidad del 10% aplica a todo el carrito sin restricciones
+                if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
+                    subtotal_con_descuento += item_subtotal * (1 - (porcentaje_descuento_aplicar / 100))
+                # Cupones de sistema evalúan restricciones de catálogo
+                elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
+                    if evaluar_restricciones_libro(item, st.session_state.aplicar_cupon_sistema_obj):
+                        subtotal_con_descuento += item_subtotal * (1 - (porcentaje_descuento_aplicar / 100))
+                    else:
+                        subtotal_con_descuento += item_subtotal
+            else:
+                subtotal_con_descuento += item_subtotal
 
-        # 3. Clasificación de cobro y suma plana de valor_envio al final (libre de descuento)
         if es_por_pagar:
             tipo_cobro_envio = "envio por pagar"
             monto_final = subtotal_con_descuento
@@ -1498,7 +1605,7 @@ def mostrar_caja():
                 monto_final = subtotal_con_descuento
             else:
                 tipo_cobro_envio = "envio pagado"
-                monto_final = subtotal_con_descuento + valor_envio  # <--- Envío libre de descuento
+                monto_final = subtotal_con_descuento + valor_envio
         
         abono_default = 0.0
         
@@ -2169,56 +2276,83 @@ CREATE TABLE IF NOT EXISTS cupones (
 );
                 """, language="sql")
                 
-        st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
-        with st.container(border=True):
-            col_nc1, col_nc2, col_nc3 = st.columns(3)
-            nuevo_codigo = col_nc1.text_input("Código del Cupón (Ej: ALBA15):").upper().strip()
-            nuevo_porcentaje = col_nc2.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=15, step=5)
-            nuevo_limite_usos = col_nc3.number_input("Límite de usos totales (1 para un solo canje):", min_value=1, value=1, step=1)
+    st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
+    with st.container(border=True):
+        col_nc1, col_nc2, col_nc3 = st.columns(3)
+        nuevo_codigo = col_nc1.text_input("Código del Cupón (Ej: ALBA15):").upper().strip()
+        nuevo_porcentaje = col_nc2.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=15, step=5)
+        nuevo_limite_usos = col_nc3.number_input("Límite de usos totales:", min_value=1, value=1000, step=1)
+        
+        col_nc4, col_nc5, col_nc6 = st.columns(3)
+        nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
+        nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
+        
+        opciones_cli = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
+        sel_clientes_excl = col_nc6.multiselect(
+            "Cupón exclusivo para (dejar vacío para público):",
+            options=opciones_cli,
+            placeholder="Selecciona una o más clientas..."
+        )
+        
+        st.markdown("🎯 **Restricciones del Cupón (Ventas Aplicables)**")
+        col_rest1, col_rest2, col_rest3 = st.columns(3)
+        
+        # 1. Obtener listas únicas del catálogo actual
+        autores_disponibles, editoriales_disponibles = cargar_listas_desplegables_caja()
+        
+        sel_editoriales_rest = col_rest1.multiselect(
+            "Restringir a Editoriales específicas (vacío = Todas):",
+            options=editoriales_disponibles,
+            placeholder="Elige editoriales..."
+        )
+        sel_autores_rest = col_rest2.multiselect(
+            "Restringir a Autores específicos (vacío = Todos):",
+            options=autores_disponibles,
+            placeholder="Elige autores..."
+        )
+        sel_enc_rest = col_rest3.selectbox(
+            "Tipo de Encuadernación permitida:",
+            options=["Todos", "Solo Tapa Blanda", "Solo Tapa Dura", "Excluir Tapa Dura"],
+            index=0
+        )
+        
+        btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
+        if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
+            conn = get_db_connection()
+            cli_excl_ids = []
+            if sel_clientes_excl and not df_clientes.empty:
+                for name in sel_clientes_excl:
+                    match_cli = df_clientes[df_clientes['nombre'] == name]
+                    if not match_cli.empty:
+                        cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
             
-            col_nc4, col_nc5, col_nc6 = st.columns(3)
-            nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
-            nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
+            cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
+            rest_editorial_str = json.dumps(sel_editoriales_rest) if sel_editoriales_rest else None
+            rest_autor_str = json.dumps(sel_autores_rest) if sel_autores_rest else None
+                    
+            datos_cupon_insert = {
+                "codigo": nuevo_codigo,
+                "porcentaje_descuento": int(nuevo_porcentaje),
+                "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
+                "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
+                "cliente_id_exclusivo": cliente_id_exclusivo_str,
+                "limite_usos": int(nuevo_limite_usos),
+                "usos_actuales": 0,
+                "activo": True,
+                "restriccion_editorial": rest_editorial_str,
+                "restriccion_autor": rest_autor_str,
+                "restriccion_encuadernacion": sel_enc_rest
+            }
             
-            opciones_cli = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
-            sel_clientes_excl = col_nc6.multiselect(
-                "Cupón exclusivo para (dejar vacío para cupón público):",
-                options=opciones_cli,
-                placeholder="Selecciona una o más clientas..."
-            )
-            
-            btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
-            if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
-                conn = get_db_connection()
-                cli_excl_ids = []
-                if sel_clientes_excl and not df_clientes.empty:
-                    for name in sel_clientes_excl:
-                        match_cli = df_clientes[df_clientes['nombre'] == name]
-                        if not match_cli.empty:
-                            cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
-                
-                # Guardar IDs de forma segura como array JSON en formato string
-                cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
-                        
-                datos_cupon_insert = {
-                    "codigo": nuevo_codigo,
-                    "porcentaje_descuento": int(nuevo_porcentaje),
-                    "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
-                    "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
-                    "cliente_id_exclusivo": cliente_id_exclusivo_str,
-                    "limite_usos": int(nuevo_limite_usos),
-                    "usos_actuales": 0,
-                    "activo": True
-                }
-                
-                try:
-                    conn.table("cupones").insert(datos_cupon_insert).execute()
-                    st.success(f"🎉 ¡Cupón '{nuevo_codigo}' creado correctamente!")
-                    st.cache_data.clear()
-                    time.sleep(1.5)
-                    st.rerun()
-                except Exception as ex_insert_cup:
-                    st.error(f"Error al registrar cupón en la base de datos: {ex_insert_cup}")
+            try:
+                conn.table("cupones").insert(datos_cupon_insert).execute()
+                st.success(f"🎉 ¡Cupón '{nuevo_codigo}' creado correctamente!")
+                st.cache_data.clear()
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as ex_insert_cup:
+                st.error(f"Error al registrar cupón: {ex_insert_cup}")
+
 
         if not df_cupones.empty:
             st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
