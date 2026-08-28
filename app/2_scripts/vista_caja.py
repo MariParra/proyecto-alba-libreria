@@ -96,7 +96,7 @@ def check_exclusivity(client_id, exclusive_ids_raw):
     Evalúa si un cliente está dentro de la lista de exclusividad del cupón.
     Soporta formato JSON [1, 2], coma-separado '1, 2' o IDs únicos.
     """
-    if exclusive_ids_raw is None or str(exclusive_ids_raw).strip() == "" or str(exclusive_ids_raw).lower() == "none":
+    if pd.isna(exclusive_ids_raw) or exclusive_ids_raw is None or str(exclusive_ids_raw).strip() == "" or str(exclusive_ids_raw).lower() in ["none", "nan", "null"]:
         return True  # Es público para todos
         
     val_str = str(exclusive_ids_raw).strip()
@@ -1329,7 +1329,7 @@ def mostrar_caja():
                     if pd.notna(ff) and ff and pd.to_datetime(ff).date() < hoy_dt:
                         continue
                     excl_raw = cp.get('cliente_id_exclusivo')
-                    if excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() != "none":
+                    if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null"]:
                         if c_id is None or not check_exclusivity(c_id, excl_raw):
                             continue
                     eligible_cupones.append(cp.to_dict())
