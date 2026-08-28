@@ -2276,354 +2276,354 @@ CREATE TABLE IF NOT EXISTS cupones (
 );
                 """, language="sql")
                 
-    st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
-    with st.container(border=True):
-        col_nc1, col_nc2, col_nc3 = st.columns(3)
-        nuevo_codigo = col_nc1.text_input("Código del Cupón (Ej: ALBA15):").upper().strip()
-        nuevo_porcentaje = col_nc2.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=15, step=5)
-        nuevo_limite_usos = col_nc3.number_input("Límite de usos totales:", min_value=1, value=1000, step=1)
-        
-        col_nc4, col_nc5, col_nc6 = st.columns(3)
-        nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
-        nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
-        
-        opciones_cli = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
-        sel_clientes_excl = col_nc6.multiselect(
-            "Cupón exclusivo para (dejar vacío para público):",
-            options=opciones_cli,
-            placeholder="Selecciona una o más clientas..."
-        )
-        
-        st.markdown("🎯 **Restricciones del Cupón (Ventas Aplicables)**")
-        col_rest1, col_rest2, col_rest3 = st.columns(3)
-        
-        # 1. Obtener listas únicas del catálogo actual
-        autores_disponibles, editoriales_disponibles = cargar_listas_desplegables_caja()
-        
-        sel_editoriales_rest = col_rest1.multiselect(
-            "Restringir a Editoriales específicas (vacío = Todas):",
-            options=editoriales_disponibles,
-            placeholder="Elige editoriales..."
-        )
-        sel_autores_rest = col_rest2.multiselect(
-            "Restringir a Autores específicos (vacío = Todos):",
-            options=autores_disponibles,
-            placeholder="Elige autores..."
-        )
-        sel_enc_rest = col_rest3.selectbox(
-            "Tipo de Encuadernación permitida:",
-            options=["Todos", "Solo Tapa Blanda", "Solo Tapa Dura", "Excluir Tapa Dura"],
-            index=0
-        )
-        
-        btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
-        if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
-            conn = get_db_connection()
-            cli_excl_ids = []
-            if sel_clientes_excl and not df_clientes.empty:
-                for name in sel_clientes_excl:
-                    match_cli = df_clientes[df_clientes['nombre'] == name]
-                    if not match_cli.empty:
-                        cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+        st.markdown("#### ➕ Crear Nuevo Cupón del Sistema")
+        with st.container(border=True):
+            col_nc1, col_nc2, col_nc3 = st.columns(3)
+            nuevo_codigo = col_nc1.text_input("Código del Cupón (Ej: ALBA15):").upper().strip()
+            nuevo_porcentaje = col_nc2.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=15, step=5)
+            nuevo_limite_usos = col_nc3.number_input("Límite de usos totales:", min_value=1, value=1000, step=1)
             
-            cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
-            rest_editorial_str = json.dumps(sel_editoriales_rest) if sel_editoriales_rest else None
-            rest_autor_str = json.dumps(sel_autores_rest) if sel_autores_rest else None
+            col_nc4, col_nc5, col_nc6 = st.columns(3)
+            nuevo_fecha_inicio = col_nc4.date_input("Fecha Inicio (Vigencia):", value=None)
+            nuevo_fecha_fin = col_nc5.date_input("Fecha Fin (Expiración):", value=None)
+            
+            opciones_cli = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
+            sel_clientes_excl = col_nc6.multiselect(
+                "Cupón exclusivo para (dejar vacío para público):",
+                options=opciones_cli,
+                placeholder="Selecciona una o más clientas..."
+            )
+            
+            st.markdown("🎯 **Restricciones del Cupón (Ventas Aplicables)**")
+            col_rest1, col_rest2, col_rest3 = st.columns(3)
+            
+            # 1. Obtener listas únicas del catálogo actual
+            autores_disponibles, editoriales_disponibles = cargar_listas_desplegables_caja()
+            
+            sel_editoriales_rest = col_rest1.multiselect(
+                "Restringir a Editoriales específicas (vacío = Todas):",
+                options=editoriales_disponibles,
+                placeholder="Elige editoriales..."
+            )
+            sel_autores_rest = col_rest2.multiselect(
+                "Restringir a Autores específicos (vacío = Todos):",
+                options=autores_disponibles,
+                placeholder="Elige autores..."
+            )
+            sel_enc_rest = col_rest3.selectbox(
+                "Tipo de Encuadernación permitida:",
+                options=["Todos", "Solo Tapa Blanda", "Solo Tapa Dura", "Excluir Tapa Dura"],
+                index=0
+            )
+            
+            btn_crear_disabled = not nuevo_codigo or nuevo_porcentaje <= 0
+            if st.button("💾 Crear y Registrar Cupón en Supabase", type="primary", use_container_width=True, disabled=btn_crear_disabled):
+                conn = get_db_connection()
+                cli_excl_ids = []
+                if sel_clientes_excl and not df_clientes.empty:
+                    for name in sel_clientes_excl:
+                        match_cli = df_clientes[df_clientes['nombre'] == name]
+                        if not match_cli.empty:
+                            cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+                
+                cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
+                rest_editorial_str = json.dumps(sel_editoriales_rest) if sel_editoriales_rest else None
+                rest_autor_str = json.dumps(sel_autores_rest) if sel_autores_rest else None
+                        
+                datos_cupon_insert = {
+                    "codigo": nuevo_codigo,
+                    "porcentaje_descuento": int(nuevo_porcentaje),
+                    "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
+                    "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
+                    "cliente_id_exclusivo": cliente_id_exclusivo_str,
+                    "limite_usos": int(nuevo_limite_usos),
+                    "usos_actuales": 0,
+                    "activo": True,
+                    "restriccion_editorial": rest_editorial_str,
+                    "restriccion_autor": rest_autor_str,
+                    "restriccion_encuadernacion": sel_enc_rest
+                }
+                
+                try:
+                    conn.table("cupones").insert(datos_cupon_insert).execute()
+                    st.success(f"🎉 ¡Cupón '{nuevo_codigo}' creado correctamente!")
+                    st.cache_data.clear()
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as ex_insert_cup:
+                    st.error(f"Error al registrar cupón: {ex_insert_cup}")
+
+
+            if not df_cupones.empty:
+                st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
+                
+                df_cupones_viz = df_cupones.copy()
+                
+                # Mapeo dinámico fila por fila para recolectar nombres de clientes exclusivos
+                excl_names_list = []
+                for _, cp in df_cupones_viz.iterrows():
+                    excl_raw = cp.get('cliente_id_exclusivo')
+                    names = []
+                    if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null", "[]"]:
+                        if not df_clientes.empty:
+                            for _, cl in df_clientes.iterrows():
+                                if check_exclusivity(cl['cliente_id'], excl_raw):
+                                    names.append(cl['nombre'].upper())
                     
-            datos_cupon_insert = {
-                "codigo": nuevo_codigo,
-                "porcentaje_descuento": int(nuevo_porcentaje),
-                "fecha_inicio": nuevo_fecha_inicio.isoformat() if nuevo_fecha_inicio else None,
-                "fecha_fin": nuevo_fecha_fin.isoformat() if nuevo_fecha_fin else None,
-                "cliente_id_exclusivo": cliente_id_exclusivo_str,
-                "limite_usos": int(nuevo_limite_usos),
-                "usos_actuales": 0,
-                "activo": True,
-                "restriccion_editorial": rest_editorial_str,
-                "restriccion_autor": rest_autor_str,
-                "restriccion_encuadernacion": sel_enc_rest
-            }
-            
-            try:
-                conn.table("cupones").insert(datos_cupon_insert).execute()
-                st.success(f"🎉 ¡Cupón '{nuevo_codigo}' creado correctamente!")
-                st.cache_data.clear()
-                time.sleep(1.5)
-                st.rerun()
-            except Exception as ex_insert_cup:
-                st.error(f"Error al registrar cupón: {ex_insert_cup}")
+                    excl_names_list.append(", ".join(names) if names else "Público / Todos")
+                
+                df_cupones_viz['Exclusivo para'] = excl_names_list
+                    
+                st.dataframe(
+                    df_cupones_viz[['codigo', 'porcentaje_descuento', 'Exclusivo para', 'usos_actuales', 'limite_usos', 'fecha_inicio', 'fecha_fin', 'activo']],
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "codigo": st.column_config.TextColumn("Código"),
+                        "porcentaje_descuento": st.column_config.NumberColumn("Descuento", format="%d%%"),
+                        "usos_actuales": st.column_config.NumberColumn("Usado"),
+                        "limite_usos": st.column_config.NumberColumn("Límite"),
+                        "activo": st.column_config.CheckboxColumn("Activo")
+                    }
+                )
 
-
-        if not df_cupones.empty:
-            st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
-            
-            df_cupones_viz = df_cupones.copy()
-            
-            # Mapeo dinámico fila por fila para recolectar nombres de clientes exclusivos
-            excl_names_list = []
-            for _, cp in df_cupones_viz.iterrows():
-                excl_raw = cp.get('cliente_id_exclusivo')
-                names = []
-                if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null", "[]"]:
-                    if not df_clientes.empty:
+                
+                st.markdown("##### ⚙️ Acciones Rápidas / Editar / Eliminar")
+                sel_cup_acc = st.selectbox("Selecciona un cupón para gestionar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
+                
+                if sel_cup_acc:
+                    row_cup_acc = df_cupones[df_cupones['codigo'] == sel_cup_acc].iloc[0]
+                    
+                    # Recuperar nombres de clientes actualmente asociados
+                    excl_raw = row_cup_acc.get('cliente_id_exclusivo')
+                    current_names = []
+                    if excl_raw and not df_clientes.empty:
                         for _, cl in df_clientes.iterrows():
                             if check_exclusivity(cl['cliente_id'], excl_raw):
-                                names.append(cl['nombre'].upper())
-                
-                excl_names_list.append(", ".join(names) if names else "Público / Todos")
-            
-            df_cupones_viz['Exclusivo para'] = excl_names_list
-                
-            st.dataframe(
-                df_cupones_viz[['codigo', 'porcentaje_descuento', 'Exclusivo para', 'usos_actuales', 'limite_usos', 'fecha_inicio', 'fecha_fin', 'activo']],
-                hide_index=True,
-                use_container_width=True,
-                column_config={
-                    "codigo": st.column_config.TextColumn("Código"),
-                    "porcentaje_descuento": st.column_config.NumberColumn("Descuento", format="%d%%"),
-                    "usos_actuales": st.column_config.NumberColumn("Usado"),
-                    "limite_usos": st.column_config.NumberColumn("Límite"),
-                    "activo": st.column_config.CheckboxColumn("Activo")
-                }
-            )
-
-            
-            st.markdown("##### ⚙️ Acciones Rápidas / Editar / Eliminar")
-            sel_cup_acc = st.selectbox("Selecciona un cupón para gestionar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
-            
-            if sel_cup_acc:
-                row_cup_acc = df_cupones[df_cupones['codigo'] == sel_cup_acc].iloc[0]
-                
-                # Recuperar nombres de clientes actualmente asociados
-                excl_raw = row_cup_acc.get('cliente_id_exclusivo')
-                current_names = []
-                if excl_raw and not df_clientes.empty:
-                    for _, cl in df_clientes.iterrows():
-                        if check_exclusivity(cl['cliente_id'], excl_raw):
-                            current_names.append(cl['nombre'])
-                
-                with st.form("form_editar_cupon"):
-                    col_ed1, col_ed2, col_ed3 = st.columns(3)
-                    ed_porcentaje = col_ed1.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=int(row_cup_acc['porcentaje_descuento']))
-                    ed_limite = col_ed2.number_input("Límite de Usos Totales:", min_value=1, value=int(row_cup_acc.get('limite_usos', 1)))
-                    ed_activo = col_ed3.toggle("Cupón Activo", value=bool(row_cup_acc.get('activo', True)))
+                                current_names.append(cl['nombre'])
                     
-                    col_ed4, col_ed5, col_ed6 = st.columns(3)
-                    def safe_parse_date(d_val):
-                        if pd.isna(d_val) or not d_val: return None
-                        return pd.to_datetime(d_val).date()
+                    with st.form("form_editar_cupon"):
+                        col_ed1, col_ed2, col_ed3 = st.columns(3)
+                        ed_porcentaje = col_ed1.number_input("Porcentaje Descuento (%):", min_value=1, max_value=100, value=int(row_cup_acc['porcentaje_descuento']))
+                        ed_limite = col_ed2.number_input("Límite de Usos Totales:", min_value=1, value=int(row_cup_acc.get('limite_usos', 1)))
+                        ed_activo = col_ed3.toggle("Cupón Activo", value=bool(row_cup_acc.get('activo', True)))
                         
-                    ed_fecha_inicio = col_ed4.date_input("Fecha Inicio:", value=safe_parse_date(row_cup_acc.get('fecha_inicio')))
-                    ed_fecha_fin = col_ed5.date_input("Fecha Fin:", value=safe_parse_date(row_cup_acc.get('fecha_fin')))
+                        col_ed4, col_ed5, col_ed6 = st.columns(3)
+                        def safe_parse_date(d_val):
+                            if pd.isna(d_val) or not d_val: return None
+                            return pd.to_datetime(d_val).date()
+                            
+                        ed_fecha_inicio = col_ed4.date_input("Fecha Inicio:", value=safe_parse_date(row_cup_acc.get('fecha_inicio')))
+                        ed_fecha_fin = col_ed5.date_input("Fecha Fin:", value=safe_parse_date(row_cup_acc.get('fecha_fin')))
+                        
+                        opciones_cli_ed = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
+                        ed_clientes_excl = col_ed6.multiselect(
+                            "Exclusivo para:",
+                            options=opciones_cli_ed,
+                            default=current_names
+                        )
+                        
+                        col_btn_ed1, col_btn_ed2 = st.columns(2)
+                        btn_guardar_ed = col_btn_ed1.form_submit_button("💾 Guardar Cambios", use_container_width=True)
+                        btn_eliminar_ed = col_btn_ed2.form_submit_button("🗑️ Eliminar Cupón Permanentemente", use_container_width=True)
+                        
+                        if btn_guardar_ed:
+                            conn = get_db_connection()
+                            cli_excl_ids = []
+                            if ed_clientes_excl and not df_clientes.empty:
+                                for name in ed_clientes_excl:
+                                    match_cli = df_clientes[df_clientes['nombre'] == name]
+                                    if not match_cli.empty:
+                                        cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+                                        
+                            cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
+                            
+                            datos_update = {
+                                "porcentaje_descuento": int(ed_porcentaje),
+                                "limite_usos": int(ed_limite),
+                                "activo": ed_activo,
+                                "fecha_inicio": ed_fecha_inicio.isoformat() if ed_fecha_inicio else None,
+                                "fecha_fin": ed_fecha_fin.isoformat() if ed_fecha_fin else None,
+                                "cliente_id_exclusivo": cliente_id_exclusivo_str
+                            }
+                            
+                            try:
+                                conn.table("cupones").update(datos_update).eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                                st.success(f"🎉 ¡Cupón '{sel_cup_acc}' editado con éxito!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e_up:
+                                st.error(f"Error al editar: {e_up}")
+                                
+                        if btn_eliminar_ed:
+                            conn = get_db_connection()
+                            try:
+                                conn.table("cupones").delete().eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
+                                st.success(f"🗑️ ¡Cupón '{sel_cup_acc}' eliminado de forma permanente!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e_del:
+                                st.error(f"Error al eliminar: {e_del}")
+
+            st.markdown("---")
+            st.markdown("#### 🏆 Fidelización: Compras Acumuladas por Clientes")
+            with st.container(border=True):
+                st.markdown("⚙️ **Configuración de Fidelidad (Descuento Automático)**")
+                col_cfg1, col_cfg2 = st.columns(2)
+                monto_min_cfg = col_cfg1.number_input(
+                    "Monto mínimo acumulado ($):", 
+                    min_value=0.0, 
+                    value=float(st.session_state.get('monto_minimo_cupon_cfg', 100000.0)), 
+                    step=10000.0,
+                    key="monto_minimo_cupon_cfg"
+                )
+                plazo_dias_cfg = col_cfg2.number_input(
+                    "Plazo de acumulación (días):", 
+                    min_value=1, 
+                    value=int(st.session_state.get('plazo_dias_cupon_cfg', 365)), 
+                    step=30,
+                    key="plazo_dias_cupon_cfg"
+                )
+                
+            if df_clientes.empty:
+                st.warning("No hay clientes registrados en el sistema.")
+            else:
+                with st.spinner("Analizando compras acumuladas..."):
+                    results_cupones = []
                     
-                    opciones_cli_ed = sorted(df_clientes['nombre'].unique().tolist()) if not df_clientes.empty else []
-                    ed_clientes_excl = col_ed6.multiselect(
-                        "Exclusivo para:",
-                        options=opciones_cli_ed,
-                        default=current_names
+                    if not df_ventas_global.empty:
+                        ref_date_calc = df_ventas_global['fecha_limpia'].max()
+                        if pd.isna(ref_date_calc):
+                            ref_date_calc = pd.to_datetime("2026-08-27")
+                    else:
+                        ref_date_calc = pd.to_datetime("2026-08-27")
+                    
+                    if hasattr(ref_date_calc, 'tz') and ref_date_calc.tz is not None:
+                        ref_date_calc = ref_date_calc.tz_localize(None)
+                        
+                    fecha_limite_calc = ref_date_calc - timedelta(days=int(plazo_dias_cfg))
+                    
+                    for _, cli in df_clientes.iterrows():
+                        c_id_val = int(cli['cliente_id'])
+                        status_str = str(cli.get('status', ''))
+                        
+                        fecha_canje_val = None
+                        if "CANJE_CUPON:" in status_str:
+                            try:
+                                fecha_canje_str = status_str.split("CANJE_CUPON:")[1].strip()
+                                fecha_canje_val = datetime.strptime(fecha_canje_str, "%Y-%m-%d")
+                            except Exception:
+                                pass
+                                
+                        total_acumulado = 0.0
+                        if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
+                            df_cli_v = df_ventas_global[df_ventas_global['cliente_id'] == c_id_val].copy()
+                            if not df_cli_v.empty:
+                                df_cli_v['fecha_dt'] = unificar_formatos_fecha(df_cli_v['fecha_venta'])
+                                df_cli_v = df_cli_v.dropna(subset=['fecha_dt'])
+                                
+                                def safe_to_naive_calc(val):
+                                    if pd.isna(val): return pd.NaT
+                                    ts = pd.to_datetime(val)
+                                    return ts.tz_localize(None) if ts.tz is not None else ts
+                                    
+                                df_cli_v['fecha_dt'] = df_cli_v['fecha_dt'].apply(safe_to_naive_calc)
+                                df_cli_v = df_cli_v[df_cli_v['fecha_dt'] >= fecha_limite_calc]
+                                
+                                if fecha_canje_val:
+                                    df_cli_v = df_cli_v[df_cli_v['fecha_dt'] > fecha_canje_val]
+                                    
+                                df_completas_v = df_cli_v[
+                                    (df_cli_v['estado'] == 'FINALIZADO') | 
+                                    (df_cli_v['estado_pago'] == 'PAGADO')
+                                ]
+                                total_acumulado = df_completas_v['monto_final'].sum()
+                                
+                        clasifica_val = total_acumulado >= monto_min_cfg
+                        results_cupones.append({
+                            'cliente_id': c_id_val,
+                            'nombre': cli['nombre'],
+                            'email': cli.get('email', 'No registrado'),
+                            'telefono': cli.get('telefono', 'No registrado'),
+                            'status_original': status_str,
+                            'fecha_ultimo_canje': fecha_canje_val.strftime("%d/%m/%Y") if fecha_canje_val else "Nunca",
+                            'compras_acumuladas': total_acumulado,
+                            'clasifica': clasifica_val
+                        })
+                        
+                    df_cupones_eval = pd.DataFrame(results_cupones)
+                    
+                df_clasificados = df_cupones_eval[df_cupones_eval['clasifica'] == True].copy()
+                
+                st.markdown("#### 🏆 Apartado de Clientes que Clasifican para el Cupón de 10%")
+                if df_clasificados.empty:
+                    st.success("🟢 Todas las cuentas al día. No hay clientas con cupones acumulados por canjear.")
+                else:
+                    st.write(f"Se encontraron **{len(df_clasificados)}** clientas que superan el monto de **${monto_min_cfg:,.0f}** en compras en el período:")
+                    
+                    st.dataframe(
+                        df_clasificados[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'email', 'telefono']],
+                        hide_index=True,
+                        use_container_width=True,
+                        column_config={
+                            "nombre": st.column_config.TextColumn("Nombre Cliente"),
+                            "compras_acumuladas": st.column_config.NumberColumn("Compras Acumuladas", format="$%.0f"),
+                            "fecha_ultimo_canje": st.column_config.TextColumn("Último Canje")
+                        }
                     )
                     
-                    col_btn_ed1, col_btn_ed2 = st.columns(2)
-                    btn_guardar_ed = col_btn_ed1.form_submit_button("💾 Guardar Cambios", use_container_width=True)
-                    btn_eliminar_ed = col_btn_ed2.form_submit_button("🗑️ Eliminar Cupón Permanentemente", use_container_width=True)
+                    st.markdown("##### 🎁 Registrar Canje de Cupón de Fidelidad (Reinicio de Historial)")
+                    sel_cliente_canje = st.selectbox(
+                        "Selecciona una clienta para registrar el canje:",
+                        options=[""] + df_clasificados['nombre'].tolist(),
+                        index=0,
+                        placeholder="Elige una clienta..."
+                    )
                     
-                    if btn_guardar_ed:
-                        conn = get_db_connection()
-                        cli_excl_ids = []
-                        if ed_clientes_excl and not df_clientes.empty:
-                            for name in ed_clientes_excl:
-                                match_cli = df_clientes[df_clientes['nombre'] == name]
-                                if not match_cli.empty:
-                                    cli_excl_ids.append(int(match_cli.iloc[0]['cliente_id']))
+                    if sel_cliente_canje:
+                        row_canje = df_clasificados[df_clasificados['nombre'] == sel_cliente_canje].iloc[0]
+                        c_id_canje = int(row_canje['cliente_id'])
+                        
+                        st.write(f"⚠️ Al hacer clic en el botón de abajo, se guardará la fecha de hoy como último canje para **{sel_cliente_canje}**. Esto reiniciará la suma de sus compras acumuladas para futuros cupones.")
+                        
+                        if st.button("🎁 Confirmar Canje y Reiniciar Historial", type="primary", use_container_width=True):
+                            try:
+                                conn = get_db_connection()
+                                old_status_val = str(row_canje['status_original'])
+                                if " | CANJE_CUPON:" in old_status_val:
+                                    base_status_val = old_status_val.split(" | CANJE_CUPON:")[0].strip()
+                                elif "CANJE_CUPON:" in old_status_val:
+                                    base_status_val = old_status_val.split("CANJE_CUPON:")[0].strip().strip("| ")
+                                else:
+                                    base_status_val = old_status_val if old_status_val else "CLIENTE REGULAR"
                                     
-                        cliente_id_exclusivo_str = json.dumps(cli_excl_ids) if cli_excl_ids else None
-                        
-                        datos_update = {
-                            "porcentaje_descuento": int(ed_porcentaje),
-                            "limite_usos": int(ed_limite),
-                            "activo": ed_activo,
-                            "fecha_inicio": ed_fecha_inicio.isoformat() if ed_fecha_inicio else None,
-                            "fecha_fin": ed_fecha_fin.isoformat() if ed_fecha_fin else None,
-                            "cliente_id_exclusivo": cliente_id_exclusivo_str
+                                hoy_str_val = datetime.now().strftime("%Y-%m-%d")
+                                nuevo_status_val = f"{base_status_val} | CANJE_CUPON: {hoy_str_val}"
+                                
+                                conn.table("clientes").update({"status": nuevo_status_val}).eq("cliente_id", c_id_canje).execute()
+                                
+                                st.success(f"🎉 Cupón registrado correctamente para {sel_cliente_canje}. Su historial ha sido reiniciado a partir de hoy.")
+                                st.balloons()
+                                time.sleep(1.5)
+                                st.rerun()
+                            except Exception as e_canje:
+                                log_error("vista_caja", "canje_cupon_manual", e_canje, st.session_state.get('email_usuario', 'Desconocido'))
+                                st.error(f"Error al registrar canje en Supabase: {e_canje}")
+                                
+                with st.expander("👥 Historial de Compras Acumuladas de todos los Clientes"):
+                    st.dataframe(
+                        df_cupones_eval.sort_values(by='compras_acumuladas', ascending=False)[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'clasifica']],
+                        hide_index=True,
+                        use_container_width=True,
+                        column_config={
+                            "nombre": st.column_config.TextColumn("Nombre Cliente"),
+                            "compras_acumuladas": st.column_config.NumberColumn("Compras Acumuladas", format="$%.0f"),
+                            "fecha_ultimo_canje": st.column_config.TextColumn("Último Canje"),
+                            "clasifica": st.column_config.CheckboxColumn("Clasifica para 10%")
                         }
-                        
-                        try:
-                            conn.table("cupones").update(datos_update).eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
-                            st.success(f"🎉 ¡Cupón '{sel_cup_acc}' editado con éxito!")
-                            st.cache_data.clear()
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e_up:
-                            st.error(f"Error al editar: {e_up}")
-                            
-                    if btn_eliminar_ed:
-                        conn = get_db_connection()
-                        try:
-                            conn.table("cupones").delete().eq("cupon_id", int(row_cup_acc['cupon_id'])).execute()
-                            st.success(f"🗑️ ¡Cupón '{sel_cup_acc}' eliminado de forma permanente!")
-                            st.cache_data.clear()
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e_del:
-                            st.error(f"Error al eliminar: {e_del}")
-
-        st.markdown("---")
-        st.markdown("#### 🏆 Fidelización: Compras Acumuladas por Clientes")
-        with st.container(border=True):
-            st.markdown("⚙️ **Configuración de Fidelidad (Descuento Automático)**")
-            col_cfg1, col_cfg2 = st.columns(2)
-            monto_min_cfg = col_cfg1.number_input(
-                "Monto mínimo acumulado ($):", 
-                min_value=0.0, 
-                value=float(st.session_state.get('monto_minimo_cupon_cfg', 100000.0)), 
-                step=10000.0,
-                key="monto_minimo_cupon_cfg"
-            )
-            plazo_dias_cfg = col_cfg2.number_input(
-                "Plazo de acumulación (días):", 
-                min_value=1, 
-                value=int(st.session_state.get('plazo_dias_cupon_cfg', 365)), 
-                step=30,
-                key="plazo_dias_cupon_cfg"
-            )
-            
-        if df_clientes.empty:
-            st.warning("No hay clientes registrados en el sistema.")
-        else:
-            with st.spinner("Analizando compras acumuladas..."):
-                results_cupones = []
-                
-                if not df_ventas_global.empty:
-                    ref_date_calc = df_ventas_global['fecha_limpia'].max()
-                    if pd.isna(ref_date_calc):
-                        ref_date_calc = pd.to_datetime("2026-08-27")
-                else:
-                    ref_date_calc = pd.to_datetime("2026-08-27")
-                
-                if hasattr(ref_date_calc, 'tz') and ref_date_calc.tz is not None:
-                    ref_date_calc = ref_date_calc.tz_localize(None)
-                    
-                fecha_limite_calc = ref_date_calc - timedelta(days=int(plazo_dias_cfg))
-                
-                for _, cli in df_clientes.iterrows():
-                    c_id_val = int(cli['cliente_id'])
-                    status_str = str(cli.get('status', ''))
-                    
-                    fecha_canje_val = None
-                    if "CANJE_CUPON:" in status_str:
-                        try:
-                            fecha_canje_str = status_str.split("CANJE_CUPON:")[1].strip()
-                            fecha_canje_val = datetime.strptime(fecha_canje_str, "%Y-%m-%d")
-                        except Exception:
-                            pass
-                            
-                    total_acumulado = 0.0
-                    if not df_ventas_global.empty and 'cliente_id' in df_ventas_global.columns:
-                        df_cli_v = df_ventas_global[df_ventas_global['cliente_id'] == c_id_val].copy()
-                        if not df_cli_v.empty:
-                            df_cli_v['fecha_dt'] = unificar_formatos_fecha(df_cli_v['fecha_venta'])
-                            df_cli_v = df_cli_v.dropna(subset=['fecha_dt'])
-                            
-                            def safe_to_naive_calc(val):
-                                if pd.isna(val): return pd.NaT
-                                ts = pd.to_datetime(val)
-                                return ts.tz_localize(None) if ts.tz is not None else ts
-                                
-                            df_cli_v['fecha_dt'] = df_cli_v['fecha_dt'].apply(safe_to_naive_calc)
-                            df_cli_v = df_cli_v[df_cli_v['fecha_dt'] >= fecha_limite_calc]
-                            
-                            if fecha_canje_val:
-                                df_cli_v = df_cli_v[df_cli_v['fecha_dt'] > fecha_canje_val]
-                                
-                            df_completas_v = df_cli_v[
-                                (df_cli_v['estado'] == 'FINALIZADO') | 
-                                (df_cli_v['estado_pago'] == 'PAGADO')
-                            ]
-                            total_acumulado = df_completas_v['monto_final'].sum()
-                            
-                    clasifica_val = total_acumulado >= monto_min_cfg
-                    results_cupones.append({
-                        'cliente_id': c_id_val,
-                        'nombre': cli['nombre'],
-                        'email': cli.get('email', 'No registrado'),
-                        'telefono': cli.get('telefono', 'No registrado'),
-                        'status_original': status_str,
-                        'fecha_ultimo_canje': fecha_canje_val.strftime("%d/%m/%Y") if fecha_canje_val else "Nunca",
-                        'compras_acumuladas': total_acumulado,
-                        'clasifica': clasifica_val
-                    })
-                    
-                df_cupones_eval = pd.DataFrame(results_cupones)
-                
-            df_clasificados = df_cupones_eval[df_cupones_eval['clasifica'] == True].copy()
-            
-            st.markdown("#### 🏆 Apartado de Clientes que Clasifican para el Cupón de 10%")
-            if df_clasificados.empty:
-                st.success("🟢 Todas las cuentas al día. No hay clientas con cupones acumulados por canjear.")
-            else:
-                st.write(f"Se encontraron **{len(df_clasificados)}** clientas que superan el monto de **${monto_min_cfg:,.0f}** en compras en el período:")
-                
-                st.dataframe(
-                    df_clasificados[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'email', 'telefono']],
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "nombre": st.column_config.TextColumn("Nombre Cliente"),
-                        "compras_acumuladas": st.column_config.NumberColumn("Compras Acumuladas", format="$%.0f"),
-                        "fecha_ultimo_canje": st.column_config.TextColumn("Último Canje")
-                    }
-                )
-                
-                st.markdown("##### 🎁 Registrar Canje de Cupón de Fidelidad (Reinicio de Historial)")
-                sel_cliente_canje = st.selectbox(
-                    "Selecciona una clienta para registrar el canje:",
-                    options=[""] + df_clasificados['nombre'].tolist(),
-                    index=0,
-                    placeholder="Elige una clienta..."
-                )
-                
-                if sel_cliente_canje:
-                    row_canje = df_clasificados[df_clasificados['nombre'] == sel_cliente_canje].iloc[0]
-                    c_id_canje = int(row_canje['cliente_id'])
-                    
-                    st.write(f"⚠️ Al hacer clic en el botón de abajo, se guardará la fecha de hoy como último canje para **{sel_cliente_canje}**. Esto reiniciará la suma de sus compras acumuladas para futuros cupones.")
-                    
-                    if st.button("🎁 Confirmar Canje y Reiniciar Historial", type="primary", use_container_width=True):
-                        try:
-                            conn = get_db_connection()
-                            old_status_val = str(row_canje['status_original'])
-                            if " | CANJE_CUPON:" in old_status_val:
-                                base_status_val = old_status_val.split(" | CANJE_CUPON:")[0].strip()
-                            elif "CANJE_CUPON:" in old_status_val:
-                                base_status_val = old_status_val.split("CANJE_CUPON:")[0].strip().strip("| ")
-                            else:
-                                base_status_val = old_status_val if old_status_val else "CLIENTE REGULAR"
-                                
-                            hoy_str_val = datetime.now().strftime("%Y-%m-%d")
-                            nuevo_status_val = f"{base_status_val} | CANJE_CUPON: {hoy_str_val}"
-                            
-                            conn.table("clientes").update({"status": nuevo_status_val}).eq("cliente_id", c_id_canje).execute()
-                            
-                            st.success(f"🎉 Cupón registrado correctamente para {sel_cliente_canje}. Su historial ha sido reiniciado a partir de hoy.")
-                            st.balloons()
-                            time.sleep(1.5)
-                            st.rerun()
-                        except Exception as e_canje:
-                            log_error("vista_caja", "canje_cupon_manual", e_canje, st.session_state.get('email_usuario', 'Desconocido'))
-                            st.error(f"Error al registrar canje en Supabase: {e_canje}")
-                            
-            with st.expander("👥 Historial de Compras Acumuladas de todos los Clientes"):
-                st.dataframe(
-                    df_cupones_eval.sort_values(by='compras_acumuladas', ascending=False)[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'clasifica']],
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "nombre": st.column_config.TextColumn("Nombre Cliente"),
-                        "compras_acumuladas": st.column_config.NumberColumn("Compras Acumuladas", format="$%.0f"),
-                        "fecha_ultimo_canje": st.column_config.TextColumn("Último Canje"),
-                        "clasifica": st.column_config.CheckboxColumn("Clasifica para 10%")
-                    }
-                )
+                    )
 
 if __name__ == "__main__":
     mostrar_caja()
