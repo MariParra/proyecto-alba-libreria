@@ -2354,20 +2354,25 @@ CREATE TABLE IF NOT EXISTS cupones (
                 st.error(f"Error al registrar cupón: {ex_insert_cup}")
 
 
-        if not df_cupones.empty:
+                if not df_cupones.empty:
             st.markdown("#### 📋 Listado y Estadísticas de Cupones Activos")
             
             df_cupones_viz = df_cupones.copy()
-            if 'cliente_id_exclusivo' in df_cupones_viz.columns and not df_clientes.empty:
-                df_cupones_viz = df_cupones_viz.merge(
-                    df_clientes[['cliente_id', 'nombre']], 
-                    left_on='cliente_id_exclusivo', 
-                    right_on='cliente_id', 
-                    how='left'
-                ).rename(columns={'nombre': 'Exclusivo para'}).drop(columns=['cliente_id', 'cliente_id_exclusivo'], errors='ignore')
-                df_cupones_viz['Exclusivo para'] = df_cupones_viz['Exclusivo para'].fillna('Público / Todos')
-            else:
-                df_cupones_viz['Exclusivo para'] = 'Público / Todos'
+            
+            # Mapeo dinámico fila por fila para recolectar nombres de clientes exclusivos
+            excl_names_list = []
+            for _, cp in df_cupones_viz.iterrows():
+                excl_raw = cp.get('cliente_id_exclusivo')
+                names = []
+                if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null", "[]"]:
+                    if not df_clientes.empty:
+                        for _, cl in df_clientes.iterrows():
+                            if check_exclusivity(cl['cliente_id'], excl_raw):
+                                names.append(cl['nombre'].upper())
+                
+                excl_names_list.append(", ".join(names) if names else "Público / Todos")
+            
+            df_cupones_viz['Exclusivo para'] = excl_names_list
                 
             st.dataframe(
                 df_cupones_viz[['codigo', 'porcentaje_descuento', 'Exclusivo para', 'usos_actuales', 'limite_usos', 'fecha_inicio', 'fecha_fin', 'activo']],
@@ -2381,6 +2386,7 @@ CREATE TABLE IF NOT EXISTS cupones (
                     "activo": st.column_config.CheckboxColumn("Activo")
                 }
             )
+
             
             st.markdown("##### ⚙️ Acciones Rápidas / Editar / Eliminar")
             sel_cup_acc = st.selectbox("Selecciona un cupón para gestionar:", options=[""] + df_cupones['codigo'].tolist(), index=0)
