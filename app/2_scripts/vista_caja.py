@@ -96,8 +96,8 @@ def check_exclusivity(client_id, exclusive_ids_raw):
     Evalúa si un cliente está dentro de la lista de exclusividad del cupón.
     Soporta formato JSON [1, 2], coma-separado '1, 2' o IDs únicos.
     """
-    if pd.isna(exclusive_ids_raw) or exclusive_ids_raw is None or str(exclusive_ids_raw).strip() == "" or str(exclusive_ids_raw).lower() in ["none", "nan", "null"]:
-        return True  # Es público para todos
+    if pd.isna(exclusive_ids_raw) or exclusive_ids_raw is None or str(exclusive_ids_raw).strip() == "" or str(exclusive_ids_raw).lower() in ["none", "nan", "null", "[]"]:
+        return True  # Es público para todos (corrige el bug de '[]')
         
     val_str = str(exclusive_ids_raw).strip()
     
@@ -106,6 +106,8 @@ def check_exclusivity(client_id, exclusive_ids_raw):
         try:
             allowed_ids = json.loads(val_str)
             if isinstance(allowed_ids, list):
+                if not allowed_ids:
+                    return True # Lista vacía es público para todos
                 return int(client_id) in [int(x) for x in allowed_ids]
         except Exception:
             pass
@@ -1312,7 +1314,7 @@ def mostrar_caja():
                 
         
         st.markdown("---")
-                # --- MOTOR DE CUPONES CENTRALIZADO AL TOTAL DE LA COMPRA ---
+        # --- MOTOR DE CUPONES CENTRALIZADO AL TOTAL DE LA COMPRA ---
         with st.expander("🎟️ Aplicar Cupón o Descuento de Fidelidad al Total", expanded=True):
             eligible_cupones = []
             if not df_cupones.empty:
@@ -1321,17 +1323,39 @@ def mostrar_caja():
                         continue
                     if int(cp.get('usos_actuales', 0)) >= int(cp.get('limite_usos', 1)):
                         continue
+                        
                     hoy_dt = date.today()
                     fi = cp.get('fecha_inicio')
                     ff = cp.get('fecha_fin')
-                    if pd.notna(fi) and fi and pd.to_datetime(fi).date() > hoy_dt:
-                        continue
-                    if pd.notna(ff) and ff and pd.to_datetime(ff).date() < hoy_dt:
-                        continue
+                    
+                    # Validación de fecha de inicio ultra-segura contra NaT
+                    if pd.notna(fi) and str(fi).strip() != "":
+                        try:
+                            fi_dt = pd.to_datetime(fi)
+                            if pd.notna(fi_dt) and hoy_dt < fi_dt.date():
+                                continue
+                        except Exception:
+                            pass
+                            
+                    # Validación de fecha de fin ultra-segura contra NaT
+                    if pd.notna(ff) and str(ff).strip() != "":
+                        try:
+                            ff_dt = pd.to_datetime(ff)
+                            if pd.notna(ff_dt) and hoy_dt > ff_dt.date():
+                                continue
+                        except Exception:
+                            pass
+                            
                     excl_raw = cp.get('cliente_id_exclusivo')
-                    if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null"]:
+                    # Si es nulo, vacío, o '[]', es público para todos:
+                    es_exclusivo = False
+                    if pd.notna(excl_raw) and excl_raw is not None and str(excl_raw).strip() != "" and str(excl_raw).lower() not in ["none", "nan", "null", "[]"]:
+                        es_exclusivo = True
+                            
+                    if es_exclusivo:
                         if c_id is None or not check_exclusivity(c_id, excl_raw):
                             continue
+                            
                     eligible_cupones.append(cp.to_dict())
             
             # Construir opciones del selector
@@ -1359,7 +1383,6 @@ def mostrar_caja():
                 key="sel_cup_db_venta"
             )
             
-            # Resetear y asignar estados lógicos según la selección del selectbox
             st.session_state.aplicar_cupon_sistema_obj = None
             st.session_state.chk_aplicar_cupon_fidelidad_auto = False
             
