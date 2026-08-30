@@ -274,7 +274,7 @@ def procesar_nuevos_libros(df):
             for col in columnas_numericas:
                 if col in fila and pd.notna(fila[col]):
                     val_clean = sanear_numero(fila[col])
-                    nuevo_libro[col] = val_clean
+                    nuevo_libro[col] = int(val_clean)
             
             encuadernacion = nuevo_libro.get('encuadernacion', '').upper()
             
