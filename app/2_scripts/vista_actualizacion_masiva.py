@@ -263,7 +263,8 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
                             if col in columnas_bool:
                                 is_different = (val_converted != bool(db_val))
                             elif col == 'stock':
-                                is_different = (val_converted != (int(db_val) if db_val is not None else 0))
+                                db_stock_clean = int(float(db_val)) if db_val is not None and str(db_val).strip() != '' else 0
+                                is_different = (val_converted != db_stock_clean)
                             elif col in columnas_float:
                                 is_different = (abs(val_converted - (float(db_val) if db_val is not None else 0.0)) > 1e-4)
                             else:
