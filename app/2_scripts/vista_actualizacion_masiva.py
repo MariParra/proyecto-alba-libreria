@@ -239,7 +239,11 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
                             val_converted = limpiar_texto_para_busqueda(valor_celda)
                         elif col == 'stock':
                             try:
-                                val_converted = int(float(valor_celda))
+                                val_numeric = float(valor_celda)
+                                if val_numeric == 0:
+                                    val_converted = 0
+                                else:
+                                    val_converted = int(val_numeric)
                             except (ValueError, TypeError):
                                 val_converted = 0
                         elif col in columnas_float:
