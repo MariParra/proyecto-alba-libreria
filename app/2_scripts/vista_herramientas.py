@@ -4,15 +4,33 @@ import pandas as pd
 import json
 import base64
 import time
+import re
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error, normalizar_nombre_para_duplicados
 
-# --- FUNCIÓN: RESUMEN DE CLIENTES ---
+# ==========================================================
+# 🧹 FUNCIONES AUXILIARES Y RESUMEN
+# ==========================================================
+
+def limpiar_rut(val):
+    """
+    Sanea el RUT dejando solo caracteres alfanuméricos en mayúscula.
+    Descarta explícitamente el '0' o valores por defecto para evitar falsas coincidencias.
+    """
+    if not val or pd.isna(val):
+        return ""
+    clean = "".join(char for char in str(val) if char.isalnum()).strip().upper()
+    # Ignora valores nulos, por defecto o ceros
+    if clean in ["NAN", "NONE", "SININFORMACION", "0", "00", "000", "SD", "SINRUT"]:
+        return ""
+    return clean
+
 def obtener_resumen_clientes():
+    """Obtiene métricas rápidas del total de clientes desde la BD."""
     conn = get_db_connection()
     try:
         all_statuses = []
         chunk_size = 1000
-        # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todos los estados de forma paginada
+        # Cargamos todos los estados de forma paginada para evitar límites
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -25,8 +43,12 @@ def obtener_resumen_clientes():
                 break
                 
         df = pd.DataFrame(all_statuses) if all_statuses else pd.DataFrame()
-        if df.empty: return 0, 0, 0
-        total, activos, inactivos = len(df), len(df[df['status'] == 'ACTIVA']), len(df[df['status'] == 'NO ACTIVA'])
+        if df.empty: 
+            return 0, 0, 0
+        
+        total = len(df)
+        activos = len(df[df['status'] == 'ACTIVA'])
+        inactivos = len(df[df['status'] == 'NO ACTIVA'])
         return total, activos, inactivos
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -38,17 +60,18 @@ def obtener_resumen_clientes():
         )
         return 0, 0, 0
 
+# ==========================================================
+# 🔄 SINCRONIZACIÓN CON GOOGLE SHEETS
+# ==========================================================
+
 def sync_google_sheets():
     """
     Sincronización Total (Clientes + Suscripciones).
-    Adaptada para leer formularios con preguntas muy largas como encabezados.
+    Soporta preguntas largas en encabezados, descarte de RUT 0 y preservación de paréntesis en nombres.
     """
     exito = False
     try:
-        # 1. Leemos la clave desde la estructura correcta
         b64_str = st.secrets["gcp_service_account"]["creds_json_b64"]
-        
-        # 2. Decodificamos
         json_str = base64.b64decode(b64_str).decode('utf-8')
         creds_dict = json.loads(json_str)
 
@@ -69,7 +92,7 @@ def sync_google_sheets():
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
             
-            # --- MAPEO INTELIGENTE DE COLUMNAS (SOPORTA PREGUNTAS LARGAS) ---
+            # Mapeo inteligente de columnas
             col_nombre, col_estado, col_telefono, col_email, col_rut = None, None, None, None, None
             col_fecha, col_generos, col_metodo = None, None, None
             
@@ -84,39 +107,54 @@ def sync_google_sheets():
                 elif 'entrega' in cl: col_metodo = c
                 elif 'rut' in cl or 'run' in cl: col_rut = c
 
-            # Si por alguna razón no encuentra la de nombre, asume que es la segunda (después de Marca Temporal)
-            if not col_nombre and len(df.columns) > 2: col_nombre = df.columns[2]
+            if not col_nombre and len(df.columns) > 2: 
+                col_nombre = df.columns[2]
             
-            procesados, clientes_nuevos, clientes_actualizados = 0, 0, 0
+            procesados, clientes_nuevos = 0, 0
             
-            def limpiar_rut(val):
-                if not val or pd.isna(val):
-                    return ""
-                clean = "".join(char for char in str(val) if char.isalnum()).strip().upper()
-                if clean in ["NAN", "NONE", "SININFORMACION"]:
-                    return ""
-                return clean
-            
+            # Cargar la lista completa de clientes para comparar en memoria
+            all_clients_db = []
+            chunk_size = 1000
+            for bloque in range(100):
+                start = bloque * chunk_size
+                end = start + chunk_size - 1
+                res_clients = (conn.table("clientes")
+                    .select("cliente_id, nombre, email, rut")
+                    .order("cliente_id")
+                    .range(start, end)
+                    .execute())
+                if res_clients.data:
+                    all_clients_db.extend(res_clients.data)
+                    if len(res_clients.data) < chunk_size:
+                        break
+                else:
+                    break
+                    
+            todos_clientes_db = all_clients_db
+
+            # Procesamiento fila a fila
             for index, row in df.iterrows():
-                # Extracción súper segura con validación de existencia de columnas
                 nombre_raw = row[col_nombre] if col_nombre in df.columns else ""
                 nombre_sync = limpiar_texto_para_busqueda(str(nombre_raw))
-                if not nombre_sync or nombre_sync == "SIN INFORMACION" or nombre_sync == "NAN": continue
+                if not nombre_sync or nombre_sync in ["SIN INFORMACION", "NAN", "NONE"]: 
+                    continue
                 
                 estado_raw = row[col_estado] if col_estado in df.columns else "ACTIVA"
                 estado_sync = str(estado_raw).strip().upper()
-                if not estado_sync or estado_sync in ["", "NONE", "NAN"]: estado_sync = "ACTIVA"
-                if estado_sync == "INACTIVO": estado_sync = "NO ACTIVA"
+                if not estado_sync or estado_sync in ["", "NONE", "NAN"]: 
+                    estado_sync = "ACTIVA"
+                if estado_sync == "INACTIVO": 
+                    estado_sync = "NO ACTIVA"
 
                 tel_raw = row[col_telefono] if col_telefono in df.columns else ""
                 tel_sync = limpiar_texto_para_busqueda(str(tel_raw))
 
                 email_raw = row[col_email] if col_email and col_email in df.columns else ""
-                email_sync = limpiar_texto_para_busqueda(str(email_raw))
+                email_sync = str(email_raw).strip().lower()
 
-                # Extraer RUT desde el formulario
                 rut_raw = row[col_rut] if col_rut and col_rut in df.columns else ""
                 rut_sync = limpiar_texto_para_busqueda(str(rut_raw))
+                rut_normalizado_sync = limpiar_rut(rut_sync)
                 
                 fecha_raw = row[col_fecha] if col_fecha in df.columns else ""
                 fecha_sync = str(fecha_raw).strip()
@@ -127,32 +165,9 @@ def sync_google_sheets():
                 metodo_raw = row[col_metodo] if col_metodo in df.columns else ""
                 metodo_sync = str(metodo_raw).strip()
                 
-                # Búsqueda e inserción
-                # 1. Normalizamos el nombre que viene de Google Sheets
-                nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
-                rut_normalizado_sync = limpiar_rut(rut_sync)
-                
-                # 2. 🚀 BYPASS DE 1000 REGISTROS: Descargamos la lista COMPLETA de clientes para comparar en memoria
-                all_clients_db = []
-                chunk_size = 1000
-                for bloque in range(100):
-                    start = bloque * chunk_size
-                    end = start + chunk_size - 1
-                    res_clients = conn.table("clientes")\
-                        .select("cliente_id, nombre, email, rut")\
-                        .order("cliente_id")\
-                        .range(start, end).execute()
-                    if res_clients.data:
-                        all_clients_db.extend(res_clients.data)
-                        if len(res_clients.data) < chunk_size:
-                            break
-                    else:
-                        break
-                        
-                todos_clientes_db = all_clients_db
                 cliente_existente = None
                 
-                # A. Buscar coincidencia prioritaria por RUT
+                # A. Búsqueda prioritaria por RUT (solo si es válido y distinto de 0)
                 if rut_normalizado_sync:
                     for cliente_db in todos_clientes_db:
                         rut_db = limpiar_rut(cliente_db.get('rut'))
@@ -160,41 +175,47 @@ def sync_google_sheets():
                             cliente_existente = cliente_db
                             break
                 
-                # B. Si no coincidió por RUT, buscar por nombre normalizado
+                # B. Búsqueda por Nombre Exacto / Normalizado (preserva paréntesis)
                 if not cliente_existente:
+                    nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
                     for cliente_db in todos_clientes_db:
-                        if normalizar_nombre_para_duplicados(cliente_db['nombre']) == nombre_normalizado_sync:
+                        nombre_db = cliente_db.get('nombre', '')
+                        if (limpiar_texto_para_busqueda(nombre_db) == nombre_sync or 
+                            normalizar_nombre_para_duplicados(nombre_db) == nombre_normalizado_sync):
                             cliente_existente = cliente_db
                             break
                 
-                # C. Si no coincidió por RUT ni nombre, buscar por email
-                if not cliente_existente and email_sync:
+                # C. Búsqueda por Email
+                if not cliente_existente and email_sync and email_sync not in ["nan", "none", ""]:
                     for cliente_db in todos_clientes_db:
-                        if cliente_db.get('email') and str(cliente_db['email']).strip().lower() == email_sync.lower():
+                        email_db = str(cliente_db.get('email', '')).strip().lower()
+                        if email_db and email_db == email_sync:
                             cliente_existente = cliente_db
                             break
                 
+                # Asignación o inserción
                 if cliente_existente:
-                    # El cliente ya existe: NO SE ACTUALIZA NADA EN LA TABLA "CLIENTES" (se conserva intacto)
                     c_id = cliente_existente['cliente_id']
                 else:
-                    # Solo si NO existe se registra en la base de datos
                     res_insert = conn.table("clientes").insert({
                         'nombre': nombre_sync, 
-                        'email': email_sync, 
+                        'email': email_sync if email_sync not in ["nan", "none"] else "", 
                         'telefono': tel_sync, 
                         'status': estado_sync,
                         'rut': rut_sync
                     }).execute()
-                    c_id = res_insert.data[0]['cliente_id']
+                    
+                    nuevo_registro = res_insert.data[0]
+                    c_id = nuevo_registro['cliente_id']
+                    todos_clientes_db.append(nuevo_registro)
                     clientes_nuevos += 1
                 
-                # Actualización de Suscripciones (Manejo de strings seguros)
+                # Actualización de suscripciones
                 res_sub = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", c_id).execute()
                 datos_sub = {
-                    "fecha_pago": fecha_sync if fecha_sync != "nan" else "", 
-                    "metodo_entrega": metodo_sync if metodo_sync != "nan" else "", 
-                    "generos_preferencia": generos_sync if generos_sync != "nan" else ""
+                    "fecha_pago": fecha_sync if fecha_sync.lower() != "nan" else "", 
+                    "metodo_entrega": metodo_sync if metodo_sync.lower() != "nan" else "", 
+                    "generos_preferencia": generos_sync if generos_sync.lower() != "nan" else ""
                 }
                 
                 if res_sub.data:
@@ -202,7 +223,7 @@ def sync_google_sheets():
                 else:
                     datos_sub.update({"cliente_id": c_id, "valor_suscripcion": 0.0})
                     conn.table("suscripciones").insert(datos_sub).execute()
-                procesas_totales = procesados + 1
+                
                 procesados += 1
                 
         st.success(f"🎉 Sincronización Finalizada. Filas procesadas: {procesados} | Clientes nuevos: {clientes_nuevos}")
@@ -221,14 +242,20 @@ def sync_google_sheets():
         st.error(f"Error crítico durante la sincronización a la BD: {e}")
         return False
 
+# ==========================================================
+# 🎨 INTERFAZ GRÁFICA DE USUARIO (UX/UI)
+# ==========================================================
+
 def mostrar_herramientas():
     st.title("🛠️ Sincronización con Google Sheet Inscripción Suscripción")
+    
     total_cli, activos_cli, inactivos_cli = obtener_resumen_clientes()
     st.markdown("### 👥 Resumen del Directorio")
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Clientes Registrados", total_cli)
     c2.metric("🟢 Activos", activos_cli)
     c3.metric("🔴 No Activos", inactivos_cli)
+    
     st.markdown("---")
     
     with st.container(border=True):
@@ -241,7 +268,10 @@ def mostrar_herramientas():
                 mensaje_cuenta_regresiva = st.empty()
                 for segundos in range(3, 0, -1):
                     mensaje_cuenta_regresiva.info(f"🔄 Actualizando métricas en {segundos} segundos...")
-                    time.sleep(10)
+                    time.sleep(1)
                 st.rerun()
     
     st.markdown("---")
+
+if __name__ == '__main__':
+    mostrar_herramientas()
