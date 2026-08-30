@@ -191,13 +191,12 @@ def sync_google_sheets():
                             cliente_existente = cliente_db
                             break
 
-                # 3. SI TAMPOCO COINCIDE EL NOMBRE -> EVALUAR POR EMAIL (Solo si el nombre coincide parcialmente)
+                # 3. SI TAMPOCO COINCIDE EL NOMBRE -> EVALUAR POR EMAIL (Solo si los nombres concuerdan)
                 if not cliente_existente and email_sync and email_sync not in ["nan", "none", "", "null"]:
                     for cliente_db in todos_clientes_db:
                         email_db = str(cliente_db.get('email', '')).strip().lower()
                         if email_db == email_sync:
                             nombre_db = str(cliente_db.get('nombre', '')).strip()
-                            # Si comparten correo pero el nombre es diferente (ej. Hermanas), no matchear
                             if normalizar_nombre_para_duplicados(nombre_db) == nombre_norm_sync:
                                 cliente_existente = cliente_db
                                 break
@@ -207,7 +206,6 @@ def sync_google_sheets():
                 # --------------------------------------------------
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']
-                    # Actualizar ficha de cliente si cambió algún dato directo
                     conn.table("clientes").update({
                         'nombre': nombre_sync,
                         'email': email_sync if email_sync not in ["nan", "none", "null"] else "",
