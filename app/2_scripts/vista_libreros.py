@@ -5,14 +5,14 @@ import re
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
-# --- VERSIÓN DEFINITIVA DE LA FUNCIÓN DE PROCESAMIENTO ---
+# --- VERSIÓN DEFINITIVA CORREGIDA ---
 def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
+    chunk_size = 1000
     
     # 1. Obtener clientes con su RUT (PAGINADO PARA BYPASS LÍMITE DE 1000)
     all_clients = []
-    chunk_size = 1000
     for bloque in range(100):
         start = bloque * chunk_size
         end = start + chunk_size - 1
@@ -30,16 +30,6 @@ def procesar_archivos_masivos(archivos):
 
     # 2. Precargar catálogo de libros (PAGINADO PARA BYPASS LÍMITE DE 1000)
     all_books = []
-
-    # 📌 PRINT DIAGNÓSTICO 1: Libros traídos desde Supabase
-    st.write(f"📚 **Total libros cargados desde Supabase:** {len(all_books)}")
-
-    inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in all_books} if all_books else {}
-
-    # 📌 PRINT DIAGNÓSTICO 2: Ver si 'VEIL' existe en el diccionario
-    veil_en_dict = {k: v for k, v in inventario_titulos.items() if 'VEIL' in k}
-    st.write("🔎 **Títulos con 'VEIL' en diccionario:**", veil_en_dict)
-    
     for bloque in range(100):
         start = bloque * chunk_size
         end = start + chunk_size - 1
@@ -53,28 +43,32 @@ def procesar_archivos_masivos(archivos):
                 break
         else:
             break
+
+    # 📌 DIAGNÓSTICOS DE CATÁLOGO (Ahora sí con los datos cargados)
+    st.write(f"📚 **Total libros cargados desde Supabase:** {len(all_books)}")
+
     inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in all_books} if all_books else {}
 
+    veil_en_dict = {k: v for k, v in inventario_titulos.items() if 'VEIL' in k}
+    st.write("🔎 **Títulos con 'VEIL' en diccionario:**", veil_en_dict)
+
+    # 3. Procesamiento de archivos
     for archivo in archivos:
         nombre_archivo_original = os.path.splitext(archivo.name)[0]
         cliente_encontrado = None
         
-        # --- INTENTO 1: BUSCAR POR RUT (Lógica Simple y Robusta) ---
-        # Limpia el nombre del archivo para dejar solo números y 'k'
+        # --- INTENTO 1: BUSCAR POR RUT ---
         rut_en_archivo = re.sub(r'[^0-9kK]', '', nombre_archivo_original)
         
-        if len(rut_en_archivo) >= 7: # Solo intenta si parece un RUT
+        if len(rut_en_archivo) >= 7:
             for cliente in clientes_db:
                 rut_cliente_bruto = str(cliente.get('rut', ''))
-                # Limpia el RUT de la base de datos
                 rut_db_limpio = re.sub(r'[^0-9kK]', '', rut_cliente_bruto)
-                
-                # Compara los RUTs limpios
                 if rut_db_limpio and rut_db_limpio == rut_en_archivo:
                     cliente_encontrado = cliente
                     break
 
-        # --- INTENTO 2: BUSCAR POR NOMBRE (Plan B) ---
+        # --- INTENTO 2: BUSCAR POR NOMBRE ---
         if not cliente_encontrado:
             nombre_archivo_limpio = limpiar_texto_para_busqueda(nombre_archivo_original)
             for cliente in clientes_db:
@@ -93,18 +87,19 @@ def procesar_archivos_masivos(archivos):
             df = pd.read_excel(archivo) if archivo.name.lower().endswith('.xlsx') else pd.read_csv(archivo)
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-            error_detalle = f"Error leyendo el archivo '{archivo.name}'. Podría estar corrupto, tener un formato inválido o una contraseña. Detalle: {e}"
+            error_detalle = f"Error leyendo el archivo '{archivo.name}'. Detalle: {e}"
             log_error(
                 vista="vista_libreros",
                 funcion="procesar_archivos_masivos (lectura archivo)",
                 error=error_detalle,
                 email_usuario=email_usuario
             )
-            log_resultados.append(f"❌ {archivo.name}: Error al leer. El archivo podría estar dañado o tener un formato incorrecto.")
+            log_resultados.append(f"❌ {archivo.name}: Error al leer el archivo.")
             continue
 
         col_titulo = next((c for c in df.columns if str(c).lower().strip() in ['titulo', 'título', 'libro']), None)
-        # 📌 PRINT DIAGNÓSTICO 3: Columna detectada
+        
+        # 📌 DIAGNÓSTICO DE COLUMNA DETECTADA
         st.write(f"🎯 **Columna detectada:** '{col_titulo}'")
 
         if not col_titulo:
@@ -114,38 +109,39 @@ def procesar_archivos_masivos(archivos):
         libros_asignados = 0
         for _, row in df.iterrows():
             titulo_raw = row.get(col_titulo)
-            if pd.isna(titulo_raw) or not str(titulo_raw).strip(): continue
+            if pd.isna(titulo_raw) or not str(titulo_raw).strip(): 
+                continue
             
             titulo_norm = limpiar_texto_para_busqueda(str(titulo_raw))
             libro_id = inventario_titulos.get(titulo_norm)
 
-            # 📌 PRINT DIAGNÓSTICO 4: Búsqueda fila por fila
+            # 📌 DIAGNÓSTICO POR FILA
             st.write(f"• Fila Excel: **'{titulo_raw}'** -> Buscado como: **'{titulo_norm}'** -> ID en BD: **{libro_id}**")
-
 
             if libro_id:
                 res_hist = conn.table("librero_historico").select("registro_id", count='exact').eq("cliente_id", cliente_id).eq("libro_id", libro_id).execute()
+                
+                # 📌 DIAGNÓSTICO DE EXISTENCIA EN HISTORIAL
+                st.write(f"  └─ ¿Ya existe en historial?: **{res_hist.count > 0}** (Count: {res_hist.count})")
+
                 if res_hist.count == 0:
                     conn.table("librero_historico").insert({"cliente_id": cliente_id, "libro_id": libro_id, "origen": "IMPORTACIÓN MASIVA"}).execute()
                     libros_asignados += 1
         
-        # --- BLOQUE DE GUARDADO DE FECHA (CORREGIDO Y BLINDADO) ---
+        # --- BLOQUE DE GUARDADO DE FECHA ---
         try:
-            # Enviamos la orden de actualización a Supabase
             update_response = conn.table("clientes").update({
                 "fecha_actualizacion_librero": datetime.now().isoformat()
             }).eq("cliente_id", cliente_id).execute()
 
-            # Verificamos si la actualización fue exitosa
             if update_response.data:
                 log_resultados.append(f"✅ {archivo.name}: {libros_asignados} libros nuevos enlazados. Fecha actualizada para {cliente_encontrado['nombre']}.")
             else:
-                # Esto captura si la base de datos no actualizó la fila por alguna razón
-                log_resultados.append(f"❌ {archivo.name}: Se enlazaron {libros_asignados} libros, pero NO SE PUDO guardar la fecha para {cliente_encontrado['nombre']}. Verifique el ID del cliente.")
+                log_resultados.append(f"❌ {archivo.name}: Se enlazaron {libros_asignados} libros, pero NO SE PUDO guardar la fecha para {cliente_encontrado['nombre']}.")
         
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-            error_detalle = f"Error CRÍTICO al guardar la fecha para {cliente_encontrado['nombre']} (ID: {cliente_id}) del archivo '{archivo.name}'. Detalle: {e}"
+            error_detalle = f"Error CRÍTICO al guardar la fecha para {cliente_encontrado['nombre']} (ID: {cliente_id}). Detalle: {e}"
             log_error(
                 vista="vista_libreros",
                 funcion="procesar_archivos_masivos (guardar fecha)",
@@ -157,7 +153,7 @@ def procesar_archivos_masivos(archivos):
     st.cache_data.clear()
     return log_resultados
 
-# --- La función mostrar_importacion_libreros() no necesita cambios ---
+
 def mostrar_importacion_libreros():
     st.title("📚 Importar Historial de Lectura")
     st.info("💡 Sube los archivos. El sistema buscará a la clienta según el nombre del archivo y solo enlazará los libros que ya existan en tu catálogo.")
