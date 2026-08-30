@@ -5,12 +5,13 @@ import re
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
+# --- FUNCIÓN DE PROCESAMIENTO MASIVO ---
 def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
     chunk_size = 1000
     
-    # 1. Obtener clientes con su RUT (PAGINACIÓN SUPABASE)
+    # 1. Obtener clientes con su RUT (PAGINADO)
     all_clients = []
     for bloque in range(100):
         start = bloque * chunk_size
@@ -27,7 +28,7 @@ def procesar_archivos_masivos(archivos):
             break
     clientes_db = all_clients if all_clients else []
 
-    # 2. Precargar catálogo de libros (PAGINACIÓN SUPABASE)
+    # 2. Precargar catálogo de libros (PAGINADO)
     all_books = []
     for bloque in range(100):
         start = bloque * chunk_size
@@ -76,8 +77,7 @@ def procesar_archivos_masivos(archivos):
             
         cliente_id = cliente_encontrado['cliente_id']
         
-        # 4. Cargar todo el historial del cliente (PAGINACIÓN SUPABASE)
-        # Esto precarga los IDs de libros que la clienta ya posee para evitar hacer consultas fila por fila
+        # 4. Cargar todo el historial del cliente (PAGINADO)
         libros_historico_cliente = set()
         for bloque in range(100):
             start = bloque * chunk_size
@@ -122,14 +122,13 @@ def procesar_archivos_masivos(archivos):
             titulo_norm = limpiar_texto_para_busqueda(str(titulo_raw))
             libro_id = inventario_titulos.get(titulo_norm)
 
-            # Si el libro existe en el catálogo y NO está en el historial del cliente
             if libro_id and libro_id not in libros_historico_cliente:
                 conn.table("librero_historico").insert({
                     "cliente_id": cliente_id, 
                     "libro_id": libro_id, 
                     "origen": "IMPORTACIÓN MASIVA"
                 }).execute()
-                libros_historico_cliente.add(libro_id) # Se agrega al set local para no duplicar si viene 2 veces en el Excel
+                libros_historico_cliente.add(libro_id)
                 libros_asignados += 1
         
         # --- BLOQUE DE GUARDADO DE FECHA ---
@@ -156,3 +155,25 @@ def procesar_archivos_masivos(archivos):
             
     st.cache_data.clear()
     return log_resultados
+
+
+# --- INTERFAZ DE STREAMLIT ---
+def mostrar_importacion_libreros():
+    st.title("📚 Importar Historial de Lectura")
+    st.info("💡 Sube los archivos. El sistema buscará a la clienta según el nombre del archivo y solo enlazará los libros que ya existan en tu catálogo.")
+    
+    archivos = st.file_uploader("Selecciona archivos Excel/CSV", type=["xlsx", "csv"], accept_multiple_files=True)
+    
+    if archivos and st.button("Iniciar Importación", type="primary"):
+        with st.spinner("Procesando..."):
+            logs = procesar_archivos_masivos(archivos)
+            st.markdown("---")
+            st.markdown("### Resultados de la Importación")
+            for log in logs:
+                if "✅" in log:
+                    st.success(log)
+                elif "⚠️" in log:
+                    st.warning(log)
+                else:
+                    st.error(log)
+ 
