@@ -5,13 +5,12 @@ import re
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
-# --- VERSIÓN DEFINITIVA CORREGIDA ---
 def procesar_archivos_masivos(archivos):
     conn = get_db_connection()
     log_resultados = []
     chunk_size = 1000
     
-    # 1. Obtener clientes con su RUT (PAGINADO PARA BYPASS LÍMITE DE 1000)
+    # 1. Obtener clientes con su RUT (PAGINACIÓN SUPABASE)
     all_clients = []
     for bloque in range(100):
         start = bloque * chunk_size
@@ -28,7 +27,7 @@ def procesar_archivos_masivos(archivos):
             break
     clientes_db = all_clients if all_clients else []
 
-    # 2. Precargar catálogo de libros (PAGINADO PARA BYPASS LÍMITE DE 1000)
+    # 2. Precargar catálogo de libros (PAGINACIÓN SUPABASE)
     all_books = []
     for bloque in range(100):
         start = bloque * chunk_size
@@ -44,13 +43,7 @@ def procesar_archivos_masivos(archivos):
         else:
             break
 
-    # 📌 DIAGNÓSTICOS DE CATÁLOGO (Ahora sí con los datos cargados)
-    st.write(f"📚 **Total libros cargados desde Supabase:** {len(all_books)}")
-
     inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in all_books} if all_books else {}
-
-    veil_en_dict = {k: v for k, v in inventario_titulos.items() if 'VEIL' in k}
-    st.write("🔎 **Títulos con 'VEIL' en diccionario:**", veil_en_dict)
 
     # 3. Procesamiento de archivos
     for archivo in archivos:
@@ -83,6 +76,23 @@ def procesar_archivos_masivos(archivos):
             
         cliente_id = cliente_encontrado['cliente_id']
         
+        # 4. Cargar todo el historial del cliente (PAGINACIÓN SUPABASE)
+        # Esto precarga los IDs de libros que la clienta ya posee para evitar hacer consultas fila por fila
+        libros_historico_cliente = set()
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_hist = conn.table("librero_historico")\
+                .select("libro_id")\
+                .eq("cliente_id", cliente_id)\
+                .range(start, end).execute()
+            if res_hist.data:
+                libros_historico_cliente.update(item['libro_id'] for item in res_hist.data)
+                if len(res_hist.data) < chunk_size:
+                    break
+            else:
+                break
+        
         try:
             df = pd.read_excel(archivo) if archivo.name.lower().endswith('.xlsx') else pd.read_csv(archivo)
         except Exception as e:
@@ -98,9 +108,6 @@ def procesar_archivos_masivos(archivos):
             continue
 
         col_titulo = next((c for c in df.columns if str(c).lower().strip() in ['titulo', 'título', 'libro']), None)
-        
-        # 📌 DIAGNÓSTICO DE COLUMNA DETECTADA
-        st.write(f"🎯 **Columna detectada:** '{col_titulo}'")
 
         if not col_titulo:
             log_resultados.append(f"⚠️ {archivo.name}: No se encontró columna 'Título'.")
@@ -115,18 +122,15 @@ def procesar_archivos_masivos(archivos):
             titulo_norm = limpiar_texto_para_busqueda(str(titulo_raw))
             libro_id = inventario_titulos.get(titulo_norm)
 
-            # 📌 DIAGNÓSTICO POR FILA
-            st.write(f"• Fila Excel: **'{titulo_raw}'** -> Buscado como: **'{titulo_norm}'** -> ID en BD: **{libro_id}**")
-
-            if libro_id:
-                res_hist = conn.table("librero_historico").select("registro_id", count='exact').eq("cliente_id", cliente_id).eq("libro_id", libro_id).execute()
-                
-                # 📌 DIAGNÓSTICO DE EXISTENCIA EN HISTORIAL
-                st.write(f"  └─ ¿Ya existe en historial?: **{res_hist.count > 0}** (Count: {res_hist.count})")
-
-                if res_hist.count == 0:
-                    conn.table("librero_historico").insert({"cliente_id": cliente_id, "libro_id": libro_id, "origen": "IMPORTACIÓN MASIVA"}).execute()
-                    libros_asignados += 1
+            # Si el libro existe en el catálogo y NO está en el historial del cliente
+            if libro_id and libro_id not in libros_historico_cliente:
+                conn.table("librero_historico").insert({
+                    "cliente_id": cliente_id, 
+                    "libro_id": libro_id, 
+                    "origen": "IMPORTACIÓN MASIVA"
+                }).execute()
+                libros_historico_cliente.add(libro_id) # Se agrega al set local para no duplicar si viene 2 veces en el Excel
+                libros_asignados += 1
         
         # --- BLOQUE DE GUARDADO DE FECHA ---
         try:
@@ -153,22 +157,3 @@ def procesar_archivos_masivos(archivos):
     st.cache_data.clear()
     return log_resultados
 
-
-def mostrar_importacion_libreros():
-    st.title("📚 Importar Historial de Lectura")
-    st.info("💡 Sube los archivos. El sistema buscará a la clienta según el nombre del archivo y solo enlazará los libros que ya existan en tu catálogo.")
-    
-    archivos = st.file_uploader("Selecciona archivos Excel/CSV", type=["xlsx", "csv"], accept_multiple_files=True)
-    
-    if archivos and st.button("Iniciar Importación", type="primary"):
-        with st.spinner("Procesando..."):
-            logs = procesar_archivos_masivos(archivos)
-            st.markdown("---")
-            st.markdown("### Resultados de la Importación")
-            for log in logs:
-                if "✅" in log:
-                    st.success(log)
-                elif "⚠️" in log:
-                    st.warning(log)
-                else:
-                    st.error(log)
