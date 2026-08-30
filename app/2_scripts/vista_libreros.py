@@ -30,6 +30,16 @@ def procesar_archivos_masivos(archivos):
 
     # 2. Precargar catálogo de libros (PAGINADO PARA BYPASS LÍMITE DE 1000)
     all_books = []
+
+    # 📌 PRINT DIAGNÓSTICO 1: Libros traídos desde Supabase
+    st.write(f"📚 **Total libros cargados desde Supabase:** {len(all_books)}")
+
+    inventario_titulos = {limpiar_texto_para_busqueda(l['titulo']): l['libro_id'] for l in all_books} if all_books else {}
+
+    # 📌 PRINT DIAGNÓSTICO 2: Ver si 'VEIL' existe en el diccionario
+    veil_en_dict = {k: v for k, v in inventario_titulos.items() if 'VEIL' in k}
+    st.write("🔎 **Títulos con 'VEIL' en diccionario:**", veil_en_dict)
+    
     for bloque in range(100):
         start = bloque * chunk_size
         end = start + chunk_size - 1
@@ -94,6 +104,9 @@ def procesar_archivos_masivos(archivos):
             continue
 
         col_titulo = next((c for c in df.columns if str(c).lower().strip() in ['titulo', 'título', 'libro']), None)
+        # 📌 PRINT DIAGNÓSTICO 3: Columna detectada
+        st.write(f"🎯 **Columna detectada:** '{col_titulo}'")
+
         if not col_titulo:
             log_resultados.append(f"⚠️ {archivo.name}: No se encontró columna 'Título'.")
             continue
@@ -105,6 +118,10 @@ def procesar_archivos_masivos(archivos):
             
             titulo_norm = limpiar_texto_para_busqueda(str(titulo_raw))
             libro_id = inventario_titulos.get(titulo_norm)
+
+            # 📌 PRINT DIAGNÓSTICO 4: Búsqueda fila por fila
+            st.write(f"• Fila Excel: **'{titulo_raw}'** -> Buscado como: **'{titulo_norm}'** -> ID en BD: **{libro_id}**")
+
 
             if libro_id:
                 res_hist = conn.table("librero_historico").select("registro_id", count='exact').eq("cliente_id", cliente_id).eq("libro_id", libro_id).execute()
