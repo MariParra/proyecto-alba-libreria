@@ -8,29 +8,27 @@ import re
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error, normalizar_nombre_para_duplicados
 
 # ==========================================================
-# 🧹 FUNCIONES AUXILIARES Y RESUMEN
+# 🧹 FUNCIONES AUXILIARES Y SANITIZACIÓN DE DATOS
 # ==========================================================
 
 def limpiar_rut(val):
     """
     Sanea el RUT dejando solo caracteres alfanuméricos en mayúscula.
-    Descarta explícitamente el '0' o valores por defecto para evitar falsas coincidencias.
+    Descarta explícitamente '0', '00', etc., para evitar falsos emparejamientos.
     """
     if not val or pd.isna(val):
         return ""
     clean = "".join(char for char in str(val) if char.isalnum()).strip().upper()
-    # Ignora valores nulos, por defecto o ceros
-    if clean in ["NAN", "NONE", "SININFORMACION", "0", "00", "000", "SD", "SINRUT"]:
+    if clean in ["NAN", "NONE", "SININFORMACION", "0", "00", "000", "SD", "SINRUT", "NULL"]:
         return ""
     return clean
 
 def obtener_resumen_clientes():
-    """Obtiene métricas rápidas del total de clientes desde la BD."""
+    """Obtiene métricas rápidas del total de clientes desde Supabase."""
     conn = get_db_connection()
     try:
         all_statuses = []
         chunk_size = 1000
-        # Cargamos todos los estados de forma paginada para evitar límites
         for bloque in range(100):
             start = bloque * chunk_size
             end = start + chunk_size - 1
@@ -66,8 +64,10 @@ def obtener_resumen_clientes():
 
 def sync_google_sheets():
     """
-    Sincronización Total (Clientes + Suscripciones).
-    Soporta preguntas largas en encabezados, descarte de RUT 0 y preservación de paréntesis en nombres.
+    Sincronización de Clientes y Suscripciones respetando jerarquía de búsqueda:
+    1. RUT (si es válido y != "0")
+    2. Nombre
+    3. Email (evita asociar personas distintas que comparten correo)
     """
     exito = False
     try:
@@ -92,7 +92,7 @@ def sync_google_sheets():
     try:
         with st.spinner("Sincronizando Clientes y Suscripciones..."):
             
-            # Mapeo inteligente de columnas
+            # Mapeo dinámico de columnas
             col_nombre, col_estado, col_telefono, col_email, col_rut = None, None, None, None, None
             col_fecha, col_generos, col_metodo = None, None, None
             
@@ -112,14 +112,14 @@ def sync_google_sheets():
             
             procesados, clientes_nuevos = 0, 0
             
-            # Cargar la lista completa de clientes para comparar en memoria
+            # Cargar directorio completo en memoria para rápida comparación
             all_clients_db = []
             chunk_size = 1000
             for bloque in range(100):
                 start = bloque * chunk_size
                 end = start + chunk_size - 1
                 res_clients = (conn.table("clientes")
-                    .select("cliente_id, nombre, email, rut")
+                    .select("cliente_id, nombre, email, rut, status, telefono")
                     .order("cliente_id")
                     .range(start, end)
                     .execute())
@@ -132,10 +132,12 @@ def sync_google_sheets():
                     
             todos_clientes_db = all_clients_db
 
-            # Procesamiento fila a fila
+            # Procesamiento de cada registro del Sheet
             for index, row in df.iterrows():
                 nombre_raw = row[col_nombre] if col_nombre in df.columns else ""
-                nombre_sync = limpiar_texto_para_busqueda(str(nombre_raw))
+                nombre_limpio_str = re.sub(r'\s+', ' ', str(nombre_raw)).strip()
+                nombre_sync = limpiar_texto_para_busqueda(nombre_limpio_str)
+                
                 if not nombre_sync or nombre_sync in ["SIN INFORMACION", "NAN", "NONE"]: 
                     continue
                 
@@ -166,40 +168,57 @@ def sync_google_sheets():
                 metodo_sync = str(metodo_raw).strip()
                 
                 cliente_existente = None
+                nombre_norm_sync = normalizar_nombre_para_duplicados(nombre_sync)
                 
-                # A. Búsqueda prioritaria por RUT (solo si es válido y distinto de 0)
+                # --------------------------------------------------
+                # 🎯 LÓGICA DE COINCIDENCIA PASO A PASO
+                # --------------------------------------------------
+
+                # 1. EVALUAR POR RUT (siempre que no sea "0", vacío o inválido)
                 if rut_normalizado_sync:
                     for cliente_db in todos_clientes_db:
                         rut_db = limpiar_rut(cliente_db.get('rut'))
                         if rut_db and rut_db == rut_normalizado_sync:
                             cliente_existente = cliente_db
                             break
-                
-                # B. Búsqueda por Nombre Exacto / Normalizado (preserva paréntesis)
+
+                # 2. SI RUT VIENE EN "0" O VACÍO -> COMPARAR POR NOMBRE
                 if not cliente_existente:
-                    nombre_normalizado_sync = normalizar_nombre_para_duplicados(nombre_sync)
                     for cliente_db in todos_clientes_db:
-                        nombre_db = cliente_db.get('nombre', '')
+                        nombre_db = str(cliente_db.get('nombre', '')).strip()
                         if (limpiar_texto_para_busqueda(nombre_db) == nombre_sync or 
-                            normalizar_nombre_para_duplicados(nombre_db) == nombre_normalizado_sync):
+                            normalizar_nombre_para_duplicados(nombre_db) == nombre_norm_sync):
                             cliente_existente = cliente_db
                             break
-                
-                # C. Búsqueda por Email
-                if not cliente_existente and email_sync and email_sync not in ["nan", "none", ""]:
+
+                # 3. SI TAMPOCO COINCIDE EL NOMBRE -> EVALUAR POR EMAIL (Solo si el nombre coincide parcialmente)
+                if not cliente_existente and email_sync and email_sync not in ["nan", "none", "", "null"]:
                     for cliente_db in todos_clientes_db:
                         email_db = str(cliente_db.get('email', '')).strip().lower()
-                        if email_db and email_db == email_sync:
-                            cliente_existente = cliente_db
-                            break
+                        if email_db == email_sync:
+                            nombre_db = str(cliente_db.get('nombre', '')).strip()
+                            # Si comparten correo pero el nombre es diferente (ej. Hermanas), no matchear
+                            if normalizar_nombre_para_duplicados(nombre_db) == nombre_norm_sync:
+                                cliente_existente = cliente_db
+                                break
                 
-                # Asignación o inserción
+                # --------------------------------------------------
+                # 💾 ASIGNACIÓN O CREACIÓN
+                # --------------------------------------------------
                 if cliente_existente:
                     c_id = cliente_existente['cliente_id']
+                    # Actualizar ficha de cliente si cambió algún dato directo
+                    conn.table("clientes").update({
+                        'nombre': nombre_sync,
+                        'email': email_sync if email_sync not in ["nan", "none", "null"] else "",
+                        'telefono': tel_sync,
+                        'status': estado_sync,
+                        'rut': rut_sync if rut_normalizado_sync else cliente_existente.get('rut', '')
+                    }).eq("cliente_id", c_id).execute()
                 else:
                     res_insert = conn.table("clientes").insert({
                         'nombre': nombre_sync, 
-                        'email': email_sync if email_sync not in ["nan", "none"] else "", 
+                        'email': email_sync if email_sync not in ["nan", "none", "null"] else "", 
                         'telefono': tel_sync, 
                         'status': estado_sync,
                         'rut': rut_sync
@@ -210,7 +229,7 @@ def sync_google_sheets():
                     todos_clientes_db.append(nuevo_registro)
                     clientes_nuevos += 1
                 
-                # Actualización de suscripciones
+                # Actualizar / Insertar Suscripciones
                 res_sub = conn.table("suscripciones").select("suscripcion_id").eq("cliente_id", c_id).execute()
                 datos_sub = {
                     "fecha_pago": fecha_sync if fecha_sync.lower() != "nan" else "", 
@@ -260,7 +279,7 @@ def mostrar_herramientas():
     
     with st.container(border=True):
         st.markdown("### 🔄 Sincronización Total con Google Sheets")
-        st.info("💡 **Lógica 2.0:** Actualiza datos de contacto y preferencias de suscripción leyendo tu formulario dinámico.")
+        st.info("💡 **Lógica 3.0:** Evalúa por RUT válido $\\rightarrow$ Nombre $\\rightarrow$ Email. Si dos personas comparten correo pero tienen distinto nombre, crea fichas independientes.")
         
         if st.button("🚀 Iniciar Sincronización", type="primary", use_container_width=True):
             exito = sync_google_sheets()
@@ -270,8 +289,29 @@ def mostrar_herramientas():
                     mensaje_cuenta_regresiva.info(f"🔄 Actualizando métricas en {segundos} segundos...")
                     time.sleep(1)
                 st.rerun()
-    
+
+    # --- DIAGNÓSTICO Y RASTREO EN VIVO ---
     st.markdown("---")
+    with st.expander("🔍 Herramienta de Rastrear Cliente en BD"):
+        busqueda = st.text_input("Ingresa nombre o correo a verificar en Supabase:", value="Agustina")
+        if busqueda:
+            conn = get_db_connection()
+            
+            # 1. Búsqueda por Nombre
+            res_bd = conn.table("clientes").select("*").ilike("nombre", f"%{busqueda}%").execute()
+            st.markdown(f"**Coincidencias en Nombre (`%{busqueda}%`):**")
+            if res_bd.data:
+                st.dataframe(pd.DataFrame(res_bd.data))
+            else:
+                st.warning("No se encontraron registros por nombre.")
+            
+            # 2. Búsqueda por Correo
+            res_email = conn.table("clientes").select("*").ilike("email", "%franandreagonzalez5%").execute()
+            st.markdown("**Coincidencias por Email (`franandreagonzalez5@gmail.com`):**")
+            if res_email.data:
+                st.dataframe(pd.DataFrame(res_email.data))
+            else:
+                st.info("No se encontró ningún usuario con ese correo.")
 
 if __name__ == '__main__':
     mostrar_herramientas()
