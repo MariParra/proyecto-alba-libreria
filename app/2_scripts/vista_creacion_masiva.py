@@ -275,6 +275,8 @@ def procesar_nuevos_libros(df):
                 if col in fila and pd.notna(fila[col]):
                     val_clean = sanear_numero(fila[col])
                     nuevo_libro[col] = int(val_clean)
+                else:
+                    nuevo_libro[col] = 0 if col == 'stock' else 0.0
             
             encuadernacion = nuevo_libro.get('encuadernacion', '').upper()
             
