@@ -7,13 +7,14 @@ from utilidades import get_db_connection, log_error, normalizar_nombre_para_dupl
 # --- FUNCIONES DE BASE DE DATOS ---
 
 def obtener_historial_completo(cliente_id):
-    columnas_finales = ['Título', 'Autor', 'Fuente']
+    # Devolvemos también 'libro_id' de forma interna para poder calcular el COUNT DISTINCT en la UI
+    columnas_retornar = ['Título', 'Autor', 'Fuente', 'libro_id']
     conn = get_db_connection()
     historial = []
     chunk_size = 1000
 
     try:
-        # --- PRECARGAR DICCIONARIO DE TÍTULOS -> ID (Bypass de 1000 registros) ---
+        # --- PRECARGAR DICCIONARIO DE TÍTULOS -> ID (Bypass de 1000 registros de Supabase) ---
         all_books = []
         for bloque in range(100):
             start = bloque * chunk_size
@@ -79,14 +80,14 @@ def obtener_historial_completo(cliente_id):
         
         # --- PARTE 4: Consolidación y cruce ---
         if not historial:
-            return pd.DataFrame(columns=columnas_finales)
+            return pd.DataFrame(columns=columnas_retornar)
 
         df_consolidado = pd.concat(historial, ignore_index=True)
         # Eliminamos los registros que tengan libro_id nulo para no procesar IDs inválidos
         df_consolidado.dropna(subset=['libro_id'], inplace=True)
         
         if df_consolidado.empty:
-            return pd.DataFrame(columns=columnas_finales)
+            return pd.DataFrame(columns=columnas_retornar)
 
         ids_libros_limpios = []
         for val in df_consolidado['libro_id'].unique():
@@ -102,7 +103,7 @@ def obtener_historial_completo(cliente_id):
                 df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
                 
         if df_nombres.empty:
-            return pd.DataFrame(columns=columnas_finales)
+            return pd.DataFrame(columns=columnas_retornar)
             
         df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
         
@@ -114,7 +115,7 @@ def obtener_historial_completo(cliente_id):
             axis=1
         )
         
-        return df_final[columnas_finales]
+        return df_final[columnas_retornar]
 
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
@@ -125,7 +126,7 @@ def obtener_historial_completo(cliente_id):
             email_usuario=email_usuario
         )
         st.error(f"No se pudo cargar el historial completo del cliente. Error: {e}")
-        return pd.DataFrame(columns=columnas_finales)
+        return pd.DataFrame(columns=columnas_retornar)
 
 @st.cache_data(ttl=300)
 def cargar_todos_los_clientes():
@@ -370,7 +371,16 @@ def mostrar_clientes():
                     else:
                         df_historial_filtrado = df_historial
                         
-                    st.success(f"Mostrando **{len(df_historial_filtrado)}** de **{len(df_historial)}** libros registrados.")
+                    # --- CONTEO Y DESGLOSE INTERACTIVO DE REGISTROS Y LIBROS ÚNICOS (DISTINCT libro_id) ---
+                    total_registros_filtrados = len(df_historial_filtrado)
+                    total_registros_globales = len(df_historial)
+                    libros_unicos_filtrados = df_historial_filtrado['libro_id'].nunique()
+                    libros_unicos_globales = df_historial['libro_id'].nunique()
+                    
+                    st.success(
+                        f"Mostrando **{total_registros_filtrados}** de **{total_registros_globales}** registros de lectura "
+                        f"({libros_unicos_filtrados} de {libros_unicos_globales} libros únicos registrados)."
+                    )
                     st.dataframe(
                         df_historial_filtrado[['Título', 'Autor', 'Fuente']], 
                         use_container_width=True, 
@@ -402,8 +412,8 @@ def mostrar_clientes():
                         # 🔍 BYPASS DE 1000 REGISTROS PARA DETECTAR DUPLICADOS EN TODA LA BASE
                         todos_los_clientes = []
                         chunk_size = 1000
-                        for bloque in range(100):
-                            start = bloque * chunk_size
+                        for bloques in range(100):
+                            start = bloques * chunk_size
                             end = start + chunk_size - 1
                             res_names = conn.table("clientes")\
                                 .select("nombre")\
