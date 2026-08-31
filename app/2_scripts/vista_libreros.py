@@ -51,16 +51,25 @@ def procesar_archivos_masivos(archivos):
         nombre_archivo_original = os.path.splitext(archivo.name)[0]
         cliente_encontrado = None
         
-        # --- INTENTO 1: BUSCAR POR RUT ---
-        rut_en_archivo = re.sub(r'[^0-9kK]', '', nombre_archivo_original)
+        # --- INTENTO 1: BUSCAR POR RUT SEGMENTADO ---
+        bloques_archivo = re.split(r'[\s_\-]+', nombre_archivo_original)
+        ruts_candidatos = []
+        for bloque in bloques_archivo:
+            bloque_limpio = re.sub(r'[^0-9kK]', '', bloque)
+            # Un RUT chileno sin puntos ni guion tiene entre 7 y 10 caracteres y empieza por número
+            if len(bloque_limpio) >= 7 and len(bloque_limpio) <= 10 and bloque_limpio[0].isdigit():
+                ruts_candidatos.append(bloque_limpio)
         
-        if len(rut_en_archivo) >= 7:
+        # Validar si alguno de los bloques candidatos coincide con un cliente en la BD
+        for rut_en_archivo in ruts_candidatos:
             for cliente in clientes_db:
                 rut_cliente_bruto = str(cliente.get('rut', ''))
                 rut_db_limpio = re.sub(r'[^0-9kK]', '', rut_cliente_bruto)
                 if rut_db_limpio and rut_db_limpio == rut_en_archivo:
                     cliente_encontrado = cliente
                     break
+            if cliente_encontrado:
+                break
 
         # --- INTENTO 2: BUSCAR POR NOMBRE ---
         if not cliente_encontrado:
@@ -155,7 +164,6 @@ def procesar_archivos_masivos(archivos):
             
     st.cache_data.clear()
     return log_resultados
-
 
 # --- INTERFAZ DE STREAMLIT ---
 def mostrar_importacion_libreros():
