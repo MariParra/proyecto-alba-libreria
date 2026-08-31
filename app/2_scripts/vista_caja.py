@@ -201,6 +201,7 @@ def mostrar_caja():
                         with st.expander("✏️ Actualizar Catálogo (Opcional)", expanded=False):
                             l_autor = st.text_input("Autor:", value=l_autor, key="autor_edit_caja_2")
                             l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0, key="precio_edit_caja_2")
+                            l_costo = st.number_input("Costo ($):", value=l_costo, step=100.0, key="costo_edit_caja_2")
                 else:
                     st.warning("El inventario está vacío.")
             else: 

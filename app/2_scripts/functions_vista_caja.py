@@ -310,7 +310,7 @@ def cargar_historial_completo():
         st.error(f"Error crítico al cargar el historial de ventas: {e}")
         return pd.DataFrame()
 
-def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion="", editorial="", apto_cajita=True):
+def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_existente=None, encuadernacion="", editorial="", apto_cajita=True, costo=None):
     conn = get_db_connection()
     datos = {
         "titulo": limpiar_texto_para_busqueda(titulo), 
@@ -321,8 +321,12 @@ def gestionar_libro(titulo, autor, precio_catalogo, stock_a_sumar, libro_id_exis
         "apto_cajita": apto_cajita
     }
     
+    if costo is not None:
+        datos["costo"] = float(costo)
+    
     if libro_id_existente:
-        datos_actualizar = {k: v for k, v in datos.items() if v}
+        # Usamos filtros más robustos que eviten omitir valores numéricos de 0.0 o booleanos False
+        datos_actualizar = {k: v for k, v in datos.items() if v is not None and v != ""}
         if datos_actualizar:
             conn.table("libros").update(datos_actualizar).eq("libro_id", libro_id_existente).execute()
         return libro_id_existente
@@ -525,14 +529,15 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         for item in carrito:
             l_id = item['libro_id']
             if item['es_nuevo']: 
-                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True) )
+                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True), costo=item.get('costo') )
             else:
-                gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id)
+                gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id, costo=item.get('costo'))
                 nuevo_stock = item['stock_actual'] - item['cantidad']
                 if item['stock_actual'] <= 0 or nuevo_stock < 0:
                     nuevo_stock = 0
                     
                 conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
+
             
             if cliente_id and l_id:
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", l_id).execute()
