@@ -304,7 +304,7 @@ def mostrar_herramientas():
                 st.warning("No se encontraron registros por nombre.")
             
             # 2. Búsqueda por Correo
-            res_email = conn.table("clientes").select("*").ilike("email", "%franandreagonzalez5%").execute()
+            res_email = conn.table("clientes").select("*").ilike("email", f"%{busqueda}%").execute()
             st.markdown("**Coincidencias por Email (`franandreagonzalez5@gmail.com`):**")
             if res_email.data:
                 st.dataframe(pd.DataFrame(res_email.data))
