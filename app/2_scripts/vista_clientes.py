@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import time
-from utilidades import get_db_connection, log_error, normalizar_nombre_para_duplicados
+from utilidades import get_db_connection, log_error, normalizar_nombre_para_duplicados, limpiar_texto_para_busqueda
 
 # --- FUNCIONES DE BASE DE DATOS ---
 
@@ -10,8 +10,31 @@ def obtener_historial_completo(cliente_id):
     columnas_finales = ['Título', 'Autor', 'Fuente']
     conn = get_db_connection()
     historial = []
+    chunk_size = 1000
 
     try:
+        # --- PRECARGAR DICCIONARIO DE TÍTULOS -> ID (Bypass de 1000 registros) ---
+        all_books = []
+        for bloque in range(100):
+            start = bloque * chunk_size
+            end = start + chunk_size - 1
+            res_libros_map = conn.table("libros")\
+                .select("libro_id, titulo")\
+                .order("libro_id")\
+                .range(start, end).execute()
+            if res_libros_map.data:
+                all_books.extend(res_libros_map.data)
+                if len(res_libros_map.data) < chunk_size:
+                    break
+            else:
+                break
+        
+        titulo_to_id = {}
+        for b in all_books:
+            titulo_norm = limpiar_texto_para_busqueda(b['titulo'])
+            if titulo_norm:
+                titulo_to_id[titulo_norm] = b['libro_id']
+
         # --- PARTE 1, 2 Y 3: Recopilación de datos ---
         # 1. Librero Histórico
         res_hist = conn.table("librero_historico").select("libro_id, origen, autor_historico").eq("cliente_id", cliente_id).execute()
@@ -35,8 +58,16 @@ def obtener_historial_completo(cliente_id):
                 try:
                     items = json.loads(v['libros_vendidos'])
                     for item in items:
+                        l_id = item.get('libro_id')
+                        title = item.get('titulo', 'N/A')
+                        
+                        # Fallback por si libro_id es nulo (nuevas ventas rápidas creadas en caja)
+                        if l_id is None or pd.isna(l_id):
+                            norm_title = limpiar_texto_para_busqueda(title)
+                            l_id = titulo_to_id.get(norm_title)
+                            
                         libros_venta.append({
-                            "libro_id": item.get('libro_id'),
+                            "libro_id": l_id,
                             "Autor": item.get('autor', 'N/A'),
                             "Fuente": f"Venta Directa ({v['fecha_venta']})"
                         })
@@ -51,7 +82,9 @@ def obtener_historial_completo(cliente_id):
             return pd.DataFrame(columns=columnas_finales)
 
         df_consolidado = pd.concat(historial, ignore_index=True)
+        # Eliminamos los registros que tengan libro_id nulo para no procesar IDs inválidos
         df_consolidado.dropna(subset=['libro_id'], inplace=True)
+        
         if df_consolidado.empty:
             return pd.DataFrame(columns=columnas_finales)
 
@@ -62,15 +95,18 @@ def obtener_historial_completo(cliente_id):
             except (ValueError, TypeError):
                 continue
         
-        if not ids_libros_limpios:
-            return pd.DataFrame(columns=columnas_finales)
-
-        res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
-        if not res_libros.data:
+        df_nombres = pd.DataFrame()
+        if ids_libros_limpios:
+            res_libros = conn.table("libros").select("libro_id, titulo, autor").in_("libro_id", ids_libros_limpios).execute()
+            if res_libros.data:
+                df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
+                
+        if df_nombres.empty:
             return pd.DataFrame(columns=columnas_finales)
             
-        df_nombres = pd.DataFrame(res_libros.data).rename(columns={'titulo': 'Título', 'autor': 'autor_catalogo'})
         df_consolidado['libro_id'] = pd.to_numeric(df_consolidado['libro_id'], errors='coerce').fillna(-1).astype(int)
+        
+        # how="inner" garantiza que SOLO aparezcan los libros que existen en la tabla 'libros'
         df_final = df_consolidado.merge(df_nombres, on="libro_id", how="inner")
         
         df_final['Autor'] = df_final.apply(
