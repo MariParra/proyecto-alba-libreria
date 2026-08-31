@@ -457,19 +457,48 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
     conn = get_db_connection()
     email_usuario = st.session_state.get('email_usuario', 'Desconocido')
     
-    libros_nuevos_list = []
-    costo_total_venta = 0.0
-    for item in carrito:
-        libros_nuevos_list.append({
-            "libro_id": item['libro_id'], "titulo": item['titulo'], "autor": item['autor'],
-            "cantidad": item['cantidad'], "precio": item['precio_cobrado']
-        })
-        costo_unitario = item.get('costo', 0.0)
-        if pd.isna(costo_unitario) or costo_unitario is None: costo_unitario = 0.0
-        costo_total_venta += float(costo_unitario) * int(item['cantidad'])
-        
-    subtotal_libros = sum([item['subtotal'] for item in carrito])
     try:
+        # --- PASO 1: INSERTAR/ACTUALIZAR LIBROS EN EL CATÁLOGO Y ASIGNAR ID DEFINITIVO ---
+        costo_total_venta = 0.0
+        for item in carrito:
+            l_id = item['libro_id']
+            if item.get('es_nuevo', False): 
+                # Insertar libro nuevo en Supabase y obtener su ID definitivo
+                l_id = gestionar_libro(
+                    item['titulo'], item['autor'], item['precio_catalogo'], 
+                    item['cantidad'], None, item.get('encuadernacion', ''), 
+                    item.get('editorial', ''), item.get('apto_cajita', True), 
+                    costo=item.get('costo')
+                )
+                # Actualizamos el libro_id en el carrito para que se registre correctamente en el JSON de la venta
+                item['libro_id'] = l_id
+            else:
+                # Libro existente: actualizamos catálogo y stock
+                gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id, costo=item.get('costo'))
+                nuevo_stock = item['stock_actual'] - item['cantidad']
+                if item['stock_actual'] <= 0 or nuevo_stock < 0:
+                    nuevo_stock = 0
+                conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
+            
+            costo_unitario = item.get('costo', 0.0)
+            if pd.isna(costo_unitario) or costo_unitario is None: 
+                costo_unitario = 0.0
+            costo_total_venta += float(costo_unitario) * int(item['cantidad'])
+
+        # --- PASO 2: CONSTRUIR LA LISTA DE VENTA CON LOS IDS DE LIBRO TOTALMENTE RESUELTOS ---
+        libros_nuevos_list = []
+        for item in carrito:
+            libros_nuevos_list.append({
+                "libro_id": item['libro_id'], 
+                "titulo": item['titulo'], 
+                "autor": item['autor'],
+                "cantidad": item['cantidad'], 
+                "precio": item['precio_cobrado']
+            })
+
+        subtotal_libros = sum([item['subtotal'] for item in carrito])
+
+        # --- PASO 3: REGISTRAR O FUSIONAR LA VENTA EN REGISTRO_VENTAS ---
         if venta_id_asociada:
             res_old = conn.table("registro_ventas").select("*").eq("venta_id", int(venta_id_asociada)).execute()
             if not res_old.data:
@@ -526,25 +555,16 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
             }
             conn.table("registro_ventas").insert(datos_venta).execute()
             
+        # --- PASO 4: REGISTRAR LIBRERO HISTÓRICO ---
         for item in carrito:
             l_id = item['libro_id']
-            if item['es_nuevo']: 
-                l_id = gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], item['cantidad'], None, item.get('encuadernacion', ''), item.get('editorial', ''), item.get('apto_cajita', True), costo=item.get('costo') )
-            else:
-                gestionar_libro(item['titulo'], item['autor'], item['precio_catalogo'], 0, l_id, costo=item.get('costo'))
-                nuevo_stock = item['stock_actual'] - item['cantidad']
-                if item['stock_actual'] <= 0 or nuevo_stock < 0:
-                    nuevo_stock = 0
-                    
-                conn.table("libros").update({"stock": nuevo_stock}).eq("libro_id", l_id).execute()
-
-            
             if cliente_id and l_id:
                 res_hist = conn.table("librero_historico").select("registro_id").eq("cliente_id", cliente_id).eq("libro_id", l_id).execute()
                 if not res_hist.data:
                     datos_historico = {"cliente_id": cliente_id, "libro_id": l_id, "autor_historico": limpiar_texto_para_busqueda(item['autor']), "origen": "VENTA CAJA"}
                     conn.table("librero_historico").insert(datos_historico).execute()
-                    
+
+        # --- PASO 5: EXTRAS DE ASIGNACIONES (CLUB DE SUSCRIPCIÓN) ---
         if asignacion_id:
             try:
                 res_asig = conn.table("asignaciones").select("extras, valor_extras").eq("asignacion_id", asignacion_id).execute()
