@@ -3,7 +3,6 @@ import pandas as pd
 import time
 from datetime import datetime
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
-
 from functions_vista_asignaciones import (
     cargar_clientes_suscritos,
     cargar_catalogo_completo_libros,
@@ -29,7 +28,6 @@ from functions_vista_asignaciones import (
 )
 
 # --- INTERFAZ PRINCIPAL ---
-
 def mostrar_asignaciones():
     st.title("📦 Gestión de Suscripciones")
     
@@ -101,7 +99,7 @@ def mostrar_asignaciones():
         df_mes['valor_extras'] = pd.to_numeric(df_mes.get('valor_extras', 0), errors='coerce').fillna(0.0)
         df_mes['monto_total'] = pd.to_numeric(df_mes.get('monto_total', 0), errors='coerce').fillna(0.0)
         
-    # =========================================================================
+        # =========================================================================
         # 🌟 PASO 2: RENDERIZADO EXCLUSIVO DE MÉTRICAS LOGÍSTICAS DE CABECERA
         # =========================================================================
         # Solo se muestran las métricas de cajas si estamos en las pestañas operativas del mes actual
@@ -123,6 +121,7 @@ def mostrar_asignaciones():
         # La alerta roja de bloqueo solo aparece si el mes está cerrado y estamos en las pestañas operativas
         if mes_esta_cerrado and opcion_menu in ["📋 Gestión (Tabla Editable)", "📖 Asignar Libro Principal"]:
             st.error(f"🔒 **MES CERRADO:** {mes_sel.upper()} {ano_sel} está bloqueado. Los cambios están deshabilitados.", icon="🔒")
+
     # ==========================================================
     # 1. TABLA EDITABLE (VERSIÓN FINAL COMPLETA)
     # ==========================================================
@@ -136,86 +135,9 @@ def mostrar_asignaciones():
                     "4. **Guardado:** Haz doble clic en una celda para editar y luego presiona `💾 Guardar Cambios Manuales` al final de la tabla."
                 )
             
-            # --- HERRAMIENTA DE ASIGNACIÓN DE PREFERENCIAS ---
-            with st.container(border=True):
-                st.markdown("#### ✨ Asignar Preferencia Mensual a un Cliente")
-                
-                # # 1. Cargamos todos los libros (incluso sin stock) para conocer el universo total de géneros
-                df_libros_completo = cargar_catalogo_completo_libros(incluir_sin_stock=True)
-                
-                set_generos = set()
-                if not df_libros_completo.empty and 'genero' in df_libros_completo.columns:
-                    generos_raw = df_libros_completo['genero'].dropna().unique()
-                    
-                    # 2. Desempaquetamos y limpiamos los géneros de los libros
-                    for g_str in generos_raw:
-                        if isinstance(g_str, str) and g_str.strip():
-                            # Dividimos por coma por si algún libro tiene más de un género
-                            generos_individuales = [g.strip().upper() for g in g_str.split(',') if g.strip()]
-                            set_generos.update(generos_individuales)
-                
-                # 3. Lista final limpia y ordenada
-                generos_disponibles = sorted(list(set_generos))
-                # --------------------------------------------------------------
-
-                clientes_disponibles = dict(zip(df_mes['nombre'], df_mes['asignacion_id']))
-
-                col_a1, col_a2 = st.columns(2)
-
-                cliente_sel = col_a1.selectbox(
-                    "1. Selecciona un Cliente:",
-                    options=list(clientes_disponibles.keys()),
-                    index=None,
-                    placeholder="👤 Busca o selecciona un cliente...",
-                    key="cliente_pref_sel"
-                )
-
-                if cliente_sel:
-                    asignacion_id_sel = clientes_disponibles[cliente_sel]
-                    
-                    # Buscamos las preferencias actuales de ese cliente
-                    preferencia_actual_str = df_mes.loc[df_mes['asignacion_id'] == asignacion_id_sel, 'preferencia_mensual'].values[0]
-                    
-                    # Normalizamos a mayúsculas y filtramos solo los géneros que existen en el catálogo actual para evitar StreamlitAPIException
-                    preferencias_actuales = []
-                    if preferencia_actual_str and isinstance(preferencia_actual_str, str):
-                        preferencias_actuales = [
-                            g.strip().upper() 
-                            for g in preferencia_actual_str.split(',') 
-                            if g.strip().upper() in generos_disponibles
-                        ]
-
-                    generos_sel = col_a2.multiselect(
-                        "2. Selecciona hasta 3 géneros:",
-                        options=generos_disponibles,
-                        default=preferencias_actuales,
-                        max_selections=3,
-                        key="generos_pref_sel"
-                    )
-
-                    if st.button("💾 Guardar Preferencia para este Cliente", type="primary", key="btn_guardar_pref"):
-                        # Unimos los géneros seleccionados en un solo string
-                        preferencia_final_str = ", ".join(generos_sel).upper()
-                        
-                        try:
-                            conn = get_db_connection()
-                            conn.table("asignaciones").update(
-                                {"preferencia_mensual": preferencia_final_str}
-                            ).eq("asignacion_id", asignacion_id_sel).execute()
-                            
-                            st.success(f"¡Preferencia '{preferencia_final_str}' guardada para {cliente_sel}!")
-                            if 'cliente_pref_sel' in st.session_state: del st.session_state.cliente_pref_sel
-                            if 'generos_pref_sel' in st.session_state: del st.session_state.generos_pref_sel
-                            
-                            time.sleep(1.5)
-                            st.rerun() # Refrescamos para que la tabla principal muestre el cambio
-                        except Exception as e:
-                            st.error(f"No se pudo guardar la preferencia. Error: {e}")
-
             st.markdown("---")
-            # --------------------------------------------------------
             
-            with st.expander("📖 Ver Historial de Últimos Cambios Masivos"):
+            with st.expander("📖 Ver Historial de Últimos Cambios Masivos", expanded=False):
                 # Llamamos a la función que busca los datos en Supabase
                 df_historial = cargar_historial_cambios()
                 
@@ -231,7 +153,6 @@ def mostrar_asignaciones():
                                 fecha_str = fecha_utc.strftime('%d-%m-%Y a las %H:%M:%S hrs')
                             except:
                                 fecha_str = str(row['fecha_cambio'])[:19] # Fallback si no hay pytz
-
                             st.markdown(f"**Fecha:** {fecha_str} | **Usuario:** `{row['email_usuario']}`")
                             st.markdown(
                                 f"Se cambió la columna **`{row['columna_afectada']}`** al nuevo valor **`{row['valor_nuevo']}`** "
@@ -246,6 +167,7 @@ def mostrar_asignaciones():
                                 st.code("- " + "\n- ".join(nombres_clientes), language=None)
                             except Exception as e:
                                 st.caption(f"No se pudo cargar el detalle de las clientas. Error: {e}")
+            
             if df_mes.empty: 
                 st.warning("No hay registros para este mes.")
             else:
@@ -268,7 +190,6 @@ def mostrar_asignaciones():
                         filtro_fecha_pago = st.selectbox("📅 Fecha de Pago:", ["Todas"] + fechas_pago_unicas)
                     
                     st.markdown("---")
-
                     # 🔴 Fila 2: Filtros de estados y envío
                     col_fa4, col_fa5, col_fa5_2, col_fa6, col_fa7 = st.columns(5)
                     with col_fa4:
@@ -300,6 +221,87 @@ def mostrar_asignaciones():
                         help="Quita las columnas que no necesites ver para tener una vista más limpia."
                     )
 
+                # =========================================================================
+                # 🌟 NUEVA UBICACIÓN: HERRAMIENTA DE ASIGNACIÓN DE PREFERENCIAS (DEBAJO DE LOS FILTROS)
+                # =========================================================================
+                if not mes_esta_cerrado:
+                    with st.expander("✨ Asignar Preferencia Mensual a un Cliente", expanded=False):
+                        # 1. Cargamos todos los libros (incluso sin stock) para conocer el universo total de géneros
+                        df_libros_completo = cargar_catalogo_completo_libros(incluir_sin_stock=True)
+                        
+                        set_generos = set()
+                        if not df_libros_completo.empty and 'genero' in df_libros_completo.columns:
+                            generos_raw = df_libros_completo['genero'].dropna().unique()
+                            
+                            # 2. Desempaquetamos y limpiamos los géneros de los libros
+                            for g_str in generos_raw:
+                                if isinstance(g_str, str) and g_str.strip():
+                                    # Dividimos por coma por si algún libro tiene más de un género
+                                    generos_individuales = [g.strip().upper() for g in g_str.split(',') if g.strip()]
+                                    set_generos.update(generos_individuales)
+                        
+                        # 3. Lista final limpia y ordenada
+                        generos_disponibles = sorted(list(set_generos))
+                        # --------------------------------------------------------------
+                        
+                        clientes_disponibles = dict(zip(df_mes['nombre'], df_mes['asignacion_id']))
+                        col_a1, col_a2 = st.columns(2)
+                        
+                        cliente_sel = col_a1.selectbox(
+                            "1. Selecciona un Cliente:",
+                            options=list(clientes_disponibles.keys()),
+                            index=None,
+                            placeholder="👤 Busca o selecciona un cliente...",
+                            key="cliente_pref_sel"
+                        )
+                        
+                        if cliente_sel:
+                            asignacion_id_sel = clientes_disponibles[cliente_sel]
+                            
+                            # Buscamos las preferencias actuales de ese cliente
+                            preferencia_actual_str = df_mes.loc[df_mes['asignacion_id'] == asignacion_id_sel, 'preferencia_mensual'].values[0]
+                            
+                            # Normalizamos a mayúsculas y filtramos solo los géneros que existen en el catálogo actual para evitar StreamlitAPIException
+                            preferencias_actuales = []
+                            if preferencia_actual_str and isinstance(preferencia_actual_str, str):
+                                preferencias_actuales = [
+                                    g.strip().upper() 
+                                    for g in preferencia_actual_str.split(',') 
+                                    if g.strip().upper() in generos_disponibles
+                                ]
+                            
+                            generos_sel = col_a2.multiselect(
+                                "2. Selecciona hasta 3 géneros:",
+                                options=generos_disponibles,
+                                default=preferencias_actuales,
+                                max_selections=3,
+                                key="generos_pref_sel"
+                            )
+                            
+                            if st.button("💾 Guardar Preferencia para este Cliente", type="primary", key="btn_guardar_pref"):
+                                # Unimos los géneros seleccionados en un solo string
+                                preferencia_final_str = ", ".join(generos_sel).upper()
+                                
+                                try:
+                                    conn = get_db_connection()
+                                    conn.table("asignaciones").update(
+                                        {"preferencia_mensual": preferencia_final_str}
+                                    ).eq("asignacion_id", asignacion_id_sel).execute()
+                                    
+                                    st.success(f"¡Preferencia '{preferencia_final_str}' guardada para {cliente_sel}!")
+                                    
+                                    # Limpieza dinámica del estado para forzar renderizado limpio sin widgets "pegados"
+                                    if 'cliente_pref_sel' in st.session_state: 
+                                        del st.session_state.cliente_pref_sel
+                                    if 'generos_pref_sel' in st.session_state: 
+                                        del st.session_state.generos_pref_sel
+                                    
+                                    time.sleep(1.5)
+                                    st.rerun() # Refrescamos para que la tabla principal muestre el cambio
+                                except Exception as e:
+                                    st.error(f"No se pudo guardar la preferencia. Error: {e}")
+                    st.markdown("---")
+
                 # --- 2. APLICACIÓN DE FILTROS INTELIGENTES ---
                 df_filtrado = df_mes.copy()
                 
@@ -326,25 +328,23 @@ def mostrar_asignaciones():
                     df_filtrado = df_filtrado[df_filtrado['tipo_cobro_envio'] == filtro_tipo_cobro_envio]   
                 if filtro_metodo_envio:
                     df_filtrado = df_filtrado[df_filtrado['metodo_entrega'].isin(filtro_metodo_envio)]
-
-
+                
                 # --- 3. PREPARACIÓN DE COLUMNAS ---
                 columnas_visibles_ordenadas = [col for col in columnas_opcionales if col in columnas_visibles]
                 columnas_mostrar = ['asignacion_id'] + columnas_visibles_ordenadas
                 
                 columnas_seguras = [col for col in columnas_mostrar if col in df_filtrado.columns]
                 df_mostrar = df_filtrado[columnas_seguras].copy()
-
+                
                 # --- 4. MODO EDICIÓN EN BLOQUE ---
                 if 'edit_mode' not in st.session_state:
                     st.session_state.edit_mode = False
-
                 if st.button("✏️ Activar/Desactivar Edición en Bloque", use_container_width=True, type="primary", help="Selecciona varias filas y aplica un cambio a todas a la vez."):
                     st.session_state.edit_mode = not st.session_state.edit_mode
                     if not st.session_state.edit_mode and 'propuesta_cambio' in st.session_state:
                         del st.session_state.propuesta_cambio
                     st.rerun()
-
+                
                 if st.session_state.edit_mode:
                     with st.expander("🆘 Edición Masiva Ayuda 🆘", expanded=False):
                         st.info(
@@ -356,11 +356,11 @@ def mostrar_asignaciones():
                         )
                         
                     df_mostrar.insert(0, "Seleccionar", False)
-
+                
                 # --- 5. GUARDADO DE ESTADO ORIGINAL ---
                 if 'asignaciones_original' not in st.session_state or not st.session_state.asignaciones_original.equals(df_mostrar):
                     st.session_state.asignaciones_original = df_mostrar.copy()
-
+                
                 # --- 6. CONFIGURACIÓN Y DIBUJO DE LA TABLA ---
                 st.caption("Doble clic en las celdas para modificar manualmente. Los totales se recalcularán al guardar.")
                 
@@ -384,7 +384,6 @@ def mostrar_asignaciones():
                 
                 columnas_no_editables = ['asignacion_id', 'nombre', 'titulo_libro', 'monto_total']
                 disabled_cols = columnas_mostrar if mes_esta_cerrado else [c for c in columnas_no_editables if c in columnas_mostrar]
-
                 df_editado = st.data_editor(
                     df_mostrar, 
                     key='editor_asignaciones_unificado',
@@ -393,7 +392,7 @@ def mostrar_asignaciones():
                     hide_index=True, 
                     use_container_width=True
                 )
-
+                
                 # --- 7. PREVISUALIZACIÓN Y CONFIRMACIÓN ---
                 if 'propuesta_cambio' in st.session_state:
                     propuesta = st.session_state.propuesta_cambio
@@ -418,7 +417,6 @@ def mostrar_asignaciones():
                         with st.form("form_confirmacion_final"):
                             confirmacion_texto = st.text_input("Si estás seguro de no arruinarlo, escribe **CONFIRMAR CAMBIOS** en mayúsculas:")
                             submit_final = st.form_submit_button("✅ Confirmar y Ejecutar", type="primary", use_container_width=True)
-
                             if submit_final and confirmacion_texto == "CONFIRMAR CAMBIOS":
                                 with st.spinner("Aplicando cambios y registrando en el historial..."):
                                     exito, error_msg = actualizar_asignaciones_masivo(propuesta['ids_afectados'], propuesta['columna'], propuesta['valor'])
@@ -447,14 +445,13 @@ def mostrar_asignaciones():
                         if st.button("❌ Arrepentirse y Cancelar", use_container_width=True):
                             del st.session_state.propuesta_cambio
                             st.rerun()
-
+                
                 # --- 8. HERRAMIENTAS DE EDICIÓN MASIVA ---
                 else:
                     if st.session_state.edit_mode:
                         st.markdown("---")
                         col_limite, col_contador = st.columns([1, 2])
                         limite_filas = col_limite.selectbox("🛑 Límite de filas a editar a la vez:", options=[5, 10, 15, 20, 25, 30], index=0)
-
                         filas_seleccionadas = df_editado[df_editado["Seleccionar"] == True]
                         cantidad_sel = len(filas_seleccionadas)
                         excede_limite = len(filas_seleccionadas) > limite_filas
@@ -468,13 +465,13 @@ def mostrar_asignaciones():
                                 st.error(f"⚠️ Has marcado **{cantidad_sel}** filas. ¡Superaste el límite permitido de {limite_filas}!")
                             else:
                                 st.success(f"✅ Llevas **{cantidad_sel}** filas seleccionadas listas para modificar.")
+                        
                         st.markdown("##### ⚙️ Aplicar Cambios en Lote")
                         st.warning("⚠️ **ACCIÓN DELICADA:** Revisa bien las filas seleccionadas antes de proceder.")
                         
                         def forzar_rerun():
                             pass 
-
-                        col1, col2 = st.columns(2)
+                        
                         col1, col2 = st.columns(2)
                         with col1:
                             columnas_modificables = ["estado_envio", "pagado", "envio_pagado", "tipo_cobro_envio", "valor_envio", "comentario"]
@@ -493,7 +490,7 @@ def mostrar_asignaciones():
                                 nuevo_valor = st.number_input("2. Nuevo valor ($):", min_value=0.0, step=1000.0, format="%.0f")
                             else:
                                 nuevo_valor = st.text_input("2. Nuevo valor:", value="")
-
+                                
                         if st.button("🔍 Previsualizar Cambios", disabled=(filas_seleccionadas.empty or excede_limite), type="primary"):
                             nombres_lista = filas_seleccionadas['nombre'].tolist() if 'nombre' in filas_seleccionadas.columns else [f"ID {x}" for x in filas_seleccionadas['asignacion_id'].tolist()]
                             valores_antiguos = filas_seleccionadas[columna_a_cambiar].tolist()
@@ -506,7 +503,7 @@ def mostrar_asignaciones():
                                 "valores_antiguos": valores_antiguos
                             }
                             st.rerun()
-
+                    
                     # --- 9. GUARDADO MANUAL ---
                     else:
                         if not st.session_state.asignaciones_original.equals(df_editado) and not mes_esta_cerrado:
@@ -527,7 +524,7 @@ def mostrar_asignaciones():
                                         del st.session_state.asignaciones_original
                                         time.sleep(1)
                                         st.rerun()
-
+                                        
     # ==========================================================
     # 2. ASIGNAR SOLO LIBRO PRINCIPAL
     # ==========================================================
@@ -538,9 +535,9 @@ def mostrar_asignaciones():
             with st.expander("⚙️ Gestionar Aptitud de Libros para Cajitas (Exclusiones)", expanded=False):
                 st.info(
                     "💡 **GUÍA RÁPIDA: ¿Cómo funciona esta sección?**\n\n"
-                    "1. **¿Qué significa Apto?** Los libros con el check (✅) entrarán en la asignación de cajitas. Los desmarcados (⬜) serán excluidos.\n"
-                    "2. **El botón mágico (🪄):** Si tienes muchos libros 'TAPA DURA', presiónalo y el sistema los excluirá automáticamente por ti con un solo clic.\n"
-                    "3. **Edición manual:** Si hay un libro específico (ej. uno muy pesado o caro) que quieres excluir, simplemente desmarca su casilla en la tabla de abajo.\n"
+                    "1. **¿Qué significa Apto?** Los libros con el check (✅) entrarán en la asignación de cajitas. Los desmarcados (⬜) serán excluidos.\\n"
+                    "2. **El botón mágico (🪄):** Si tienes muchos libros 'TAPA DURA', presiónalo y el sistema los excluirá automáticamente por ti con un solo clic.\\n"
+                    "3. **Edición manual:** Si hay un libro específico (ej. uno muy pesado o caro) que quieres excluir, simplemente desmarca su casilla en la tabla de abajo.\\n"
                     "4. **Guardar:** Una vez que edites la tabla, aparecerá el botón azul `💾 Guardar Cambios de Aptitud`. Presiónalo para confirmar."
                 )
                 st.write("")
@@ -559,7 +556,6 @@ def mostrar_asignaciones():
                         cargar_catalogo_completo_libros.clear()
                         time.sleep(1.5)
                         st.rerun()
-
                 df_aptitud = cargar_libros_aptitud()
                 
                 if not df_aptitud.empty:
@@ -604,7 +600,6 @@ def mostrar_asignaciones():
                                 
                                 if not cambios.empty:
                                     st.success(f"Se actualizaron {len(cambios)} libros.")
-
                                     total_libros_stock_final = len(df_editado_apt)
                                     aptos_final = df_editado_apt['apto_cajita'].sum()
                                     no_aptos_final = total_libros_stock_final - aptos_final
@@ -636,7 +631,6 @@ def mostrar_asignaciones():
                     st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
                     
                     df_filtrado_final = df_pendientes.copy()
-                    
                     
                     descartar_antiguos = st.checkbox("🛡️ Solo incluir clientas que hayan actualizado su librero en los últimos 7 días")
                     if descartar_antiguos and not df_filtrado_final.empty:
@@ -714,7 +708,7 @@ def mostrar_asignaciones():
                             del st.session_state.propuesta_azar
                             del st.session_state.sin_asignar_azar
                             st.rerun()
-
+                            
                 # --- ASIGNACIÓN INDIVIDUAL / MANUAL ---
                 with st.container(border=True):
                     st.markdown("### 👤 Asignación Manual Individual")
@@ -852,8 +846,9 @@ def mostrar_asignaciones():
                                                             st.rerun()
                                                         else:
                                                             st.error(f"Error al asignar: {err}")
-        # ==========================================================
-    # 📜 Historial suscripciones (MÉTRICAS REACTIVAS CON COSTO Y UTILIDAD)
+
+    # ==========================================================
+    # 3. HISTORIAL SUSCRIPCIONES (MÉTRICAS REACTIVAS CON COSTO Y UTILIDAD)
     # ==========================================================
     elif opcion_menu == "📜 Historial suscripciones":
         st.markdown("### 📜 Historial de Suscripciones y Envíos")
@@ -899,7 +894,6 @@ def mostrar_asignaciones():
                 opciones_clientes_h = sorted(df_hist_asig['nombre'].dropna().unique().tolist())
                 sel_clientes_h = col_h4.multiselect("Buscar Cliente(s):", options=opciones_clientes_h, placeholder="", key="hist_filter_clients")
 
-
             df_filtrado_h = df_hist_asig.copy()
             if sel_anio_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['ano'] == int(sel_anio_h)]
             if sel_mes_h != "Ver Todos": df_filtrado_h = df_filtrado_h[df_filtrado_h['mes_nombre'] == sel_mes_h]
@@ -927,7 +921,6 @@ def mostrar_asignaciones():
             df_pagadas_h['utilidad_real'] = df_pagadas_h['valor_suscripcion'] - df_pagadas_h['costo_caja']
             utilidad_total_h = df_pagadas_h['utilidad_real'].sum()
 
-
             st.markdown("#### 📊 Balance Financiero del Período Filtrado")
             c_h1, c_h2, c_h3, c_h4 = st.columns(4)
             c_h1.metric("💰 Recaudación Bruta", f"${monto_total_recaudado_h:,.0f}")
@@ -939,6 +932,7 @@ def mostrar_asignaciones():
                 c_h3.metric("📉 Pérdida Estimada", f"${utilidad_total_h:,.0f}")
             c_h4.metric("💳 Cajas Pagadas", f"{cajas_pagadas_h} / {total_cajas_h}")
             st.markdown("---")
+
             # --- TABLA DE DATOS DEL HISTORIAL GENERAL CON PAGINACIÓN ---
             limite_actual = st.session_state.hist_limit_view
             total_filas_filtradas = len(df_filtrado_h)
@@ -968,8 +962,6 @@ def mostrar_asignaciones():
             else:
                 # Si aplicó filtros y se muestran menos de las filas límite, restablecemos el paginador al valor por defecto
                 st.session_state.hist_limit_view = 100
-
-
 
     # ==========================================================
     # 3. GESTIONAR ENVÍO Y AJUSTE MANUAL
@@ -1040,7 +1032,6 @@ def mostrar_asignaciones():
                             df_mes_con_status = pd.merge(df_mes, df_status, on='cliente_id', how='left')
                             # Filtramos a las que ya NO son "ACTIVA"
                             df_inactivos_mes = df_mes_con_status[df_mes_con_status['status'] != 'ACTIVA']
-
                     clientes_en_mes = df_mes['cliente_id'].nunique()
                     # Clientes activos que aún no tienen caja
                     ids_activos = df_suscritos_activos['cliente_id'].tolist()
@@ -1065,7 +1056,6 @@ def mostrar_asignaciones():
                     df_mostrar_inact['Alerta Libro'] = df_mostrar_inact['titulo_libro'].apply(
                         lambda x: "⚠️ DEVOLVERÁ STOCK" if x != "⏳ PENDIENTE DE ASIGNAR" else "Caja vacía (Seguro borrar)"
                     )
-
                     st.dataframe(
                         df_mostrar_inact[['nombre', 'status', 'titulo_libro', 'Alerta Libro']],
                         column_config={
@@ -1102,11 +1092,11 @@ def mostrar_asignaciones():
                             time.sleep(2)
                             st.rerun()
                     st.markdown("---")
-
+                
                 # --- SECCIÓN ORIGINAL DE CREACIÓN ---
                 st.info(
                     "💡 **¿Cómo usar esta herramienta?**\n\n"
-                    "1. **A principio de mes:** Crea las cajas en blanco para todas tus clientas en estado 'ACTIVA'.\n"
+                    "1. **A principio de mes:** Crea las cajas en blanco para todas tus clientas en estado 'ACTIVA'.\n\n"
                     "2. **A mitad de mes:** Si se inscriben nuevas clientas, presiona este botón nuevamente para agregarlas.\n\n"
                     "🛡️ **Tranquilidad:** El sistema es inteligente y **solo agregará a las clientas faltantes** con un costo fijo de caja base de $10.000."
                 )
@@ -1253,7 +1243,7 @@ def mostrar_asignaciones():
                                     
                                 time.sleep(2)
                                 st.rerun()
-
+                                
     elif opcion_menu == "🔒 Cierre de Mes":
         if mes_esta_cerrado:
             st.success(f"El mes {mes_sel} {ano_sel} está **CERRADO**.")
