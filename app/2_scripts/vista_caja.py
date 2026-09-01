@@ -783,7 +783,7 @@ def mostrar_caja():
             st.session_state.historial_original = df_mostrar.copy()
             
             config_cols_hist = {
-                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f", disabled=True), 
+                "monto_final": st.column_config.NumberColumn("Monto Final", format="$%.0f", disabled=False), 
                 "valor_envio": st.column_config.NumberColumn("Valor Envío 🚚", format="$%.0f", step=500.0), 
                 "tipo_cobro_envio": st.column_config.SelectboxColumn("Cobro Envío 💳", options=["retiro", "envio por pagar", "envio pagado"], required=True),
                 "abono": st.column_config.NumberColumn("Abono", format="$%.0f"),

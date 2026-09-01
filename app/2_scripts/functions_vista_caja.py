@@ -974,7 +974,7 @@ def generar_comprobante(
     x_margin = 130
     x_right = 740
     
-    draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
+    draw.text((x_margin, 60), "Alba Librería", fill="#4F4449", font=font_title)
     
     id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
     draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
