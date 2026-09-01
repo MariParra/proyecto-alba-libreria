@@ -4,8 +4,10 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import pandas as pd
 from supabase import create_client
+
 
 # --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS ---
 def cargar_secretos_streamlit():
@@ -85,8 +87,11 @@ def generar_reporte_empaque():
         print("❌ Error: Faltan credenciales de Correo.")
         return
 
+    # Zona horaria de Chile
+    ZONA_CHILE = ZoneInfo("America/Santiago")
+    
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    hoy = datetime.now()
+    hoy = datetime.now(ZONA_CHILE)
     hoy_str = hoy.strftime("%Y-%m-%d")
     dia_semana = hoy.weekday() # Monday is 0, Tuesday is 1, Wednesday is 2
     hora_actual = hoy.hour
