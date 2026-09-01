@@ -127,6 +127,7 @@ def check_exclusivity(client_id, exclusive_ids_raw):
         pass
         
     return False
+
 def evaluar_restricciones_libro(libro_item, cupon):
     """
     Evalúa si un libro del carrito cumple con las restricciones del cupón.
@@ -575,7 +576,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     
                     lista_extras_previos = []
                     if extras_previos_raw:
-                        items = extras_previos_raw.replace('\\n', '|').split('|')
+                        items = extras_previos_raw.replace('\n', '|').split('|')
                         for item in items:
                             item_limpio = item.strip()
                             if '.' in item_limpio:
@@ -585,7 +586,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                                 
                     nuevos_extras_list = [f"{item['cantidad']} x {item['titulo']}".upper() for item in carrito]
                     lista_completa = lista_extras_previos + nuevos_extras_list
-                    extras_final_enumerado = "\\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
+                    extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
                     valor_final = valor_previo + subtotal_libros
                     
                     conn.table("asignaciones").update({
@@ -736,7 +737,7 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
             
             lista_extras_previos = []
             if extras_previos_raw:
-                items = extras_previos_raw.replace('\\n', '|').split('|')
+                items = extras_previos_raw.replace('\n', '|').split('|')
                 for item in items:
                     item_limpio = item.strip()
                     if '.' in item_limpio:
@@ -745,7 +746,7 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
                         lista_extras_previos.append(item_limpio.upper())
             
             lista_completa = lista_extras_previos + nuevos_extras_list
-            extras_final_enumerado = "\\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
+            extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
             valor_final = valor_previo + subtotal_libros
             
             conn.table("asignaciones").update({
@@ -851,20 +852,34 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
     nombre_limpio = "Lato"  
     ruta_local = os.path.join("assets", f"{nombre_limpio}-{estilo}.ttf")
     
+    # 1. Intentar cargar la fuente local si existe y es válida
+    if os.path.exists(ruta_local):
+        try:
+            return ImageFont.truetype(ruta_local, tamanio)
+        except Exception:
+            try:
+                os.remove(ruta_local)  # Eliminar archivo corrupto/incompleto para poder reintentar
+            except:
+                pass
+                
+    # 2. Si no existe o fue eliminada por estar corrupta, intentar descargarla de forma segura
     if not os.path.exists(ruta_local):
         url = f"https://raw.githubusercontent.com/google/fonts/main/ofl/lato/{nombre_limpio}-{estilo}.ttf"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5) as response:
-                with open(ruta_local, "wb") as f:
-                    f.write(response.read())
+                content = response.read()
+                # Asegurar que el contenido no sea un HTML de error y tenga un tamaño de fuente real (>10KB)
+                if b"HTML" not in content[:100] and len(content) > 10000:
+                    if not os.path.exists("assets"):
+                        os.makedirs("assets")
+                    with open(ruta_local, "wb") as f:
+                        f.write(content)
+                    return ImageFont.truetype(ruta_local, tamanio)
         except Exception:
             pass
-    if os.path.exists(ruta_local):
-        try:
-            return ImageFont.truetype(ruta_local, tamanio)
-        except Exception:
-            pass
+
+    # 3. Fallback 1: Intentar con fuentes de matplotlib
     try:
         import matplotlib
         font_name_mpl = "DejaVuSans.ttf"
@@ -880,6 +895,16 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
             return ImageFont.truetype(mpl_ttf, tamanio)
     except Exception:
         pass
+
+    # 4. Fallback 2: Intentar usar cualquier fuente del sistema (corregido)
+    sys_font = find_any_system_ttf()
+    if sys_font:
+        try:
+            return ImageFont.truetype(sys_font, tamanio)
+        except Exception:
+            pass
+
+    # 5. Fallback 3: Candidatas fijas adicionales en disco
     candidatas = [
         os.path.join("assets", "Lato-Regular.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf" if italic else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -892,18 +917,19 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
         except Exception:
             continue
             
+    # 6. Fallback final de emergencia (Pillow)
     try:
         return ImageFont.load_default(size=tamanio)
     except:
         return ImageFont.load_default()
 
 def extraer_pago_y_comentario(comentario_raw):
-    comentario_raw = str(comentario_raw).strip().replace("\\\\n", " ").replace("\\\\r", " ").replace("\\n", " ").replace("\\r", " ")
+    comentario_raw = str(comentario_raw).strip().replace("\\n", " ").replace("\\r", " ")
     
-    match = re.search(r"Pago:\s*([^.]+)\.", comentario_raw, re.IGNORECASE)
+    match = re.search(r"Pago:\\s*([^.]+)\\.", comentario_raw, re.IGNORECASE)
     if match:
         pago = match.group(1).strip()
-        resto = re.sub(r"Pago:\s*[^.]+\.\s*", "", comentario_raw, flags=re.IGNORECASE).strip()
+        resto = re.sub(r"Pago:\\s*[^.]+\\.\\s*", "", comentario_raw, flags=re.IGNORECASE).strip()
     else:
         pago = "N/A"
         for kw in ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito", "Débito", "Crédito"]:
@@ -913,10 +939,10 @@ def extraer_pago_y_comentario(comentario_raw):
         resto = comentario_raw
         
     resto_limpio = resto
-    resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\.?\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Fusionada:\s*Pago:\s*[^.]+\.\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Fusionada:\s*\|?\s*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Comentario:\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\\.?\\s*\\|\\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\\s*Pago:\\s*[^.]+\\.\\s*\\|\\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\\s*\\|?\\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Comentario:\\s*", "", resto_limpio, flags=re.IGNORECASE)
     resto_limpio = resto_limpio.strip(" |")
     
     return pago, resto_limpio
@@ -933,7 +959,6 @@ def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, draw,
     except Exception:
         w_val = len(val_str) * 9
     draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
-
 
 def generar_comprobante(
     carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
