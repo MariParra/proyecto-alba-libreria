@@ -2,12 +2,12 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import format_datetime
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import pandas as pd
 from supabase import create_client
-
 
 # --- FUNCIÓN DE CARGA INTELIGENTE DE SECRETOS ---
 def cargar_secretos_streamlit():
@@ -33,11 +33,14 @@ def cargar_secretos_streamlit():
                         if section:
                             if "." in section:
                                 s1, s2 = section.split(".", 1)
-                                if s1 not in secrets: secrets[s1] = {}
-                                if s2 not in secrets[s1]: secrets[s1][s2] = {}
+                                if s1 not in secrets:
+                                    secrets[s1] = {}
+                                if s2 not in secrets[s1]:
+                                    secrets[s1][s2] = {}
                                 secrets[s1][s2][k] = v
                             else:
-                                if section not in secrets: secrets[section] = {}
+                                if section not in secrets:
+                                    secrets[section] = {}
                                 secrets[section][k] = v
                         else:
                             secrets[k] = v
@@ -71,7 +74,6 @@ st_secrets = cargar_secretos_streamlit()
 
 SUPABASE_URL = st_secrets.get("connections", {}).get("supabase", {}).get("url") or os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = st_secrets.get("connections", {}).get("supabase", {}).get("key") or os.environ.get("SUPABASE_KEY")
-
 EMAIL_EMISOR = st_secrets.get("email", {}).get("remitente") or os.environ.get("EMAIL_EMISOR")
 EMAIL_RECEPTOR = st_secrets.get("email", {}).get("dest_admin") or os.environ.get("EMAIL_RECEPTOR")
 EMAIL_PASSWORD = st_secrets.get("email", {}).get("password") or os.environ.get("EMAIL_PASSWORD")
@@ -92,8 +94,9 @@ def generar_reporte_empaque():
     
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     hoy = datetime.now(ZONA_CHILE)
+    hoy_date = hoy.date()  # Usar solo la fecha para comparaciones
     hoy_str = hoy.strftime("%Y-%m-%d")
-    dia_semana = hoy.weekday() # Monday is 0, Tuesday is 1, Wednesday is 2
+    dia_semana = hoy.weekday()  # Lunes = 0, Martes = 1, Miércoles = 2, etc.
     hora_actual = hoy.hour
 
     # ================= VALIDACIÓN DE DÍAS LABORALES =================
@@ -123,13 +126,18 @@ def generar_reporte_empaque():
     
     if not df_ventas.empty:
         df_ventas['fecha_dt'] = unificar_formatos_fecha(df_ventas['fecha_venta'])
-        df_ventas['dias'] = df_ventas['fecha_dt'].apply(lambda x: (hoy - x).days if pd.notna(x) else 0)
+        # Cálculo de días directamente con fechas (date) para evitar conflictos tz-aware vs tz-naive
+        df_ventas['dias'] = df_ventas['fecha_dt'].apply(
+            lambda x: (hoy_date - x.date()).days if pd.notna(x) else 0
+        )
         df_criticas = df_ventas[
             (df_ventas['dias'] > 5) & 
             (~df_ventas['estado'].isin(['PAQUETE LISTO', 'FINALIZADO']))
         ].copy()
         if not df_criticas.empty:
-            df_criticas['cliente_nombre'] = df_criticas['cliente'].apply(lambda x: x.get('nombre') if isinstance(x, dict) else 'Cliente')
+            df_criticas['cliente_nombre'] = df_criticas['cliente'].apply(
+                lambda x: x.get('nombre') if isinstance(x, dict) else 'Cliente'
+            )
 
     # ================= PARTE 2: CONSULTA DE NOTAS DE LA PIZARRA (PAGINADO) =================
     all_notes = []
@@ -155,9 +163,9 @@ def generar_reporte_empaque():
     if not df_notes.empty:
         df_notes['fecha_limite_dt'] = pd.to_datetime(df_notes['fecha_limite']).dt.date
         # 1. Separar vencidas
-        df_notas_vencidas = df_notes[df_notes['fecha_limite_dt'] < hoy.date()].copy()
+        df_notas_vencidas = df_notes[df_notes['fecha_limite_dt'] < hoy_date].copy()
         # 2. Separar pendientes en plazo (hoy o fecha futura)
-        df_notas_pendientes = df_notes[df_notes['fecha_limite_dt'] >= hoy.date()].copy()
+        df_notas_pendientes = df_notes[df_notes['fecha_limite_dt'] >= hoy_date].copy()
         # Ordenar pendientes por fecha para ver las que expiran más pronto arriba
         if not df_notas_pendientes.empty:
             df_notas_pendientes = df_notas_pendientes.sort_values(by='fecha_limite_dt')
@@ -167,7 +175,7 @@ def generar_reporte_empaque():
     if not df_notes.empty:
         facturas_vencidas_activas = df_notes[
             (df_notes['titulo'] == "HACER FACTURAS DE LA SEMANA") & 
-            (df_notes['fecha_limite_dt'] < hoy.date())
+            (df_notes['fecha_limite_dt'] < hoy_date)
         ].copy()
 
     # ================= PARTE 3: MODALIDAD DUOLINGO: ESCALA DE DRAMA INTERNA =================
@@ -193,7 +201,7 @@ def generar_reporte_empaque():
         else:
             msg_cuerpo = "¡Increíble Ivonne! No tienes paquetes demorados, post-its vencidos ni tareas pendientes en la pizarra. ¡Todo está 100% al día! El hámster está en un estado de iluminación absoluta. 🐹✨ ¡Disfruta tu día libre de pendientes!"
 
-    elif dia_semana == 1: # Martes
+    elif dia_semana == 1:  # Martes
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20peace.jpg"
         header_color = "#0288d1"
         border_style = "2px solid #0288d1"
@@ -201,16 +209,16 @@ def generar_reporte_empaque():
         msg_titulo = "🕊️ ¡MAÑANA ES DÍA DE FACTURAS! (PAZ ANTES DE LA TORMENTA)"
         msg_cuerpo = "Ivonne, recuerda que hoy es Martes... ¡Mañana se viene el día de facturas! Mantén la paz mental hoy y prepárate para mañana. 🐹✌️"
 
-    elif dia_semana == 2: # Miércoles
+    elif dia_semana == 2:  # Miércoles
         hamster_img_url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/hamster%20mirando.jpg"
         header_color = "#ef6c00"
         border_style = "2px solid #ef6c00"
         card_bg = "#fff3e0"
         
-        if hora_actual <= 14: # Mediodía
+        if hora_actual <= 14:  # Mediodía
             msg_titulo = "👀 ¡MIÉRCOLES DE FACTURAS (MEDIODÍA)! 👀"
             msg_cuerpo = "Ivonne, ya es mediodía de miércoles. ¿Cómo van esas facturas semanales? El hámster te está observando fijamente... 🐹🔍"
-        else: # Tarde (17:00 en adelante)
+        else:  # Tarde (17:00 en adelante)
             msg_titulo = "🚨 ¡MIÉRCOLES DE FACTURAS (ÚLTIMO AVISO DE LA TARDE)! 🚨"
             msg_cuerpo = "¡Ivonne! Son las 5 de la tarde de miércoles. Termina de clavar las facturas de la semana en la pizarra antes de que acabe el día laboral. 🐹📦"
 
@@ -295,7 +303,7 @@ def generar_reporte_empaque():
                     <tbody>
         """
         for _, row in df_notas_pendientes.iterrows():
-            vence_hoy = row['fecha_limite_dt'] == hoy.date()
+            vence_hoy = row['fecha_limite_dt'] == hoy_date
             color_fecha = "#2e7d32" if vence_hoy else "#333"
             peso_fecha = "bold" if vence_hoy else "normal"
             label_hoy = " (¡Vence Hoy!)" if vence_hoy else ""
@@ -358,6 +366,9 @@ def generar_reporte_empaque():
     msg = MIMEMultipart()
     msg['From'] = EMAIL_EMISOR
     msg['To'] = EMAIL_RECEPTOR
+    
+    # Encabezado con fecha y hora exacta en huso horario de Chile (RFC 2822)
+    msg['Date'] = format_datetime(hoy)
     
     retrasos = len(df_criticas) + len(df_notas_vencidas)
     pendientes_en_plazo = len(df_notas_pendientes)
