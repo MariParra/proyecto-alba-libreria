@@ -199,7 +199,7 @@ def cargar_cupones_caja():
 
 @st.cache_data(ttl=300)
 def cargar_listas_desplegables_caja():
-    """Obtiene Autores y Editoriales únicos para los desplegables de caja."""
+    """Obtiene Autores e Editoriales únicos para los desplegables de caja."""
     try:
         df_libros = cargar_libros_caja()
         if df_libros.empty:
@@ -922,12 +922,12 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
         return ImageFont.load_default()
 
 def extraer_pago_y_comentario(comentario_raw):
-    comentario_raw = str(comentario_raw).strip().replace("\\\\\\\\n", " ").replace("\\\\\\\\r", " ").replace("\\\\n", " ").replace("\\\\r", " ")
+    comentario_raw = str(comentario_raw).strip().replace("\n", " ").replace("\r", " ")
     
-    match = re.search(r"Pago:\\s\*([^.]+)\\.", comentario_raw, re.IGNORECASE)
+    match = re.search(r"Pago:\s*([^.]+)\.", comentario_raw, re.IGNORECASE)
     if match:
         pago = match.group(1).strip()
-        resto = re.sub(r"Pago:\\s\*[^.]+\\.\\s\*", "", comentario_raw, flags=re.IGNORECASE).strip()
+        resto = re.sub(r"Pago:\s*[^.]+\.\s*", "", comentario_raw, flags=re.IGNORECASE).strip()
     else:
         pago = "N/A"
         for kw in ["Transferencia", "Efectivo", "Tarjeta Débito", "Tarjeta Crédito", "Débito", "Crédito"]:
@@ -937,10 +937,10 @@ def extraer_pago_y_comentario(comentario_raw):
         resto = comentario_raw
         
     resto_limpio = resto
-    resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\\.?\\s\*\\|\\s\*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Fusionada:\\s\*Pago:\\s\*[^.]+\\.\\s\*\\|\\s\*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Fusionada:\\s\*\\|?\\s\*", "", resto_limpio, flags=re.IGNORECASE)
-    resto_limpio = re.sub(r"Comentario:\\s\*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"^(Transferencia|Efectivo|Tarjeta Débito|Tarjeta Crédito|Débito|Crédito)\.?\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\s*Pago:\s*[^.]+\.\s*\|\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Fusionada:\s*\|?\s*", "", resto_limpio, flags=re.IGNORECASE)
+    resto_limpio = re.sub(r"Comentario:\s*", "", resto_limpio, flags=re.IGNORECASE)
     resto_limpio = resto_limpio.strip(" |")
     
     return pago, resto_limpio
@@ -1056,7 +1056,7 @@ def generar_comprobante(
     
     y_table = 440
     draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_body_bold)
+    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_section)
     draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
     draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
     
