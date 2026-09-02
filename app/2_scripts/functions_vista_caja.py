@@ -44,9 +44,9 @@ def cargar_libros_caja():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("libros")
-                   .select("libro_id, titulo, autor, precio, costo, stock, editorial, encuadernacion, precio_original")
-                   .order("libro_id")
-                   .range(start, end).execute())
+                .select("libro_id, titulo, autor, precio, costo, stock, editorial, encuadernacion, precio_original")
+                .order("libro_id")
+                .range(start, end).execute())
             if res.data:
                 all_data.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -76,9 +76,9 @@ def cargar_clientes_caja():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("clientes")
-                   .select("cliente_id, nombre, email, telefono, status, rut, direccion")
-                   .order("cliente_id")
-                   .range(start, end).execute())
+                .select("cliente_id, nombre, email, telefono, status, rut, direccion")
+                .order("cliente_id")
+                .range(start, end).execute())
             if res.data:
                 all_data.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -184,9 +184,9 @@ def cargar_cupones_caja():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("cupones")
-                   .select("*")
-                   .order("cupon_id")
-                   .range(start, end).execute())
+                .select("*")
+                .order("cupon_id")
+                .range(start, end).execute())
             if res.data:
                 all_data.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -255,9 +255,9 @@ def cargar_historial_completo():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res_ventas = (conn.table("registro_ventas")
-                          .select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono, direccion)")
-                          .order("venta_id", desc=True)
-                          .range(start, end).execute())
+                        .select("*, cliente:clientes(cliente_id, nombre, rut, email, telefono, direccion)")
+                        .order("venta_id", desc=True)
+                        .range(start, end).execute())
                 
             if res_ventas.data:
                 all_data.extend(res_ventas.data)
@@ -296,7 +296,6 @@ def cargar_historial_completo():
         # Formateamos solo la columna visual para la visualización del usuario
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
         df_ventas['nombre_cliente'] = df_ventas['cliente_nombre']
-
         
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
@@ -581,7 +580,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                     
                     lista_extras_previos = []
                     if extras_previos_raw:
-                        items = extras_previos_raw.replace('\\n', '|').split('|')
+                        items = extras_previos_raw.replace('\n', '|').split('|')
                         for item in items:
                             item_limpio = item.strip()
                             if '.' in item_limpio:
@@ -591,7 +590,7 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
                                 
                     nuevos_extras_list = [f"{item['cantidad']} x {item['titulo']}".upper() for item in carrito]
                     lista_completa = lista_extras_previos + nuevos_extras_list
-                    extras_final_enumerado = "\\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
+                    extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
                     valor_final = valor_previo + subtotal_libros
                     
                     conn.table("asignaciones").update({
@@ -742,7 +741,7 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
             
             lista_extras_previos = []
             if extras_previos_raw:
-                items = extras_previos_raw.replace('\\n', '|').split('|')
+                items = extras_previos_raw.replace('\n', '|').split('|')
                 for item in items:
                     item_limpio = item.strip()
                     if '.' in item_limpio:
@@ -751,7 +750,7 @@ def cambiar_logistica_venta_existente(venta_id, nuevo_metodo, valor_envio, asign
                         lista_extras_previos.append(item_limpio.upper())
             
             lista_completa = lista_extras_previos + nuevos_extras_list
-            extras_final_enumerado = "\\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
+            extras_final_enumerado = "\n".join([f"{i+1}. {libro}" for i, libro in enumerate(lista_completa)])
             valor_final = valor_previo + subtotal_libros
             
             conn.table("asignaciones").update({
@@ -883,7 +882,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
             return ImageFont.truetype(ruta_local, tamanio)
         except Exception:
             pass
-
     try:
         import matplotlib
         font_name_mpl = "DejaVuSans.ttf"
@@ -900,7 +898,7 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
     except Exception:
         pass
 
-        candidatas = [
+    candidatas = [
         os.path.join("assets", "Lato-Regular.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf" if italic else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
@@ -920,7 +918,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
             return ImageFont.truetype(ruta_sistema, tamanio)
     except Exception:
         pass
-
     try:
         return ImageFont.load_default(size=tamanio)
     except:
@@ -928,7 +925,6 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
 
 def extraer_pago_y_comentario(comentario_raw):
     comentario_raw = str(comentario_raw).strip().replace("\n", " ").replace("\r", " ")
-    
     match = re.search(r"Pago:\s*([^.]+)\.", comentario_raw, re.IGNORECASE)
     if match:
         pago = match.group(1).strip()
@@ -963,6 +959,7 @@ def draw_total_row(label, val_float, y_pos, font_lbl, font_val, color_val, draw,
         w_val = len(val_str) * 9
     draw.text((box_x2 - 20 - w_val, y_pos), val_str, fill=color_val, font=font_val)
 
+
 def generar_comprobante(
     carrito, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_direccion,
     fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
@@ -978,17 +975,14 @@ def generar_comprobante(
         df_libros = cargar_libros_caja()
         items_procesados = []
         suma_precios_catalogo = 0.0
-        
         for item in carrito:
             qty = int(item.get('cantidad') or item.get('qty') or 1)
             titulo = item.get('titulo', 'N/A')
             titulo_limpio = limpiar_texto_para_busqueda(titulo)
             precio_item = float(item.get('precio_cobrado') or item.get('precio') or item.get('precio_catalogo') or 0.0)
-            
             if precio_item == 0.0 and df_libros is not None and not df_libros.empty:
                 if 'titulo_limpio' not in df_libros.columns:
                     df_libros['titulo_limpio'] = df_libros['titulo'].apply(limpiar_texto_para_busqueda)
-                
                 match = df_libros[df_libros['titulo_limpio'] == titulo_limpio]
                 if not match.empty:
                     precio_item = float(match.iloc[0]['precio'])
@@ -1000,37 +994,64 @@ def generar_comprobante(
                         match_sub2 = df_libros[df_libros['titulo_limpio'].apply(lambda x: titulo_limpio in x if isinstance(x, str) else False)]
                         if not match_sub2.empty:
                             precio_item = float(match_sub2.iloc[0]['precio'])
-            
             items_procesados.append({
                 'item': item,
                 'qty': qty,
                 'precio_base': precio_item,
             })
             suma_precios_catalogo += precio_item * qty
-
         # Asignación de precio promedio para libros que no existan en el catálogo
         matched_prices = [ip['precio_base'] for ip in items_procesados if ip['precio_base'] > 0.0]
         average_matched = sum(matched_prices) / len(matched_prices) if matched_prices else 15000.0
-        
         any_unmatched = False
         for ip in items_procesados:
             if ip['precio_base'] == 0.0:
                 ip['precio_base'] = average_matched
                 any_unmatched = True
-                
         if any_unmatched:
             suma_precios_catalogo = sum([ip['precio_base'] * ip['qty'] for ip in items_procesados])
+        factor = float(subtotal) / suma_precios_catalogo if suma_precios_catalogo > 0 else 0.0
+        precios_base_ajustados = [ip['precio_base'] * factor for ip in items_procesados]
+        qtys = [ip['qty'] for ip in items_procesados]
+        # Algoritmo de Redondeo Comercial Inteligente (CLP)
+        # Redondea a base 100 y ajusta remanentes en pasos de 10 para cuadrar el subtotal exacto
+        round_base = 100
+        adjust_step = 10
+        rounded_prices = [int(round(p / round_base) * round_base) for p in precios_base_ajustados]
+        subtotal_actual = sum([rounded_prices[i] * qtys[i] for i in range(len(items_procesados))])
+        diff = int(subtotal) - subtotal_actual
+        
+        while diff != 0:
+            sign = 1 if diff > 0 else -1
+            best_idx = -1
+            best_score = float('inf')
             
-        factor = 1.0
-        if suma_precios_catalogo > 0:
-            factor = float(subtotal) / suma_precios_catalogo
-        else:
-            factor = 0.0
-            
+            for i in range(len(items_procesados)):
+                change = sign * adjust_step * qtys[i]
+                if abs(diff - change) < abs(diff):
+                    score = abs(diff - change)
+                    if score < best_score:
+                        best_score = score
+                        best_idx = i
+                        
+            if best_idx == -1:
+                for i in range(len(items_procesados)):
+                    change = sign * adjust_step * qtys[i]
+                    score = abs(diff - change)
+                    if score < best_score:
+                        best_score = score
+                        best_idx = i
+                        
+            if best_idx != -1:
+                rounded_prices[best_idx] += sign * adjust_step
+                subtotal_actual = sum([rounded_prices[j] * qtys[j] for j in range(len(items_procesados))])
+                diff = int(subtotal) - subtotal_actual
+            else:
+                break
+                
         carrito_reconstruido = []
-        for ip in items_procesados:
-            precio_final = ip['precio_base'] * factor
-            precio_final = round(precio_final)
+        for idx, ip in enumerate(items_procesados):
+            precio_final = rounded_prices[idx]
             subtotal_final = precio_final * ip['qty']
             
             item_copy = ip['item'].copy()
@@ -1041,7 +1062,6 @@ def generar_comprobante(
         carrito = carrito_reconstruido
     except Exception as e_recon:
         pass
-
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
     img = None
     try:
@@ -1055,126 +1075,111 @@ def generar_comprobante(
             img = img.resize((800, 1200), resample_filter)
     except Exception:
         pass
-        
     if img is None:
         img = Image.new('RGB', (800, 1200), color='#FAF8FC')
-        
     width, height = img.size
     draw = ImageDraw.Draw(img)
-    
     font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
     font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
     font_body = obtener_fuente_comprobante("Lato", 15)
     font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
     font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
     font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
-    
     x_margin = 130
     x_right = 740
-    
     draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
-    
     id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
     draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
-    
     draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
     draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
-    
     pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
-    
     draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
-    
     draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
-    
     email_c = str(cliente_email or 'No registrado')
+
     if len(email_c) > 31:
         email_c = email_c[:28] + "..."
     draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
-    
     tel_c = str(cliente_telefono or 'No registrado')
+
     if len(tel_c) > 31:
         tel_c = tel_c[:28] + "..."
     draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
-    
     direccion_c = str(cliente_direccion or 'No especificado')
+
     if len(direccion_c) > 65:
         direccion_c = direccion_c[:62] + "..."
     draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
-    
+
     x_col2 = 510
     draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
-    
+
     envio_c = str(metodo_envio)
     if len(envio_c) > 30:
         envio_c = envio_c[:27] + "..."
     draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
-    
     draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
-    
+
     if comentario_limpio:
         nota_c = str(comentario_limpio).upper()
         if len(nota_c) > 20:
             nota_c = nota_c[:17] + "..."
         draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
         draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
-    
+
     draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
     draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
-    
+
     y_table = 440
     draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_section)
     draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
     draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
-    
     draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
-    
     y_item = y_table + 35
+    
     for item in carrito:
         qty = int(item.get('cantidad') or item.get('qty') or 1)
         qty_str = str(qty)
         draw.text((x_margin, y_item), qty_str, fill='#333333', font=font_body)
-        
         titulo = str(item.get('titulo', 'N/A')).upper()
+        
         if len(titulo) > 28:
             titulo = titulo[:25] + "..."
-            
+
         draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
-        
         # Robust retrieval of unit price and subtotal
         precio_val = float(item.get('precio_cobrado') or item.get('precio') or item.get('precio_catalogo') or 0.0)
         draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
-        
+
         subtotal_val = float(item.get('subtotal') or (precio_val * qty) or 0.0)
         draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
-        
         y_item += 35
+
         if y_item > 850:
             draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
             break
-            
+
     draw.line([x_margin, 880, x_right, 880], fill='#BA96A5', width=2)
-    
     box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
     draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
     draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
-    
+
     draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
     draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
     draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
     draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
     draw_total_row("Deuda Pendiente:", float(deuda), 1050, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
-    
     draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
-    
+
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=95)
     return buf.getvalue()
