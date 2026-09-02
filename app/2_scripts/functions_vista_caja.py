@@ -290,8 +290,13 @@ def cargar_historial_completo():
                 except: return libros_data
             else: return libros_data
                 
+        # --- CAMBIO DE INGENIERÍA DE DATOS: Preservamos el JSON original con precios ---
+        df_ventas['libros_vendidos_raw'] = df_ventas['libros_vendidos']
+        
+        # Formateamos solo la columna visual para la visualización del usuario
         df_ventas['libros_vendidos'] = df_ventas['libros_vendidos'].apply(formatear_libros)
         df_ventas['nombre_cliente'] = df_ventas['cliente_nombre']
+
         
         df_ventas['monto_final'] = pd.to_numeric(df_ventas['monto_final'], errors='coerce').fillna(0)
         df_ventas['abono'] = pd.to_numeric(df_ventas.get('abono', 0), errors='coerce').fillna(0)
@@ -895,7 +900,7 @@ def obtener_fuente_comprobante(nombre_fuente, tamanio, bold=False, italic=False)
     except Exception:
         pass
 
-    candidatas = [
+        candidatas = [
         os.path.join("assets", "Lato-Regular.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf" if italic else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
@@ -967,6 +972,76 @@ def generar_comprobante(
     Utiliza Lato para los textos de datos.
     Conserva la resolución física de 800x1200 para máxima nitidez sin requerir zoom en pantalla.
     """
+    # --- MOTOR DE RECONSTRUCCIÓN FINANCIERA INVERSA ---
+    # Reconstruye quirúrgicamente los precios unitarios si vienen vacíos o en 0.0 desde vistas históricas
+    try:
+        df_libros = cargar_libros_caja()
+        items_procesados = []
+        suma_precios_catalogo = 0.0
+        
+        for item in carrito:
+            qty = int(item.get('cantidad') or item.get('qty') or 1)
+            titulo = item.get('titulo', 'N/A')
+            titulo_limpio = limpiar_texto_para_busqueda(titulo)
+            precio_item = float(item.get('precio_cobrado') or item.get('precio') or item.get('precio_catalogo') or 0.0)
+            
+            if precio_item == 0.0 and df_libros is not None and not df_libros.empty:
+                if 'titulo_limpio' not in df_libros.columns:
+                    df_libros['titulo_limpio'] = df_libros['titulo'].apply(limpiar_texto_para_busqueda)
+                
+                match = df_libros[df_libros['titulo_limpio'] == titulo_limpio]
+                if not match.empty:
+                    precio_item = float(match.iloc[0]['precio'])
+                else:
+                    match_sub = df_libros[df_libros['titulo_limpio'].str.contains(titulo_limpio, na=False)]
+                    if not match_sub.empty:
+                        precio_item = float(match_sub.iloc[0]['precio'])
+                    else:
+                        match_sub2 = df_libros[df_libros['titulo_limpio'].apply(lambda x: titulo_limpio in x if isinstance(x, str) else False)]
+                        if not match_sub2.empty:
+                            precio_item = float(match_sub2.iloc[0]['precio'])
+            
+            items_procesados.append({
+                'item': item,
+                'qty': qty,
+                'precio_base': precio_item,
+            })
+            suma_precios_catalogo += precio_item * qty
+
+        # Asignación de precio promedio para libros que no existan en el catálogo
+        matched_prices = [ip['precio_base'] for ip in items_procesados if ip['precio_base'] > 0.0]
+        average_matched = sum(matched_prices) / len(matched_prices) if matched_prices else 15000.0
+        
+        any_unmatched = False
+        for ip in items_procesados:
+            if ip['precio_base'] == 0.0:
+                ip['precio_base'] = average_matched
+                any_unmatched = True
+                
+        if any_unmatched:
+            suma_precios_catalogo = sum([ip['precio_base'] * ip['qty'] for ip in items_procesados])
+            
+        factor = 1.0
+        if suma_precios_catalogo > 0:
+            factor = float(subtotal) / suma_precios_catalogo
+        else:
+            factor = 0.0
+            
+        carrito_reconstruido = []
+        for ip in items_procesados:
+            precio_final = ip['precio_base'] * factor
+            precio_final = round(precio_final)
+            subtotal_final = precio_final * ip['qty']
+            
+            item_copy = ip['item'].copy()
+            item_copy['precio_cobrado'] = precio_final
+            item_copy['subtotal'] = subtotal_final
+            carrito_reconstruido.append(item_copy)
+            
+        carrito = carrito_reconstruido
+    except Exception as e_recon:
+        pass
+
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
     img = None
     try:
