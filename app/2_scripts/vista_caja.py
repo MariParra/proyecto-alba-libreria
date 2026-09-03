@@ -242,6 +242,27 @@ def mostrar_caja():
             st.markdown("👇 **Precio Especial y Cantidad para esta venta**")
             permitir_sin_stock = st.checkbox("🔓 Permitir sobreventa (omitir límite de stock disponible)", value=False)
             
+            # --- SECCIÓN: DESCUENTO DIRECTO A NIVEL DE LIBRO ---
+            col_desc_l1, col_desc_l2 = st.columns(2)
+            tipo_desc_libro = col_desc_l1.selectbox(
+                "Descuento para este libro:",
+                ["Sin Descuento", "Porcentaje (%)", "Monto Fijo ($)"],
+                key="tipo_desc_libro_caja"
+            )
+            
+            val_desc_libro = 0.0
+            if tipo_desc_libro == "Porcentaje (%)":
+                val_desc_libro = col_desc_l2.number_input("Porcentaje (%):", min_value=0.0, max_value=100.0, step=5.0, key="val_desc_libro_caja")
+            elif tipo_desc_libro == "Monto Fijo ($)":
+                val_desc_libro = col_desc_l2.number_input("Monto Fijo ($):", min_value=0.0, step=500.0, key="val_desc_libro_caja")
+                
+            precio_calculado_con_desc = float(precio_inicial_caja)
+            if tipo_desc_libro == "Porcentaje (%)" and val_desc_libro > 0:
+                precio_calculado_con_desc = float(precio_inicial_caja) * (1 - (val_desc_libro / 100))
+            elif tipo_desc_libro == "Monto Fijo ($)" and val_desc_libro > 0:
+                precio_calculado_con_desc = max(0.0, float(precio_inicial_caja) - val_desc_libro)
+            
+            
             col_c1, col_c2 = st.columns(2)
             precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(precio_inicial_caja), step=500.0)
             limite_maximo = None if (l_stock_actual <= 0 or permitir_sin_stock) else max(1, l_stock_actual)
@@ -427,7 +448,7 @@ def mostrar_caja():
                         st.session_state.aplicar_cupon_sistema_obj = cp
                         break
                     
-                    # =========================================================================
+            # =========================================================================
             # 📊 VISTA PREVIA INTERACTIVA DE DESCUENTOS (TABLA DE CONTROL DE PRECIOS)
             # =========================================================================
             pct_preview = 0
@@ -476,7 +497,23 @@ def mostrar_caja():
                 )
 
         st.markdown("---")
+
+        # ---  DESCUENTO MANUAL AL SUBTOTAL ---
+        with st.expander("💸 Aplicar Descuento Manual / Ajuste al Subtotal de la Compra", expanded=True):
+            col_dm1, col_dm2 = st.columns(2)
+            tipo_descuento_manual = col_dm1.selectbox(
+                "Tipo de Descuento Manual (Subtotal):",
+                ["Sin Descuento", "Porcentaje (%)", "Monto Fijo ($)"],
+                key="tipo_descuento_manual_caja"
+            )
+            
+            valor_descuento_manual = 0.0
+            if tipo_descuento_manual == "Porcentaje (%)":
+                valor_descuento_manual = col_dm2.number_input("Porcentaje de Descuento (%):", min_value=0.0, max_value=100.0, step=1.0, key="valor_descuento_manual_caja")
+            elif tipo_descuento_manual == "Monto Fijo ($)":
+                valor_descuento_manual = col_dm2.number_input("Monto de Descuento ($):", min_value=0.0, step=500.0, key="valor_descuento_manual_caja")
         
+        # --- FIN  DESCUENTO MANUAL AL SUBTOTAL ---
         
         st.markdown("---")
         st.markdown("### 3️⃣ Envío, Pago y Confirmación")
@@ -558,7 +595,7 @@ def mostrar_caja():
         estado_pago_sel = col_abono2.selectbox("Estado del Pago:", ["PENDIENTE", "PAGADO"], index=0)
         fecha_pago_sel = col_abono3.date_input("Fecha de Pago:", value=None)
         
-                # =========================================================================
+        # =========================================================================
         # 💳 RE-CÁLCULO FINANCIERO TRANSACCIONAL SEGÚN RESTRICCIONES
         # =========================================================================
         porcentaje_descuento_aplicar = 0
@@ -569,13 +606,12 @@ def mostrar_caja():
             
         subtotal_con_descuento = 0.0
         
+
         for item in st.session_state.carrito_caja:
             item_subtotal = float(item.get('subtotal', 0.0))
             if porcentaje_descuento_aplicar > 0:
-                # Fidelidad del 10% aplica a todo el carrito sin restricciones
                 if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
                     subtotal_con_descuento += item_subtotal * (1 - (porcentaje_descuento_aplicar / 100))
-                # Cupones de sistema evalúan restricciones de catálogo
                 elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
                     if evaluar_restricciones_libro(item, st.session_state.aplicar_cupon_sistema_obj):
                         subtotal_con_descuento += item_subtotal * (1 - (porcentaje_descuento_aplicar / 100))
@@ -583,6 +619,15 @@ def mostrar_caja():
                         subtotal_con_descuento += item_subtotal
             else:
                 subtotal_con_descuento += item_subtotal
+
+        # ---> APLICACIÓN DEL DESCUENTO MANUAL / AJUSTE ADICIONAL AL SUBTOTAL <---
+        tipo_dm = st.session_state.get('tipo_descuento_manual_caja', 'Sin Descuento')
+        val_dm = float(st.session_state.get('valor_descuento_manual_caja', 0.0))
+        if tipo_dm == "Porcentaje (%)" and val_dm > 0:
+            subtotal_con_descuento = subtotal_con_descuento * (1 - (val_dm / 100))
+        elif tipo_dm == "Monto Fijo ($)" and val_dm > 0:
+            subtotal_con_descuento = max(0.0, subtotal_con_descuento - val_dm)
+
 
         if es_por_pagar:
             tipo_cobro_envio = "envio por pagar"
