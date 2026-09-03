@@ -1001,114 +1001,45 @@ def generar_comprobante(
 ):
     """
     Genera un comprobante premium sobre plantilla con márgenes alineados al cuaderno.
-    Utiliza Lato para los textos de datos.
-    Conserva la resolución física de 800x1200 para máxima nitidez sin requerir zoom en pantalla.
+    Calcula correctamente el descuento total (libro + cupón + manual) y desglosa precios.
     """
-    # --- MOTOR DE RECONSTRUCCIÓN FINANCIERA INVERSA ---
-    # Reconstruye quirúrgicamente los precios unitarios si vienen vacíos o en 0.0 desde vistas históricas
-    try:
-        df_libros = cargar_libros_caja()
-        suma_precios_catalogo = float(subtotal)
-        items_procesados = []
-        suma_precios_catalogo = 0.0
-        
-        for item in carrito:
-            qty = int(item.get('cantidad') or item.get('qty') or 1)
-            titulo = item.get('titulo', 'N/A')
-            titulo_limpio = limpiar_texto_para_busqueda(titulo)
-            
-            # ---> AQUÍ: Prioriza leer el precio catálogo guardado en el JSON <---
-            precio_item = float(item.get('precio_catalogo_original') or item.get('precio_catalogo') or item.get('precio_original') or 0.0)
-            
-            # Si no existía en el JSON (por ser una venta antigua), lo busca en el catálogo actual
-            if precio_item == 0.0 and df_libros is not None and not df_libros.empty:
-                if 'titulo_limpio' not in df_libros.columns:
-                    df_libros['titulo_limpio'] = df_libros['titulo'].apply(limpiar_texto_para_busqueda)
-                match = df_libros[df_libros['titulo_limpio'] == titulo_limpio]
-                if not match.empty:
-                    precio_item = float(match.iloc[0]['precio'])
-                else:
-                    match_sub = df_libros[df_libros['titulo_limpio'].str.contains(titulo_limpio, na=False)]
-                    if not match_sub.empty:
-                        precio_item = float(match_sub.iloc[0]['precio'])
-                    else:
-                        match_sub2 = df_libros[df_libros['titulo_limpio'].apply(lambda x: titulo_limpio in x if isinstance(x, str) else False)]
-                        if not match_sub2.empty:
-                            precio_item = float(match_sub2.iloc[0]['precio'])
-                            
-            # Fallback de seguridad: si no se encuentra, usa el precio cobrado
-            if precio_item == 0.0:
-                precio_item = float(item.get('precio_cobrado') or item.get('precio') or 0.0)
-                
-            items_procesados.append({
-                'item': item,
-                'qty': qty,
-                'precio_base': precio_item,
-            })
-            suma_precios_catalogo += precio_item * qty
-            
-        # Asignación de precio promedio para libros que no existan en el catálogo
-        matched_prices = [ip['precio_base'] for ip in items_procesados if ip['precio_base'] > 0.0]
-        average_matched = sum(matched_prices) / len(matched_prices) if matched_prices else 15000.0
-        any_unmatched = False
-        for ip in items_procesados:
-            if ip['precio_base'] == 0.0:
-                ip['precio_base'] = average_matched
-                any_unmatched = True
-        if any_unmatched:
-            suma_precios_catalogo = sum([ip['precio_base'] * ip['qty'] for ip in items_procesados])
-        factor = float(subtotal) / suma_precios_catalogo if suma_precios_catalogo > 0 else 0.0
-        precios_base_ajustados = [ip['precio_base'] * factor for ip in items_procesados]
-        qtys = [ip['qty'] for ip in items_procesados]
-        # Algoritmo de Redondeo Comercial Inteligente (CLP)
-        # Redondea a base 100 y ajusta remanentes en pasos de 10 para cuadrar el subtotal exacto
-        round_base = 100
-        adjust_step = 10
-        rounded_prices = [int(round(p / round_base) * round_base) for p in precios_base_ajustados]
-        subtotal_actual = sum([rounded_prices[i] * qtys[i] for i in range(len(items_procesados))])
-        diff = int(subtotal) - subtotal_actual
-        
-        while diff != 0:
-            sign = 1 if diff > 0 else -1
-            best_idx = -1
-            best_score = float('inf')
-            
-            for i in range(len(items_procesados)):
-                change = sign * adjust_step * qtys[i]
-                if abs(diff - change) < abs(diff):
-                    score = abs(diff - change)
-                    if score < best_score:
-                        best_score = score
-                        best_idx = i
-                        
-            if best_idx == -1:
-                for i in range(len(items_procesados)):
-                    change = sign * adjust_step * qtys[i]
-                    score = abs(diff - change)
-                    if score < best_score:
-                        best_score = score
-                        best_idx = i
-                        
-            if best_idx != -1:
-                rounded_prices[best_idx] += sign * adjust_step
-                subtotal_actual = sum([rounded_prices[j] * qtys[j] for j in range(len(items_procesados))])
-                diff = int(subtotal) - subtotal_actual
-            else:
-                break
-                
-        carrito_reconstruido = []
-        for idx, ip in enumerate(items_procesados):
-            precio_final = rounded_prices[idx]
-            subtotal_final = precio_final * ip['qty']
-            
-            item_copy = ip['item'].copy()
-            item_copy['precio_cobrado'] = precio_final
-            item_copy['subtotal'] = subtotal_final
-            carrito_reconstruido.append(item_copy)
-            
-        carrito = carrito_reconstruido
-    except Exception as e_recon:
-        pass
+    df_libros = cargar_libros_caja()
+    items_procesados = []
+    suma_precios_catalogo = 0.0
+    suma_precios_cobrados = 0.0
+
+    # 1. Procesamiento y cálculo de precios por ítem
+    for item in carrito:
+        qty = int(item.get('cantidad') or item.get('qty') or 1)
+        titulo = item.get('titulo', 'N/A')
+        titulo_limpio = limpiar_texto_para_busqueda(titulo)
+
+        # Precio de catálogo original
+        precio_cat = float(item.get('precio_catalogo_original') or item.get('precio_catalogo') or item.get('precio_original') or 0.0)
+
+        if precio_cat == 0.0 and df_libros is not None and not df_libros.empty:
+            if 'titulo_limpio' not in df_libros.columns:
+                df_libros['titulo_limpio'] = df_libros['titulo'].apply(limpiar_texto_para_busqueda)
+            match = df_libros[df_libros['titulo_limpio'] == titulo_limpio]
+            if not match.empty:
+                precio_cat = float(match.iloc[0]['precio'])
+
+        # Precio cobrado unitario final (con todos los descuentos aplicados)
+        precio_cobrado = float(item.get('precio_cobrado') or item.get('precio') or (precio_cat if precio_cat > 0 else 0.0))
+        if precio_cat == 0.0:
+            precio_cat = precio_cobrado
+
+        subtotal_item = float(item.get('subtotal') or (precio_cobrado * qty))
+
+        suma_precios_catalogo += precio_cat * qty
+        suma_precios_cobrados += subtotal_item
+
+        item_mod = item.copy()
+        item_mod['precio_cobrado'] = precio_cobrado
+        item_mod['subtotal'] = subtotal_item
+        items_procesados.append(item_mod)
+
+    # 2. Carga de plantilla gráfica
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
     img = None
     try:
@@ -1122,9 +1053,10 @@ def generar_comprobante(
             img = img.resize((800, 1200), resample_filter)
     except Exception:
         pass
+
     if img is None:
         img = Image.new('RGB', (800, 1200), color='#FAF8FC')
-    width, height = img.size
+
     draw = ImageDraw.Draw(img)
     font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
     font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
@@ -1132,34 +1064,35 @@ def generar_comprobante(
     font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
     font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
     font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
+
     x_margin = 130
     x_right = 740
+
+    # 3. Encabezado y Datos del Cliente
     draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
     id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
     draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
     draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
     draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
+
     pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
     draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
     draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
-    email_c = str(cliente_email or 'No registrado')
 
-    if len(email_c) > 31:
-        email_c = email_c[:28] + "..."
+    email_c = str(cliente_email or 'No registrado')
+    if len(email_c) > 31: email_c = email_c[:28] + "..."
     draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
-    tel_c = str(cliente_telefono or 'No registrado')
 
-    if len(tel_c) > 31:
-        tel_c = tel_c[:28] + "..."
+    tel_c = str(cliente_telefono or 'No registrado')
+    if len(tel_c) > 31: tel_c = tel_c[:28] + "..."
     draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
-    direccion_c = str(cliente_direccion or 'No especificado')
 
-    if len(direccion_c) > 65:
-        direccion_c = direccion_c[:62] + "..."
+    direccion_c = str(cliente_direccion or 'No especificado')
+    if len(direccion_c) > 65: direccion_c = direccion_c[:62] + "..."
     draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
 
@@ -1168,8 +1101,7 @@ def generar_comprobante(
     draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
 
     envio_c = str(metodo_envio)
-    if len(envio_c) > 30:
-        envio_c = envio_c[:27] + "..."
+    if len(envio_c) > 30: envio_c = envio_c[:27] + "..."
     draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
     draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
@@ -1177,11 +1109,11 @@ def generar_comprobante(
 
     if comentario_limpio:
         nota_c = str(comentario_limpio).upper()
-        if len(nota_c) > 20:
-            nota_c = nota_c[:17] + "..."
+        if len(nota_c) > 20: nota_c = nota_c[:17] + "..."
         draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
         draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
 
+    # 4. Tabla de Detalle de Libros
     draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
     draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
 
@@ -1191,23 +1123,20 @@ def generar_comprobante(
     draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
     draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
     draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
-    y_item = y_table + 35
     
-    for item in carrito:
-        qty = int(item.get('cantidad') or item.get('qty') or 1)
-        qty_str = str(qty)
-        draw.text((x_margin, y_item), qty_str, fill='#333333', font=font_body)
-        titulo = str(item.get('titulo', 'N/A')).upper()
+    y_item = y_table + 35
+    for item in items_procesados:
+        qty = int(item.get('cantidad', 1))
+        draw.text((x_margin, y_item), str(qty), fill='#333333', font=font_body)
         
-        if len(titulo) > 28:
-            titulo = titulo[:25] + "..."
-
+        titulo = str(item.get('titulo', 'N/A')).upper()
+        if len(titulo) > 28: titulo = titulo[:25] + "..."
         draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
-        # Robust retrieval of unit price and subtotal
-        precio_val = float(item.get('precio_cobrado') or item.get('precio') or item.get('precio_catalogo') or 0.0)
+
+        precio_val = float(item.get('precio_cobrado', 0.0))
         draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
 
-        subtotal_val = float(item.get('subtotal') or (precio_val * qty) or 0.0)
+        subtotal_val = float(item.get('subtotal', precio_val * qty))
         draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
         y_item += 35
 
@@ -1215,11 +1144,10 @@ def generar_comprobante(
             draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
             break
 
-        # Restamos el subtotal final cobrado del subtotal catálogo original para obtener el descuento total
-    descuento_total = round(suma_precios_catalogo - float(subtotal))
-    
-    if descuento_total > 10:
-        # Caja expandida a 6 filas (y_pos de 890 a 1125)
+    # 5. Tarjeta de Totales Financieros
+    descuento_total = round(suma_precios_catalogo - suma_precios_cobrados)
+
+    if descuento_total > 0:
         box_x1, box_y1, box_x2, box_y2 = 410, 890, 740, 1125
         draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
         draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
@@ -1231,12 +1159,11 @@ def generar_comprobante(
         draw_total_row("Abono Registrado:", float(abono), 1025, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
         draw_total_row("Deuda Pendiente:", float(deuda), 1060, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
     else:
-        # Caja estándar de 5 filas (y_pos de 900 a 1110)
         box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
         draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
         draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
 
-        draw_total_row("Subtotal Libros:", float(subtotal), 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+        draw_total_row("Subtotal Libros:", float(suma_precios_cobrados), 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
         draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
         draw_total_row("Monto Final:", float(monto_final), 980, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
         draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
