@@ -95,6 +95,9 @@ def mostrar_caja():
                - Haz clic en **➕ AÑADIR AL CARRITO** para guardar el libro con su precio rebajado.
             """)
 
+        st.markdown("---")
+        
+
         st.markdown("### 1️⃣ Datos del Cliente")
         modo_cliente = st.radio("Cliente:", ["👤 Buscar Existente", "➕ Nuevo"], horizontal=True, label_visibility="collapsed")
         
@@ -514,7 +517,19 @@ def mostrar_caja():
         st.markdown("---")
 
         # ---  DESCUENTO MANUAL AL SUBTOTAL ---
-        with st.expander("💸 Aplicar Descuento Manual / Ajuste al Subtotal de la Compra", expanded=True):
+        with st.expander("💸 Aplicar Descuento Manual / Ajuste al Subtotal", expanded=False):
+            # Nota explicativa sobre el cálculo de precios
+            with st.expander("ℹ️ ¿Cómo se calculan los precios y descuentos en Caja?"):
+                st.markdown("""
+                **Jerarquía de cálculo de precios:**
+                1.  **Precio Original:** Valor de lista del libro.
+                2.  **Descuento Libro:** Rebaja si el libro ya está en oferta en el inventario.
+                3.  **Descuento Cupón:** Si se aplica un cupón válido.
+                4.  **Descuento Manual:** Rebaja final en pesos ($) que se ingresa en esta caja.
+                
+                El **precio final** de cada libro es el `Precio Original` menos la suma de **todos** los descuentos.
+                """)
+
             col_dm1, col_dm2 = st.columns(2)
             tipo_descuento_manual = col_dm1.selectbox(
                 "Tipo de Descuento Manual (Subtotal):",
@@ -527,6 +542,34 @@ def mostrar_caja():
                 valor_descuento_manual = col_dm2.number_input("Porcentaje de Descuento (%):", min_value=0.0, max_value=100.0, step=1.0, key="valor_descuento_manual_caja")
             elif tipo_descuento_manual == "Monto Fijo ($)":
                 valor_descuento_manual = col_dm2.number_input("Monto de Descuento ($):", min_value=0.0, step=500.0, key="valor_descuento_manual_caja")
+            
+            # Lógica CRÍTICA para guardar el descuento manual en el estado del carrito
+            subtotal_bruto_carrito = sum(float(i.get('precio_catalogo', 0.0)) * int(i.get('cantidad', 1)) for i in st.session_state.carrito_caja)
+
+            for item in st.session_state.carrito_caja:
+                # Inicializar descuento manual
+                item['descuento_manual'] = 0.0
+                
+                if subtotal_bruto_carrito > 0:
+                    # Calcular la proporción del ítem sobre el total
+                    proporcion_item = (float(item.get('precio_catalogo', 0.0)) * int(item.get('cantidad', 1))) / subtotal_bruto_carrito
+                    
+                    if tipo_descuento_manual == "Monto Fijo ($)" and valor_descuento_manual > 0:
+                        # Repartir el descuento fijo proporcionalmente
+                        item['descuento_manual'] = valor_descuento_manual * proporcion_item
+                    elif tipo_descuento_manual == "Porcentaje (%)" and valor_descuento_manual > 0:
+                        # Aplicar el porcentaje al precio de catálogo del ítem
+                        item['descuento_manual'] = (float(item.get('precio_catalogo', 0.0)) * int(item.get('cantidad', 1))) * (valor_descuento_manual / 100)
+
+                # Se recalcula el precio final del ítem con TODA la data
+                precio_cat_item = float(item.get('precio_catalogo_original', item.get('precio_catalogo', 0.0)))
+                desc_libro_item = float(item.get('descuento_libro', 0.0))
+                desc_cupon_item = float(item.get('descuento_cupon', 0.0)) # Asumimos que ya está calculado
+                desc_manual_item = float(item.get('descuento_manual', 0.0)) / int(item.get('cantidad', 1)) # por unidad
+
+                item['precio_cobrado'] = max(0.0, precio_cat_item - desc_libro_item - desc_cupon_item - desc_manual_item)
+                item['subtotal'] = item['precio_cobrado'] * int(item.get('cantidad', 1))
+
         
         # --- FIN  DESCUENTO MANUAL AL SUBTOTAL ---
         
