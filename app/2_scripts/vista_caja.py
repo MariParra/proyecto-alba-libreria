@@ -654,8 +654,87 @@ def mostrar_caja():
         if mensaje_exito:
             st.success(mensaje_exito)
             
-        st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros: ${subtotal_carrito:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
+        # =========================================================================
+        # 🔍 VISTA PREVIA DETALLADA Y AUDITORÍA DE LA VENTA ANTES DE CONFIRMAR
+        # =========================================================================
+        st.markdown("### 🔍 Resumen y Auditoría Detallada de la Venta")
+        with st.container(border=True):
+            col_p_cli1, col_p_cli2 = st.columns(2)
+            with col_p_cli1:
+                st.markdown("**👤 Datos del Cliente:**")
+                st.write(f"• **Nombre:** {c_nombre.upper() if c_nombre else 'No registrado'}")
+                st.write(f"• **RUT:** {c_rut.upper() if c_rut else 'No registrado'}")
+                st.write(f"• **Correo:** {c_correo if c_correo else 'No registrado'}")
+            with col_p_cli2:
+                st.markdown("**📦 Despacho y Logística:**")
+                st.write(f"• **Método Envío:** `{metodo_envio_final}`")
+                st.write(f"• **Dirección de Despacho:** {c_direccion if c_direccion else 'Retiro en Tienda / No aplica'}")
+                st.write(f"• **Método de Pago:** `{metodo_pago}`")
+                
+            st.markdown("---")
+            st.markdown("**📚 Desglose de Precios y Descuentos por Libro:**")
+            
+            preview_detallada_libros = []
+            total_descuentos_libros = 0.0
+            
+            for item in st.session_state.carrito_caja:
+                precio_base = float(item['precio_catalogo'])
+                precio_con_desc_l = float(item['precio_cobrado'])
+                desc_l_monto = precio_base - precio_con_desc_l
+                
+                # Descuento de cupón
+                precio_con_cupon = precio_con_desc_l
+                desc_c_monto = 0.0
+                if porcentaje_descuento_aplicar > 0:
+                    applies = True
+                    if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
+                        applies = True
+                    elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
+                        applies = evaluar_restricciones_libro(item, st.session_state.aplicar_cupon_sistema_obj)
+                    
+                    if applies:
+                        precio_con_cupon = precio_con_desc_l * (1 - (porcentaje_descuento_aplicar / 100))
+                        desc_c_monto = precio_con_desc_l - precio_con_cupon
+                
+                # Descuento manual subtotal
+                precio_final = precio_con_cupon
+                desc_m_monto = 0.0
+                tipo_dm = st.session_state.get('tipo_descuento_manual_caja', 'Sin Descuento')
+                val_dm = float(st.session_state.get('valor_descuento_manual_caja', 0.0))
+                
+                if tipo_dm == "Porcentaje (%)" and val_dm > 0:
+                    precio_final = precio_con_cupon * (1 - (val_dm / 100))
+                    desc_m_monto = precio_con_cupon - precio_final
+                elif tipo_dm == "Monto Fijo ($)" and val_dm > 0:
+                    subtotal_libros_bruto = sum(float(x['subtotal']) for x in st.session_state.carrito_caja)
+                    if subtotal_libros_bruto > 0:
+                        factor = (subtotal_libros_bruto - val_dm) / subtotal_libros_bruto
+                        if factor < 0:
+                            factor = 0.0
+                        precio_final = precio_con_cupon * factor
+                        desc_m_monto = precio_con_cupon - precio_final
+                
+                desc_total_item = (precio_base - precio_final) * int(item['cantidad'])
+                total_descuentos_libros += desc_total_item
+                
+                preview_detallada_libros.append({
+                    "Libro": item['titulo'].upper(),
+                    "Cant": item['cantidad'],
+                    "Precio Catálogo": f"${precio_base:,.0f}",
+                    "Desc. Libro": f"-${desc_l_monto:,.0f}" if desc_l_monto > 0 else "$0",
+                    "Desc. Cupón": f"-${desc_c_monto:,.0f}" if desc_c_monto > 0 else "$0",
+                    "Desc. Manual": f"-${desc_m_monto:,.0f}" if desc_m_monto > 0 else "$0",
+                    "Precio Final (Unit)": f"${round(precio_final):,.0f}",
+                    "Subtotal Final": f"${round(precio_final * item['cantidad']):,.0f}"
+                })
+                
+            df_preview_detallada = pd.DataFrame(preview_detallada_libros)
+            st.dataframe(df_preview_detallada, hide_index=True, use_container_width=True)
+            
+        st.markdown(f"<div style='background-color:#E6F3E6; border:2px solid #4CAF50; padding:15px; border-radius:10px; text-align:center;'><p style='color:#2E7D32; margin:0;'>Subtotal Libros Bruto: ${subtotal_carrito:,.0f} | Total Descuentos: -${total_descuentos_libros:,.0f} | Envío: ${valor_envio:,.0f}</p><h2 style='color:#2E7D32; margin:0;'>MONTO FINAL A PAGAR: ${monto_final:,.0f}</h2><p style='color:#1B5E20; margin:0; font-weight:bold;'>Abono Registrado: ${abono_inicial:,.0f} | Deuda Pendiente: ${(monto_final - abono_inicial):,.0f}</p></div>", unsafe_allow_html=True)
         st.write("")
+        
+        desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
         
         desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
         
