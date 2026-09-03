@@ -304,11 +304,28 @@ def mostrar_caja():
             df_carrito = pd.DataFrame(st.session_state.carrito_caja)
             df_carrito.insert(0, 'Quitar', False)
             
+            # Asegurarse de que 'costo' exista y sea numérico para evitar errores de tipo
+            if 'costo' in df_carrito.columns:
+                df_carrito['costo'] = pd.to_numeric(df_carrito['costo'], errors='coerce').fillna(0.0)
+            else:
+                df_carrito['costo'] = 0.0
+                
+            df_carrito_display = df_carrito[['Quitar', 'cantidad', 'titulo', 'costo', 'precio_cobrado', 'subtotal']].copy()
+            df_carrito_estilizado = df_carrito_display.style.apply(
+                lambda s: ['background-color: #ffebee; color: #c62828; font-weight: bold;' if (pd.isna(v) or v == 0 or v == 0.0) else '' for v in s],
+                subset=['costo']
+            )
+            
             df_editado_carrito = st.data_editor(
-                df_carrito[['Quitar', 'cantidad', 'titulo', 'precio_cobrado', 'subtotal']], 
+                df_carrito_estilizado, 
                 hide_index=True, 
                 use_container_width=True,
-                column_config={"Quitar": st.column_config.CheckboxColumn("Quitar ❌", default=False)}
+                column_config={
+                    "Quitar": st.column_config.CheckboxColumn("Quitar ❌", default=False),
+                    "costo": st.column_config.NumberColumn("Costo", format="$%.0f"),
+                    "precio_cobrado": st.column_config.NumberColumn("Precio Cobrado", format="$%.0f"),
+                    "subtotal": st.column_config.NumberColumn("Subtotal", format="$%.0f")
+                }
             )
             
             subtotal_carrito = df_carrito['subtotal'].sum()
@@ -750,7 +767,15 @@ def mostrar_caja():
                 tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", options=tipo_cobro_options)
                 
                 st.markdown("---")
-                solo_costo_cero = st.checkbox("⚠️ Mostrar rápido: Ventas sin costo asignado ($0)", value=False)
+                col_search, col_cost = st.columns([3, 1])
+                busqueda_titulo = col_search.text_input("🔍 Buscar por Título de Libro en el Historial:", placeholder="Escribe el título del libro a buscar...", key="buscar_titulo_historial")
+                
+                if busqueda_titulo.strip():
+                    if col_search.button("🗑️ Limpiar búsqueda de título", key="btn_limpiar_busqueda_titulo", use_container_width=True):
+                        st.session_state.buscar_titulo_historial = ""  
+                        st.rerun()  
+                        
+                solo_costo_cero = col_cost.checkbox("⚠️ Ventas sin costo asignado ($0)", value=False)
                 
                 st.markdown("---")
                 columnas_hist_todas = ['venta_id', 'fecha_venta', 'fecha_pago', 'cliente_nombre', 'cliente_rut', 'cliente_email', 'cliente_telefono', 'libros_vendidos', 'monto_final', 'valor_envio', 'tipo_cobro_envio', 'abono', 'deuda', 'utilidad', 'costo_venta', 'estado', 'estado_pago', 'metodo_envio', 'comentario']
@@ -768,7 +793,14 @@ def mostrar_caja():
             if cliente_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['cliente_nombre'] == cliente_filtro]
             if estado_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado'] == estado_filtro]
             if estado_pago_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado_pago'] == estado_pago_filtro]
-                
+            
+            # Filtro por búsqueda de título (Lupa)
+            if busqueda_titulo.strip():
+                df_filtrado_general = df_filtrado_general[
+                    df_filtrado_general['libros_vendidos'].str.contains(busqueda_titulo, case=False, na=False) |
+                    df_filtrado_general['libros_vendidos_raw'].str.contains(busqueda_titulo, case=False, na=False)
+                ]
+            
             st.markdown("#### 📊 Resumen del período filtrado")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("💰 Ventas Totales", f"${df_filtrado_general['monto_final'].sum():,.0f}")
@@ -825,7 +857,11 @@ def mostrar_caja():
                     num = actualizar_historial_caja(df_editado)
                     st.success(f"¡Se actualizaron {num} registros!")
                     time.sleep(1.5); st.rerun()
-                    
+                
+                    if "buscar_titulo_historial" in st.session_state:
+                        del st.session_state["buscar_titulo_historial"]  # Se destruye la clave para no persistir basura
+                    st.rerun()     
+
             st.markdown("---")
             with st.expander("🚚 Re-rutar o Vincular Venta Existente a Suscripción/Courier", expanded=False):
                 st.markdown("#### 🔄 Vincular o Cambiar Método de Envío de una Venta")
