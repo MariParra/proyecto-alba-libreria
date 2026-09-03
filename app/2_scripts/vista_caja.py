@@ -805,12 +805,14 @@ def mostrar_caja():
                     placeholder="Escribe o selecciona un título de libro vendido...",
                     key="buscar_titulo_historial"
                 )
+
                                 
                 if busqueda_titulo:
                     if col_search.button("🗑️ Limpiar búsqueda de título", key="btn_limpiar_busqueda_titulo", use_container_width=True):
                         if "buscar_titulo_historial" in st.session_state:
-                            del st.session_state["buscar_titulo_historial"] # Destrucción limpia del estado
-                        st.rerun() 
+                            del st.session_state["buscar_titulo_historial"]
+                        st.rerun()
+
                         
                 solo_costo_cero = col_cost.checkbox("⚠️ Ventas sin costo asignado ($0)", value=False)
                 
@@ -832,11 +834,13 @@ def mostrar_caja():
             if estado_pago_filtro != "Todos": df_filtrado_general = df_filtrado_general[df_filtrado_general['estado_pago'] == estado_pago_filtro]
             
             # Filtro por búsqueda de título (Lupa)
-            if busqueda_titulo.strip():
+            if busqueda_titulo and str(busqueda_titulo).strip():
+                term = str(busqueda_titulo).strip()
                 df_filtrado_general = df_filtrado_general[
-                    df_filtrado_general['libros_vendidos'].str.contains(busqueda_titulo, case=False, na=False) |
-                    df_filtrado_general['libros_vendidos_raw'].str.contains(busqueda_titulo, case=False, na=False)
+                    df_filtrado_general['libros_vendidos'].str.contains(term, case=False, na=False) |
+                    df_filtrado_general['libros_vendidos_raw'].str.contains(term, case=False, na=False)
                 ]
+
             
             st.markdown("#### 📊 Resumen del período filtrado")
             m1, m2, m3, m4 = st.columns(4)
