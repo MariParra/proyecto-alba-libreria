@@ -1558,16 +1558,6 @@ def mostrar_caja():
                                 key=f"dl_abierta_{v_id_sel}"
                             )
 
-
-                        st.download_button(
-                            label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
-                            data=img_bytes_abierta,
-                            file_name=f"comprobante_venta_{v_id_sel}_{limpiar_texto_para_busqueda(c_nom_v).replace(' ', '_')}.jpg",
-                            mime="image/jpeg",
-                            use_container_width=True,
-                            key=f"dl_abierta_{v_id_sel}"
-                        )
-                        
     # =========================================================================
     # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (CON GESTIÓN CRUD COMPLETA)
     # =========================================================================
