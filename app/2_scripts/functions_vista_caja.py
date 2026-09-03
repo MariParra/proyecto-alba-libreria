@@ -667,10 +667,30 @@ def actualizar_historial_caja(df_editado):
                 if datos_cliente_limpios:
                     conn.table("clientes").update(datos_cliente_limpios).eq("cliente_id", int(cliente_id)).execute()
             
-            datos_venta_raw = {k: v for k, v in row.items() if not k.startswith('cliente_')}
-            tipo_cobro = str(datos_venta_raw.get('tipo_cobro_envio', 'envio pagado')).lower().strip()
-            subtotal = float(row.get('subtotal_libros', 0.0))
-            envio = float(row.get('valor_envio', 0.0))
+            # 1. Obtener registro actual de la base de datos para evitar pérdidas de columnas ocultas en la UI
+            res_v = conn.table("registro_ventas").select("*").eq("venta_id", venta_id).execute()
+            if not res_v.data:
+                st.warning(f"No se encontró la venta #{venta_id} en la base de datos.")
+                continue
+            db_row = res_v.data[0]
+
+            # 2. Helper de extracción segura: prioriza la celda editada, recurre a la DB si está oculta
+            def obtener_valor_seguro(col_name, tipo_esperado=str, fallback_val=None):
+                val = row.get(col_name)
+                if val is None or pd.isna(val):
+                    val = db_row.get(col_name, fallback_val)
+                if val is None:
+                    return fallback_val
+                try:
+                    return tipo_esperado(val)
+                except:
+                    return fallback_val
+
+            tipo_cobro_val = obtener_valor_seguro('tipo_cobro_envio', str, 'envio pagado')
+            tipo_cobro = tipo_cobro_val.lower().strip()
+            
+            subtotal = obtener_valor_seguro('subtotal_libros', float, 0.0)
+            envio = obtener_valor_seguro('valor_envio', float, 0.0)
             
             if tipo_cobro == "envio por pagar":
                 monto_final_actual = subtotal  
@@ -679,19 +699,29 @@ def actualizar_historial_caja(df_editado):
             else:
                 monto_final_actual = subtotal + envio
                 
-            datos_venta_raw['monto_final'] = monto_final_actual
+            estado = obtener_valor_seguro('estado', str, 'PENDIENTE')
+            estado_pago = obtener_valor_seguro('estado_pago', str, 'PENDIENTE')
             
-            if datos_venta_raw.get('estado') == 'FINALIZADO' or datos_venta_raw.get('estado_pago') == 'PAGADO':
-                datos_venta_raw['estado_pago'] = 'PAGADO'
-                datos_venta_raw['abono'] = monto_final_actual
+            # Inicializar los datos que enviaremos a actualizar de forma segura
+            datos_venta_final = {
+                "monto_final": monto_final_actual,
+                "tipo_cobro_envio": tipo_cobro_val,
+                "valor_envio": envio
+            }
+            
+            # Manejo blindado de estados de pago y abono
+            if estado == 'FINALIZADO' or estado_pago == 'PAGADO':
+                datos_venta_final['estado_pago'] = 'PAGADO'
+                datos_venta_final['abono'] = monto_final_actual
             else:
-                datos_venta_raw['abono'] = float(row.get('abono', 0.0))
-                
-            datos_venta_final = {}
-            columnas_venta_validas = ['monto_final', 'abono', 'costo_venta', 'estado', 'estado_pago', 'fecha_pago', 'metodo_envio', 'comentario', 'tipo_cobro_envio', 'valor_envio']
+                datos_venta_final['estado_pago'] = estado_pago
+                datos_venta_final['abono'] = obtener_valor_seguro('abono', float, 0.0)
+
+            # Copiar otros campos editados en Streamlit si están presentes en la UI
+            columnas_venta_validas = ['estado', 'fecha_pago', 'metodo_envio', 'comentario', 'costo_venta']
             for col in columnas_venta_validas:
-                if col in datos_venta_raw:
-                    valor = datos_venta_raw[col]
+                if col in row and not pd.isna(row[col]) and row[col] is not None:
+                    valor = row[col]
                     if col == 'fecha_pago':
                         datos_venta_final[col] = pd.to_datetime(valor).isoformat() if pd.notna(valor) and str(valor).strip() != '' else None
                     else:
