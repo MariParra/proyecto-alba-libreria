@@ -519,20 +519,19 @@ def mostrar_caja():
         # ---  DESCUENTO MANUAL AL SUBTOTAL ---
         with st.expander("💸 Aplicar Descuento Manual / Ajuste al Subtotal", expanded=False):
             # Nota explicativa sobre el cálculo de precios
-            with st.expander("ℹ️ ¿Cómo se calculan los precios y descuentos en Caja?", expanded=False):
             
-                mostrar_guia = st.checkbox("ℹ️ ¿Cómo se calculan los precios y descuentos en Caja?", value=False, key="chk_guia_calculo_precios_caja")
+            mostrar_guia = st.checkbox("ℹ️ ¿Cómo se calculan los precios y descuentos en Caja?", value=False, key="chk_guia_calculo_precios_caja")
+            
+            if mostrar_guia:
+                st.markdown("""
+                **Jerarquía de cálculo de precios:**
+                1.  **Precio Original:** Valor de lista del libro.
+                2.  **Descuento Libro:** Rebaja si el libro ya está en oferta en el inventario.
+                3.  **Descuento Cupón:** Si se aplica un cupón válido.
+                4.  **Descuento Manual:** Rebaja final en pesos ($) que se ingresa en esta caja.
                 
-                if mostrar_guia:
-                    st.markdown("""
-                    **Jerarquía de cálculo de precios:**
-                    1.  **Precio Original:** Valor de lista del libro.
-                    2.  **Descuento Libro:** Rebaja si el libro ya está en oferta en el inventario.
-                    3.  **Descuento Cupón:** Si se aplica un cupón válido.
-                    4.  **Descuento Manual:** Rebaja final en pesos ($) que se ingresa en esta caja.
-                    
-                    El **precio final** de cada libro es el `Precio Original` menos la suma de **todos** los descuentos.
-                    """)
+                El **precio final** de cada libro es el `Precio Original` menos la suma de **todos** los descuentos.
+                """)
 
             col_dm1, col_dm2 = st.columns(2)
             tipo_descuento_manual = col_dm1.selectbox(
