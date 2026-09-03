@@ -154,35 +154,46 @@ def cargar_libros_filtrados_para_cliente(cliente_id, asig_row, incluir_sin_stock
     df_catalogo = cargar_catalogo_completo_libros(incluir_sin_stock=incluir_sin_stock, filtrar_aptos=True)
     if df_catalogo.empty or not cliente_id:
         return df_catalogo, []
-
     conn = get_db_connection()
     try:
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         if ids_poseidos:
             df_catalogo = df_catalogo[~df_catalogo['libro_id'].isin(ids_poseidos)]
+            
+        # Helper de validación de alta confiabilidad
+        def es_pref_valida(v):
+            if pd.isna(v) or v is None:
+                return False
+            v_clean = str(v).strip().upper()
+            return v_clean not in ["", "NONE", "NAN", "NULL", "SIN PREFERENCIAS", "SIN PREFERENCIA"]
 
         # ========================================================
-        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS ---
+        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS (SANEADA) ---
         # ========================================================
         generos_pref = []
         
         preferencia_del_mes = asig_row.get('preferencia_mensual') if asig_row is not None else None
+        generos_historial = asig_row.get('generos_preferencia') if asig_row is not None else None
         
         # 1. Prioridad 1: Preferencia del Mes (SOLO si no forzamos la histórica)
-        if not usar_historica and preferencia_del_mes and isinstance(preferencia_del_mes, str) and preferencia_del_mes.strip():
-            generos_brutos = preferencia_del_mes.split(',')
+        if not usar_historica and es_pref_valida(preferencia_del_mes):
+            generos_brutos = str(preferencia_del_mes).split(',')
             generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
             
-        # 2. Prioridad 2: Preferencia Histórica (si se fuerza o si no hay mensual)
+        # 2. Prioridad 2: Preferencia Histórica
         else:
-            res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
-            if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-                generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+            if es_pref_valida(generos_historial):
+                generos_brutos = str(generos_historial).split(',')
                 generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
-        # ========================================================
-
+            else:
+                try:
+                    res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+                    if res_susc.data and es_pref_valida(res_susc.data[0].get('generos_preferencia')):
+                        generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+                        generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+                except Exception:
+                    pass
         return df_catalogo, generos_pref
-
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
@@ -458,6 +469,13 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
     propuesta = []
     sin_asignar = []
     
+    # Helper de validación de alta confiabilidad para evitar falsos positivos de nulos
+    def es_pref_valida(v):
+        if pd.isna(v) or v is None:
+            return False
+        v_clean = str(v).strip().upper()
+        return v_clean not in ["", "NONE", "NAN", "NULL", "SIN PREFERENCIAS", "SIN PREFERENCIA"]
+    
     for _, asig in df_pendientes.iterrows():
         cliente_id = int(asig['cliente_id'])
         nombre_cliente = asig['nombre']
@@ -469,27 +487,37 @@ def generar_propuesta_azar(df_pendientes, incluir_sin_stock=False):
         ids_poseidos = obtener_ids_libros_poseidos_por_cliente(cliente_id)
         
         # ========================================================
-        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS ---
+        # --- NUEVA LÓGICA DE JERARQUÍA DE PREFERENCIAS (SANEADA) ---
         # ========================================================
         generos_pref = []
         origen_preferencia = ""
         
         preferencia_del_mes = asig.get('preferencia_mensual')
+        generos_historial = asig.get('generos_preferencia')
         
         # 1. Prioridad 1: Preferencia del Mes
-        if pd.notna(preferencia_del_mes) and str(preferencia_del_mes).strip():
+        if es_pref_valida(preferencia_del_mes):
             generos_brutos = str(preferencia_del_mes).split(',')
             generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
             origen_preferencia = "🌟 MENSUAL"
             
-        # 2. Prioridad 2: Preferencia Histórica (Fallback)
+        # 2. Prioridad 2: Preferencia Histórica (Extraída del DataFrame ya cargado)
+        elif es_pref_valida(generos_historial):
+            generos_brutos = str(generos_historial).split(',')
+            generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+            origen_preferencia = "📜 HISTÓRICA"
+            
+        # 3. Prioridad 3: Salvaguarda directa en la Base de Datos (en caso de que el DataFrame no tuviese la columna)
         else:
-            res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
-            if res_susc.data and res_susc.data[0].get('generos_preferencia'):
-                generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
-                generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
-                origen_preferencia = "📜 HISTÓRICA"
-            else:
+            try:
+                res_susc = conn.table("suscripciones").select("generos_preferencia").eq("cliente_id", cliente_id).execute()
+                if res_susc.data and es_pref_valida(res_susc.data[0].get('generos_preferencia')):
+                    generos_brutos = res_susc.data[0]['generos_preferencia'].split(',')
+                    generos_pref = [limpiar_texto_para_busqueda(g.strip()).upper() for g in generos_brutos if g.strip()]
+                    origen_preferencia = "📜 HISTÓRICA"
+                else:
+                    origen_preferencia = "Sin Preferencias"
+            except Exception:
                 origen_preferencia = "Sin Preferencias"
         # ========================================================
             
