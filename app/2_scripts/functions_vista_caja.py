@@ -493,13 +493,18 @@ def procesar_venta_carrito(carrito, cliente_id, valor_envio, metodo_envio, metod
         # --- PASO 2: CONSTRUIR LA LISTA DE VENTA CON LOS IDS DE LIBRO TOTALMENTE RESUELTOS ---
         libros_nuevos_list = []
         for item in carrito:
-            libros_nuevos_list.append({
+            entry = {
                 "libro_id": item['libro_id'], 
                 "titulo": item['titulo'], 
                 "autor": item['autor'],
                 "cantidad": item['cantidad'], 
                 "precio": item['precio_cobrado']
-            })
+            }
+            # Copiar dinámicamente todos los detalles de auditoría de descuentos si están presentes en la estructura del libro
+            for k, v in item.items():
+                if k not in entry and k != 'subtotal':
+                    entry[k] = v
+            libros_nuevos_list.append(entry)
 
         subtotal_libros = sum([item['subtotal'] for item in carrito])
 

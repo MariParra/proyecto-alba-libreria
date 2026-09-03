@@ -798,14 +798,74 @@ def mostrar_caja():
                 else:
                     v_id_fusion = None
                     if modo_envio == "Añadir a compra anterior" and 'v_id_asociada' in locals():
+                        v_id_fusion = None
+                    if modo_envio == "Añadir a compra anterior" and 'v_id_asociada' in locals():
                         v_id_fusion = int(v_id_asociada)
                         
+                    # ---> CONSTRUCCIÓN DINÁMICA DEL CARRITO AJUSTADO CON AUDITORÍA DE DESCUENTOS <---
+                    carrito_ajustado = []
+                    for item in st.session_state.carrito_caja:
+                        item_copy = item.copy()
+                        precio_base = float(item_copy['precio_catalogo'])
+                        precio_con_desc_l = float(item_copy['precio_cobrado'])
+                        desc_l_monto = precio_base - precio_con_desc_l
+                        
+                        # 1. Descuento por Cupón / Fidelización
+                        precio_con_cupon = precio_con_desc_l
+                        desc_c_monto = 0.0
+                        cupon_codigo = None
+                        
+                        if porcentaje_descuento_aplicar > 0:
+                            applies = True
+                            if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False):
+                                cupon_codigo = "CUPON_FIDELIDAD_10"
+                                applies = True
+                            elif st.session_state.get('aplicar_cupon_sistema_obj') is not None:
+                                cupon_codigo = st.session_state.aplicar_cupon_sistema_obj.get('codigo', 'CUPON_SISTEMA')
+                                applies = evaluar_restricciones_libro(item_copy, st.session_state.aplicar_cupon_sistema_obj)
+                            
+                            if applies:
+                                precio_con_cupon = precio_con_desc_l * (1 - (porcentaje_descuento_aplicar / 100))
+                                desc_c_monto = precio_con_desc_l - precio_con_cupon
+                        
+                        # 2. Descuento manual al subtotal (proporcionalmente)
+                        precio_final = precio_con_cupon
+                        desc_m_monto = 0.0
+                        tipo_dm = st.session_state.get('tipo_descuento_manual_caja', 'Sin Descuento')
+                        val_dm = float(st.session_state.get('valor_descuento_manual_caja', 0.0))
+                        
+                        if tipo_dm == "Porcentaje (%)" and val_dm > 0:
+                            precio_final = precio_con_cupon * (1 - (val_dm / 100))
+                            desc_m_monto = precio_con_cupon - precio_final
+                        elif tipo_dm == "Monto Fijo ($)" and val_dm > 0:
+                            subtotal_libros_bruto = sum(float(x['subtotal']) for x in st.session_state.carrito_caja)
+                            if subtotal_libros_bruto > 0:
+                                factor = (subtotal_libros_bruto - val_dm) / subtotal_libros_bruto
+                                if factor < 0:
+                                    factor = 0.0
+                                precio_final = precio_con_cupon * factor
+                                desc_m_monto = precio_con_cupon - precio_final
+                        
+                        # Guardar valores de auditoría detallados en el JSON de la orden
+                        item_copy['precio_catalogo_original'] = round(precio_base)
+                        item_copy['descuento_libro_unitario'] = round(desc_l_monto)
+                        item_copy['cupon_codigo_aplicado'] = cupon_codigo
+                        item_copy['descuento_cupon_unitario'] = round(desc_c_monto)
+                        item_copy['descuento_manual_subtotal_tipo'] = tipo_dm
+                        item_copy['descuento_manual_subtotal_valor_unitario'] = round(desc_m_monto)
+                        
+                        item_copy['precio_cobrado'] = round(precio_final)
+                        item_copy['subtotal'] = round(precio_final * int(item_copy['cantidad']))
+                        carrito_ajustado.append(item_copy)
+
+                    # Despachamos el carrito ajustado que contiene todo el desglose de descuentos
                     exito, err = procesar_venta_carrito(
-                        st.session_state.carrito_caja, final_cliente_id, valor_envio, 
+                        carrito_ajustado, final_cliente_id, valor_envio, 
                         metodo_envio_final, metodo_pago, comentario_venta, fecha_venta_manual,
                         estado_venta_sel, estado_pago_sel, fecha_pago_sel, abono_inicial, 
                         tipo_cobro_envio, asignacion_id_target, v_id_fusion 
                     )
+                    
                     if exito: 
                         # 1. Registrar canje automático si usaba fidelidad
                         if st.session_state.get('chk_aplicar_cupon_fidelidad_auto', False) and final_cliente_id:
