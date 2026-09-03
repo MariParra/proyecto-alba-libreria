@@ -848,7 +848,7 @@ def mostrar_caja():
                         abono=abono_inicial,
                         deuda=monto_final - abono_inicial
                     )
-                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", width=550)
+                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_container_width=True)
                     st.download_button(
                         label="📥 Descargar Comprobante (JPG)",
                         data=img_bytes_preview,
@@ -1542,7 +1542,7 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
-                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", width=550)
+                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                             data=img_bytes_abierta,
