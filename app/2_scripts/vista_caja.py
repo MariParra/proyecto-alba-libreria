@@ -848,7 +848,18 @@ def mostrar_caja():
                         abono=abono_inicial,
                         deuda=monto_final - abono_inicial
                     )
-                    st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_container_width=True)
+                    
+                    if img_bytes_preview:
+                        st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_container_width=True)
+                        st.download_button(
+                            label="📥 Descargar Comprobante (JPG)",
+                            data=img_bytes_preview,
+                            file_name=f"comprobante_{limpiar_texto_para_busqueda(c_nombre).replace(' ', '_')}.jpg",
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key="btn_dl_comprobante_nueva"
+                        )
+                        
                     st.download_button(
                         label="📥 Descargar Comprobante (JPG)",
                         data=img_bytes_preview,
@@ -1542,7 +1553,17 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
-                        st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                        if img_bytes_abierta:
+                            st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                            st.download_button(
+                                label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
+                                data=img_bytes_abierta,
+                                file_name=f"comprobante_venta_{v_id_sel}_{limpiar_texto_para_busqueda(c_nom_v).replace(' ', '_')}.jpg",
+                                mime="image/jpeg",
+                                use_container_width=True,
+                                key=f"dl_abierta_{v_id_sel}"
+                            )
+
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                             data=img_bytes_abierta,

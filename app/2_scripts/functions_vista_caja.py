@@ -1000,156 +1000,181 @@ def generar_comprobante(
     fecha, metodo_envio, valor_envio, metodo_pago, subtotal, monto_final, abono, deuda, venta_id=None
 ):
     """
-    Genera un comprobante premium que recalcula los totales desde el carrito
-    e implementa reintentos para la carga de la imagen de fondo.
+    Genera un comprobante premium sobre la plantilla oficial descargada desde Supabase.
+    Recalcula totales desde el carrito y maneja la imagen de fondo de forma segura.
     """
-    # --- PASO 1: RECONSTRUCCIÓN FINANCIERA (Esta parte ya está bien) ---
-    suma_precios_catalogo = 0.0
-    suma_precios_cobrados = 0.0
-    carrito_procesado = []
+    try:
+        # --- PASO 1: RECONSTRUCCIÓN FINANCIERA ---
+        suma_precios_catalogo = 0.0
+        suma_precios_cobrados = 0.0
+        carrito_procesado = []
 
-    for item in carrito:
-        item_copy = item.copy()
-        qty = int(item_copy.get('cantidad', 1))
-        precio_cat = float(item_copy.get('precio_original', item_copy.get('precio_catalogo', 0.0)))
+        for item in carrito:
+            item_copy = item.copy()
+            qty = int(item_copy.get('cantidad') or item_copy.get('qty') or 1)
+            precio_cat = float(item_copy.get('precio_original') or item_copy.get('precio_catalogo_original') or item_copy.get('precio_catalogo') or 0.0)
+            
+            if precio_cat == 0.0:
+                precio_cat = float(item_copy.get('precio_cobrado') or item_copy.get('precio') or 0.0)
+
+            desc_libro = float(item_copy.get('descuento_libro', 0.0))
+            desc_cupon = float(item_copy.get('descuento_cupon', 0.0))
+            desc_manual_total = float(item_copy.get('descuento_manual', 0.0))
+            desc_manual_unit = desc_manual_total / qty if qty > 0 else 0.0
+
+            precio_cobrado_unit = float(item_copy.get('precio_cobrado', max(0.0, precio_cat - desc_libro - desc_cupon - desc_manual_unit)))
+            subtotal_item_final = precio_cobrado_unit * qty
+
+            item_copy['precio_cobrado'] = precio_cobrado_unit
+            item_copy['subtotal'] = subtotal_item_final
+            carrito_procesado.append(item_copy)
+            
+            suma_precios_catalogo += precio_cat * qty
+            suma_precios_cobrados += subtotal_item_final
+
+        descuento_total_calculado = max(0.0, suma_precios_catalogo - suma_precios_cobrados)
+        monto_final_calculado = suma_precios_cobrados + float(valor_envio)
+        deuda_calculada = monto_final_calculado - float(abono)
+
+        # --- PASO 2: CARGA SEGURA DE LA PLANTILLA ---
+        url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
+        img = None
         
-        if precio_cat == 0.0:
-            precio_cat = float(item_copy.get('precio_cobrado', 0.0))
+        # Filtro de reescalado compatible con Pillow moderno
+        try:
+            resample_filter = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample_filter = Image.BICUBIC
 
-        desc_libro = float(item_copy.get('descuento_libro', 0.0))
-        desc_cupon = float(item_copy.get('descuento_cupon', 0.0))
-        desc_manual_total_item = float(item_copy.get('descuento_manual', 0.0))
-        desc_manual_unitario = desc_manual_total_item / qty if qty > 0 else 0.0
-
-        precio_cobrado_unit = float(item_copy.get('precio_cobrado', max(0.0, precio_cat - desc_libro - desc_cupon - desc_manual_unitario)))
-        subtotal_item_final = precio_cobrado_unit * qty
-
-        item_copy['precio_cobrado'] = precio_cobrado_unit
-        item_copy['subtotal'] = subtotal_item_final
-        carrito_procesado.append(item_copy)
-        
-        suma_precios_catalogo += precio_cat * qty
-        suma_precios_cobrados += subtotal_item_final
-
-    descuento_total_calculado = suma_precios_catalogo - suma_precios_cobrados
-    monto_final_calculado = suma_precios_cobrados + float(valor_envio)
-    deuda_calculada = monto_final_calculado - float(abono)
-
-    # --- PASO 2: CARGA ROBUSTA DE LA IMAGEN DE FONDO (AQUÍ ESTÁ EL CAMBIO) ---
-    url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
-    img = None
-    intentos = 3
-    for i in range(intentos):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5) as r:
                 img_data = r.read()
                 img = Image.open(io.BytesIO(img_data)).convert('RGB')
-                resample_filter = getattr(Image, 'Resampling', {}).get('LANCZOS', Image.ANTIALIAS)
                 img = img.resize((800, 1200), resample_filter)
-            break  # Si tiene éxito, sale del bucle
         except Exception as e:
-            print(f"Intento {i+1}/{intentos} fallido para cargar la imagen de fondo: {e}")
-            if i < intentos - 1:
-                time.sleep(1)  # Espera 1 segundo antes de reintentar
+            log_error("vista_caja", "generar_comprobante_img_bg", f"No se pudo cargar plantilla: {e}", st.session_state.get('email_usuario', 'Desconocido'))
 
-    # Si después de todos los intentos la imagen no se cargó, crea el fondo blanco
-    if img is None:
-        print("Todos los intentos fallaron. Creando comprobante con fondo blanco.")
-        img = Image.new('RGB', (800, 1200), color='#FAF8FC')
-        
-    # --- PASO 3: DIBUJO DEL COMPROBANTE (sin cambios) ---
-    draw = ImageDraw.Draw(img)
-    # ... (El resto de tu código de dibujo permanece exactamente igual) ...
-    font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
-    font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
-    font_body = obtener_fuente_comprobante("Lato", 15)
-    font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
-    font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
-    x_margin, x_right = 130, 740
-    
-    draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
-    id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
-    draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
-    draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
-    draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
-    pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
-    
-    draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
-    draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
-    email_c = str(cliente_email or 'No registrado')
-    if len(email_c) > 31: email_c = email_c[:28] + "..."
-    draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
-    tel_c = str(cliente_telefono or 'No registrado')
-    if len(tel_c) > 31: tel_c = tel_c[:28] + "..."
-    draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
-    direccion_c = str(cliente_direccion or 'No especificado')
-    if len(direccion_c) > 65: direccion_c = direccion_c[:62] + "..."
-    draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
-    
-    x_col2 = 510
-    draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
-    envio_c = str(metodo_envio)
-    if len(envio_c) > 30: envio_c = envio_c[:27] + "..."
-    draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
-    draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
-    if comentario_limpio:
-        nota_c = str(comentario_limpio).upper()
-        if len(nota_c) > 20: nota_c = nota_c[:17] + "..."
-        draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
-        draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
+        if img is None:
+            img = Image.new('RGB', (800, 1200), color='#FAF8FC')
 
-    draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
-    draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
-    y_table = 440
-    draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
-    draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_section)
-    draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
-    draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
-    draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
-    
-    y_item = y_table + 35
-    for item in carrito_procesado:
-        draw.text((x_margin, y_item), str(item.get('cantidad', 1)), fill='#333333', font=font_body)
-        titulo = str(item.get('titulo', 'N/A')).upper()
-        if len(titulo) > 28: titulo = titulo[:25] + "..."
-        draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
-        draw.text((560, y_item), f"${item.get('precio_cobrado', 0.0):,.0f}", fill='#333333', font=font_body)
-        draw.text((660, y_item), f"${item.get('subtotal', 0.0):,.0f}", fill='#333333', font=font_body)
-        y_item += 35
-        if y_item > 850:
-            draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
-            break
-            
-    if descuento_total_calculado > 10:
-        box_x1, box_y1, box_x2, box_y2 = 410, 890, 740, 1125
-        draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
-        draw_total_row("Subtotal Catálogo:", suma_precios_catalogo, 900, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Descuentos:", -descuento_total_calculado, 930, font_body_bold, font_body, '#C62828', draw, box_x1, box_x2)
-        draw_total_row("Costo Envío:", float(valor_envio), 960, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Monto Final:", monto_final_calculado, 990, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
-        draw_total_row("Abono Registrado:", float(abono), 1025, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
-        draw_total_row("Deuda Pendiente:", deuda_calculada, 1060, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
-    else:
-        box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
-        draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
-        draw_total_row("Subtotal Libros:", suma_precios_cobrados, 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Monto Final:", monto_final_calculado, 980, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
-        draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
-        draw_total_row("Deuda Pendiente:", deuda_calculada, 1050, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
-        
-    draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
-    
-    buf = io.BytesIO()
-    img.save(buf, format='JPEG', quality=95)
-    return buf.getvalue()
+        # --- PASO 3: DIBUJO DEL COMPROBANTE ---
+        draw = ImageDraw.Draw(img)
+        font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
+        font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
+        font_body = obtener_fuente_comprobante("Lato", 15)
+        font_body_bold = obtener_fuente_comprobante("Lato", 15, bold=True)
+        font_price_accent = obtener_fuente_comprobante("Lato", 15, bold=True)
+        font_footer = obtener_fuente_comprobante("Lato", 18, italic=True)
+
+        x_margin = 130
+        x_right = 740
+
+        draw.text((x_margin, 60), "Alba Librería", fill='#7C0C3F', font=font_title)
+        id_str = f"COMPROBANTE DE VENTA #{venta_id}" if venta_id else "COMPROBANTE DE VENTA (PREVIO)"
+        draw.text((x_margin, 105), id_str, fill='#555555', font=font_body_bold)
+        draw.line([x_margin, 135, x_right, 135], fill='#BA96A5', width=2)
+        draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
+
+        pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
+        draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
+        draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 90, 220), str(cliente_rut or 'No registrado').upper(), fill='#333333', font=font_body)
+
+        email_c = str(cliente_email or 'No registrado')
+        if len(email_c) > 31: email_c = email_c[:28] + "..."
+        draw.text((x_margin, 250), "Email:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 90, 250), email_c, fill='#333333', font=font_body)
+
+        tel_c = str(cliente_telefono or 'No registrado')
+        if len(tel_c) > 31: tel_c = tel_c[:28] + "..."
+        draw.text((x_margin, 280), "Teléfono:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 90, 280), tel_c, fill='#333333', font=font_body)
+
+        direccion_c = str(cliente_direccion or 'No especificado')
+        if len(direccion_c) > 65: direccion_c = direccion_c[:62] + "..."
+        draw.text((x_margin, 340), "Dirección:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 100, 340), direccion_c, fill='#333333', font=font_body)
+
+        x_col2 = 510
+        draw.text((x_col2, 190), "Fecha:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_col2 + 80, 190), str(fecha), fill='#333333', font=font_body)
+
+        envio_c = str(metodo_envio)
+        if len(envio_c) > 30: envio_c = envio_c[:27] + "..."
+        draw.text((x_col2, 220), "Envío:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_col2 + 80, 220), envio_c, fill='#333333', font=font_body)
+        draw.text((x_col2, 250), "Pago:", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_col2 + 80, 250), str(pago_limpio).upper(), fill='#333333', font=font_body)
+
+        if comentario_limpio:
+            nota_c = str(comentario_limpio).upper()
+            if len(nota_c) > 20: nota_c = nota_c[:17] + "..."
+            draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
+            draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
+
+        # Tabla de Detalle
+        draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
+        draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
+
+        y_table = 440
+        draw.text((x_margin, y_table), "CANT", fill='#7C0C3F', font=font_body_bold)
+        draw.text((x_margin + 60, y_table), "DESCRIPCIÓN / LIBRO", fill='#7C0C3F', font=font_section)
+        draw.text((560, y_table), "P. UNIT", fill='#7C0C3F', font=font_body_bold)
+        draw.text((660, y_table), "SUBTOTAL", fill='#7C0C3F', font=font_body_bold)
+        draw.line([x_margin, y_table + 25, x_right, y_table + 25], fill='#BA96A5', width=1)
+
+        y_item = y_table + 35
+        for item in carrito_procesado:
+            draw.text((x_margin, y_item), str(item.get('cantidad', 1)), fill='#333333', font=font_body)
+            titulo = str(item.get('titulo', 'N/A')).upper()
+            if len(titulo) > 28: titulo = titulo[:25] + "..."
+            draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
+
+            precio_val = float(item.get('precio_cobrado', 0.0))
+            draw.text((560, y_item), f"${precio_val:,.0f}", fill='#333333', font=font_body)
+
+            subtotal_val = float(item.get('subtotal', 0.0))
+            draw.text((660, y_item), f"${subtotal_val:,.0f}", fill='#333333', font=font_body)
+            y_item += 35
+
+            if y_item > 850:
+                draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
+                break
+
+        # Totales Financieros
+        if descuento_total_calculado > 0:
+            box_x1, box_y1, box_x2, box_y2 = 410, 890, 740, 1125
+            draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
+            draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
+
+            draw_total_row("Subtotal Catálogo:", float(suma_precios_catalogo), 900, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+            draw_total_row("Descuentos:", float(-descuento_total_calculado), 930, font_body_bold, font_body, '#C62828', draw, box_x1, box_x2)
+            draw_total_row("Costo Envío:", float(valor_envio), 960, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+            draw_total_row("Monto Final:", float(monto_final_calculado), 990, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
+            draw_total_row("Abono Registrado:", float(abono), 1025, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
+            draw_total_row("Deuda Pendiente:", float(deuda_calculada), 1060, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
+        else:
+            box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
+            draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
+            draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
+
+            draw_total_row("Subtotal Libros:", float(suma_precios_cobrados), 915, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+            draw_total_row("Costo Envío:", float(valor_envio), 945, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+            draw_total_row("Monto Final:", float(monto_final_calculado), 980, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
+            draw_total_row("Abono Registrado:", float(abono), 1015, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
+            draw_total_row("Deuda Pendiente:", float(deuda_calculada), 1050, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
+
+        draw.text((435, 1140), "¡Gracias por tu preferencia! - Alba Librería", fill='#7C0C3F', font=font_footer, anchor="mm")
+
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=95)
+        return buf.getvalue()
+    except Exception as e_global:
+        log_error("vista_caja", "generar_comprobante_global", str(e_global), st.session_state.get('email_usuario', 'Desconocido'))
+        # Retornar una imagen de respaldo para evitar que la UI quede rota
+        img_fallback = Image.new('RGB', (800, 1200), color='#FAF8FC')
+        buf = io.BytesIO()
+        img_fallback.save(buf, format='JPEG', quality=90)
+        return buf.getvalue()
