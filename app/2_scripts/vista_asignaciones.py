@@ -533,7 +533,9 @@ def mostrar_asignaciones():
             st.warning("Mes cerrado.")
         else:
             with st.expander("⚙️ Gestionar Aptitud de Libros para Cajitas (Exclusiones)", expanded=False):
-                with st.expander("📖 ¿Cómo funciona esta sección? (Ver Guía Rápida)", expanded=False):
+                mostrar_guia = st.checkbox("📖 Mostrar Guía Rápida de Funcionamiento", value=False, key="chk_guia_aptitud_exclusiones")
+                
+                if mostrar_guia:
                     st.info(
                         "💡 **GUÍA RÁPIDA: ¿Cómo funciona esta sección?**\n\n"
                         "1. **¿Qué significa Apto?** Los libros con el check (✅) entrarán en la asignación de cajitas. Los desmarcados (⬜) serán excluidos.\n"
