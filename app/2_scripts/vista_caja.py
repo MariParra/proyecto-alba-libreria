@@ -822,6 +822,7 @@ def mostrar_caja():
         
         desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
         
+                # --- GENERAR COMPROBANTE RESUMEN (NUEVA VENTA) ---
         st.markdown("---")
         st.markdown("#### 🧾 Generar Comprobante Resumen (Opcional)")
         generar_comp = st.checkbox("🧾 Generar Vista Previa del Comprobante para descarga", value=False, key="chk_generar_comp_nueva")
@@ -849,8 +850,9 @@ def mostrar_caja():
                         deuda=monto_final - abono_inicial
                     )
                     
-                    if img_bytes_preview:
-                        st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_container_width=True)
+                    if img_bytes_preview and isinstance(img_bytes_preview, bytes):
+                        # Envolvemos en io.BytesIO para visualización limpia sin TypeErrors ni recortes
+                        st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_container_width=True)
                         st.download_button(
                             label="📥 Descargar Comprobante (JPG)",
                             data=img_bytes_preview,
@@ -859,15 +861,7 @@ def mostrar_caja():
                             use_container_width=True,
                             key="btn_dl_comprobante_nueva"
                         )
-                        
-                    st.download_button(
-                        label="📥 Descargar Comprobante (JPG)",
-                        data=img_bytes_preview,
-                        file_name=f"comprobante_{limpiar_texto_para_busqueda(c_nombre).replace(' ', '_')}.jpg",
-                        mime="image/jpeg",
-                        use_container_width=True,
-                        key="btn_dl_comprobante_nueva"
-                    )
+
         
         if st.button("✅ CONFIRMAR VENTA TOTAL", type="primary", use_container_width=True, disabled=desactivar_boton):
             with st.spinner("Procesando Venta..."):
@@ -1553,8 +1547,8 @@ def mostrar_caja():
                             venta_id=v_id_sel
                         )
                         
-                        if img_bytes_abierta:
-                            st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                        if img_bytes_abierta and isinstance(img_bytes_abierta, bytes):
+                            st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
                             st.download_button(
                                 label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                                 data=img_bytes_abierta,
@@ -1563,6 +1557,7 @@ def mostrar_caja():
                                 use_container_width=True,
                                 key=f"dl_abierta_{v_id_sel}"
                             )
+
 
                         st.download_button(
                             label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
