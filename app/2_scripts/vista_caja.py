@@ -264,7 +264,22 @@ def mostrar_caja():
             
             
             col_c1, col_c2 = st.columns(2)
-            precio_a_cobrar = col_c1.number_input("Precio a Cobrar ($):", value=float(precio_inicial_caja), step=500.0)
+            precio_calculado_con_desc = float(precio_inicial_caja)
+            if tipo_desc_libro == "Porcentaje (%)" and val_desc_libro > 0:
+                precio_calculado_con_desc = float(precio_inicial_caja) * (1 - (val_desc_libro / 100))
+            elif tipo_desc_libro == "Monto Fijo ($)" and val_desc_libro > 0:
+                precio_calculado_con_desc = max(0.0, float(precio_inicial_caja) - val_desc_libro)
+            
+            col_c1, col_c2 = st.columns(2)
+            
+            # ---> AQUÍ AGREGAMOS LA KEY DINÁMICA <---
+            precio_a_cobrar = col_c1.number_input(
+                "Precio a Cobrar ($):", 
+                value=float(precio_calculado_con_desc), 
+                step=500.0, 
+                key=f"precio_cobrar_widget_{precio_calculado_con_desc}_{tipo_desc_libro}_{val_desc_libro}"
+            )
+            
             limite_maximo = None if (l_stock_actual <= 0 or permitir_sin_stock) else max(1, l_stock_actual)
             amount_val = col_c2.number_input("Cantidad:", min_value=1, max_value=limite_maximo, step=1)
             
