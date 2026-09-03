@@ -299,22 +299,45 @@ def mostrar_caja():
                     autor_final = limpiar_texto_para_busqueda(l_autor)
                     editorial_final = limpiar_texto_para_busqueda(l_editorial)
                     encuadernacion_final = limpiar_texto_para_busqueda(l_encuadernacion)
+
+                    # --- LÓGICA DE PRECIOS CORREGIDA ---
+                    # 1. Definir el precio de lista real del libro
+                    p_original = float(l_precio_original if l_precio_original > 0 else l_precio_catalogo)
                     
-                    st.session_state.carrito_caja.append({
-                        'libro_id': l_id, 
-                        'titulo': titulo_final,          
-                        'autor': autor_final,            
-                        'editorial': editorial_final,      
-                        'encuadernacion': encuadernacion_final, 
-                        'precio_catalogo': l_precio_catalogo, 
-                        'precio_cobrado': precio_a_cobrar, 
-                        'cantidad': amount_val, 
-                        'subtotal': precio_a_cobrar * amount_val,
-                        'stock_actual': l_stock_actual, 
-                        'costo': l_costo, 
+                    # 2. Calcular el descuento que trae el libro desde el catálogo (si lo tiene)
+                    # Este es el descuento que se estaba perdiendo.
+                    desc_catalogo = max(0.0, p_original - float(l_precio_catalogo))
+                    
+                    # 3. Calcular el descuento adicional aplicado en el widget de la caja
+                    desc_adicional_caja = max(0.0, float(l_precio_catalogo) - float(precio_a_cobrar))
+                    
+                    # 4. El descuento total del libro es la suma de ambos
+                    desc_libro_total = desc_catalogo + desc_adicional_caja
+
+                    # Crear el diccionario para el carrito con el desglose completo
+                    nuevo_item = {
+                        'libro_id': l_id,
+                        'titulo': titulo_final,
+                        'autor': autor_final,
+                        'editorial': editorial_final,
+                        'encuadernacion': encuadernacion_final,
+                        'cantidad': amount_val,
+                        'stock_actual': l_stock_actual,
+                        'costo': l_costo,
                         'es_nuevo': es_nuevo,
-                        'apto_cajita': l_apto_cajita
-                    })
+                        'apto_cajita': l_apto_cajita,
+                        
+                        # --- ESTRUCTURA FINANCIERA COMPLETA ---
+                        'precio_original': p_original,            # Precio de lista (sin descuentos)
+                        'precio_catalogo': l_precio_catalogo,     # Precio de venta en BD (puede tener oferta)
+                        'descuento_libro': desc_libro_total,      # Suma de todos los descuentos a nivel de libro
+                        'descuento_cupon': 0.0,                   # Se calculará después
+                        'descuento_manual': 0.0,                  # Se calculará después
+                        'precio_cobrado': precio_a_cobrar,        # Precio unitario actual a cobrar
+                        'subtotal': precio_a_cobrar * amount_val  # Subtotal del ítem
+                    }
+                    
+                    st.session_state.carrito_caja.append(nuevo_item)
                     
                     if 'sel_libro_caja' in st.session_state:
                         del st.session_state.sel_libro_caja
@@ -575,7 +598,7 @@ def mostrar_caja():
 
         
         # --- FIN  DESCUENTO MANUAL AL SUBTOTAL ---
-        
+            
         st.markdown("---")
         st.markdown("### 3️⃣ Envío, Pago y Confirmación")
         fecha_venta_manual = st.date_input("Fecha de la Venta:", value=datetime.now())
