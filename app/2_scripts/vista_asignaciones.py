@@ -533,13 +533,14 @@ def mostrar_asignaciones():
             st.warning("Mes cerrado.")
         else:
             with st.expander("⚙️ Gestionar Aptitud de Libros para Cajitas (Exclusiones)", expanded=False):
-                st.info(
-                    "💡 **GUÍA RÁPIDA: ¿Cómo funciona esta sección?**\n\n"
-                    "1. **¿Qué significa Apto?** Los libros con el check (✅) entrarán en la asignación de cajitas. Los desmarcados (⬜) serán excluidos.\n"
-                    "2. **El botón mágico (🪄):** Si tienes muchos libros 'TAPA DURA', presiónalo y el sistema los excluirá automáticamente por ti con un solo clic.\n"
-                    "3. **Edición manual:** Si hay un libro específico (ej. uno muy pesado o caro) que quieres excluir, simplemente desmarca su casilla en la tabla de abajo.\n"
-                    "4. **Guardar:** Una vez que edites la tabla, aparecerá el botón azul `💾 Guardar Cambios de Aptitud`. Presiónalo para confirmar."
-                )
+                with st.expander("📖 ¿Cómo funciona esta sección? (Ver Guía Rápida)", expanded=False):
+                    st.info(
+                        "💡 **GUÍA RÁPIDA: ¿Cómo funciona esta sección?**\n\n"
+                        "1. **¿Qué significa Apto?** Los libros con el check (✅) entrarán en la asignación de cajitas. Los desmarcados (⬜) serán excluidos.\n"
+                        "2. **El botón mágico (🪄):** Si tienes muchos libros 'TAPA DURA', presiónalo y el sistema los excluirá automáticamente por ti con un solo clic.\n"
+                        "3. **Edición manual:** Si hay un libro específico (ej. uno muy pesado o caro) que quieres excluir, simplemente desmarca su casilla en la tabla de abajo.\n"
+                        "4. **Guardar:** Una vez que edites la tabla, aparecerá el botón azul `💾 Guardar Cambios de Aptitud`. Presiónalo para confirmar."
+                    )
                 st.write("")
                 
                 if st.button("🪄 Auto-excluir libros Tapa Dura", help="Marca como 'No Apto' a todos los libros con encuadernación TAPA DURA", key="btn_auto_excluir_tapa_dura"):
