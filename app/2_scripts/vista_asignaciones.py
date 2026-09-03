@@ -624,8 +624,8 @@ def mostrar_asignaciones():
                 st.info("No hay suscripciones en el mes.")
             else:
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
-                
-                # --- ASIGNACIÓN MASIVA Y AUTOMÁTICA ---
+
+                ## --- ASIGNACIÓN MASIVA Y AUTOMÁTICA ---
                 with st.container(border=True):
                     st.markdown("### 🎲 Asignación al Azar (Masiva y Segura)")
                     st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
@@ -647,15 +647,129 @@ def mostrar_asignaciones():
                         
                     st.metric("Cajas Pendientes", len(df_filtrado_final))
                     
-                    if st.button("🔍 Generar Propuesta (Previsualización)", type="primary", use_container_width=True):
+                    # =========================================================================
+                    # 🌟 NUEVA SECCIÓN: GESTIONAR APTITUD DE LIBROS (CON LUPA Y ACCIÓN EN LOTE)
+                    # =========================================================================
+                    st.markdown("---")
+                    st.markdown("#### ⚙️ Configurar Aptitud de Libros (Exclusiones de Cajitas)")
+                    st.caption("Usa la lupa para buscar libros específicos o los botones para desmarcar/marcar todos de una sola vez.")
+                    
+                    # 1. Botón mágico para Tapa Dura
+                    if st.button("🪄 Auto-excluir libros Tapa Dura", help="Marca como 'No Apto' a todos los libros con encuadernación TAPA DURA", key="btn_auto_excluir_tapa_dura"):
+                        with st.spinner("Actualizando catálogo..."):
+                            modificados = auto_descartar_tapa_dura()
+                            if modificados > 0:
+                                st.success(f"¡Listo! Se excluyeron {modificados} libros Tapa Dura.")
+                            elif modificados == 0:
+                                st.info("Todos los libros Tapa Dura ya estaban excluidos.")
+                            else:
+                                st.error("Hubo un error al actualizar la base de datos.")
+                            
+                            cargar_libros_aptitud.clear()
+                            cargar_catalogo_completo_libros.clear()
+                            st.session_state.clear_apt_cache = True
+                            time.sleep(1.5)
+                            st.rerun()
+                    
+                    df_aptitud_base = cargar_libros_aptitud()
+                    
+                    if not df_aptitud_base.empty:
+                        df_aptitud_base['apto_cajita'] = df_aptitud_base['apto_cajita'].fillna(True).astype(bool)
+                        
+                        # Inicializamos la copia de trabajo en session_state para persistir ediciones entre búsquedas
+                        if 'df_aptitud_working' not in st.session_state or st.session_state.get('clear_apt_cache', False):
+                            st.session_state.df_aptitud_working = df_aptitud_base.copy()
+                            st.session_state.clear_apt_cache = False
+                            
+                        # Botones de desmarcar / marcar todos
+                        col_lote1, col_lote2 = st.columns(2)
+                        if col_lote1.button("⬜ Desmarcar Todos (Ninguno Apto)", use_container_width=True, key="btn_desmarcar_todos_apt"):
+                            st.session_state.df_aptitud_working['apto_cajita'] = False
+                            st.rerun()
+                        if col_lote2.button("✅ Marcar Todos como Aptos (Excluyendo Tapa Dura)", use_container_width=True, key="btn_marcar_todos_apt"):
+                            # Marcamos como aptos (True) solo aquellos que NO sean TAPA DURA
+                            df_work = st.session_state.df_aptitud_working
+                            df_work['apto_cajita'] = df_work['encuadernacion'].fillna("").astype(str).str.upper().str.strip() != "TAPA DURA"
+                            st.rerun()
+                            
+                        # Lupa para buscar libros particulares
+                        lupa_libro = st.text_input("🔍 Lupa: Buscar libro por título o autor (Aptitud):", placeholder="Escribe el nombre o autor del libro para filtrar la lista...", key="lupa_aptitud")
+                        
+                        # Filtrado dinámico en memoria
+                        df_mostrar_apt = st.session_state.df_aptitud_working.copy()
+                        if lupa_libro:
+                            filtro_lupa = (
+                                df_mostrar_apt['titulo'].str.contains(lupa_libro, case=False, na=False) |
+                                df_mostrar_apt.get('autor', pd.Series(dtype=str)).str.contains(lupa_libro, case=False, na=False)
+                            )
+                            df_mostrar_apt = df_mostrar_apt[filtro_lupa]
+                            
+                        total_libros_stock = len(st.session_state.df_aptitud_working)
+                        aptos = st.session_state.df_aptitud_working['apto_cajita'].sum()
+                        no_aptos = total_libros_stock - aptos
+                        
+                        st.markdown("##### Resumen de Estado Actual")
+                        col_m1, col_m2, col_m3 = st.columns(3)
+                        col_m1.metric("📚 Total con Stock", total_libros_stock)
+                        col_m2.metric("✅ Aptos para Cajita", aptos)
+                        col_m3.metric("❌ No Aptos", no_aptos)
+                        st.markdown("---")
+                        
+                        # Dibujamos el data_editor con los datos filtrados por la lupa
+                        df_editado_apt_filtered = st.data_editor(
+                            df_mostrar_apt,
+                            column_config={
+                                "libro_id": None,
+                                "titulo": st.column_config.TextColumn("Título", disabled=True, width="large"),
+                                "encuadernacion": st.column_config.TextColumn("Encuadernación", disabled=True),
+                                "stock": st.column_config.NumberColumn("Stock", disabled=True),
+                                "apto_cajita": st.column_config.CheckboxColumn("¿Apto Cajita? ✅", default=True)
+                            },
+                            hide_index=True, use_container_width=True, key="editor_aptitud_libros"
+                        )
+                        
+                        # Guardamos de vuelta los checks modificados al DataFrame maestro de session_state
+                        if not df_mostrar_apt.equals(df_editado_apt_filtered):
+                            st.session_state.df_aptitud_working.set_index('libro_id', inplace=True)
+                            df_editado_apt_filtered_set = df_editado_apt_filtered.set_index('libro_id')
+                            st.session_state.df_aptitud_working.update(df_editado_apt_filtered_set)
+                            st.session_state.df_aptitud_working.reset_index(inplace=True)
+                            st.rerun()
+                            
+                        # Botón para guardar los cambios de aptitud modificados en la Base de Datos
+                        if not df_aptitud_base.equals(st.session_state.df_aptitud_working):
+                            if st.button("💾 Guardar Cambios de Aptitud", type="primary", use_container_width=True, key="btn_guardar_apt_db"):
+                                with st.spinner("Guardando en la base de datos..."):
+                                    conn = get_db_connection()
+                                    diff = st.session_state.df_aptitud_working.merge(df_aptitud_base, on='libro_id', suffixes=('_nuevo', '_viejo'))
+                                    cambios = diff[diff['apto_cajita_nuevo'] != diff['apto_cajita_viejo']]
+                                    
+                                    for _, row in cambios.iterrows():
+                                        conn.table("libros").update({"apto_cajita": row['apto_cajita_nuevo']}).eq("libro_id", row['libro_id']).execute()
+                                    
+                                    if not cambios.empty:
+                                        st.success(f"Se actualizaron {len(cambios)} libros con éxito.")
+                                        st.session_state.clear_apt_cache = True
+                                        cargar_libros_aptitud.clear()
+                                        cargar_catalogo_completo_libros.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.info("No se detectaron cambios para guardar.")
+                    else:
+                        st.warning("No hay libros con stock en el inventario.")
+                    st.markdown("---")
+                    
+                    # --- BOTÓN DE GENERACIÓN DE PROPUESTA PRINCIPAL ---
+                    if st.button("🔍 Generar Propuesta (Previsualización)", type="primary", use_container_width=True, key="btn_generar_propuesta_azar"):
                         if not df_filtrado_final.empty:
                             with st.spinner("Analizando inventario y gustos..."):
                                 prop, sin_asig = generar_propuesta_azar(df_filtrado_final)
                                 st.session_state.propuesta_azar = prop
                                 st.session_state.sin_asignar_azar = sin_asig
                         else: 
-                            st.warning("No hay clientes pendientes que estén pagados (y que cumplan las condiciones de fecha si están activas).")
-                            
+                            st.warning("No hay clientes pendientes  que cumplan las condiciones de fecha si están activas).")
+
                     if 'propuesta_azar' in st.session_state:
                         prop = st.session_state.propuesta_azar
                         sin_asig = st.session_state.sin_asignar_azar
