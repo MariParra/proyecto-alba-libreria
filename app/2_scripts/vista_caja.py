@@ -1723,14 +1723,14 @@ CREATE TABLE IF NOT EXISTS cupones (
                 monto_min_cfg = col_cfg1.number_input(
                     "Monto mínimo acumulado ($):", 
                     min_value=0.0, 
-                    value=float(st.session_state.get('monto_minimo_cupon_cfg', 100000.0)), 
+                    value=float(st.session_state.get('monto_minimo_cupon_cfg', 150000.0)), 
                     step=10000.0,
                     key="monto_minimo_cupon_cfg"
                 )
                 plazo_dias_cfg = col_cfg2.number_input(
                     "Plazo de acumulación (días):", 
                     min_value=1, 
-                    value=int(st.session_state.get('plazo_dias_cupon_cfg', 365)), 
+                    value=int(st.session_state.get('plazo_dias_cupon_cfg', 90)), 
                     step=30,
                     key="plazo_dias_cupon_cfg"
                 )
@@ -1859,7 +1859,46 @@ CREATE TABLE IF NOT EXISTS cupones (
                             except Exception as e_canje:
                                 log_error("vista_caja", "canje_cupon_manual", e_canje, st.session_state.get('email_usuario', 'Desconocido'))
                                 st.error(f"Error al registrar canje en Supabase: {e_canje}")
-                                
+                        
+                        # --- NUEVO: RESTAURAR CUPÓN DE FIDELIDAD (ANULAR CANJE DE PRUEBA) ---
+                df_canjeados = df_cupones_eval[df_cupones_eval['status_original'].str.contains("CANJE_CUPON:", na=False, case=False)]
+                if not df_canjeados.empty:
+                    st.markdown("##### 🔄 Anular Canje Existente / Devolver Cupón de Fidelidad")
+                    sel_cliente_restaurar = st.selectbox(
+                        "Selecciona una clienta para devolver/anular su canje de fidelidad:",
+                        options=[""] + df_canjeados['nombre'].tolist(),
+                        index=0,
+                        placeholder="Elige una clienta que ya canjeó su cupón...",
+                        key="sel_cliente_restaurar_fidelity"
+                    )
+                    
+                    if sel_cliente_restaurar:
+                        row_restaurar = df_canjeados[df_canjeados['nombre'] == sel_cliente_restaurar].iloc[0]
+                        c_id_restaurar = int(row_restaurar['cliente_id'])
+                        old_status_val = str(row_restaurar['status_original'])
+                        
+                        # Limpiar el CANJE_CUPON del status para recuperar su estado base
+                        if " | CANJE_CUPON:" in old_status_val:
+                            base_status_val = old_status_val.split(" | CANJE_CUPON:")[0].strip()
+                        elif "CANJE_CUPON:" in old_status_val:
+                            base_status_val = old_status_val.split("CANJE_CUPON:")[0].strip().strip("| ")
+                        else:
+                            base_status_val = "CLIENTE REGULAR"
+                            
+                        st.write(f"⚠️ Al hacer clic en el botón de abajo, se eliminará el registro de canje para **{sel_cliente_restaurar}** (Estado actual: `{old_status_val}`). Su estado volverá a ser `{base_status_val}`, lo que devolverá el cupón y recalculará sus compras acumuladas de forma inmediata.")
+                        
+                        if st.button("🔄 Anular Canje y Devolver Cupón", type="secondary", use_container_width=True):
+                            try:
+                                conn = get_db_connection()
+                                conn.table("clientes").update({"status": base_status_val}).eq("cliente_id", c_id_restaurar).execute()
+                                st.success(f"🎉 ¡Canje anulado con éxito para {sel_cliente_restaurar}! El cupón ha sido devuelto a su historial.")
+                                st.balloons()
+                                time.sleep(1.5)
+                                st.rerun()
+                            except Exception as e_restaurar:
+                                log_error("vista_caja", "anular_canje_fidelity_manual", e_restaurar, st.session_state.get('email_usuario', 'Desconocido'))
+                                st.error(f"Error al anular canje en Supabase: {e_restaurar}")
+                        
                 with st.expander("👥 Historial de Compras Acumuladas de todos los Clientes"):
                     st.dataframe(
                         df_cupones_eval.sort_values(by='compras_acumuladas', ascending=False)[['nombre', 'compras_acumuladas', 'fecha_ultimo_canje', 'clasifica']],

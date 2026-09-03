@@ -1008,17 +1008,19 @@ def generar_comprobante(
     # Reconstruye quirúrgicamente los precios unitarios si vienen vacíos o en 0.0 desde vistas históricas
     try:
         df_libros = cargar_libros_caja()
+        suma_precios_catalogo = float(subtotal)
         items_procesados = []
         suma_precios_catalogo = 0.0
+        
         for item in carrito:
             qty = int(item.get('cantidad') or item.get('qty') or 1)
             titulo = item.get('titulo', 'N/A')
             titulo_limpio = limpiar_texto_para_busqueda(titulo)
             
-            # ---> OBTENER PRECIO BRUTO DE CATÁLOGO ORIGINAL PARA AUDITAR DESCUENTOS <---
-            precio_item = float(item.get('precio_catalogo') or item.get('precio_original') or 0.0)
+            # ---> AQUÍ: Prioriza leer el precio catálogo guardado en el JSON <---
+            precio_item = float(item.get('precio_catalogo_original') or item.get('precio_catalogo') or item.get('precio_original') or 0.0)
             
-            # Si es una venta histórica o no tiene el precio catálogo, lo buscamos en el inventario actual
+            # Si no existía en el JSON (por ser una venta antigua), lo busca en el catálogo actual
             if precio_item == 0.0 and df_libros is not None and not df_libros.empty:
                 if 'titulo_limpio' not in df_libros.columns:
                     df_libros['titulo_limpio'] = df_libros['titulo'].apply(limpiar_texto_para_busqueda)
@@ -1033,18 +1035,18 @@ def generar_comprobante(
                         match_sub2 = df_libros[df_libros['titulo_limpio'].apply(lambda x: titulo_limpio in x if isinstance(x, str) else False)]
                         if not match_sub2.empty:
                             precio_item = float(match_sub2.iloc[0]['precio'])
-            
-            # Fallback de seguridad: si no se encuentra en catálogo, usamos el precio cobrado
+                            
+            # Fallback de seguridad: si no se encuentra, usa el precio cobrado
             if precio_item == 0.0:
                 precio_item = float(item.get('precio_cobrado') or item.get('precio') or 0.0)
-
-            # ¡AQUÍ SE MANTIENE EL APENDICE INTACTO Y CORRECTO!
+                
             items_procesados.append({
                 'item': item,
                 'qty': qty,
                 'precio_base': precio_item,
             })
             suma_precios_catalogo += precio_item * qty
+            
         # Asignación de precio promedio para libros que no existan en el catálogo
         matched_prices = [ip['precio_base'] for ip in items_procesados if ip['precio_base'] > 0.0]
         average_matched = sum(matched_prices) / len(matched_prices) if matched_prices else 15000.0
@@ -1213,31 +1215,23 @@ def generar_comprobante(
             draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
             break
 
-        draw.line([x_margin, 880, x_right, 880], fill='#BA96A5', width=2)
+        # Restamos el subtotal final cobrado del subtotal catálogo original para obtener el descuento total
+    descuento_total = round(suma_precios_catalogo - float(subtotal))
     
-    # Evaluar si existió un descuento real en la transacción
-    try:
-        if 'subtotal_bruto' not in locals():
-            subtotal_bruto = float(subtotal)
-        total_descuento = max(0.0, subtotal_bruto - float(subtotal))
-    except Exception:
-        total_descuento = 0.0
-        subtotal_bruto = float(subtotal)
-
-    if total_descuento > 10:
-        # Cuadro de 6 filas (Expandido)
-        box_x1, box_y1, box_x2, box_y2 = 410, 885, 740, 1115
+    if descuento_total > 10:
+        # Caja expandida a 6 filas (y_pos de 890 a 1125)
+        box_x1, box_y1, box_x2, box_y2 = 410, 890, 740, 1125
         draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
         draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
 
-        draw_total_row("Subtotal Libros Bruto:", float(subtotal_bruto), 895, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Descuento Aplicado:", -float(total_descuento), 925, font_body_bold, font_body, '#C62828', draw, box_x1, box_x2, color_lbl='#C62828')
-        draw_total_row("Costo Envío:", float(valor_envio), 955, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
-        draw_total_row("Monto Final:", float(monto_final), 985, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
-        draw_total_row("Abono Registrado:", float(abono), 1020, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
-        draw_total_row("Deuda Pendiente:", float(deuda), 1055, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
+        draw_total_row("Subtotal Catálogo:", float(suma_precios_catalogo), 900, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+        draw_total_row("Descuentos:", float(-descuento_total), 930, font_body_bold, font_body, '#C62828', draw, box_x1, box_x2)
+        draw_total_row("Costo Envío:", float(valor_envio), 960, font_body_bold, font_body, '#333333', draw, box_x1, box_x2)
+        draw_total_row("Monto Final:", float(monto_final), 990, font_body_bold, font_price_accent, '#7C0C3F', draw, box_x1, box_x2, color_lbl='#7C0C3F')
+        draw_total_row("Abono Registrado:", float(abono), 1025, font_body_bold, font_price_accent, '#2E7D32', draw, box_x1, box_x2)
+        draw_total_row("Deuda Pendiente:", float(deuda), 1060, font_body_bold, font_price_accent, '#C62828', draw, box_x1, box_x2)
     else:
-        # Cuadro estándar de 5 filas (Sin Descuentos)
+        # Caja estándar de 5 filas (y_pos de 900 a 1110)
         box_x1, box_y1, box_x2, box_y2 = 410, 900, 740, 1110
         draw.rounded_rectangle([box_x1 + 6, box_y1 + 6, box_x2 + 6, box_y2 + 6], radius=15, fill=None, outline='#F4CCD4', width=2)
         draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
