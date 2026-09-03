@@ -1490,7 +1490,7 @@ def mostrar_caja():
         st.markdown("### 🎟️ Panel de Cupones y Fidelización Premium")
         
         # --- GUÍA DE USO INTERACTIVA ---
-        with st.expander("📖 Manual de Uso Integrado: ¿Cómo funcionan mis cupones?", expanded=True):
+        with st.expander("📖 Manual de Uso Integrado: ¿Cómo funcionan mis cupones?", expanded=False):
             st.markdown("#### 1️⃣ Módulo de Cupones del Sistema (Cupones creados en Base de Datos)")
             st.info("""
             💡 **¿Cómo funciona el Límite de Usos?**
