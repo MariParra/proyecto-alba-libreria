@@ -1001,8 +1001,9 @@ def generar_comprobante(
 ):
     """
     Genera un comprobante premium que recalcula los totales desde el carrito
-    para garantizar que todos los descuentos (libro, cupón, manual) se reflejen siempre.
+    e implementa reintentos para la carga de la imagen de fondo.
     """
+    # --- PASO 1: RECONSTRUCCIÓN FINANCIERA (Esta parte ya está bien) ---
     suma_precios_catalogo = 0.0
     suma_precios_cobrados = 0.0
     carrito_procesado = []
@@ -1010,20 +1011,16 @@ def generar_comprobante(
     for item in carrito:
         item_copy = item.copy()
         qty = int(item_copy.get('cantidad', 1))
+        precio_cat = float(item_copy.get('precio_original', item_copy.get('precio_catalogo', 0.0)))
         
-        precio_cat = float(item_copy.get('precio_original', item_copy.get('precio_catalogo_original', item_copy.get('precio_catalogo', 0.0))))
-        
-        # Si el precio de catálogo es 0, intentar un fallback con el precio cobrado
         if precio_cat == 0.0:
             precio_cat = float(item_copy.get('precio_cobrado', 0.0))
 
-        # Sumar todos los descuentos ya calculados en vista_caja.py
         desc_libro = float(item_copy.get('descuento_libro', 0.0))
         desc_cupon = float(item_copy.get('descuento_cupon', 0.0))
         desc_manual_total_item = float(item_copy.get('descuento_manual', 0.0))
-        desc_manual_unitario = desc_manual_total_item / qty if qty > 0 else 0
+        desc_manual_unitario = desc_manual_total_item / qty if qty > 0 else 0.0
 
-        # El precio cobrado debe estar en el item, si no, lo recalculamos
         precio_cobrado_unit = float(item_copy.get('precio_cobrado', max(0.0, precio_cat - desc_libro - desc_cupon - desc_manual_unitario)))
         subtotal_item_final = precio_cobrado_unit * qty
 
@@ -1038,21 +1035,32 @@ def generar_comprobante(
     monto_final_calculado = suma_precios_cobrados + float(valor_envio)
     deuda_calculada = monto_final_calculado - float(abono)
 
-    # --- INICIO DEL CÓDIGO DE DIBUJO ---
-    # (El resto del código de dibujo es idéntico al que te proporcioné antes,
-    # puedes mantenerlo como está o reemplazarlo para asegurar que no haya errores)
+    # --- PASO 2: CARGA ROBUSTA DE LA IMAGEN DE FONDO (AQUÍ ESTÁ EL CAMBIO) ---
     url = "https://mjwwljryowjehktgcmtm.supabase.co/storage/v1/object/public/grafica/comprobante.jpg"
     img = None
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3) as r:
-            img = Image.open(io.BytesIO(r.read())).convert('RGB')
-            resample_filter = getattr(Image, 'Resampling', {}).get('LANCZOS', Image.ANTIALIAS)
-            img = img.resize((800, 1200), resample_filter)
-    except Exception:
+    intentos = 3
+    for i in range(intentos):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                img_data = r.read()
+                img = Image.open(io.BytesIO(img_data)).convert('RGB')
+                resample_filter = getattr(Image, 'Resampling', {}).get('LANCZOS', Image.ANTIALIAS)
+                img = img.resize((800, 1200), resample_filter)
+            break  # Si tiene éxito, sale del bucle
+        except Exception as e:
+            print(f"Intento {i+1}/{intentos} fallido para cargar la imagen de fondo: {e}")
+            if i < intentos - 1:
+                time.sleep(1)  # Espera 1 segundo antes de reintentar
+
+    # Si después de todos los intentos la imagen no se cargó, crea el fondo blanco
+    if img is None:
+        print("Todos los intentos fallaron. Creando comprobante con fondo blanco.")
         img = Image.new('RGB', (800, 1200), color='#FAF8FC')
         
+    # --- PASO 3: DIBUJO DEL COMPROBANTE (sin cambios) ---
     draw = ImageDraw.Draw(img)
+    # ... (El resto de tu código de dibujo permanece exactamente igual) ...
     font_title = obtener_fuente_comprobante("Lato", 32, bold=True)
     font_section = obtener_fuente_comprobante("Lato", 20, bold=True)
     font_body = obtener_fuente_comprobante("Lato", 15)
@@ -1068,8 +1076,6 @@ def generar_comprobante(
     draw.text((x_margin, 150), "Datos del Cliente", fill='#7C0C3F', font=font_section)
     pago_limpio, comentario_limpio = extraer_pago_y_comentario(metodo_pago)
     
-    # ... (El código de dibujo de datos del cliente, tabla y totales permanece igual)
-    # Datos del cliente
     draw.text((x_margin, 190), "Cliente:", fill='#7C0C3F', font=font_body_bold)
     draw.text((x_margin + 90, 190), str(cliente_nombre).upper(), fill='#333333', font=font_body)
     draw.text((x_margin, 220), "RUT:", fill='#7C0C3F', font=font_body_bold)
@@ -1102,7 +1108,6 @@ def generar_comprobante(
         draw.text((x_col2, 280), "Nota:", fill='#7C0C3F', font=font_body_bold)
         draw.text((x_col2 + 80, 280), nota_c, fill='#333333', font=font_body)
 
-    # Tabla de Detalle
     draw.line([x_margin, 380, x_right, 380], fill='#BA96A5', width=2)
     draw.text((x_margin, 395), "Detalle de la Compra", fill='#7C0C3F', font=font_section)
     y_table = 440
@@ -1115,7 +1120,8 @@ def generar_comprobante(
     y_item = y_table + 35
     for item in carrito_procesado:
         draw.text((x_margin, y_item), str(item.get('cantidad', 1)), fill='#333333', font=font_body)
-        titulo = str(item.get('titulo', 'N/A')).upper()[:25] + "..." if len(str(item.get('titulo', 'N/A'))) > 28 else str(item.get('titulo', 'N/A')).upper()
+        titulo = str(item.get('titulo', 'N/A')).upper()
+        if len(titulo) > 28: titulo = titulo[:25] + "..."
         draw.text((x_margin + 60, y_item), titulo, fill='#333333', font=font_body)
         draw.text((560, y_item), f"${item.get('precio_cobrado', 0.0):,.0f}", fill='#333333', font=font_body)
         draw.text((660, y_item), f"${item.get('subtotal', 0.0):,.0f}", fill='#333333', font=font_body)
@@ -1124,7 +1130,6 @@ def generar_comprobante(
             draw.text((x_margin + 60, y_item), "... (Otros libros omitidos)", fill='#777777', font=font_body)
             break
             
-    # Totales Financieros
     if descuento_total_calculado > 10:
         box_x1, box_y1, box_x2, box_y2 = 410, 890, 740, 1125
         draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2], radius=15, fill=None, outline='#7C0C3F', width=2)
