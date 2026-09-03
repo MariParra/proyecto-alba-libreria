@@ -654,13 +654,14 @@ def mostrar_asignaciones():
             else:
                 df_pendientes = df_mes[df_mes['titulo_libro'] == "⏳ PENDIENTE DE ASIGNAR"]
 
-                ## --- ASIGNACIÓN MASIVA Y AUTOMÁTICA ---
+                                ## --- ASIGNACIÓN MASIVA Y AUTOMÁTICA ---
                 with st.container(border=True):
                     st.markdown("### 🎲 Asignación al Azar (Masiva y Segura)")
                     st.caption("Analiza stock y gustos en vivo. Solo asigna libros si existe coincidencia perfecta.")
                     
                     df_filtrado_final = df_pendientes.copy()
                     
+                    # 1. Filtro por actualización de librero
                     descartar_antiguos = st.checkbox("🛡️ Solo incluir clientas que hayan actualizado su librero en los últimos 7 días")
                     if descartar_antiguos and not df_filtrado_final.empty:
                         df_filtrado_final['fecha_actualizacion_librero'] = pd.to_datetime(
@@ -673,6 +674,17 @@ def mostrar_asignaciones():
                         excluidas_fecha = antes_de_fecha - len(df_filtrado_final)
                         if excluidas_fecha > 0:
                             st.info(f"💡 Filtro activo: Se omitieron otras {excluidas_fecha} clientas por no actualizar su librero a tiempo.")
+                        
+                    # 2. NUEVO FILTRO: Solo clientas que han pagado
+                    filtrar_pagadas = st.checkbox("💳 Solo incluir clientas con pago confirmado (Suscripción Pagada)")
+                    if filtrar_pagadas and not df_filtrado_final.empty:
+                        antes_de_pago = len(df_filtrado_final)
+                        # Filtramos basándonos en la normalización 'SI' aplicada en cabecera
+                        df_filtrado_final = df_filtrado_final[df_filtrado_final['pagado'] == 'SI']
+                        
+                        excluidas_pago = antes_de_pago - len(df_filtrado_final)
+                        if excluidas_pago > 0:
+                            st.info(f"💡 Filtro activo: Se omitieron otras {excluidas_pago} clientas por no registrar pago confirmado ('SI').")
                         
                     st.metric("Cajas Pendientes", len(df_filtrado_final))
                     
