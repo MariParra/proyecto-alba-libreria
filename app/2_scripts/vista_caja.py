@@ -727,6 +727,33 @@ def mostrar_caja():
         if df_ventas.empty: 
             st.info("Aún no hay ventas registradas.")
         else:
+            # ---> INICIO DE EXTRACCIÓN DE SUGERENCIAS DESDE EL JSON CRUDO DE VENTAS <---
+            titulos_sugeridos = set()
+            col_target = 'libros_vendidos_raw' if 'libros_vendidos_raw' in df_ventas.columns else 'libros_vendidos'
+            for val in df_ventas[col_target].dropna():
+                val_str = str(val).strip()
+                if val_str.startswith('['):
+                    try:
+                        items_json = json.loads(val_str)
+                        for item in items_json:
+                            if isinstance(item, dict) and 'titulo' in item:
+                                t = str(item['titulo']).strip()
+                                if t:
+                                    titulos_sugeridos.add(t.upper())
+                    except Exception:
+                        pass
+                else:
+                    items_str = val_str.split(" | ")
+                    for item_str in items_str:
+                        partes = item_str.split(" x ", 1)
+                        if len(partes) == 2:
+                            t = partes[1].strip()
+                        else:
+                            t = item_str.strip()
+                        if t:
+                            titulos_sugeridos.add(t.upper())
+            listado_titulos_sugeridos = sorted(list(titulos_sugeridos))
+            
             fechas_invalidas = df_ventas['fecha_limpia'].isna()
             if fechas_invalidas.any():
                 with st.expander(f"⚠️ Atención: {fechas_invalidas.sum()} ventas tienen fechas ilegibles"):
@@ -767,13 +794,23 @@ def mostrar_caja():
                 tipo_cobro_filtro = col_f5.selectbox("Filtrar Cobro Envío:", options=tipo_cobro_options)
                 
                 st.markdown("---")
-                col_search, col_cost = st.columns([3, 1])
-                busqueda_titulo = col_search.text_input("🔍 Buscar por Título de Libro en el Historial:", placeholder="Escribe el título del libro a buscar...", key="buscar_titulo_historial")
                 
-                if busqueda_titulo.strip():
+                
+                col_search, col_cost = st.columns([3, 1])
+                
+                busqueda_titulo = col_search.selectbox(
+                    "🔍 Buscar por Título de Libro en el Historial (Sugerencias):",
+                    options=listado_titulos_sugeridos,
+                    index=None,
+                    placeholder="Escribe o selecciona un título de libro vendido...",
+                    key="buscar_titulo_historial"
+                )
+                                
+                if busqueda_titulo:
                     if col_search.button("🗑️ Limpiar búsqueda de título", key="btn_limpiar_busqueda_titulo", use_container_width=True):
-                        st.session_state.buscar_titulo_historial = ""  
-                        st.rerun()  
+                        if "buscar_titulo_historial" in st.session_state:
+                            del st.session_state["buscar_titulo_historial"] # Destrucción limpia del estado
+                        st.rerun() 
                         
                 solo_costo_cero = col_cost.checkbox("⚠️ Ventas sin costo asignado ($0)", value=False)
                 
