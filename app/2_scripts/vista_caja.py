@@ -819,8 +819,7 @@ def mostrar_caja():
         st.write("")
         
         desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
-        
-        desactivar_boton = not c_nombre or len(st.session_state.carrito_caja) == 0 or bloquear_venta
+
         
                 # --- GENERAR COMPROBANTE RESUMEN (NUEVA VENTA) ---
         st.markdown("---")
@@ -851,8 +850,11 @@ def mostrar_caja():
                     )
                     
                     if img_bytes_preview and isinstance(img_bytes_preview, bytes):
-                        # Envolvemos en io.BytesIO para visualización limpia sin TypeErrors ni recortes
-                        st.image(io.BytesIO(img_bytes_preview), caption="Vista Previa de Comprobante", use_container_width=True)
+                        try:
+                            st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_container_width=True)
+                        except TypeError:
+                            st.image(img_bytes_preview, caption="Vista Previa de Comprobante", use_column_width=True)
+
                         st.download_button(
                             label="📥 Descargar Comprobante (JPG)",
                             data=img_bytes_preview,
@@ -1548,7 +1550,13 @@ def mostrar_caja():
                         )
                         
                         if img_bytes_abierta and isinstance(img_bytes_abierta, bytes):
-                            st.image(io.BytesIO(img_bytes_abierta), caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                            try:
+                                # Compatible con versiones recientes de Streamlit
+                                st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_container_width=True)
+                            except TypeError:
+                                # Fallback para versiones previas de Streamlit
+                                st.image(img_bytes_abierta, caption=f"Comprobante Venta #{v_id_sel}", use_column_width=True)
+
                             st.download_button(
                                 label=f"📥 Descargar Comprobante Venta #{v_id_sel} (JPG)",
                                 data=img_bytes_abierta,
@@ -1557,6 +1565,7 @@ def mostrar_caja():
                                 use_container_width=True,
                                 key=f"dl_abierta_{v_id_sel}"
                             )
+
 
     # =========================================================================
     # 🎟️ TAB 7: PANEL DE CUPONES Y FIDELIZACIÓN (CON GESTIÓN CRUD COMPLETA)
