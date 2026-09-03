@@ -697,12 +697,13 @@ def mostrar_caja():
                     
     with tab_historial:
         st.markdown("### 📜 Historial de Ventas")
-        st.info("""
-        💡 **¿Cómo se calculan las finanzas en este panel?**
-        * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
-        * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
-        * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
-        """)
+        
+        with st.expander("💡 **¿Cómo se calculan las finanzas en este panel?**", expanded=False):
+            st.info("""
+            * **Ventas Totales (Monto Final):** Suma del precio cobrado por cada libro más el **Costo de Envío** (si aplica).
+            * **Costos Totales (Costo Venta):** Suma del costo de adquisición registrado en catálogo para cada libro vendido.
+            * **Utilidad Estimada:** Se obtiene restando `(Ventas Totales - Costo de Envío) - Costos Totales` (es decir, la utilidad real que te dejan los libros sin contar el despacho).
+            """)
         
         df_ventas = df_ventas_global.copy()
         
