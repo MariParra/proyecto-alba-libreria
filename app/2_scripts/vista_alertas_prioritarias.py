@@ -268,6 +268,12 @@ def mostrar_alertas_prioritarias():
                     # Línea de visualización del método de envío agregada de manera elegante:
                     st.markdown(f"🚚 **Método de Envío:** `{row.get('metodo_envio', 'No especificado')}`")
                     st.markdown(f"📚 **Libros a empacar:** {libros_formateados}")
+                    
+                    # BOTÓN DE REDIRECCIÓN A LA CAJA
+                    if st.button(f"🔍 Resolver Venta #{row['venta_id']}", key=f"btn_resolver_envio_{row['venta_id']}", use_container_width=True):
+                        st.session_state["buscar_venta_id"] = int(row['venta_id'])
+                        st.session_state["pagina_actual"] = "🛒 CAJA / VENTAS RÁPIDAS"
+                        st.rerun()
 
             # Botón de carga incremental de envíos
             if total_envios > limite_envios:
@@ -294,6 +300,12 @@ def mostrar_alertas_prioritarias():
                     st.markdown(f"👤 **{row['cliente_nombre']}**")
                     st.markdown(f"💰 **Deuda Pendiente:** `{row['deuda']:,.0f}` (Total: `${row['monto_final']:,.0f}`) ")
                     st.markdown(f"⏳ `{row['dias_antiguedad']} días` de atraso desde la fecha de venta.")
+                    
+                    # BOTÓN DE REDIRECCIÓN A COBRANZA EN CAJA
+                    if st.button(f"🔍 Gestionar Cobro #{row['venta_id']}", key=f"btn_resolver_cobro_{row['venta_id']}", use_container_width=True):
+                        st.session_state["buscar_venta_id"] = int(row['venta_id'])
+                        st.session_state["pagina_actual"] = "🛒 CAJA / VENTAS RÁPIDAS"
+                        st.rerun()
 
             # Botón de carga incremental de cobranzas
             if total_cobranzas > limite_cobranzas:
