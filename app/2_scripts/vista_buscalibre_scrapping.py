@@ -42,7 +42,7 @@ def mostrar_buscalibre_scrapping():
     opciones_libros = {f"{limpiar_texto_para_busqueda(l['titulo'])} (ISBN: {l.get('isbn', 'N/A')}):": l for l in libros_data}
     
     # --- PESTAÑAS ADMINISTRATIVAS PARA MEJORAR LA ORGANIZACIÓN (UX) ---
-    tab_gestion, tab_actualizacion_masiva = st.tabs(["📌 Registrar y Buscar", "⚡ Actualización Masiva de Precios Objetivos"])
+    tab_gestion, tab_actualizacion_masiva = st.tabs(["📌 Registrar y Buscar", "⚡ Actualización Masiva de Precios"])
     
     # =====================================================================
     # PESTAÑA 1: REGISTRO Y GESTIÓN DE LIBROS INDIVIDUALES
@@ -131,113 +131,113 @@ def mostrar_buscalibre_scrapping():
                 else:
                     encuader = encuader_select
 
-            with col2:
-                url_buscalibre = st.text_input("URL Buscalibre (Opcional - El Scrapper la buscará si se deja vacía):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
+        with col2:
+            url_buscalibre = st.text_input("URL Buscalibre (Opcional - El Scrapper la buscará si se deja vacía):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
+            
+            # --- EDITORIAL (Dinámico con opción OTRO) ---
+            opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
+            editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
+            
+            if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
+                editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
+            else:
+                editorial = editorial_select
+            
+            # --- GÉNERO (Dinámico con opción OTRO) ---
+            opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
+            genero_select = st.selectbox("Género:", options=opciones_generos, index=None, placeholder="Elige género...", key="sb_genero_existente")
+            
+            if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
+                genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
+            else:
+                genero = genero_select
+            
+            target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
+
+        id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
+
+        if st.button("Agregar a la Wishlist", type="primary"):
+            titulo_clean = limpiar_texto_para_busqueda(titulo)
+            autor_clean = limpiar_texto_para_busqueda(autor)
+            editorial_clean = limpiar_texto_para_busqueda(editorial)
+            isbn_clean = ''.join(filter(str.isdigit, str(isbn)))
+            encuader_clean = limpiar_texto_para_busqueda(encuader)
+            genero_clean = limpiar_texto_para_busqueda(genero) if genero else None
+
+            if not titulo_clean:
+                st.error("⚠️ El título del libro es obligatorio.")
+                return
+            if not autor_clean:
+                st.error("⚠️ El autor es obligatorio.")
+                return
+            if not editorial_clean:
+                st.error("⚠️ La editorial es obligatoria.")
+                return
+            if not isbn_clean:
+                st.error("⚠️ El ISBN es obligatorio.")
+                return
+            if not encuader_clean:
+                st.error("⚠️ La encuadernación es obligatoria.")
+                return
+
+            try:
+                # 1. Crear libro si no existe
+                existe_libro_db = any(limpiar_texto_para_busqueda(l.get('titulo', '')) == titulo_clean or (l.get('isbn') and l.get('isbn') == isbn_clean) for l in libros_data)
                 
-                # --- EDITORIAL (Dinámico con opción OTRO) ---
-                opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
-                editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
-                
-                if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
-                    editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
-                else:
-                    editorial = editorial_select
-                
-                # --- GÉNERO (Dinámico con opción OTRO) ---
-                opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
-                genero_select = st.selectbox("Género:", options=opciones_generos, index=None, placeholder="Elige género...", key="sb_genero_existente")
-                
-                if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
-                    genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
-                else:
-                    genero = genero_select
-                
-                target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
-
-            id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
-
-            if st.button("Agregar a la Wishlist", type="primary"):
-                titulo_clean = limpiar_texto_para_busqueda(titulo)
-                autor_clean = limpiar_texto_para_busqueda(autor)
-                editorial_clean = limpiar_texto_para_busqueda(editorial)
-                isbn_clean = ''.join(filter(str.isdigit, str(isbn)))
-                encuader_clean = limpiar_texto_para_busqueda(encuader)
-                genero_clean = limpiar_texto_para_busqueda(genero) if genero else None
-
-                if not titulo_clean:
-                    st.error("⚠️ El título del libro es obligatorio.")
-                    return
-                if not autor_clean:
-                    st.error("⚠️ El autor es obligatorio.")
-                    return
-                if not editorial_clean:
-                    st.error("⚠️ La editorial es obligatoria.")
-                    return
-                if not isbn_clean:
-                    st.error("⚠️ El ISBN es obligatorio.")
-                    return
-                if not encuader_clean:
-                    st.error("⚠️ La encuadernación es obligatoria.")
-                    return
-
-                try:
-                    # 1. Crear libro si no existe
-                    existe_libro_db = any(limpiar_texto_para_busqueda(l.get('titulo', '')) == titulo_clean or (l.get('isbn') and l.get('isbn') == isbn_clean) for l in libros_data)
-                    
-                    if not existe_libro_db:
-                        try:
-                            conn.table("libros").insert({
-                                "titulo": titulo_clean,
-                                "autor": autor_clean,
-                                "isbn": isbn_clean,
-                                "editorial": editorial_clean,
-                                "genero": genero_clean,
-                                "encuadernacion": encuader_clean
-                            }).execute()
-                            st.toast(f"📖 ¡Libro '{titulo_clean}' creado en la base de datos!")
-                        except Exception as db_err:
-                            st.warning(f"Nota: {db_err}")
-
-                    # 2. Registrar en la wishlist
-                    target_val_final = target_price
-                    if target_price == 0:
-                        if encuader_clean == "TAPA DURA":
-                            target_val_final = 15000
-                        elif encuader_clean == "TAPA BLANDA":
-                            target_val_final = 11000
-
-                    wishlist_data = {
-                        "user_id": id_usuario_defecto,
-                        "title": titulo_clean,
-                        "author": autor_clean,
-                        "isbn": isbn_clean,
-                        "store_url_buscalibre": url_buscalibre if url_buscalibre else None,
-                        "target_price": target_val_final if target_val_final > 0 else None,
-                        "editorial": editorial_clean,
-                        "genre": genero_clean,
-                        "current_price": None,
-                        "alert_sent": False,
-                        "encuadernacion": encuader_clean
-                    }
-                    
+                if not existe_libro_db:
                     try:
+                        conn.table("libros").insert({
+                            "titulo": titulo_clean,
+                            "autor": autor_clean,
+                            "isbn": isbn_clean,
+                            "editorial": editorial_clean,
+                            "genero": genero_clean,
+                            "encuadernacion": encuader_clean
+                        }).execute()
+                        st.toast(f"📖 ¡Libro '{titulo_clean}' creado en la base de datos!")
+                    except Exception as db_err:
+                        st.warning(f"Nota: {db_err}")
+
+                # 2. Registrar en la wishlist
+                target_val_final = target_price
+                if target_price == 0:
+                    if encuader_clean == "TAPA DURA":
+                        target_val_final = 15000
+                    elif encuader_clean == "TAPA BLANDA":
+                        target_val_final = 11000
+
+                wishlist_data = {
+                    "user_id": id_usuario_defecto,
+                    "title": titulo_clean,
+                    "author": autor_clean,
+                    "isbn": isbn_clean,
+                    "store_url_buscalibre": url_buscalibre if url_buscalibre else None,
+                    "target_price": target_val_final if target_val_final > 0 else None,
+                    "editorial": editorial_clean,
+                    "genre": genero_clean,
+                    "current_price": None,
+                    "alert_sent": False,
+                    "encuadernacion": encuader_clean
+                }
+                
+                try:
+                    conn.table("book_wishlist").insert(wishlist_data).execute()
+                except Exception as insert_err:
+                    if "encuadernacion" in str(insert_err):
+                        wishlist_data.pop("encuadernacion", None)
                         conn.table("book_wishlist").insert(wishlist_data).execute()
-                    except Exception as insert_err:
-                        if "encuadernacion" in str(insert_err):
-                            wishlist_data.pop("encuadernacion", None)
-                            conn.table("book_wishlist").insert(wishlist_data).execute()
-                        else:
-                            raise insert_err
-                    st.success(f"🎉 ¡Libro '{titulo_clean}' agregado con éxito para monitoreo!")
-                    
-                    for key in ["sb_scra_libro", "txt_scra_titulo", "txt_scra_autor", "txt_scra_isbn", "num_scra_target", 
-                                "txt_scra_buscalibre", "txt_scra_editorial", "txt_scra_genero", "sb_autor_existente", 
-                                "sb_editorial_existente", "sb_genero_existente", "sb_encuader_existente", "txt_scra_encuader"]:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
+                    else:
+                        raise insert_err
+                st.success(f"🎉 ¡Libro '{titulo_clean}' agregado con éxito para monitoreo!")
+                
+                for key in ["sb_scra_libro", "txt_scra_titulo", "txt_scra_autor", "txt_scra_isbn", "num_scra_target", 
+                            "txt_scra_buscalibre", "txt_scra_editorial", "txt_scra_genero", "sb_autor_existente", 
+                            "sb_editorial_existente", "sb_genero_existente", "sb_encuader_existente", "txt_scra_encuader"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
 
         # Mostrar wishlist actual e historial de precios
         st.markdown("---")
@@ -337,23 +337,21 @@ def mostrar_buscalibre_scrapping():
                             step=1000, 
                             key=f"edit_indiv_{item['id']}"
                         )
-                        col_btn1, col_btn2 = st.columns(2)
-                        with col_btn1:
-                            if st.button("Guardar", key=f"save_indiv_{item['id']}", use_container_width=True, type="primary"):
-                                try:
-                                    conn.table("book_wishlist").update({"target_price": nuevo_precio_obj_indiv}).eq("id", item["id"]).execute()
-                                    st.toast("✅ ¡Precio Objetivo guardado!")
-                                    st.rerun()
-                                except Exception as err:
-                                    st.error(f"Error: {err}")
-                        with col_btn2:
-                            if st.button("Eliminar", key=f"del_{item['id']}", use_container_width=True, type="secondary"):
-                                try:
-                                    conn.table("book_wishlist").delete().eq("id", item["id"]).execute()
-                                    st.toast(f"Monitoreo eliminado")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
+                        # Renderizamos los botones de forma vertical consecutiva para evitar anidamiento de columnas prohibido
+                        if st.button("Guardar", key=f"save_indiv_{item['id']}", use_container_width=True, type="primary"):
+                            try:
+                                conn.table("book_wishlist").update({"target_price": nuevo_precio_obj_indiv}).eq("id", item["id"]).execute()
+                                st.toast("✅ ¡Precio Objetivo guardado!")
+                                st.rerun()
+                            except Exception as err:
+                                st.error(f"Error: {err}")
+                        if st.button("Eliminar", key=f"del_{item['id']}", use_container_width=True, type="secondary"):
+                            try:
+                                conn.table("book_wishlist").delete().eq("id", item["id"]).execute()
+                                st.toast(f"Monitoreo eliminado")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
                                     
                     # Historial reciente de precios
                     try:
