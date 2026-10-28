@@ -39,178 +39,196 @@ def mostrar_buscalibre_scrapping():
         generos_existentes = []
         encuader_existentes = []
 
-    # Opciones de libros con nombres limpios
     opciones_libros = {f"{limpiar_texto_para_busqueda(l['titulo'])} (ISBN: {l.get('isbn', 'N/A')}):": l for l in libros_data}
     
-    st.markdown("### 📌 Registrar Libro para Monitoreo")
-    
-    # 1. Selector autocompletable para buscar libros existentes
-    libro_seleccionado = st.selectbox(
-        "Autocompletar con un libro de la base de datos Alba:",
-        options=list(opciones_libros.keys()),
-        index=None,
-        placeholder="Selecciona un libro de la base de datos...",
-        key="sb_scra_libro"
-    )
+    # 1. REGISTRAR LIBRO AHORA ES UN EXPANDER COLAPSABLE (Punto 1)
+    with st.expander("📌 Registrar Libro para Monitoreo", expanded=True):
+        
+        # Selector autocompletable para buscar libros existentes
+        libro_seleccionado = st.selectbox(
+            "Autocompletar con un libro de la base de datos Alba:",
+            options=list(opciones_libros.keys()),
+            index=None,
+            placeholder="Selecciona un libro de la base de datos...",
+            key="sb_scra_libro"
+        )
 
-    # Inicialización de variables para autofill
-    titulo_def = ""
-    autor_def = None
-    isbn_def = ""
-    editorial_def = None
-    genero_def = None
-    encuader_def = None
-    libro_db_id = None
+        # --- CONTROL INTELIGENTE DE ESTADO (SYNC) ---
+        if "previo_libro_seleccionado" not in st.session_state:
+            st.session_state.previo_libro_seleccionado = None
 
-    if libro_seleccionado:
-        libro_db = opciones_libros[libro_seleccionado]
-        titulo_def = limpiar_texto_para_busqueda(libro_db.get("titulo"))
-        autor_def = limpiar_texto_para_busqueda(libro_db.get("autor")) or None
-        isbn_def = libro_db.get("isbn") or ""
-        editorial_def = limpiar_texto_para_busqueda(libro_db.get("editorial")) or None
-        genero_def = limpiar_texto_para_busqueda(libro_db.get("genero")) or None
-        encuader_def = limpiar_texto_para_busqueda(libro_db.get("encuadernacion")) or None
-        libro_db_id = libro_db.get("libro_id")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        titulo = st.text_input("Título del libro (Obligatorio):", value=titulo_def, key="txt_scra_titulo")
-        
-        # --- AUTOR (DInámico con opción OTRO) ---
-        opciones_autores = autores_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_autor = opciones_autores.index(autor_def) if autor_def in opciones_autores else None
-        
-        autor_select = st.selectbox("Autor:", options=opciones_autores, index=idx_autor, placeholder="Elige un autor...", key="sb_autor_existente")
-        
-        if autor_select == "OTRO (Escribir nuevo...)" or (not autores_existentes and autor_select is None):
-            autor = st.text_input("Escribir nuevo Autor (MANDATORIO):", key="txt_scra_autor")
-        else:
-            autor = autor_select
-            
-        isbn = st.text_input("ISBN (MANDATORIO):", value=isbn_def, key="txt_scra_isbn")
-        
-        # --- ENCUADERNACIÓN (Dinámico con opción OTRO) ---
-        opciones_encuader = encuader_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_encuader = opciones_encuader.index(encuader_def) if encuader_def in opciones_encuader else None
-        
-        encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=idx_encuader, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
-        
-        if encuader_select == "OTRO (Escribir nuevo...)" or (not encuader_existentes and encuader_select is None):
-            encuader = st.text_input("Escribir nueva Encuadernación (MANDATORIO):", key="txt_scra_encuader")
-        else:
-            encuader = encuader_select
-
-    with col2:
-        url_buscalibre = st.text_input("URL Buscalibre (MANDATORIO):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
-        
-        # --- EDITORIAL (Dinámico con opción OTRO) ---
-        opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_editorial = opciones_editoriales.index(editorial_def) if editorial_def in opciones_editoriales else None
-        
-        editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=idx_editorial, placeholder="Elige editorial...", key="sb_editorial_existente")
-        
-        if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
-            editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
-        else:
-            editorial = editorial_select
-        
-        # --- GÉNERO (Dinámico con opción OTRO) ---
-        opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_genero = opciones_generos.index(genero_def) if genero_def in opciones_generos else None
-        
-        genero_select = st.selectbox("Género:", options=opciones_generos, index=idx_genero, placeholder="Elige género...", key="sb_genero_existente")
-        
-        if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
-            genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
-        else:
-            genero = genero_select
-        
-        target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
-
-    id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
-
-    if st.button("Agregar a la Wishlist", type="primary"):
-        # Normalizamos los valores usando limpiar_texto_para_busqueda (Punto 2)
-        titulo_clean = limpiar_texto_para_busqueda(titulo)
-        autor_clean = limpiar_texto_para_busqueda(autor)
-        editorial_clean = limpiar_texto_para_busqueda(editorial)
-        isbn_clean = ''.join(filter(str.isdigit, str(isbn))) # Limpia guiones del ISBN
-        encuader_clean = limpiar_texto_para_busqueda(encuader)
-        genero_clean = limpiar_texto_para_busqueda(genero) if genero else None
-
-        # Validar campos obligatorios
-        if not titulo_clean:
-            st.error("⚠️ El título del libro es obligatorio.")
-            return
-        if not autor_clean:
-            st.error("⚠️ El autor es obligatorio.")
-            return
-        if not editorial_clean:
-            st.error("⚠️ La editorial es obligatoria.")
-            return
-        if not isbn_clean:
-            st.error("⚠️ El ISBN es obligatorio.")
-            return
-        if not encuader_clean:
-            st.error("⚠️ La encuadernación es obligatoria.")
-            return
-        if not url_buscalibre:
-            st.error("⚠️ La URL de Buscalibre es obligatoria.")
-            return
-
-        try:
-            # 1. Crear libro si no existe (con datos 100% normalizados)
-            existe_libro_db = any(limpiar_texto_para_busqueda(l.get('titulo', '')) == titulo_clean or (l.get('isbn') and l.get('isbn') == isbn_clean) for l in libros_data)
-            
-            if not existe_libro_db:
-                try:
-                    insert_libro = conn.table("libros").insert({
-                        "titulo": titulo_clean,
-                        "autor": autor_clean,
-                        "isbn": isbn_clean,
-                        "editorial": editorial_clean,
-                        "genero": genero_clean,
-                        "encuadernacion": encuader_clean
-                    }).execute()
-                    if insert_libro.data:
-                        st.toast(f"📖 ¡Libro '{titulo_clean}' creado exitosamente en la base de datos Alba!")
-                except Exception as db_err:
-                    st.warning(f"Nota: No se pudo registrar en la tabla libros de forma automática ({db_err}), guardando directo en wishlist.")
-
-            # 2. Registrar en la wishlist de precios (datos 100% normalizados)
-            wishlist_data = {
-                "user_id": id_usuario_defecto,
-                "title": titulo_clean,
-                "author": autor_clean,
-                "isbn": isbn_clean,
-                "store_url_buscalibre": url_buscalibre,
-                "target_price": target_price if target_price > 0 else None,
-                "editorial": editorial_clean,
-                "genre": genero_clean,
-                "current_price": None,
-                "alert_sent": False,
-                "encuadernacion": encuader_clean
-            }
-            
-            try:
-                conn.table("book_wishlist").insert(wishlist_data).execute()
-            except Exception as insert_err:
-                if "encuadernacion" in str(insert_err):
-                    wishlist_data.pop("encuadernacion", None)
-                    conn.table("book_wishlist").insert(wishlist_data).execute()
+        if libro_seleccionado != st.session_state.previo_libro_seleccionado:
+            st.session_state.previo_libro_seleccionado = libro_seleccionado
+            if libro_seleccionado:
+                libro_db = opciones_libros[libro_seleccionado]
+                st.session_state["txt_scra_titulo"] = libro_db.get("titulo") or ""
+                st.session_state["txt_scra_isbn"] = libro_db.get("isbn") or ""
+                
+                # Autores
+                autor_val = libro_db.get("autor") or ""
+                if autor_val in autores_existentes:
+                    st.session_state["sb_autor_existente"] = autor_val
                 else:
-                    raise insert_err
-            st.success(f"🎉 ¡Libro '{titulo_clean}' agregado con éxito para monitoreo de precios!")
+                    st.session_state["sb_autor_existente"] = "OTRO (Escribir nuevo...)"
+                    st.session_state["txt_scra_autor"] = autor_val
+
+                # Editoriales
+                edit_val = libro_db.get("editorial") or ""
+                if edit_val in editoriales_existentes:
+                    st.session_state["sb_editorial_existente"] = edit_val
+                else:
+                    st.session_state["sb_editorial_existente"] = "OTRO (Escribir nuevo...)"
+                    st.session_state["txt_scra_editorial"] = edit_val
+
+                # Géneros
+                gen_val = libro_db.get("genero") or ""
+                if gen_val in generos_existentes:
+                    st.session_state["sb_genero_existente"] = gen_val
+                else:
+                    st.session_state["sb_genero_existente"] = "OTRO (Escribir nuevo...)"
+                    st.session_state["txt_scra_genero"] = gen_val
+
+                # Encuadernación
+                enc_val = libro_db.get("encuadernacion") or ""
+                if enc_val in encuader_existentes:
+                    st.session_state["sb_encuader_existente"] = enc_val
+                else:
+                    st.session_state["sb_encuader_existente"] = "OTRO (Escribir nuevo...)"
+                    st.session_state["txt_scra_encuader"] = enc_val
+            else:
+                for k in ["txt_scra_titulo", "txt_scra_isbn", "sb_autor_existente", "txt_scra_autor", 
+                          "sb_editorial_existente", "txt_scra_editorial", "sb_genero_existente", "txt_scra_genero",
+                          "sb_encuader_existente", "txt_scra_encuader"]:
+                    st.session_state[k] = "" if "txt" in k else None
+
+        col1, col2 = st.columns(2)
+        with col1:
+            titulo = st.text_input("Título del libro (Obligatorio):", key="txt_scra_titulo")
             
-            # Limpieza de estados según directrices UX
-            for key in ["sb_scra_libro", "txt_scra_titulo", "txt_scra_autor", "txt_scra_isbn", "num_scra_target", 
-                        "txt_scra_buscalibre", "txt_scra_editorial", "txt_scra_genero", "sb_autor_existente", 
-                        "sb_editorial_existente", "sb_genero_existente", "sb_encuader_existente", "txt_scra_encuader"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al guardar en book_wishlist: {e}")
+            # --- AUTOR (DInámico con opción OTRO) ---
+            opciones_autores = autores_existentes + ["OTRO (Escribir nuevo...)"]
+            autor_select = st.selectbox("Autor:", options=opciones_autores, index=None, placeholder="Elige un autor...", key="sb_autor_existente")
+            
+            if autor_select == "OTRO (Escribir nuevo...)" or (not autores_existentes and autor_select is None):
+                autor = st.text_input("Escribir nuevo Autor (MANDATORIO):", key="txt_scra_autor")
+            else:
+                autor = autor_select
+                
+            isbn = st.text_input("ISBN (MANDATORIO):", key="txt_scra_isbn")
+            
+            # --- ENCUADERNACIÓN (Dinámico con opción OTRO) ---
+            opciones_encuader = encuader_existentes + ["OTRO (Escribir nuevo...)"]
+            encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=None, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
+            
+            if encuader_select == "OTRO (Escribir nuevo...)" or (not encuader_existentes and encuader_select is None):
+                encuader = st.text_input("Escribir nueva Encuadernación (MANDATORIO):", key="txt_scra_encuader")
+            else:
+                encuader = encuader_select
+
+        with col2:
+            url_buscalibre = st.text_input("URL Buscalibre (Opcional - El Scrapper la buscará si se deja vacía):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
+            
+            # --- EDITORIAL (Dinámico con opción OTRO) ---
+            opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
+            editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
+            
+            if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
+                editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
+            else:
+                editorial = editorial_select
+            
+            # --- GÉNERO (Dinámico con opción OTRO) ---
+            opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
+            genero_select = st.selectbox("Género:", options=opciones_generos, index=None, placeholder="Elige género...", key="sb_genero_existente")
+            
+            if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
+                genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
+            else:
+                genero = genero_select
+            
+            target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
+
+        id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
+
+        if st.button("Agregar a la Wishlist", type="primary"):
+            # Normalizamos los valores usando limpiar_texto_para_busqueda
+            titulo_clean = limpiar_texto_para_busqueda(titulo)
+            autor_clean = limpiar_texto_para_busqueda(autor)
+            editorial_clean = limpiar_texto_para_busqueda(editorial)
+            isbn_clean = ''.join(filter(str.isdigit, str(isbn))) # Limpia guiones del ISBN
+            encuader_clean = limpiar_texto_para_busqueda(encuader)
+            genero_clean = limpiar_texto_para_busqueda(genero) if genero else None
+
+            # Validar campos obligatorios (URL ES OPCIONAL AHORA GRACIAS AL AUTO-DISCOVERY)
+            if not titulo_clean:
+                st.error("⚠️ El título del libro es obligatorio.")
+                return
+            if not autor_clean:
+                st.error("⚠️ El autor es obligatorio.")
+                return
+            if not editorial_clean:
+                st.error("⚠️ La editorial es obligatoria.")
+                return
+            if not isbn_clean:
+                st.error("⚠️ El ISBN es obligatorio.")
+                return
+            if not encuader_clean:
+                st.error("⚠️ La encuadernación es obligatoria.")
+                return
+
+            try:
+                # 1. Crear libro si no existe (con datos 100% normalizados)
+                existe_libro_db = any(limpiar_texto_para_busqueda(l.get('titulo', '')) == titulo_clean or (l.get('isbn') and l.get('isbn') == isbn_clean) for l in libros_data)
+                
+                if not existe_libro_db:
+                    try:
+                        insert_libro = conn.table("libros").insert({
+                            "titulo": titulo_clean,
+                            "autor": autor_clean,
+                            "isbn": isbn_clean,
+                            "editorial": editorial_clean,
+                            "genero": genero_clean,
+                            "encuadernacion": encuader_clean
+                        }).execute()
+                        if insert_libro.data:
+                            st.toast(f"📖 ¡Libro '{titulo_clean}' creado exitosamente en la base de datos Alba!")
+                    except Exception as db_err:
+                        st.warning(f"Nota: No se pudo registrar en la tabla libros de forma automática ({db_err}), guardando directo en wishlist.")
+
+                # 2. Registrar en la wishlist de precios (datos 100% normalizados)
+                wishlist_data = {
+                    "user_id": id_usuario_defecto,
+                    "title": titulo_clean,
+                    "author": autor_clean,
+                    "isbn": isbn_clean,
+                    "store_url_buscalibre": url_buscalibre if url_buscalibre else None,
+                    "target_price": target_price if target_price > 0 else None,
+                    "editorial": editorial_clean,
+                    "genre": genero_clean,
+                    "current_price": None,
+                    "alert_sent": False,
+                    "encuadernacion": encuader_clean
+                }
+                
+                try:
+                    conn.table("book_wishlist").insert(wishlist_data).execute()
+                except Exception as insert_err:
+                    if "encuadernacion" in str(insert_err):
+                        wishlist_data.pop("encuadernacion", None)
+                        conn.table("book_wishlist").insert(wishlist_data).execute()
+                    else:
+                        raise insert_err
+                st.success(f"🎉 ¡Libro '{titulo_clean}' agregado con éxito para monitoreo de precios!")
+                
+                # Limpieza de estados según directrices UX
+                for key in ["sb_scra_libro", "txt_scra_titulo", "txt_scra_autor", "txt_scra_isbn", "num_scra_target", 
+                            "txt_scra_buscalibre", "txt_scra_editorial", "txt_scra_genero", "sb_autor_existente", 
+                            "sb_editorial_existente", "sb_genero_existente", "sb_encuader_existente", "txt_scra_encuader"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar en book_wishlist: {e}")
 
     # Mostrar wishlist actual e historial de precios
     st.markdown("---")
@@ -223,7 +241,7 @@ def mostrar_buscalibre_scrapping():
         st.warning(f"Error al cargar wishlist: {e}")
         wishlist = []
 
-    # 2. AGREGAR FILTRO Y LUPA DE BÚSQUEDA (Punto 2)
+    # 2. AGREGAR FILTRO Y LUPA DE BÚSQUEDA
     search_query = st.text_input("🔍 Buscar en libros de monitoreo (Título, Autor, ISBN, Editorial):", value="", placeholder="Escribe para filtrar tu wishlist...")
 
     # Filtrado en memoria
@@ -256,7 +274,7 @@ def mostrar_buscalibre_scrapping():
                     current_price_val = item.get("current_price")
                     previous_price_val = item.get("previous_price")
                     
-                    # 3. LÓGICA DE FLECHAS DE FLUCTUACIÓN DE PRECIO (Punto 2)
+                    # 3. LÓGICA DE FLECHAS DE FLUCTUACIÓN DE PRECIO
                     tendencia_str = ""
                     if current_price_val is not None:
                         current_price_str = f"${float(current_price_val):,.0f} CLP"
@@ -264,13 +282,10 @@ def mostrar_buscalibre_scrapping():
                         if previous_price_val is not None:
                             diff = float(current_price_val) - float(previous_price_val)
                             if diff < 0:
-                                # Bajó de precio (Verde)
                                 tendencia_str = f" 🟢 ⬇️ **Bajó de precio! (-${abs(diff):,.0f} CLP)**"
                             elif diff > 0:
-                                # Subió de precio (Rojo)
                                 tendencia_str = f" 🔴 ⬆️ **Subió de precio (+${diff:,.0f} CLP)**"
                             else:
-                                # Sin cambios (Amarillo)
                                 tendencia_str = " 🟡 ➡️ **Sin cambios**"
                     else:
                         current_price_str = "Pendiente de Scraping"
