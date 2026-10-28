@@ -5,16 +5,16 @@ from utilidades import get_db_connection
 def mostrar_buscalibre_scrapping():
     st.markdown("<h2 style='color: #4A4D7E;'>🔍 Buscalibre Price Tracker</h2>", unsafe_allow_html=True)
     
-    # 4. CUADRO INFORMATIVO DE FUNCIONAMIENTO (UX)
-    st.info(
-        "💡 **¿Cómo funciona el Scraper?**\n\n"
-        "1. **Monitoreo Diario:** El script alojado en *Alwaysdata* revisa de forma automática los precios de Buscalibre cada día.\n"
-        "2. **Historial de Precios:** Cada consulta guarda un registro histórico en la base de datos para mostrar las tendencias de precios de cada libro.\n"
-        "3. **Valor Objetivo (Precio Alerta):** Si el precio de Buscalibre cae por debajo o igual al **Precio Objetivo** configurado "
-        "(con un margen a favor de hasta **+$1.000 CLP**), el sistema encola una alerta.\n"
-        "4. **Notificación Consolidada:** Al terminar de revisar todos los libros, el sistema despacha un único correo resumido con "
-        "todas las ofertas vigentes a la lista de correos autorizados."
-    )
+    # 1. CUADRO INFORMATIVO COLAPSABLE (UX)
+    with st.expander("💡 ¿Cómo funciona el Scraper y el Valor Objetivo?", expanded=False):
+        st.write(
+            "1. **Monitoreo Diario:** El script alojado en *Alwaysdata* revisa de forma automática los precios de Buscalibre cada día.\n"
+            "2. **Historial de Precios:** Cada consulta guarda un registro histórico en la base de datos para mostrar las tendencias de precios de cada libro.\n"
+            "3. **Valor Objetivo (Precio Alerta):** Si el precio de Buscalibre cae por debajo o igual al **Precio Objetivo** configurado "
+            "(con un margen a favor de hasta **+$1.000 CLP**), el sistema encola una alerta.\n"
+            "4. **Notificación Consolidada:** Al terminar de revisar todos los libros, el sistema despacha un único correo resumido con "
+            "todas las ofertas vigentes a la lista de correos autorizados."
+        )
 
     try:
         conn = get_db_connection()
@@ -24,7 +24,6 @@ def mostrar_buscalibre_scrapping():
 
     # Obtener catálogos existentes para autocompletado y selectores inteligentes (Punto 3)
     try:
-        # Obtenemos libros para el selector de autocompletado (Punto 1)
         res_libros = conn.table("libros").select("*").order("titulo").execute()
         libros_data = res_libros.data if res_libros.data else []
         
@@ -55,67 +54,96 @@ def mostrar_buscalibre_scrapping():
 
     # Inicialización de variables para autofill
     titulo_def = ""
-    autor_def = ""
+    autor_def = None
     isbn_def = ""
-    editorial_def = ""
-    genero_def = ""
-    encuader_def = ""
+    editorial_def = None
+    genero_def = None
+    encuader_def = None
     libro_db_id = None
 
     if libro_seleccionado:
         libro_db = opciones_libros[libro_seleccionado]
         titulo_def = libro_db.get("titulo") or ""
-        autor_def = libro_db.get("autor") or ""
+        autor_def = libro_db.get("autor") or None
         isbn_def = libro_db.get("isbn") or ""
-        editorial_def = libro_db.get("editorial") or ""
-        genero_def = libro_db.get("genero") or ""
-        encuader_def = libro_db.get("encuadernacion") or ""
+        editorial_def = libro_db.get("editorial") or None
+        genero_def = libro_db.get("genero") or None
+        encuader_def = libro_db.get("encuadernacion") or None
         libro_db_id = libro_db.get("libro_id")
 
     col1, col2 = st.columns(2)
     with col1:
         titulo = st.text_input("Título del libro (Obligatorio):", value=titulo_def, key="txt_scra_titulo")
         
-        # 3. Selectores inteligentes / Campos de texto para Autor
-        autor_select = st.selectbox("Autor existente:", options=autores_existentes, index=None, placeholder="Elige un autor...", key="sb_autor_existente")
-        autor = st.text_input("Escribir o corregir Autor (MANDATORIO):", value=autor_def if not autor_select else autor_select, key="txt_scra_autor")
+        # --- AUTOR (DInámico con opción OTRO) ---
+        opciones_autores = autores_existentes + ["OTRO (Escribir nuevo...)"]
+        # Buscar índice por defecto si fue pre-seleccionado
+        idx_autor = opciones_autores.index(autor_def) if autor_def in opciones_autores else None
         
+        autor_select = st.selectbox("Autor:", options=opciones_autores, index=idx_autor, placeholder="Elige un autor...", key="sb_autor_existente")
+        
+        if autor_select == "OTRO (Escribir nuevo...)" or autor_select is None:
+            autor = st.text_input("Escribir nuevo Autor (MANDATORIO):", key="txt_scra_autor")
+        else:
+            autor = autor_select
+            
         isbn = st.text_input("ISBN (MANDATORIO):", value=isbn_def, key="txt_scra_isbn")
         
-        # Campo Encuadernación MANDATORIO
-        encuader_select = st.selectbox("Encuadernación existente:", options=encuader_existentes, index=None, placeholder="Elige tipo...", key="sb_encuader_existente")
-        encuader = st.text_input("Escribir o corregir Encuadernación (MANDATORIO):", value=encuader_def if not encuader_select else encuader_select, key="txt_scra_encuader")
+        # --- ENCUADERNACIÓN (Dinámico con opción OTRO) ---
+        opciones_encuader = encuader_existentes + ["OTRO (Escribir nuevo...)"]
+        idx_encuader = opciones_encuader.index(encuader_def) if encuader_def in opciones_encuader else None
+        
+        encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=idx_encuader, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
+        
+        if encuader_select == "OTRO (Escribir nuevo...)" or encuader_select is None:
+            encuader = st.text_input("Escribir nueva Encuadernación (MANDATORIO):", key="txt_scra_encuader")
+        else:
+            encuader = encuader_select
 
     with col2:
         url_buscalibre = st.text_input("URL Buscalibre (MANDATORIO):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
         
-        # Editorial inteligente
-        editorial_select = st.selectbox("Editorial existente:", options=editoriales_existentes, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
-        editorial = st.text_input("Escribir o corregir Editorial (MANDATORIO):", value=editorial_def if not editorial_select else editorial_select, key="txt_scra_editorial")
+        # --- EDITORIAL (Dinámico con opción OTRO) ---
+        opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
+        idx_editorial = opciones_editoriales.index(editorial_def) if editorial_def in opciones_editoriales else None
         
-        # Género inteligente
-        genero_select = st.selectbox("Género existente:", options=generos_existentes, index=None, placeholder="Elige género...", key="sb_genero_existente")
-        genero = st.text_input("Escribir o corregir Género / Categoría (Opcional):", value=genero_def if not genero_select else genero_select, key="txt_scra_genero")
+        editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=idx_editorial, placeholder="Elige editorial...", key="sb_editorial_existente")
+        
+        if editorial_select == "OTRO (Escribir nuevo...)" or editorial_select is None:
+            editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
+        else:
+            editorial = editorial_select
+        
+        # --- GÉNERO (Dinámico con opción OTRO) ---
+        opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
+        idx_genero = opciones_generos.index(genero_def) if genero_def in opciones_generos else None
+        
+        genero_select = st.selectbox("Género:", options=opciones_generos, index=idx_genero, placeholder="Elige género...", key="sb_genero_existente")
+        
+        if genero_select == "OTRO (Escribir nuevo...)" or genero_select is None:
+            genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
+        else:
+            genero = genero_select
         
         target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
 
     id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
 
     if st.button("Agregar a la Wishlist", type="primary"):
-        # Validar campos obligatorios incluyendo Encuadernación
+        # Validar campos obligatorios
         if not titulo:
             st.error("⚠️ El título del libro es obligatorio.")
             return
-        if not autor:
+        if not autor or autor.strip() == "":
             st.error("⚠️ El autor es obligatorio.")
             return
-        if not editorial:
+        if not editorial or editorial.strip() == "":
             st.error("⚠️ La editorial es obligatoria.")
             return
         if not isbn:
             st.error("⚠️ El ISBN es obligatorio.")
             return
-        if not encuader:
+        if not encuader or encuader.strip() == "":
             st.error("⚠️ La encuadernación es obligatoria.")
             return
         if not url_buscalibre:
@@ -124,12 +152,13 @@ def mostrar_buscalibre_scrapping():
 
         try:
             # 1. Si no existe en la tabla de libros de Alba, lo creamos de forma automática (Normalizado)
+            # 3. GUARDAR EL ISBN EN LA TABLA LIBROS (Punto 3)
             if not libro_db_id:
                 try:
                     insert_libro = conn.table("libros").insert({
                         "titulo": titulo,
                         "autor": autor,
-                        "isbn": isbn,
+                        "isbn": isbn, # Se guarda el ISBN aquí en 'libros'
                         "editorial": editorial,
                         "genero": genero if genero else None,
                         "encuadernacion": encuader
@@ -139,7 +168,7 @@ def mostrar_buscalibre_scrapping():
                 except Exception as db_err:
                     st.warning(f"Nota: No se pudo registrar en la tabla libros de forma automática ({db_err}), guardando directo en wishlist.")
 
-            # 2. Registrar en la wishlist de precios (incluyendo encuadernacion si la columna existe)
+            # 2. Registrar en la wishlist de precios
             wishlist_data = {
                 "user_id": id_usuario_defecto,
                 "title": titulo,
