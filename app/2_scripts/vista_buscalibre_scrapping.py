@@ -32,11 +32,13 @@ def mostrar_buscalibre_scrapping():
         autores_existentes = sorted(list(set([l['autor'].strip() for l in libros_data if l.get('autor')])))
         editoriales_existentes = sorted(list(set([l['editorial'].strip() for l in libros_data if l.get('editorial')])))
         generos_existentes = sorted(list(set([l['genero'].strip() for l in libros_data if l.get('genero')])))
+        encuader_existentes = sorted(list(set([l['encuadernacion'].strip() for l in libros_data if l.get('encuadernacion')])))
     except Exception:
         libros_data = []
         autores_existentes = []
         editoriales_existentes = []
         generos_existentes = []
+        encuader_existentes = []
 
     opciones_libros = {f"{l['titulo']} (ISBN: {l.get('isbn', 'N/A')})": l for l in libros_data}
     
@@ -57,6 +59,7 @@ def mostrar_buscalibre_scrapping():
     isbn_def = ""
     editorial_def = ""
     genero_def = ""
+    encuader_def = ""
     libro_db_id = None
 
     if libro_seleccionado:
@@ -66,35 +69,40 @@ def mostrar_buscalibre_scrapping():
         isbn_def = libro_db.get("isbn") or ""
         editorial_def = libro_db.get("editorial") or ""
         genero_def = libro_db.get("genero") or ""
+        encuader_def = libro_db.get("encuadernacion") or ""
         libro_db_id = libro_db.get("libro_id")
 
     col1, col2 = st.columns(2)
     with col1:
         titulo = st.text_input("Título del libro (Obligatorio):", value=titulo_def, key="txt_scra_titulo")
         
-        # 3. Selectores inteligentes / Campos de texto combinados para Autor, Editorial y Género
-        autor_select = st.selectbox("Autor existente (Opcional si vas a escribir uno nuevo abajo):", 
-                                    options=autores_existentes, index=None, placeholder="Elige un autor existente...", key="sb_autor_existente")
+        # 3. Selectores inteligentes / Campos de texto para Autor
+        autor_select = st.selectbox("Autor existente:", options=autores_existentes, index=None, placeholder="Elige un autor...", key="sb_autor_existente")
         autor = st.text_input("Escribir o corregir Autor (MANDATORIO):", value=autor_def if not autor_select else autor_select, key="txt_scra_autor")
         
         isbn = st.text_input("ISBN (MANDATORIO):", value=isbn_def, key="txt_scra_isbn")
-        target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
+        
+        # Campo Encuadernación MANDATORIO
+        encuader_select = st.selectbox("Encuadernación existente:", options=encuader_existentes, index=None, placeholder="Elige tipo...", key="sb_encuader_existente")
+        encuader = st.text_input("Escribir o corregir Encuadernación (MANDATORIO):", value=encuader_def if not encuader_select else encuader_select, key="txt_scra_encuader")
 
     with col2:
         url_buscalibre = st.text_input("URL Buscalibre (MANDATORIO):", placeholder="https://www.buscalibre.cl/libro-...", key="txt_scra_buscalibre")
         
-        editorial_select = st.selectbox("Editorial existente (Opcional si vas a escribir una nueva abajo):", 
-                                        options=editoriales_existentes, index=None, placeholder="Elige una editorial existente...", key="sb_editorial_existente")
+        # Editorial inteligente
+        editorial_select = st.selectbox("Editorial existente:", options=editoriales_existentes, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
         editorial = st.text_input("Escribir o corregir Editorial (MANDATORIO):", value=editorial_def if not editorial_select else editorial_select, key="txt_scra_editorial")
         
-        genero_select = st.selectbox("Género existente (Opcional si vas a escribir uno nuevo abajo):", 
-                                     options=generos_existentes, index=None, placeholder="Elige un género existente...", key="sb_genero_existente")
+        # Género inteligente
+        genero_select = st.selectbox("Género existente:", options=generos_existentes, index=None, placeholder="Elige género...", key="sb_genero_existente")
         genero = st.text_input("Escribir o corregir Género / Categoría (Opcional):", value=genero_def if not genero_select else genero_select, key="txt_scra_genero")
+        
+        target_price = st.number_input("Precio Objetivo (CLP):", min_value=0, value=0, step=1000, key="num_scra_target")
 
     id_usuario_defecto = "00000000-0000-0000-0000-000000000000"
 
     if st.button("Agregar a la Wishlist", type="primary"):
-        # 2. Validar campos obligatorios
+        # Validar campos obligatorios incluyendo Encuadernación
         if not titulo:
             st.error("⚠️ El título del libro es obligatorio.")
             return
@@ -107,12 +115,15 @@ def mostrar_buscalibre_scrapping():
         if not isbn:
             st.error("⚠️ El ISBN es obligatorio.")
             return
+        if not encuader:
+            st.error("⚠️ La encuadernación es obligatoria.")
+            return
         if not url_buscalibre:
             st.error("⚠️ La URL de Buscalibre es obligatoria.")
             return
 
         try:
-            # 1. Si no existe en la tabla de libros de Alba, lo creamos de forma automática (Punto 1)
+            # 1. Si no existe en la tabla de libros de Alba, lo creamos de forma automática (Normalizado)
             if not libro_db_id:
                 try:
                     insert_libro = conn.table("libros").insert({
@@ -120,14 +131,15 @@ def mostrar_buscalibre_scrapping():
                         "autor": autor,
                         "isbn": isbn,
                         "editorial": editorial,
-                        "genero": genero if genero else None
+                        "genero": genero if genero else None,
+                        "encuadernacion": encuader
                     }).execute()
                     if insert_libro.data:
                         st.toast(f"📖 ¡Libro '{titulo}' creado exitosamente en la base de datos Alba!")
                 except Exception as db_err:
                     st.warning(f"Nota: No se pudo registrar en la tabla libros de forma automática ({db_err}), guardando directo en wishlist.")
 
-            # 2. Registrar en la wishlist de precios
+            # 2. Registrar en la wishlist de precios (incluyendo encuadernacion si la columna existe)
             wishlist_data = {
                 "user_id": id_usuario_defecto,
                 "title": titulo,
@@ -140,13 +152,19 @@ def mostrar_buscalibre_scrapping():
                 "current_price": None,
                 "alert_sent": False
             }
+            # Opcional: agregamos encuadernacion si la columna existe en book_wishlist
+            try:
+                wishlist_data["encuadernacion"] = encuader
+            except Exception:
+                pass
+
             conn.table("book_wishlist").insert(wishlist_data).execute()
             st.success(f"🎉 ¡Libro '{titulo}' agregado con éxito para monitoreo de precios!")
             
             # Limpieza de estados según directrices UX
             for key in ["sb_scra_libro", "txt_scra_titulo", "txt_scra_autor", "txt_scra_isbn", "num_scra_target", 
                         "txt_scra_buscalibre", "txt_scra_editorial", "txt_scra_genero", "sb_autor_existente", 
-                        "sb_editorial_existente", "sb_genero_existente"]:
+                        "sb_editorial_existente", "sb_genero_existente", "sb_encuader_existente", "txt_scra_encuader"]:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -172,7 +190,9 @@ def mostrar_buscalibre_scrapping():
                     st.markdown(f"#### 📖 {item['title']}")
                     if item.get("author"):
                         st.markdown(f"**Autor:** {item['author']}")
-                    st.write(f"**ISBN:** {item.get('isbn') or 'N/A'} | **Editorial:** {item.get('editorial') or 'N/A'} | **Género:** {item.get('genre') or 'N/A'}")
+                    
+                    encuad_str = f" | **Encuadernación:** {item['encuadernacion']}" if item.get('encuadernacion') else ""
+                    st.write(f"**ISBN:** {item.get('isbn') or 'N/A'} | **Editorial:** {item.get('editorial') or 'N/A'} | **Género:** {item.get('genre') or 'N/A'}{encuad_str}")
                     
                     target_price_val = item.get("target_price")
                     if target_price_val is not None:
