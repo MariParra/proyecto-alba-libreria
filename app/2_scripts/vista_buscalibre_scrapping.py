@@ -52,50 +52,76 @@ def mostrar_buscalibre_scrapping():
         key="sb_scra_libro"
     )
 
-    # Inicialización de variables para autofill
-    titulo_def = ""
-    autor_def = None
-    isbn_def = ""
-    editorial_def = None
-    genero_def = None
-    encuader_def = None
-    libro_db_id = None
+    # --- CONTROL INTELIGENTE DE ESTADO (SYNC) ---
+    # En Streamlit, si el usuario selecciona un libro del selectbox, forzamos la actualización de st.session_state
+    # para que los inputs de texto y selectores se actualicen inmediatamente sin "quedarse pegados".
+    if "previo_libro_seleccionado" not in st.session_state:
+        st.session_state.previo_libro_seleccionado = None
 
-    if libro_seleccionado:
-        libro_db = opciones_libros[libro_seleccionado]
-        titulo_def = libro_db.get("titulo") or ""
-        autor_def = libro_db.get("autor") or None
-        isbn_def = libro_db.get("isbn") or ""
-        editorial_def = libro_db.get("editorial") or None
-        genero_def = libro_db.get("genero") or None
-        encuader_def = libro_db.get("encuadernacion") or None
-        libro_db_id = libro_db.get("libro_id")
+    if libro_seleccionado != st.session_state.previo_libro_seleccionado:
+        st.session_state.previo_libro_seleccionado = libro_seleccionado
+        if libro_seleccionado:
+            libro_db = opciones_libros[libro_seleccionado]
+            st.session_state["txt_scra_titulo"] = libro_db.get("titulo") or ""
+            st.session_state["txt_scra_isbn"] = libro_db.get("isbn") or ""
+            
+            # Autores
+            autor_val = libro_db.get("autor") or ""
+            if autor_val in autores_existentes:
+                st.session_state["sb_autor_existente"] = autor_val
+            else:
+                st.session_state["sb_autor_existente"] = "OTRO (Escribir nuevo...)"
+                st.session_state["txt_scra_autor"] = autor_val
+
+            # Editoriales
+            edit_val = libro_db.get("editorial") or ""
+            if edit_val in editoriales_existentes:
+                st.session_state["sb_editorial_existente"] = edit_val
+            else:
+                st.session_state["sb_editorial_existente"] = "OTRO (Escribir nuevo...)"
+                st.session_state["txt_scra_editorial"] = edit_val
+
+            # Géneros
+            gen_val = libro_db.get("genero") or ""
+            if gen_val in generos_existentes:
+                st.session_state["sb_genero_existente"] = gen_val
+            else:
+                st.session_state["sb_genero_existente"] = "OTRO (Escribir nuevo...)"
+                st.session_state["txt_scra_genero"] = gen_val
+
+            # Encuadernación
+            enc_val = libro_db.get("encuadernacion") or ""
+            if enc_val in encuader_existentes:
+                st.session_state["sb_encuader_existente"] = enc_val
+            else:
+                st.session_state["sb_encuader_existente"] = "OTRO (Escribir nuevo...)"
+                st.session_state["txt_scra_encuader"] = enc_val
+        else:
+            # Si se limpia el selector de libros, vaciamos todos los campos del estado
+            for k in ["txt_scra_titulo", "txt_scra_isbn", "sb_autor_existente", "txt_scra_autor", 
+                      "sb_editorial_existente", "txt_scra_editorial", "sb_genero_existente", "txt_scra_genero",
+                      "sb_encuader_existente", "txt_scra_encuader"]:
+                st.session_state[k] = "" if "txt" in k else None
 
     col1, col2 = st.columns(2)
     with col1:
-        titulo = st.text_input("Título del libro (Obligatorio):", value=titulo_def, key="txt_scra_titulo")
+        titulo = st.text_input("Título del libro (Obligatorio):", key="txt_scra_titulo")
         
         # --- AUTOR (DInámico con opción OTRO) ---
         opciones_autores = autores_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_autor = opciones_autores.index(autor_def) if autor_def in opciones_autores else None
+        autor_select = st.selectbox("Autor:", options=opciones_autores, index=None, placeholder="Elige un autor...", key="sb_autor_existente")
         
-        autor_select = st.selectbox("Autor:", options=opciones_autores, index=idx_autor, placeholder="Elige un autor...", key="sb_autor_existente")
-        
-        # Ocultar campo de texto a menos que se elija "OTRO"
         if autor_select == "OTRO (Escribir nuevo...)" or (not autores_existentes and autor_select is None):
             autor = st.text_input("Escribir nuevo Autor (MANDATORIO):", key="txt_scra_autor")
         else:
             autor = autor_select
             
-        isbn = st.text_input("ISBN (MANDATORIO):", value=isbn_def, key="txt_scra_isbn")
+        isbn = st.text_input("ISBN (MANDATORIO):", key="txt_scra_isbn")
         
         # --- ENCUADERNACIÓN (Dinámico con opción OTRO) ---
         opciones_encuader = encuader_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_encuader = opciones_encuader.index(encuader_def) if encuader_def in opciones_encuader else None
+        encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=None, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
         
-        encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=idx_encuader, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
-        
-        # Ocultar campo de texto a menos que se elija "OTRO"
         if encuader_select == "OTRO (Escribir nuevo...)" or (not encuader_existentes and encuader_select is None):
             encuader = st.text_input("Escribir nueva Encuadernación (MANDATORIO):", key="txt_scra_encuader")
         else:
@@ -106,11 +132,8 @@ def mostrar_buscalibre_scrapping():
         
         # --- EDITORIAL (Dinámico con opción OTRO) ---
         opciones_editoriales = editoriales_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_editorial = opciones_editoriales.index(editorial_def) if editorial_def in opciones_editoriales else None
+        editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=None, placeholder="Elige editorial...", key="sb_editorial_existente")
         
-        editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=idx_editorial, placeholder="Elige editorial...", key="sb_editorial_existente")
-        
-        # Ocultar campo de texto a menos que se elija "OTRO"
         if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
             editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
         else:
@@ -118,11 +141,8 @@ def mostrar_buscalibre_scrapping():
         
         # --- GÉNERO (Dinámico con opción OTRO) ---
         opciones_generos = generos_existentes + ["OTRO (Escribir nuevo...)"]
-        idx_genero = opciones_generos.index(genero_def) if genero_def in opciones_generos else None
+        genero_select = st.selectbox("Género:", options=opciones_generos, index=None, placeholder="Elige género...", key="sb_genero_existente")
         
-        genero_select = st.selectbox("Género:", options=opciones_generos, index=idx_genero, placeholder="Elige género...", key="sb_genero_existente")
-        
-        # Ocultar campo de texto a menos que se elija "OTRO"
         if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
             genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
         else:
@@ -156,7 +176,10 @@ def mostrar_buscalibre_scrapping():
         try:
             # 1. Si no existe en la tabla de libros de Alba, lo creamos de forma automática (Normalizado)
             # 3. GUARDAR EL ISBN EN LA TABLA LIBROS (Punto 3)
-            if not libro_db_id:
+            # Para comprobar si el libro existe, buscamos por titulo o isbn en libros_data
+            existe_libro_db = any(l.get('titulo', '').upper() == titulo.upper() or (l.get('isbn') and l.get('isbn') == isbn) for l in libros_data)
+            
+            if not existe_libro_db:
                 try:
                     insert_libro = conn.table("libros").insert({
                         "titulo": titulo,
@@ -182,15 +205,18 @@ def mostrar_buscalibre_scrapping():
                 "editorial": editorial,
                 "genre": genero if genero else None,
                 "current_price": None,
-                "alert_sent": False
+                "alert_sent": False,
+                "encuadernacion": encuader  # Intentamos guardar encuadernación
             }
-            # Opcional: agregamos encuadernacion si la columna existe en book_wishlist
+            
             try:
-                wishlist_data["encuadernacion"] = encuader
-            except Exception:
-                pass
-
-            conn.table("book_wishlist").insert(wishlist_data).execute()
+                conn.table("book_wishlist").insert(wishlist_data).execute()
+            except Exception as insert_err:
+                if "encuadernacion" in str(insert_err):
+                    wishlist_data.pop("encuadernacion", None)
+                    conn.table("book_wishlist").insert(wishlist_data).execute()
+                else:
+                    raise insert_err
             st.success(f"🎉 ¡Libro '{titulo}' agregado con éxito para monitoreo de precios!")
             
             # Limpieza de estados según directrices UX
