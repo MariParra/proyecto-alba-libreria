@@ -174,7 +174,7 @@ def mostrar_caja():
             modo_libro = st.radio("Libro:", ["📚 Buscar Existente", "➕ Rápido (No en catálogo)"], horizontal=True, label_visibility="collapsed")
             autores_db, editoriales_db = cargar_listas_desplegables_caja()
     
-            l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion, l_apto_cajita = None, "", "", "", 0.0, 0, 0.0, False, "", True
+            l_id, l_titulo, l_autor, l_editorial, l_precio_catalogo, l_stock_actual, l_costo, es_nuevo, l_encuadernacion, l_apto_cajita, l_isbn = None, "", "", "", 0.0, 0, 0.0, False, "", True, ""
             l_precio_original = 0.0
             
             if modo_libro == "📚 Buscar Existente":
@@ -196,6 +196,7 @@ def mostrar_caja():
                         l_autor = datos_l.get('autor', '')
                         l_editorial = datos_l.get('editorial', '')
                         l_encuadernacion = datos_l.get('encuadernacion', '')
+                        l_isbn = datos_l.get('isbn', '')
                         
                         l_precio_original = float(datos_l.get('precio_original', l_precio_catalogo))
                         if pd.isna(l_precio_original):
@@ -205,6 +206,7 @@ def mostrar_caja():
                             l_autor = st.text_input("Autor:", value=l_autor, key="autor_edit_caja_2")
                             l_precio_catalogo = st.number_input("Precio Oficial ($):", value=l_precio_catalogo, step=100.0, key="precio_edit_caja_2")
                             l_costo = st.number_input("Costo ($):", value=l_costo, step=100.0, key="costo_edit_caja_2")
+                            l_isbn = st.text_input("ISBN:", value=l_isbn, key="isbn_edit_caja_2")
                 else:
                     st.warning("El inventario está vacío.")
             else: 
@@ -229,9 +231,13 @@ def mostrar_caja():
                     l_editorial = st.session_state.sel_edit_caja
                 else:
                     l_editorial = ""
-                l_encuadernacion = st.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
+                    
+                col_rap3, col_rap4 = st.columns(2)
+                l_encuadernacion = col_rap3.selectbox("Encuadernación:", ["", "TAPA BLANDA", "TAPA DURA", "BOLSILLO"])
+                l_isbn = col_rap4.text_input("ISBN (Opcional):", key="nuevo_isbn_caja")  # <--- Campo para ingresar el ISBN manualmente
                 es_tapa_dura = (l_encuadernacion == "TAPA DURA")
                 l_apto_cajita = st.checkbox("🎁 Apto para enviar en Cajitas de Suscripción", value=not es_tapa_dura)
+
                 
                 col_num1, col_num2 = st.columns(2)
                 l_precio_catalogo = col_num1.number_input("Precio Oficial ($):", min_value=0.0, step=100.0)
@@ -299,6 +305,7 @@ def mostrar_caja():
                     autor_final = limpiar_texto_para_busqueda(l_autor)
                     editorial_final = limpiar_texto_para_busqueda(l_editorial)
                     encuadernacion_final = limpiar_texto_para_busqueda(l_encuadernacion)
+                    isbn_final = l_isbn.strip() if l_isbn else None
 
                     # --- LÓGICA DE PRECIOS CORREGIDA ---
                     # 1. Definir el precio de lista real del libro
@@ -321,6 +328,7 @@ def mostrar_caja():
                         'autor': autor_final,
                         'editorial': editorial_final,
                         'encuadernacion': encuadernacion_final,
+                        'isbn': isbn_final,
                         'cantidad': amount_val,
                         'stock_actual': l_stock_actual,
                         'costo': l_costo,
