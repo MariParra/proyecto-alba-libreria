@@ -327,9 +327,8 @@ def mostrar_buscalibre_scrapping():
                             st.markdown(f"🔗 Enlace: [Ver en Buscalibre]({item['store_url_buscalibre']})")
                         
                     with col_acciones:
-                        # --- EDICIÓN INDIVIDUAL DE PRECIO OBJETIVO (Punto 1) ---
+                        # --- EDICIÓN INDIVIDUAL DE PRECIO OBJETIVO ---
                         st.markdown("**⚡ Edición Rápida**")
-                        # Cargamos el precio actual del modelo
                         nuevo_precio_obj_indiv = st.number_input(
                             "Editar Precio Objetivo:", 
                             min_value=0, 
@@ -337,7 +336,6 @@ def mostrar_buscalibre_scrapping():
                             step=1000, 
                             key=f"edit_indiv_{item['id']}"
                         )
-                        # Renderizamos los botones de forma vertical consecutiva para evitar anidamiento de columnas prohibido
                         if st.button("Guardar", key=f"save_indiv_{item['id']}", use_container_width=True, type="primary"):
                             try:
                                 conn.table("book_wishlist").update({"target_price": nuevo_precio_obj_indiv}).eq("id", item["id"]).execute()
@@ -353,16 +351,56 @@ def mostrar_buscalibre_scrapping():
                             except Exception as e:
                                 st.error(f"Error: {e}")
                                     
-                    # Historial reciente de precios
+                    # =====================================================================
+                    # NUEVA SECCIÓN DE HISTORIAL Y GRÁFICO INTERACTIVO (Granularidad)
+                    # =====================================================================
                     try:
-                        res_hist = conn.table("book_price_history").select("*").eq("wishlist_item_id", item["id"]).order("recorded_at", desc=True).limit(5).execute()
+                        res_hist = conn.table("book_price_history").select("*").eq("wishlist_item_id", item["id"]).order("recorded_at", desc=False).execute()
                         if res_hist.data:
                             hist_df = pd.DataFrame(res_hist.data)
-                            hist_df['recorded_at'] = pd.to_datetime(hist_df['recorded_at']).dt.strftime('%Y-%m-%d %H:%M')
-                            hist_df = hist_df.rename(columns={'price': 'Precio (CLP)', 'store_name': 'Tienda', 'recorded_at': 'Fecha'})
-                            with st.expander("📊 Ver Historial Completo de fluctuaciones", expanded=False):
-                                st.dataframe(hist_df[['Fecha', 'Tienda', 'Precio (CLP)']], use_container_width=True, hide_index=True)
-                    except Exception:
+                            hist_df['recorded_at'] = pd.to_datetime(hist_df['recorded_at'])
+                            
+                            with st.expander("📊 Ver Historial y Tendencia de Precios", expanded=False):
+                                col_g1, col_g2 = st.columns([1, 2])
+                                with col_g1:
+                                    # Selector de granularidad
+                                    granularidad = st.selectbox(
+                                        "Seleccionar Granularidad:",
+                                        options=["Diaria (Detallada)", "Semanal (Promedio)", "Mensual (Promedio)"],
+                                        index=0,
+                                        key=f"gran_{item['id']}"
+                                    )
+                                
+                                # Aplicamos remuestreo según la granularidad elegida
+                                if granularidad == "Semanal (Promedio)":
+                                    # Agrupamos por semana y tomamos el promedio
+                                    df_plot = hist_df.resample('W', on='recorded_at').mean(numeric_only=True).dropna().reset_index()
+                                    df_plot['Fecha'] = df_plot['recorded_at'].dt.strftime('%Y-Semana %U')
+                                elif granularidad == "Mensual (Promedio)":
+                                    # Agrupamos por mes y tomamos el promedio
+                                    df_plot = hist_df.resample('ME', on='recorded_at').mean(numeric_only=True).dropna().reset_index()
+                                    df_plot['Fecha'] = df_plot['recorded_at'].dt.strftime('%Y-%B')
+                                else:
+                                    # Diaria / Sin agrupar
+                                    df_plot = hist_df.copy()
+                                    df_plot['Fecha'] = df_plot['recorded_at'].dt.strftime('%Y-%m-%d %H:%M')
+                                
+                                # Renombramos columnas para el gráfico
+                                df_plot = df_plot.rename(columns={'price': 'Precio (CLP)'})
+                                
+                                # Mostrar gráfico de línea interactivo nativo de Streamlit
+                                if not df_plot.empty:
+                                    st.line_chart(df_plot.set_index('Fecha')['Precio (CLP)'], color="#4A4D7E")
+                                else:
+                                    st.info("No hay suficientes datos históricos para este periodo.")
+                                    
+                                # Tabla de datos recientes
+                                hist_df_table = hist_df.sort_values(by="recorded_at", ascending=False).head(5)
+                                hist_df_table['Fecha'] = hist_df_table['recorded_at'].dt.strftime('%Y-%m-%d %H:%M')
+                                hist_df_table = hist_df_table.rename(columns={'price': 'Precio (CLP)', 'store_name': 'Tienda'})
+                                st.write("**Últimas Fluctuaciones Registradas:**")
+                                st.dataframe(hist_df_table[['Fecha', 'Tienda', 'Precio (CLP)']], use_container_width=True, hide_index=True)
+                    except Exception as hist_err:
                         pass
         else:
             st.info("No hay libros que coincidan con la búsqueda en el tracker actualmente.")
