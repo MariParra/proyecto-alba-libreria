@@ -159,7 +159,7 @@ def mostrar_buscalibre_scrapping():
             encuader_clean = limpiar_texto_para_busqueda(encuader)
             genero_clean = limpiar_texto_para_busqueda(genero) if genero else None
 
-            # Validar campos obligatorios (URL ES OPCIONAL AHORA GRACIAS AL AUTO-DISCOVERY)
+            # Validar campos obligatorios
             if not titulo_clean:
                 st.error("⚠️ El título del libro es obligatorio.")
                 return
@@ -177,7 +177,7 @@ def mostrar_buscalibre_scrapping():
                 return
 
             try:
-                # 1. Crear libro si no existe (con datos 100% normalizados)
+                # 1. Crear libro si no existe
                 existe_libro_db = any(limpiar_texto_para_busqueda(l.get('titulo', '')) == titulo_clean or (l.get('isbn') and l.get('isbn') == isbn_clean) for l in libros_data)
                 
                 if not existe_libro_db:
@@ -195,14 +195,22 @@ def mostrar_buscalibre_scrapping():
                     except Exception as db_err:
                         st.warning(f"Nota: No se pudo registrar en la tabla libros de forma automática ({db_err}), guardando directo en wishlist.")
 
-                # 2. Registrar en la wishlist de precios (datos 100% normalizados)
+                # 2. Registrar en la wishlist de precios
+                # Como regla de negocio: si es TAPA DURA es 15000, si es TAPA BLANDA es 11000 por defecto
+                target_val_final = target_price
+                if target_price == 0:
+                    if encuader_clean == "TAPA DURA":
+                        target_val_final = 15000
+                    elif encuader_clean == "TAPA BLANDA":
+                        target_val_final = 11000
+
                 wishlist_data = {
                     "user_id": id_usuario_defecto,
                     "title": titulo_clean,
                     "author": autor_clean,
                     "isbn": isbn_clean,
                     "store_url_buscalibre": url_buscalibre if url_buscalibre else None,
-                    "target_price": target_price if target_price > 0 else None,
+                    "target_price": target_val_final if target_val_final > 0 else None,
                     "editorial": editorial_clean,
                     "genre": genero_clean,
                     "current_price": None,
@@ -232,10 +240,10 @@ def mostrar_buscalibre_scrapping():
 
     # Mostrar wishlist actual e historial de precios
     st.markdown("---")
-    st.markdown("### 📋 Libros en Monitoreo")
+    st.markdown("### 📋 Libros Destacados en Monitoreo (Máx. 3)")
     
     try:
-        res_wish = conn.table("book_wishlist").select("*").order("title").execute()
+        res_wish = conn.table("book_wishlist").select("*").execute()
         wishlist = res_wish.data if res_wish.data else []
     except Exception as e:
         st.warning(f"Error al cargar wishlist: {e}")
@@ -255,7 +263,33 @@ def mostrar_buscalibre_scrapping():
             or q in (item.get('editorial') or '').lower()
         ]
 
+    # Lógica de Ordenación: Prioridad 1: Los que bajaron de precio (Ordenados por mayor descuento)
+    # Prioridad 2: Sin cambios, Prioridad 3: Subieron, Prioridad 4: Pendientes.
+    def sort_prioridad_oferta(item):
+        curr = item.get("current_price")
+        prev = item.get("previous_price")
+        if curr is not None and prev is not None:
+            diff = float(curr) - float(prev)
+            if diff < 0:
+                return (0, diff) # Prioridad 0: Descuentos (el más negativo de primero)
+            elif diff == 0:
+                return (1, 0)    # Prioridad 1: Sin cambios
+            else:
+                return (2, diff) # Prioridad 2: Alzas de precio
+        return (3, 0)            # Prioridad 3: Pendientes de scraping
+
+    wishlist = sorted(wishlist, key=sort_prioridad_oferta)
+    
+    # Mostrar únicamente los primeros 3 libros prioritarios
+    total_encontrados = len(wishlist)
+    wishlist = wishlist[:3]
+
     if wishlist:
+        if search_query:
+            st.write(f"🔍 *Mostrando los 3 resultados con mayor prioridad de oferta (de {total_encontrados} encontrados):*")
+        else:
+            st.write("💡 *Mostrando los 3 libros prioritarios con mayor descuento o más recientes:*")
+            
         for item in wishlist:
             with st.container(border=True):
                 col_detalles, col_acciones = st.columns([4, 1])
@@ -274,7 +308,7 @@ def mostrar_buscalibre_scrapping():
                     current_price_val = item.get("current_price")
                     previous_price_val = item.get("previous_price")
                     
-                    # 3. LÓGICA DE FLECHAS DE FLUCTUACIÓN DE PRECIO
+                    # LÓGICA DE FLECHAS DE FLUCTUACIÓN DE PRECIO
                     tendencia_str = ""
                     if current_price_val is not None:
                         current_price_str = f"${float(current_price_val):,.0f} CLP"
@@ -317,4 +351,4 @@ def mostrar_buscalibre_scrapping():
                         except Exception as e:
                             st.error(f"Error al eliminar: {e}")
     else:
-        st.info("No hay libros configurados en el tracker actualmente.")
+        st.info("No hay libros que coincidan con la búsqueda en el tracker actualmente.")
