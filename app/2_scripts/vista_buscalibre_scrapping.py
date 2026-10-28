@@ -77,12 +77,12 @@ def mostrar_buscalibre_scrapping():
         
         # --- AUTOR (DInámico con opción OTRO) ---
         opciones_autores = autores_existentes + ["OTRO (Escribir nuevo...)"]
-        # Buscar índice por defecto si fue pre-seleccionado
         idx_autor = opciones_autores.index(autor_def) if autor_def in opciones_autores else None
         
         autor_select = st.selectbox("Autor:", options=opciones_autores, index=idx_autor, placeholder="Elige un autor...", key="sb_autor_existente")
         
-        if autor_select == "OTRO (Escribir nuevo...)" or autor_select is None:
+        # Ocultar campo de texto a menos que se elija "OTRO"
+        if autor_select == "OTRO (Escribir nuevo...)" or (not autores_existentes and autor_select is None):
             autor = st.text_input("Escribir nuevo Autor (MANDATORIO):", key="txt_scra_autor")
         else:
             autor = autor_select
@@ -95,7 +95,8 @@ def mostrar_buscalibre_scrapping():
         
         encuader_select = st.selectbox("Encuadernación:", options=opciones_encuader, index=idx_encuader, placeholder="Elige tipo encuadernación...", key="sb_encuader_existente")
         
-        if encuader_select == "OTRO (Escribir nuevo...)" or encuader_select is None:
+        # Ocultar campo de texto a menos que se elija "OTRO"
+        if encuader_select == "OTRO (Escribir nuevo...)" or (not encuader_existentes and encuader_select is None):
             encuader = st.text_input("Escribir nueva Encuadernación (MANDATORIO):", key="txt_scra_encuader")
         else:
             encuader = encuader_select
@@ -109,7 +110,8 @@ def mostrar_buscalibre_scrapping():
         
         editorial_select = st.selectbox("Editorial:", options=opciones_editoriales, index=idx_editorial, placeholder="Elige editorial...", key="sb_editorial_existente")
         
-        if editorial_select == "OTRO (Escribir nuevo...)" or editorial_select is None:
+        # Ocultar campo de texto a menos que se elija "OTRO"
+        if editorial_select == "OTRO (Escribir nuevo...)" or (not editoriales_existentes and editorial_select is None):
             editorial = st.text_input("Escribir nueva Editorial (MANDATORIO):", key="txt_scra_editorial")
         else:
             editorial = editorial_select
@@ -120,7 +122,8 @@ def mostrar_buscalibre_scrapping():
         
         genero_select = st.selectbox("Género:", options=opciones_generos, index=idx_genero, placeholder="Elige género...", key="sb_genero_existente")
         
-        if genero_select == "OTRO (Escribir nuevo...)" or genero_select is None:
+        # Ocultar campo de texto a menos que se elija "OTRO"
+        if genero_select == "OTRO (Escribir nuevo...)" or (not generos_existentes and genero_select is None):
             genero = st.text_input("Escribir nuevo Género / Categoría (Opcional):", key="txt_scra_genero")
         else:
             genero = genero_select
