@@ -28,7 +28,7 @@ from vista_web import mostrar_gestion_web
 from vista_alertas_prioritarias import mostrar_alertas_prioritarias
 from vista_pizarra import mostrar_pizarra
 from vista_costos import mostrar_costos
-
+from vista_buscalibre_scrapping import mostrar_buscalibre_scrapping
 
 import sys
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -205,7 +205,7 @@ else:
         # Definición de grupos de vistas para la apertura dinámica de los expanders
         grupo_general = ["🚨 ALERTAS PRIORITARIAS", "📌 PIZARRA DE NOTAS", "📋 TABLERO KANBAN", "📊 DASHBOARD"]
         grupo_ventas = ["🛒 CAJA / VENTAS RÁPIDAS", "🎡 VENTAS MASIVAS", "📦 GESTIÓN DE SUSCRIPCIÓN", "👥 CLIENTES Y LIBRERO", "💸 GASTOS"]
-        grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 GENERADOR CATÁLOGO IG", "🌐 GESTIÓN WEB"]
+        grupo_catalogo = ["📦 GESTIÓN DE INVENTARIO", "🖼️ GESTIÓN DE PORTADAS", "🎨 GENERADOR CATÁLOGO IG", "🌐 GESTIÓN WEB", "🔍 BUSCALIBRE SCRAPPING"]
         grupo_datos = ["🛠️ SINCRONIZACIÓN GOOGLE SHEET", "📔 IMPORTAR LIBREROS", "📥 REPORTES Y DESCARGAS"]
         grupo_soporte = ["✨ CREACIÓN MASIVA", "⚡ ACTUALIZACIÓN MASIVA", "⏪ ROLLBACK BD"]
 
@@ -265,6 +265,9 @@ else:
                 
             if st.button("🌐 GESTIÓN WEB", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🌐 GESTIÓN WEB" else "secondary"):
                 st.session_state.pagina_actual = "🌐 GESTIÓN WEB"
+                st.rerun()
+            if st.button("🔍 BUSCALIBRE SCRAPPING", use_container_width=True, type="primary" if st.session_state.pagina_actual == "🔍 BUSCALIBRE SCRAPPING" else "secondary"):
+                st.session_state.pagina_actual = "🔍 BUSCALIBRE SCRAPPING"
                 st.rerun()
 
         # --- SECCIÓN 4: DATOS & INTEGRACIONES ---
@@ -371,6 +374,8 @@ else:
             mostrar_gestion_portadas()
         elif st.session_state.pagina_actual == "🌐 GESTIÓN WEB":
             mostrar_gestion_web()
+        elif st.session_state.pagina_actual == "🔍 BUSCALIBRE SCRAPPING":
+            mostrar_buscalibre_scrapping()
         elif st.session_state.pagina_actual == "📥 REPORTES Y DESCARGAS":
             mostrar_reportes()
         elif st.session_state.pagina_actual == "✨ CREACIÓN MASIVA":
