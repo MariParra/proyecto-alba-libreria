@@ -89,12 +89,16 @@ def normalizar_autor(autor_raw):
 def normalizar_titulo(titulo_raw):
     if pd.isna(titulo_raw): return ""
     titulo_str = str(titulo_raw).strip()
+
+    # 🇨🇱 CORE FIX: Removemos de forma segura y limpia el sufijo "(CHI)" al final de los títulos
+    titulo_str = re.sub(r'\s*\(CHI\)\s*$', '', titulo_str, flags=re.IGNORECASE)
+
     articles = [", EL", ", LA", ", LOS", ", LAS", ", UN", ", UNA", ", EN"]
     for art in articles:
         if titulo_str.upper().endswith(art):
             titulo_str = art[2:].strip() + " " + titulo_str[:-len(art)].strip()
             break
-    return limpiar_texto_para_busqueda(titulo_str)  # <--- SANEADO UNIFICADO SIN TILDES Y EN MAYÚSCULAS
+    return limpiar_texto_para_busqueda(titulo_str)
 
 def aproximar_cien_superior(valor):
     import math
