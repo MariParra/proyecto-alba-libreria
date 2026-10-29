@@ -49,6 +49,12 @@ DICCIONARIO_PLANETA_GENEROS = {
     "COCINA": "NO FICCION"
 }
 
+PALABRAS_SEGURIDAD_RANDOM = [
+    "BODEGA", "CONFIRMAR", "EJECUTAR", "RESTAURAR", 
+    "FORZAR", "SOPORTE", "INGRESAR", "DESPACHO", 
+    "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
+]
+
 # --- PARSERS INTELIGENTES ---
 def sanear_numero(val):
     if pd.isna(val): return 0.0
@@ -89,13 +95,39 @@ def normalizar_autor(autor_raw):
 def normalizar_titulo(titulo_raw):
     if pd.isna(titulo_raw): return ""
     titulo_str = str(titulo_raw).strip()
+    # 🇨🇱 CORE FIX: Removemos de forma segura y limpia el sufijo "(CHI)" al final de los títulos
     titulo_str = re.sub(r'\s*\(CHI\)\s*$', '', titulo_str, flags=re.IGNORECASE)
+    
     articles = [", EL", ", LA", ", LOS", ", LAS", ", UN", ", UNA", ", EN"]
     for art in articles:
         if titulo_str.upper().endswith(art):
             titulo_str = art[2:].strip() + " " + titulo_str[:-len(art)].strip()
             break
     return limpiar_texto_para_busqueda(titulo_str)
+
+def normalizar_para_cruce(texto):
+    """
+    Crea una huella digital para comparar títulos de forma robusta.
+    Remueve signos de puntuación especiales (¡, !, ¿, ?, ., ,, ;, :, -, _)
+    y conserva solo caracteres alfanuméricos y espacios simples.
+    """
+    clean = limpiar_texto_para_busqueda(texto)
+    return re.sub(r'[^A-Z0-9\s]', '', clean).strip()
+
+def autores_coinciden_flexible(autor_db, autor_import):
+    """
+    Compara autores de forma flexible basándose en intersección de palabras clave.
+    Ej: "ENZO ROUBAUD ROJAS" y "ENZO ROBAUD" coincidirán al compartir palabras clave troncales.
+    """
+    key_db = set(normalizar_para_cruce(autor_db).split())
+    key_import = set(normalizar_para_cruce(autor_import).split())
+    
+    interseccion = key_db.intersection(key_import)
+    
+    # Si comparten el nombre y al menos parte del apellido o coincidencia de prefijos de tokens
+    if len(interseccion) >= 2 or (len(key_db) > 0 and any(any(abs(len(a) - len(b)) <= 2 and (a[:4] == b[:4]) for b in key_import) for a in key_db)):
+        return True
+    return False
 
 def aproximar_cien_superior(valor):
     import math
@@ -120,7 +152,6 @@ def cargar_db_libros():
 # --- SIMULADOR DE CAMBIOS (PREVIEW) ---
 def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
     db_libros = cargar_db_libros()
-    map_db = {(limpiar_texto_para_busqueda(b['titulo']), limpiar_texto_para_busqueda(b.get('autor', ''))): b for b in db_libros}
     
     preview_creados = []
     preview_actualizados = []
@@ -136,10 +167,9 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             autor_saneado = normalizar_autor(autor_original)
             isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) else None
             
-            titulo_key = limpiar_texto_para_busqueda(titulo_saneado)
-            autor_key = limpiar_texto_para_busqueda(autor_saneado)
+            titulo_key_saneado = normalizar_para_cruce(titulo_saneado)
             
-            if not titulo_key:
+            if not titulo_key_saneado:
                 continue
                 
             if editorial_tipo == "PLANETA":
@@ -156,7 +186,14 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 genero_final = None
                 encuadernacion = None
             
-            match_libro = map_db.get((titulo_key, autor_key))
+            # Búsqueda Inteligente de Doble Factor
+            match_libro = None
+            for b in db_libros:
+                titulo_db_saneado = normalizar_para_cruce(b['titulo'])
+                if titulo_db_saneado == titulo_key_saneado:
+                    if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
+                        match_libro = b
+                        break
             
             if match_libro:
                 # Libro existente -> Comparar diferencias de enriquecimiento
@@ -175,6 +212,9 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                         "ID": match_libro['libro_id'],
                         "Título": titulo_saneado,
                         "Autor": autor_saneado,
+                        "ISBN": isbn_saneado if "ISBN" in campos_cambiados else match_libro.get('isbn'),
+                        "Género": genero_final if "Género" in campos_cambiados else match_libro.get('genero'),
+                        "Encuadernación": encuadernacion if "Encuadernación" in campos_cambiados else match_libro.get('encuadernacion'),
                         "Cambios a Aplicar": ", ".join(campos_cambiados),
                         "Nuevo Costo": f"${round(costo_base):,.0f}" if forzar_finanzas else "Sin cambios",
                         "Nuevo Precio": f"${precio_venta:,.0f}" if forzar_finanzas else "Sin cambios"
@@ -186,6 +226,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     "Autor": autor_saneado,
                     "ISBN": isbn_saneado,
                     "Género": genero_final,
+                    "Encuadernación": encuadernacion,
                     "Costo Calculado": f"${round(costo_base):,.0f}",
                     "Precio Venta": f"${precio_venta:,.0f}"
                 })
@@ -218,6 +259,7 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
                 "autor": item['Autor'],
                 "editorial": editorial_tipo,
                 "genero": item['Género'],
+                "encuadernacion": item['Encuadernación'],
                 "stock": 0,
                 "precio": precio_float,
                 "precio_original": precio_float,
@@ -237,17 +279,11 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
             libro_id = int(item['ID'])
             payload = {}
             
-            # Recuperar de las llaves que se simularon
-            if "ISBN" in item['Cambios a Aplicar'] or "Costo" in item['Cambios a Aplicar']:
-                # Hacemos una consulta rápida o mapeamos del objeto original
-                pass
-                
-            # Para simplificar y resguardar, volvemos a evaluar el item
-            # Pero dado que la simulación es idéntica, podemos mapear de vuelta de la DB
-            # Para máxima seguridad, realizamos el update basado en campos rellenados:
             if "ISBN" in item['Cambios a Aplicar'] and pd.notna(item.get('ISBN')): payload['isbn'] = item['ISBN']
-            if "Autor" in item['Cambios a Aplicar']: payload['autor'] = item['Autor']
-            if "Editorial" in item['Cambios a Aplicar']: payload['editorial'] = editorial_tipo
+            if "Autor" in item['Cambios a Aplicar'] and pd.notna(item.get('Autor')): payload['autor'] = item['Autor']
+            if "Género" in item['Cambios a Aplicar'] and pd.notna(item.get('Género')): payload['genero'] = item['Género']
+            if "Encuadernación" in item['Cambios a Aplicar'] and pd.notna(item.get('Encuadernación')): payload['encuadernacion'] = item['Encuadernación']
+            payload['editorial'] = editorial_tipo
             
             if forzar_finanzas:
                 costo_float = float(item['Nuevo Costo'].replace('$', '').replace('.', '').replace(',', ''))
@@ -267,6 +303,7 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
     return exitos_creados, exitos_actualizados, errores
 
 def mostrar_carga_editoriales():
+    # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
     with st.expander("📖 Manual y Guía de Ingesta Inteligente de Editoriales (Fórmulas y Columnas)", expanded=False):
         st.markdown("""
         ### ⚙️ ¿Cómo funciona este módulo?
@@ -274,7 +311,7 @@ def mostrar_carga_editoriales():
         
         #### 🧠 Inteligencia de Homologación:
         * **Reordenamiento de Autores:** Convierte automáticamente formatos invertidos como `POSTON, ASHLEY` $\\rightarrow$ `ASHLEY POSTON`.
-        * **Limpieza de Títulos:** Sanea artículos finales como `VERANO QUE NUNCA FUE, EL` $\\rightarrow$ `EL VERANO QUE NUNCA FUE`.
+        * **Limpieza de Títulos:** Sanea artículos finales como `VERANO QUE NUNCA FUE, EL` $\\rightarrow$ `EL VERANO QUE NUNCA FUE`. También remueve sufijos comerciales chilenos de forma transparente como `(CHI)`.
         * **Homologación de Géneros (Planeta):** Mapea la columna *Temática Web* de Planeta con los géneros de tu tienda de forma nativa.
         
         #### 📊 Fórmulas de Costos y Ventas:
@@ -327,6 +364,8 @@ def mostrar_carga_editoriales():
                     st.session_state['p_creados'] = creados_p
                     st.session_state['p_actualizados'] = actualizados_p
                     st.session_state['p_errores'] = errores_p
+                    import random
+                    st.session_state['p_random_token'] = random.choice(PALABRAS_SEGURIDAD_RANDOM)
                     
             if 'p_creados' in st.session_state:
                 st.markdown("### 🔍 Previsualización de Cambios Simulados")
@@ -343,9 +382,15 @@ def mostrar_carga_editoriales():
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
                 st.markdown("#### 🔒 Confirmación de Seguridad Obligatoria")
-                palabra_seguridad = st.text_input("Escribe la palabra **PROCEDER** en mayúsculas para confirmar los cambios:", key="confirm_p")
+                token_esperado_p = st.session_state.get('p_random_token', 'CONFIRMAR')
                 
-                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (PLANETA)", type="primary", use_container_width=True, disabled=(palabra_seguridad != "PROCEDER")):
+                palabra_seguridad = st.text_input(
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_p}** en mayúsculas:", 
+                    key="confirm_p",
+                    placeholder=f"Escribe {token_esperado_p} aquí..."
+                )
+                
+                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (PLANETA)", type="primary", use_container_width=True, disabled=(palabra_seguridad != token_esperado_p)):
                     exitos_c, exitos_u, errores_v = ejecutar_upsert_editorial_seguro(
                         st.session_state['p_creados'], 
                         st.session_state['p_actualizados'], 
@@ -355,6 +400,7 @@ def mostrar_carga_editoriales():
                     st.balloons()
                     del st.session_state['p_creados']
                     del st.session_state['p_actualizados']
+                    if 'p_random_token' in st.session_state: del st.session_state['p_random_token']
                     time.sleep(2)
                     st.rerun()
 
@@ -377,6 +423,8 @@ def mostrar_carga_editoriales():
                     st.session_state['u_creados'] = creados_u
                     st.session_state['u_actualizados'] = actualizados_u
                     st.session_state['u_errores'] = errores_u
+                    import random
+                    st.session_state['u_random_token'] = random.choice(PALABRAS_SEGURIDAD_RANDOM)
                     
             if 'u_creados' in st.session_state:
                 st.markdown("### 🔍 Previsualización de Cambios Simulados")
@@ -393,9 +441,15 @@ def mostrar_carga_editoriales():
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
                 st.markdown("#### 🔒 Confirmación de Seguridad Obligatoria")
-                palabra_seguridad_u = st.text_input("Escribe la palabra **PROCEDER** en mayúsculas para confirmar los cambios:", key="confirm_u")
+                token_esperado_u = st.session_state.get('u_random_token', 'CONFIRMAR')
                 
-                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (URANO)", type="primary", use_container_width=True, disabled=(palabra_seguridad_u != "PROCEDER")):
+                palabra_seguridad_u = st.text_input(
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_u}** en mayúsculas:", 
+                    key="confirm_u",
+                    placeholder=f"Escribe {token_esperado_u} aquí..."
+                )
+                
+                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (URANO)", type="primary", use_container_width=True, disabled=(palabra_seguridad_u != token_esperado_u)):
                     exitos_c, exitos_u, errores_v = ejecutar_upsert_editorial_seguro(
                         st.session_state['u_creados'], 
                         st.session_state['u_actualizados'], 
@@ -405,6 +459,7 @@ def mostrar_carga_editoriales():
                     st.balloons()
                     del st.session_state['u_creados']
                     del st.session_state['u_actualizados']
+                    if 'u_random_token' in st.session_state: del st.session_state['u_random_token']
                     time.sleep(2)
                     st.rerun()
 
