@@ -18,9 +18,10 @@ def cargar_catalogo_libros_vm():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = conn.table("libros")\
-                .select("libro_id, titulo, autor, stock, genero, editorial")\
+                .select("libro_id, titulo, autor, stock, genero, editorial, isbn")\
                 .order("libro_id")\
                 .range(start, end).execute()
+
             if res.data:
                 all_data.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -99,7 +100,8 @@ def procesar_nueva_venta_masiva(datos_evento):
                         "precio": float(libro.get("precio", 0)),
                         "precio_original": float(libro.get("precio", 0)),
                         "costo": float(libro.get("costo", 0)),
-                        "stock": int(libro.get("stock_inicial", 0))
+                        "stock": int(libro.get("stock_inicial", 0)),
+                        "isbn": libro.get("isbn")
                     }
                     res = conn.table("libros").insert(datos_libro).execute()
                     nuevo_id = res.data[0]['libro_id']
@@ -191,6 +193,8 @@ def anadir_nuevo_libro_carrito():
         editorial = ""
 
     encuadernacion = st.session_state.get('tmp_encuadernacion', '')
+    isbn = st.session_state.get('tmp_isbn', '').strip()
+    isbn_final = isbn if isbn else None
     precio = st.session_state.get('tmp_precio', 0.0)
     costo = st.session_state.get('tmp_costo', 0.0)
     stock = st.session_state.get('tmp_stock', 0)
@@ -210,18 +214,18 @@ def anadir_nuevo_libro_carrito():
         
     # Añadimos al carrito
     st.session_state.vm_carrito.append({
-        "libro_id": None, "titulo": titulo.upper(), "cantidad": cant, 
-        "stock_actual": stock, "es_nuevo": True, "autor": autor.upper() if autor else "", 
-        "genero": genero.upper() if genero else "", "editorial": editorial.upper() if editorial else "", 
-        "encuadernacion": encuadernacion, "precio": precio, 
-        "costo": costo, "stock_inicial": stock
+    "libro_id": None, "titulo": titulo.upper(), "cantidad": cant,
+    "stock_actual": stock, "es_nuevo": True, "autor": autor.upper() if autor else "",
+    "genero": genero.upper() if genero else "", "editorial": editorial.upper() if editorial else "",
+    "encuadernacion": encuadernacion, "isbn": isbn_final, "precio": precio,
+    "costo": costo, "stock_inicial": stock
     })
     
     # Limpiamos todos los campos temporales
     st.session_state['vm_error_libro'] = ""
     keys_to_clear = [
-        'tmp_titulo', 'sel_autor', 'tmp_autor_nuevo', 'sel_genero', 'tmp_genero_nuevo', 
-        'sel_editorial', 'tmp_editorial_nueva', 'tmp_encuadernacion', 'tmp_precio', 
+        'tmp_titulo', 'sel_autor', 'tmp_autor_nuevo', 'sel_genero', 'tmp_genero_nuevo',
+        'sel_editorial', 'tmp_editorial_nueva', 'tmp_encuadernacion', 'tmp_isbn', 'tmp_precio',
         'tmp_costo', 'tmp_stock', 'tmp_cant'
     ]
     for k in keys_to_clear:
@@ -373,12 +377,14 @@ def mostrar_ventas_masivas():
                 if sel_edit == "➕ Crear Nueva Editorial":
                     col_n3.text_input("Nombre de la nueva editorial", key="tmp_editorial_nueva")
                 
-                col_n4, col_n5, col_n6, col_n7, col_n8 = st.columns(5)
+                col_n4, col_n5_isbn, col_n5, col_n6, col_n7, col_n8 = st.columns(6)
                 col_n4.selectbox("Encuadernación", ["", "TAPA BLANDA", "TAPA DURA", "ESPIRAL"], key="tmp_encuadernacion")
-                col_n5.number_input("Precio Oficial ($)*", min_value=0.0, step=500.0, key="tmp_precio")
+                col_n5_isbn.text_input("ISBN (Opcional)", key="tmp_isbn")  # <--- Agregamos el input del ISBN
+                col_n5.number_input("Precio Oficial ($)\*", min_value=0.0, step=500.0, key="tmp_precio")
                 col_n6.number_input("Costo ($)", min_value=0.0, step=500.0, key="tmp_costo")
-                col_n7.number_input("Stock Inicial Total*", min_value=0, step=1, key="tmp_stock")
-                col_n8.number_input("Cant. Implicada*", min_value=1, step=1, key="tmp_cant")
+                col_n7.number_input("Stock Inicial Total\*", min_value=0, step=1, key="tmp_stock")
+                col_n8.number_input("Cant. Implicada\*", min_value=1, step=1, key="tmp_cant")
+
                 
                 # BOTÓN CONECTADO AL CALLBACK
                 st.button("➕ Crear y Añadir a la lista", type="secondary", on_click=anadir_nuevo_libro_carrito)
