@@ -301,7 +301,32 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
     progreso.empty()
     st.cache_data.clear()
     return exitos_creados, exitos_actualizados, errores
+def color_enriquecer_existentes(data):
+    """
+    Colorea en amarillo pastel suave las celdas que van a sufrir cambios
+    según lo especificado en la columna 'Cambios a Aplicar'.
+    """
+    # Creamos una plantilla de estilos vacía del mismo tamaño del DataFrame
+    estilos = pd.DataFrame('', index=data.index, columns=data.columns)
 
+    # Color amarillo pastel suave y amigable para la vista
+    color_amarillo_pastel = 'background-color: #fff9c4; color: #5d4037; font-weight: bold;'
+
+    for idx, row in data.iterrows():
+        cambios = str(row.get('Cambios a Aplicar', '')).split(', ')
+        for cambio in cambios:
+            col_target = None
+            if cambio == "ISBN": col_target = "ISBN"
+            elif cambio == "Autor": col_target = "Autor"
+            elif cambio == "Género": col_target = "Género"
+            elif cambio == "Encuadernación": col_target = "Encuadernación"
+            elif cambio == "Costo": col_target = "Nuevo Costo"
+            elif cambio == "Precio": col_target = "Nuevo Precio"
+
+            if col_target and col_target in data.columns:
+                estilos.loc[idx, col_target] = color_amarillo_pastel
+
+    return estilos
 def mostrar_carga_editoriales():
     # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
     with st.expander("📖 Manual y Guía de Ingesta Inteligente de Editoriales (Fórmulas y Columnas)", expanded=False):
@@ -377,7 +402,12 @@ def mostrar_carga_editoriales():
                     st.dataframe(pd.DataFrame(st.session_state['p_creados']), use_container_width=True, hide_index=True) if st.session_state['p_creados'] else st.info("No hay libros nuevos para crear.")
                     
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
-                    st.dataframe(pd.DataFrame(st.session_state['p_actualizados']), use_container_width=True, hide_index=True) if st.session_state['p_actualizados'] else st.info("No hay libros existentes por enriquecer.")
+                    if st.session_state['p_actualizados']:
+                        df_act_styled = pd.DataFrame(st.session_state['p_actualizados'])
+                        # Aplicamos el coloreado selectivo en caliente
+                        st.dataframe(df_act_styled.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No hay libros existentes por enriquecer.")
                 
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
