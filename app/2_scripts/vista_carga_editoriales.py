@@ -76,6 +76,13 @@ PALABRAS_SEGURIDAD_RANDOM = [
     "DESPACHO", "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
 ]
 
+def limpiar_cache_previsualizaciones():
+    """Limpia la previsualización de la pantalla al cambiar los parámetros financieros."""
+    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
+    for k in keys_to_delete:
+        if k in st.session_state:
+            del st.session_state[k]
+
 # --- PARSERS INTELIGENTES ---
 def sanear_numero(val):
     if pd.isna(val): return 0.0
@@ -420,8 +427,13 @@ def mostrar_carga_editoriales():
         pct_p = col_p1.number_input("Descuento Comercial de Planeta (%):", min_value=0.0, max_value=100.0, value=40.0, step=1.0, key="pct_p")
         val_p = col_p2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_p")
         
-        force_p = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_p")
-        
+        force_p = st.toggle(
+            "🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", 
+            value=False, 
+            key="force_p", 
+            on_change=limpiar_cache_previsualizaciones  # <--- Limpia la simulación vieja al mover el switch
+        )
+
         up_planeta = st.file_uploader("Sube el catálogo de Planeta (.xlsx):", type=["xlsx"], key="up_planeta")
         if up_planeta:
             df_p = pd.read_excel(up_planeta, engine="openpyxl")
@@ -484,7 +496,13 @@ def mostrar_carga_editoriales():
         pct_u = col_u1.number_input("Descuento Comercial de Urano (%):", min_value=0.0, max_value=100.0, value=35.0, step=1.0, key="pct_u")
         val_u = col_u2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_u")
         
-        force_u = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_u")
+        force_u = st.toggle(
+            "🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", 
+            value=False, 
+            key="force_u", 
+            on_change=limpiar_cache_previsualizaciones  # <--- Limpia la simulación vieja al mover el switch
+        )
+
         
         up_urano = st.file_uploader("Sube el catálogo de Urano (.xlsx):", type=["xlsx"], key="up_urano")
         if up_urano:
