@@ -199,7 +199,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
-                encuadernacion = limpiar_texto_para_busqueda(str(row.get('FORMATO', '')))
+                encuadernacion = normalizar_encuadernacion_planeta(row.get('FORMATO'))
             else: # URANO
                 precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
                 costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
@@ -348,6 +348,28 @@ def color_enriquecer_existentes(data):
                 estilos.loc[idx, col_target] = color_amarillo_pastel
 
     return estilos
+
+def normalizar_encuadernacion_planeta(formato_raw):
+    if pd.isna(formato_raw):
+        return None
+    f_upper = limpiar_texto_para_busqueda(formato_raw)
+    if not f_upper:
+        return None
+        
+    # Casos explícitos para DEJAR COMO NULL
+    null_keywords = ["LOMO VISTO", "TODO CARTON", "PACK", "LIBRO DE BAN", "LIBRO DE TELA", "CALENDARIO"]
+    if any(k in f_upper for k in null_keywords):
+        return None
+        
+    if "RUSTICA" in f_upper or "RUSTICO" in f_upper:
+        return "TAPA BLANDA"
+    if "DURA" in f_upper or "CARTONE" in f_upper or "CARTON" in f_upper:
+        return "TAPA DURA"
+    if "BOLSILLO" in f_upper or "FLEXIBLE" in f_upper:
+        return "BOLSILLO"
+        
+    return f_upper # Fallback de seguridad
+
 def mostrar_carga_editoriales():
     # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
     with st.expander("📖 Manual y Guía de Ingesta Inteligente de Editoriales (Fórmulas y Columnas)", expanded=False):
