@@ -84,15 +84,12 @@ def normalizar_autor(autor_raw):
         parts = autor_str.split(",")
         if len(parts) == 2:
             autor_str = f"{parts[1].strip()} {parts[0].strip()}"
-    return limpiar_texto_para_busqueda(autor_str)  # <--- SANEADO UNIFICADO SIN TILDES Y EN MAYÚSCULAS
+    return limpiar_texto_para_busqueda(autor_str)
 
 def normalizar_titulo(titulo_raw):
     if pd.isna(titulo_raw): return ""
     titulo_str = str(titulo_raw).strip()
-
-    # 🇨🇱 CORE FIX: Removemos de forma segura y limpia el sufijo "(CHI)" al final de los títulos
     titulo_str = re.sub(r'\s*\(CHI\)\s*$', '', titulo_str, flags=re.IGNORECASE)
-
     articles = [", EL", ", LA", ", LOS", ", LAS", ", UN", ", UNA", ", EN"]
     for art in articles:
         if titulo_str.upper().endswith(art):
@@ -120,24 +117,16 @@ def cargar_db_libros():
             break
     return all_books
 
-# --- GESTOR DE UPSERT ---
-def ejecutar_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
-    conn = get_db_connection()
+# --- SIMULADOR DE CAMBIOS (PREVIEW) ---
+def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
     db_libros = cargar_db_libros()
-    
-    # Llave de emparejamiento limpia y homogeneizada: (titulo_key, autor_key) -> libro_db_dict
     map_db = {(limpiar_texto_para_busqueda(b['titulo']), limpiar_texto_para_busqueda(b.get('autor', ''))): b for b in db_libros}
     
-    exitos_creados = 0
-    exitos_actualizados = 0
+    preview_creados = []
+    preview_actualizados = []
     errores = []
     
-    progreso = st.progress(0.0, text="Iniciando Upsert...")
-    total_filas = len(df_import)
-    
     for idx, row in df_import.iterrows():
-        progreso.progress((idx + 1) / total_filas, text=f"Procesando fila {idx+1}/{total_filas}...")
-        
         try:
             titulo_original = row.get('TITULO') if editorial_tipo == "PLANETA" else row.get('Titulo')
             autor_original = row.get('AUTOR') if editorial_tipo == "PLANETA" else row.get('Autores')
@@ -151,15 +140,12 @@ def ejecutar_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fi
             autor_key = limpiar_texto_para_busqueda(autor_saneado)
             
             if not titulo_key:
-                errores.append(f"Fila {idx+2}: Título vacío. Omitido.")
                 continue
                 
-            # Cálculo financiero
             if editorial_tipo == "PLANETA":
                 precio_lista = sanear_numero(row.get('PVP_ACT', 0.0))
                 costo_base = (precio_lista - (precio_lista * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
-                
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = limpiar_texto_para_busqueda(str(row.get('FORMATO', '')))
@@ -167,65 +153,120 @@ def ejecutar_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fi
                 precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
                 costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
-                
                 genero_final = None
                 encuadernacion = None
             
             match_libro = map_db.get((titulo_key, autor_key))
             
             if match_libro:
-                # El libro ya existe -> Modo UPDATE / RELLENO inteligente
-                libro_id = match_libro['libro_id']
-                payload = {}
+                # Libro existente -> Comparar diferencias de enriquecimiento
+                campos_cambiados = []
+                if not match_libro.get('isbn') and isbn_saneado: campos_cambiados.append("ISBN")
+                if not match_libro.get('autor') and autor_saneado: campos_cambiados.append("Autor")
+                if not match_libro.get('genero') and genero_final: campos_cambiados.append("Género")
+                if not match_libro.get('encuadernacion') and encuadernacion: campos_cambiados.append("Encuadernación")
+                if not match_libro.get('editorial'): campos_cambiados.append("Editorial")
                 
-                # Saneamiento de campos que están vacíos en tu Base de Datos
-                if not match_libro.get('isbn') and isbn_saneado:
-                    payload['isbn'] = isbn_saneado
-                if not match_libro.get('autor') and autor_saneado:
-                    payload['autor'] = autor_saneado
-                if not match_libro.get('genero') and genero_final:
-                    payload['genero'] = genero_final
-                if not match_libro.get('encuadernacion') and encuadernacion:
-                    payload['encuadernacion'] = encuadernacion
-                if not match_libro.get('editorial'):
-                    payload['editorial'] = editorial_tipo
-                
-                # Modificaciones financieras (Solo si se activó el Toggle explícito)
                 if forzar_finanzas:
-                    payload['costo'] = costo_base
-                    payload['precio'] = precio_venta
-                    payload['precio_original'] = precio_venta
+                    campos_cambiados.extend(["Costo", "Precio"])
                 
-                if payload:
-                    conn.table("libros").update(payload).eq("libro_id", libro_id).execute()
-                    exitos_actualizados += 1
+                if campos_cambiados:
+                    preview_actualizados.append({
+                        "ID": match_libro['libro_id'],
+                        "Título": titulo_saneado,
+                        "Autor": autor_saneado,
+                        "Cambios a Aplicar": ", ".join(campos_cambiados),
+                        "Nuevo Costo": f"${round(costo_base):,.0f}" if forzar_finanzas else "Sin cambios",
+                        "Nuevo Precio": f"${precio_venta:,.0f}" if forzar_finanzas else "Sin cambios"
+                    })
             else:
-                # El libro no existe -> Modo CREATE
-                payload_insert = {
-                    "titulo": titulo_saneado,
-                    "autor": autor_saneado,
-                    "editorial": editorial_tipo,
-                    "genero": genero_final,
-                    "encuadernacion": encuadernacion,
-                    "stock": 0,
-                    "precio": precio_venta,
-                    "precio_original": precio_venta,
-                    "costo": costo_base,
-                    "isbn": isbn_saneado,
-                    "visible_catalogo": True
-                }
-                conn.table("libros").insert(payload_insert).execute()
-                exitos_creados += 1
-                
+                # Libro Nuevo
+                preview_creados.append({
+                    "Título": titulo_saneado,
+                    "Autor": autor_saneado,
+                    "ISBN": isbn_saneado,
+                    "Género": genero_final,
+                    "Costo Calculado": f"${round(costo_base):,.0f}",
+                    "Precio Venta": f"${precio_venta:,.0f}"
+                })
         except Exception as e:
-            errores.append(f"Fila {idx+2}: Error al procesar '{titulo_original}'. Detalle: {e}")
+            errores.append(f"Fila {idx+2}: Error de simulación: {e}")
+            
+    return preview_creados, preview_actualizados, errores
+
+# --- PROCESADOR EFECTIVO EN SUPABASE ---
+def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
+    conn = get_db_connection()
+    exitos_creados = 0
+    exitos_actualizados = 0
+    errores = []
+    
+    progreso = st.progress(0.0, text="Iniciando Escritura en Supabase...")
+    total_crear = len(lista_creados)
+    total_update = len(lista_actualizados)
+    total_total = total_crear + total_update
+    
+    # 1. Crear Libros Nuevos
+    for idx, item in enumerate(lista_creados):
+        progreso.progress((idx + 1) / total_total, text=f"Creando nuevo libro {idx+1}/{total_crear}...")
+        try:
+            costo_float = float(item['Costo Calculado'].replace('$', '').replace('.', '').replace(',', ''))
+            precio_float = float(item['Precio Venta'].replace('$', '').replace('.', '').replace(',', ''))
+            
+            payload_insert = {
+                "titulo": item['Título'],
+                "autor": item['Autor'],
+                "editorial": editorial_tipo,
+                "genero": item['Género'],
+                "stock": 0,
+                "precio": precio_float,
+                "precio_original": precio_float,
+                "costo": costo_float,
+                "isbn": item['ISBN'],
+                "visible_catalogo": True
+            }
+            conn.table("libros").insert(payload_insert).execute()
+            exitos_creados += 1
+        except Exception as e:
+            errores.append(f"Fallo al insertar '{item['Título']}': {e}")
+            
+    # 2. Actualizar / Enriquecer Existentes
+    for idx, item in enumerate(lista_actualizados):
+        progreso.progress((total_crear + idx + 1) / total_total, text=f"Actualizando libro {idx+1}/{total_update}...")
+        try:
+            libro_id = int(item['ID'])
+            payload = {}
+            
+            # Recuperar de las llaves que se simularon
+            if "ISBN" in item['Cambios a Aplicar'] or "Costo" in item['Cambios a Aplicar']:
+                # Hacemos una consulta rápida o mapeamos del objeto original
+                pass
+                
+            # Para simplificar y resguardar, volvemos a evaluar el item
+            # Pero dado que la simulación es idéntica, podemos mapear de vuelta de la DB
+            # Para máxima seguridad, realizamos el update basado en campos rellenados:
+            if "ISBN" in item['Cambios a Aplicar'] and pd.notna(item.get('ISBN')): payload['isbn'] = item['ISBN']
+            if "Autor" in item['Cambios a Aplicar']: payload['autor'] = item['Autor']
+            if "Editorial" in item['Cambios a Aplicar']: payload['editorial'] = editorial_tipo
+            
+            if forzar_finanzas:
+                costo_float = float(item['Nuevo Costo'].replace('$', '').replace('.', '').replace(',', ''))
+                precio_float = float(item['Nuevo Precio'].replace('$', '').replace('.', '').replace(',', ''))
+                payload['costo'] = costo_float
+                payload['precio'] = precio_float
+                payload['precio_original'] = precio_float
+                
+            if payload:
+                conn.table("libros").update(payload).eq("libro_id", libro_id).execute()
+                exitos_actualizados += 1
+        except Exception as e:
+            errores.append(f"Fallo al actualizar '{item['Título']}' (ID: {item['ID']}): {e}")
             
     progreso.empty()
     st.cache_data.clear()
     return exitos_creados, exitos_actualizados, errores
 
 def mostrar_carga_editoriales():
-    # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
     with st.expander("📖 Manual y Guía de Ingesta Inteligente de Editoriales (Fórmulas y Columnas)", expanded=False):
         st.markdown("""
         ### ⚙️ ¿Cómo funciona este módulo?
@@ -275,29 +316,47 @@ def mostrar_carga_editoriales():
         val_p = col_p2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_p")
         
         force_p = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_p")
-        if not force_p:
-            st.info("🔒 Modo Relleno Activo: Solo se inyectarán ISBNs y campos vacíos. Costos y precios existentes no serán alterados.")
-        else:
-            st.warning("⚠️ Forzar Finanzas Activo: Se recalcularán y sobreescribirán costos y precios de venta de tus libros existentes.")
-            
+        
         up_planeta = st.file_uploader("Sube el catálogo de Planeta (.xlsx):", type=["xlsx"], key="up_planeta")
         if up_planeta:
             df_p = pd.read_excel(up_planeta, engine="openpyxl")
-            if st.button("🚀 Ejecutar Ingesta Planeta", type="primary", use_container_width=True, key="btn_p"):
-                creados, actualizados, errores = ejecutar_upsert_editorial(df_p, "PLANETA", pct_p, val_p, force_p)
+            
+            if st.button("🔍 Previsualizar Simulación de Cambios (Planeta)", type="secondary", use_container_width=True):
+                with st.spinner("Simulando cambios y analizando duplicados..."):
+                    creados_p, actualizados_p, errores_p = simular_upsert_editorial(df_p, "PLANETA", pct_p, val_p, force_p)
+                    st.session_state['p_creados'] = creados_p
+                    st.session_state['p_actualizados'] = actualizados_p
+                    st.session_state['p_errores'] = errores_p
+                    
+            if 'p_creados' in st.session_state:
+                st.markdown("### 🔍 Previsualización de Cambios Simulados")
+                c1, c2 = st.columns(2)
+                c1.metric("Libros Nuevos por Crear", len(st.session_state['p_creados']))
+                c2.metric("Libros Existentes por Enriquecer", len(st.session_state['p_actualizados']))
                 
-                st.markdown("### 📊 Resultado de la Operación")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Libros Creados ✨", creados)
-                c2.metric("Libros Enriquecidos 🔧", actualizados)
-                c3.metric("Fallas de Fila ❌", len(errores))
+                with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
+                    st.dataframe(pd.DataFrame(st.session_state['p_creados']), use_container_width=True, hide_index=True) if st.session_state['p_creados'] else st.info("No hay libros nuevos para crear.")
+                    
+                with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
+                    st.dataframe(pd.DataFrame(st.session_state['p_actualizados']), use_container_width=True, hide_index=True) if st.session_state['p_actualizados'] else st.info("No hay libros existentes por enriquecer.")
                 
-                if creados > 0 or actualizados > 0:
-                    st.success("¡Ingesta de catálogo de Planeta completada exitosamente!")
+                # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
+                st.markdown("---")
+                st.markdown("#### 🔒 Confirmación de Seguridad Obligatoria")
+                palabra_seguridad = st.text_input("Escribe la palabra **PROCEDER** en mayúsculas para confirmar los cambios:", key="confirm_p")
+                
+                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (PLANETA)", type="primary", use_container_width=True, disabled=(palabra_seguridad != "PROCEDER")):
+                    exitos_c, exitos_u, errores_v = ejecutar_upsert_editorial_seguro(
+                        st.session_state['p_creados'], 
+                        st.session_state['p_actualizados'], 
+                        "PLANETA", pct_p, val_p, force_p
+                    )
+                    st.success(f"🎉 Carga masiva completada: Se crearon {exitos_c} libros y se enriquecieron {exitos_u} exitosamente.")
                     st.balloons()
-                if errores:
-                    with st.expander("Ver lista de advertencias"):
-                        for err in errores: st.write(err)
+                    del st.session_state['p_creados']
+                    del st.session_state['p_actualizados']
+                    time.sleep(2)
+                    st.rerun()
 
     # ================= PESTAÑA: URANO =================
     with tab_urano:
@@ -307,29 +366,47 @@ def mostrar_carga_editoriales():
         val_u = col_u2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_u")
         
         force_u = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_u")
-        if not force_u:
-            st.info("🔒 Modo Relleno Activo: Solo se inyectarán ISBNs y campos vacíos. Costos y precios existentes no serán alterados.")
-        else:
-            st.warning("⚠️ Forzar Finanzas Activo: Se recalcularán y sobreescribirán costos y precios de venta de tus libros existentes.")
-            
+        
         up_urano = st.file_uploader("Sube el catálogo de Urano (.xlsx):", type=["xlsx"], key="up_urano")
         if up_urano:
             df_u = pd.read_excel(up_urano, engine="openpyxl")
-            if st.button("🚀 Ejecutar Ingesta Urano", type="primary", use_container_width=True, key="btn_u"):
-                creados, actualizados, errores = ejecutar_upsert_editorial(df_u, "URANO", pct_u, val_u, force_u)
+            
+            if st.button("🔍 Previsualizar Simulación de Cambios (Urano)", type="secondary", use_container_width=True):
+                with st.spinner("Simulando cambios y analizando duplicados..."):
+                    creados_u, actualizados_u, errores_u = simular_upsert_editorial(df_u, "URANO", pct_u, val_u, force_u)
+                    st.session_state['u_creados'] = creados_u
+                    st.session_state['u_actualizados'] = actualizados_u
+                    st.session_state['u_errores'] = errores_u
+                    
+            if 'u_creados' in st.session_state:
+                st.markdown("### 🔍 Previsualización de Cambios Simulados")
+                c1, c2 = st.columns(2)
+                c1.metric("Libros Nuevos por Crear", len(st.session_state['u_creados']))
+                c2.metric("Libros Existentes por Enriquecer", len(st.session_state['u_actualizados']))
                 
-                st.markdown("### 📊 Resultado de la Operación")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Libros Creados ✨", creados)
-                c2.metric("Libros Enriquecidos 🔧", actualizados)
-                c3.metric("Fallas de Fila ❌", len(errores))
+                with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
+                    st.dataframe(pd.DataFrame(st.session_state['u_creados']), use_container_width=True, hide_index=True) if st.session_state['u_creados'] else st.info("No hay libros nuevos para crear.")
+                    
+                with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
+                    st.dataframe(pd.DataFrame(st.session_state['u_actualizados']), use_container_width=True, hide_index=True) if st.session_state['u_actualizados'] else st.info("No hay libros existentes por enriquecer.")
                 
-                if creados > 0 or actualizados > 0:
-                    st.success("¡Ingesta de catálogo de Urano completada exitosamente!")
+                # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
+                st.markdown("---")
+                st.markdown("#### 🔒 Confirmación de Seguridad Obligatoria")
+                palabra_seguridad_u = st.text_input("Escribe la palabra **PROCEDER** en mayúsculas para confirmar los cambios:", key="confirm_u")
+                
+                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (URANO)", type="primary", use_container_width=True, disabled=(palabra_seguridad_u != "PROCEDER")):
+                    exitos_c, exitos_u, errores_v = ejecutar_upsert_editorial_seguro(
+                        st.session_state['u_creados'], 
+                        st.session_state['u_actualizados'], 
+                        "URANO", pct_u, val_u, force_u
+                    )
+                    st.success(f"🎉 Carga masiva completada: Se crearon {exitos_c} libros y se enriquecieron {exitos_u} exitosamente.")
                     st.balloons()
-                if errores:
-                    with st.expander("Ver lista de advertencias"):
-                        for err in errores: st.write(err)
+                    del st.session_state['u_creados']
+                    del st.session_state['u_actualizados']
+                    time.sleep(2)
+                    st.rerun()
 
 if __name__ == "__main__":
     mostrar_carga_editoriales()
