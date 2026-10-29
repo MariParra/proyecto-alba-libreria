@@ -197,7 +197,7 @@ def generar_plantilla_libros():
     columnas = [
         'titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 
         'stock', 'precio', 'precio_original', 'costo', 
-        'apto_cajita', 'destacado', 'visible_catalogo',
+        'apto_cajita', 'destacado', 'visible_catalogo','isbn',
         'descuento_inicio_YYYY_MM_DD', 'descuento_fin_YYYY_MM_DD'
     ]
     df_vacio = pd.DataFrame(columns=columnas)
@@ -236,7 +236,7 @@ def procesar_nuevos_libros(df):
     barra_progreso = st.progress(0, text='Iniciando carga de catálogo...')
     total_filas = len(df)
     
-    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion']
+    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 'isbn']
     columnas_numericas = ['stock', 'precio', 'precio_original', 'costo']
 
     for indice, fila in df.iterrows():
@@ -268,7 +268,10 @@ def procesar_nuevos_libros(df):
                 if col in fila and pd.notna(fila[col]):
                     valor_celda = normalizar_celda_excel(fila[col])
                     if valor_celda != '':
-                        nuevo_libro[col] = limpiar_texto_para_busqueda(valor_celda)
+                        if col == 'isbn':
+                            nuevo_libro[col] = valor_celda.strip()  # <--- Saneamos el ISBN de forma segura sin remover su formato
+                        else:
+                            nuevo_libro[col] = limpiar_texto_para_busqueda(valor_celda)
             
             # 2. Columnas numéricas
             for col in columnas_numericas:
