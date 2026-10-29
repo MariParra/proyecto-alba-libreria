@@ -39,7 +39,7 @@ def cargar_datos_completos():
         df = pd.DataFrame(all_data)
     
         # Procesamos directamente el DataFrame unificado
-        columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+        columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion', 'isbn']
         for col in columnas_texto:
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str).str.strip()
@@ -157,7 +157,7 @@ def actualizar_destacados_batch(df_con_cambios):
         
     return updates_count
 
-def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True):
+def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True, isbn=None):
     conn = get_db_connection()
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
     autor_limpio = limpiar_texto_para_busqueda(autor)
@@ -181,9 +181,10 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         "editorial": limpiar_texto_para_busqueda(editorial), "genero": limpiar_texto_para_busqueda(genero),
         "encuadernacion": limpiar_texto_para_busqueda(encuadernacion), "stock": stock,
         "precio": precio, "precio_original": precio, "costo": costo,
-        "apto_cajita": apto_cajita, 
-        "destacado": destacado, 
-        "visible_catalogo": visible_catalogo
+        "apto_cajita": apto_cajita,
+        "destacado": destacado,
+        "visible_catalogo": visible_catalogo,
+        "isbn": isbn.strip() if isbn else None  # <--- Almacenamos el ISBN en Supabase
     }
     try:
         conn.table("libros").insert(datos).execute()
@@ -240,6 +241,7 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'editorial' in row: datos['editorial'] = limpiar_texto_para_busqueda(str(row['editorial']))
             if 'genero' in row: datos['genero'] = limpiar_texto_para_busqueda(str(row['genero']))
             if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto_para_busqueda(str(row['encuadernacion']))
+            if 'isbn' in row: datos['isbn'] = str(row['isbn']).strip() if pd.notna(row['isbn']) and str(row['isbn']).strip() != "" else None  # <--- Soporte de ISBN en lote
             if 'stock' in row: datos['stock'] = int(row['stock'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
             if 'titulo' in row: datos['titulo'] = limpiar_texto_para_busqueda(str(row['titulo']))
@@ -576,10 +578,12 @@ def mostrar_inventario():
                         else:
                             nueva_encuadernacion = sel_enc
                             
-                        col5, col6, col7 = st.columns(3)
+                        col5, col6, col7, col_isbn = st.columns(4)  # <--- Creamos 4 columnas
                         nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
                         nuevo_precio_original = col7.number_input("Precio Orig. ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
+                        nuevo_isbn = col_isbn.text_input("ISBN:", value=libro.get('isbn', ''))  # <--- Input para modificar el ISBN
+
                         
                         st.markdown("📅 **Vigencia del Descuento (Individual)**")
                         col_ed_f1, col_ed_f2 = st.columns(2)
@@ -612,9 +616,10 @@ def mostrar_inventario():
                                     "descuento_fin": nuevo_f_fin.strftime("%Y-%m-%d"),
                                     "apto_cajita": nuevo_apto_cajita,
                                     "destacado": nuevo_destacado,
-                                    "visible_catalogo": nuevo_visible
+                                    "visible_catalogo": nuevo_visible,
+                                    "isbn": nuevo_isbn.strip() if nuevo_isbn else None  # <--- Guardamos el ISBN editado
                                 }
-                                
+
                                 pct_dcto = float(libro.get('Dcto %', 0))
                                 if pct_dcto > 0:
                                     datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
@@ -636,10 +641,11 @@ def mostrar_inventario():
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
             columnas_tabla_pc_todas = [
-                "libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", 
+                "libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "isbn", # <--- Agregamos isbn a las columnas de la tabla PC
                 "stock", "costo", "precio", "precio_original", 
                 "apto_cajita", "destacado", "visible_catalogo"
             ]
+
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
             columnas_a_mostrar = st.multiselect(
@@ -659,6 +665,7 @@ def mostrar_inventario():
             
             config_columnas = {
                 "autor": st.column_config.SelectboxColumn("Autor", options=autores_unicos, required=True),
+                "isbn": st.column_config.TextColumn("ISBN"),
                 "editorial": st.column_config.SelectboxColumn("Editorial", options=editoriales_unicas, required=True),
                 "genero": st.column_config.SelectboxColumn("Género", options=generos_unicos),
                 "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=encuadernaciones_unicas),
@@ -728,10 +735,12 @@ def mostrar_inventario():
             )
             val_enc_nu = st.text_input("O escribe una nueva Encuadernación:", key="n_enc_nu")
             
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)  # <--- Ampliamos a 4 columnas
             val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
             val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
             val_precio = c3.number_input("Precio ($):", min_value=0.0, format="%.0f", key="n_pre")
+            val_isbn = c4.text_input("ISBN (Opcional):", key="n_isbn")  # <--- Entrada del ISBN para el libro nuevo
+
             
             st.markdown("🌐 **Configuración Pública y Web**")
             check_col1, check_col2, check_col3 = st.columns(3)
@@ -743,7 +752,8 @@ def mostrar_inventario():
             col_btn1, col_btn2 = st.columns(2)
             btn_guardar = col_btn1.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True)
             btn_limpiar = col_btn2.form_submit_button("🧹 Limpiar Formulario", type="secondary", use_container_width=True)
-            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre", "n_apto", "n_dest", "n_vis"]
+            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre", "n_isbn", "n_apto", "n_dest", "n_vis"]  # <--- Agregamos 'n_isbn' a las claves a limpiar
+
 
             if btn_limpiar:
                 for key in claves_formulario:
@@ -766,7 +776,8 @@ def mostrar_inventario():
                         val_costo,
                         apto_cajita=val_apto_cajita,
                         destacado=val_destacado,
-                        visible_catalogo=val_visible
+                        visible_catalogo=val_visible,
+                        isbn=val_isbn  # <--- Pasamos el ISBN recogido del formulario
                     )
 
                     if success:
