@@ -50,9 +50,30 @@ DICCIONARIO_PLANETA_GENEROS = {
 }
 
 PALABRAS_SEGURIDAD_RANDOM = [
-    "BODEGA", "CONFIRMAR", "EJECUTAR", "RESTAURAR", 
-    "FORZAR", "SOPORTE", "INGRESAR", "DESPACHO", 
-    "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
+    # Nombres de mascotas divertidos
+    "HARRY", "TRUFA", "PETER", "CONO", "PRI", "GUAGUITO", "CACHORRA",
+    
+    # Divertidas y caóticas
+    "APOCALIPSIS", "BOMBA", "TORNADO", "TURBO", "MAGIA", 
+    "MUTACION", "CAOS", "MATRIZ", "VORTEX", "CHISPA", 
+    "CATACLISMO", "FUSION", "ESTALLIDO", "RAYO", "COHETE",
+    "SUPERNOVA", "AVALANCHA", "TERREMOTO", "MISIL", "REACTOR",
+    
+    # Objetos y conceptos cotidianos pero graciosos
+    "PLATANO", "BURBUJA", "GALAXIA", "JARRON", "PINGUINO", 
+    "BOTIQUIN", "PATITO", "KRAKEN", "CIBORG", "HAMBURGUESA",
+    "ZOMBIE", "FANTASMA", "GALLETA", "NINJA", "PIRATA", 
+    "ROBOT", "UNICORNIO", "FOGATA", "BANDIDO",
+    
+    # Literatura y librería con chispa
+    "BIBLIOTECA", "IMPRENTA", "BESTSELLER", "MANUSCRITO", "ESTANTERIA", 
+    "BOOKLOVER", "PROLOGO", "SINOPSIS", "EPILOGO", "TOMO", 
+    "FOLIO", "RESEÑA", "TAPA", "LOMO", "EDICION", 
+    "EJEMPLAR", "AUTOR", "PAGINAS", "CAPITULO", "TINTA",
+    
+    # Acciones y conceptos dinámicos
+    "EJECUTAR", "RESTAURAR", "FORZAR", "SOPORTE", "INGRESAR", 
+    "DESPACHO", "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
 ]
 
 # --- PARSERS INTELIGENTES ---
