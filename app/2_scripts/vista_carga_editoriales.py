@@ -372,7 +372,7 @@ def mostrar_carga_editoriales():
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.markdown("""
-            **📋 Formato Esperado para PLANETA:**
+            **📋 Columnas relevantes para PLANETA:**
             * `TITULO`
             * `AUTOR`
             * `EAN` (ISBN)
@@ -382,7 +382,7 @@ def mostrar_carga_editoriales():
             """)
         with col_m2:
             st.markdown("""
-            **📋 Formato Esperado para URANO:**
+            **📋 Columnas relevantes para URANO:**
             * `Titulo`
             * `Autores`
             * `EAN13`
