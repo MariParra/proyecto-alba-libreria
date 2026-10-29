@@ -509,7 +509,13 @@ def mostrar_carga_editoriales():
                     st.dataframe(pd.DataFrame(st.session_state['u_creados']), use_container_width=True, hide_index=True) if st.session_state['u_creados'] else st.info("No hay libros nuevos para crear.")
                     
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
-                    st.dataframe(pd.DataFrame(st.session_state['u_actualizados']), use_container_width=True, hide_index=True) if st.session_state['u_actualizados'] else st.info("No hay libros existentes por enriquecer.")
+                    if st.session_state['u_actualizados']:
+                        df_act_styled_u = pd.DataFrame(st.session_state['u_actualizados'])
+                        # 🔵 CORE FIX: Aplicamos el coloreado selectivo en caliente para Urano también
+                        st.dataframe(df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No hay libros existentes por enriquecer.")
+
                 
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
