@@ -39,11 +39,11 @@ def generar_plantilla_actualizacion_libros():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = (conn.table('libros')
-                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin')
+                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin, isbn')  # <--- Agregamos 'isbn' al final del select
                 .order('libro_id')
                 .range(start, end)
                 .execute())
-            
+
             if res.data:
                 all_books.extend(res.data)
                 if len(res.data) < chunk_size:
@@ -170,7 +170,7 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
     no_encontrados = 0
     errores = []
     
-    columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+    columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion', 'isbn']
     columnas_float = ['precio', 'costo', 'precio_original']
     columnas_bool = ['apto_cajita', 'destacado', 'visible_catalogo']
     columnas_fecha = ['descuento_inicio', 'descuento_fin']
@@ -191,8 +191,7 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
         for idx in range(0, len(ids_libros), 1000):
             chunk = ids_libros[idx:idx + 1000]
             res_original = (conn.table('libros')
-                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin')
-                .in_('libro_id', chunk)
+                .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin, isbn')
                 .execute())
             if res_original.data:
                 existing_books_data.extend(res_original.data)
@@ -236,7 +235,10 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
                     if valor_celda != '':
                         val_converted = None
                         if col in columnas_texto:
-                            val_converted = limpiar_texto_para_busqueda(valor_celda)
+                            if col == 'isbn':
+                                val_converted = valor_celda.strip()  # <--- Saneamos el ISBN de forma segura en las actualizaciones sin alterar su formato
+                            else:
+                                val_converted = limpiar_texto_para_busqueda(valor_celda)
                         elif col == 'stock':
                             try:
                                 val_numeric = float(valor_celda)
