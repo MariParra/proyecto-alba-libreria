@@ -559,8 +559,8 @@ def obtener_reporte_asignaciones(ano, lista_meses, todos_los_anos=False, todos_l
                 df_reporte[col] = df_reporte[col].fillna('N/A')
 
         columnas_ordenadas = [
-            'ID Asignacion', 'Año', 'Mes', 'Cliente', 'RUT', 'Estado Suscripción', 
-            'Libro Principal Asignado', 'Autor', '¿Libro Destacado?', '¿Visible en Web?',
+            'ID Asignacion', 'Año', 'Mes', 'Cliente', 'RUT', 'Estado Suscripción',
+            'Libro Principal Asignado', 'ISBN Libro Principal', 'Autor', '¿Libro Destacado?', '¿Visible en Web?',  # <--- Agregamos 'ISBN Libro Principal' al listado de columnas
             'Libros Extras', 'Estado Logística', 'Suscripción Pagada', 'Monto Total ($)', 'Comentarios'
         ]
         columnas_finales = [c for c in columnas_ordenadas if c in df_reporte.columns]
@@ -741,7 +741,7 @@ def obtener_reporte_bajo_stock(limite=5):
             start = bloques * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("libros")
-                .select("titulo, autor, editorial, stock, precio, visible_catalogo, destacado")
+                .select("titulo, autor, editorial, stock, precio, visible_catalogo, destacado, isbn")  # <--- Agregamos isbn al select de bajo stock
                 .lte("stock", limite)
                 .order("stock")
                 .range(start, end).execute())
