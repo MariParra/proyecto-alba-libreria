@@ -6,6 +6,14 @@ import json
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
+TEMATICAS_OMITIDAS_PLANETA = [
+    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
+    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
+    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
+    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
+    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES"
+]
+
 # --- HOMOLOGACIÓN GÉNEROS PLANETA ---
 DICCIONARIO_PLANETA_GENEROS = {
     "NOVELA ROMÁNTICA": "ROMANCE",
@@ -182,32 +190,54 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             if not titulo_key_saneado:
                 continue
                 
+            # --- Dentro del bucle de ejecutar_upsert_editorial_seguro ---
             if editorial_tipo == "PLANETA":
-                # 🚫 REGLA DE EXCLUSIÓN 1: Omitir formatos de Planeta restringidos del catálogo por completo
                 formato_raw = row.get('FORMATO')
                 f_upper_formato = limpiar_texto_para_busqueda(formato_raw)
                 restringidos_formato = ["LOMO VISTO", "TODO CARTON", "PACK", "LIBRO DE BAN", "LIBRO DE TELA", "CALENDARIO"]
                 if any(k in f_upper_formato for k in restringidos_formato):
-                    continue  # Descartar libro por completo, nunca se sube a la BD
+                    continue
                     
                 precio_lista = sanear_numero(row.get('PVP_ACT', 0.0))
                 costo_base = (precio_lista - (precio_lista * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
-                tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
-                genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 
-                # 🚫 REGLA DE EXCLUSIÓN 2: Omitir libros de No Ficción por completo del catálogo
-                if genero_final == "NO FICCION":
-                    continue  # Descartar libro por completo, nunca se sube a la BD
+                # Saneamos la Temática Web original de la fila
+                tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
+                
+                # 🚫 REGLA DE EXCLUSIÓN TOTAL PLANETA: Omitir si pertenece a las 25 temáticas restringidas
+                tematicas_omitidas = [
+                    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
+                    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
+                    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
+                    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
+                    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES"
+                ]
+                
+                if tematica in tematicas_omitidas:
+                    continue  # Descartar libro por completo, nunca ingresa a la base de datos
                     
+                genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
+
             else: # URANO
+                # 🚫 REGLA DE EXCLUSIÓN URANO: Omitir sellos restringidos de la distribuidora
+                sello_raw = str(row.get('Sello', '')).strip().upper()
+                sellos_restringidos = [
+                    "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
+                    "LO SCARABEO", "LITTLE REX", "INDICIOS", "TERAPIAS VERDES", 
+                    "URANITO", "MALINKA", "CAELUS BOOKS"
+                ]
+                if sello_raw in sellos_restringidos:
+                    continue # Descartar libro por completo, nunca se sube a la BD
+                    
                 precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
                 costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 genero_final = None
                 encuadernacion = None
-            
+
+                        
             # Búsqueda Inteligente de Doble Factor
             match_libro = None
             for b in db_libros:
