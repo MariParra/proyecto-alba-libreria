@@ -216,6 +216,20 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
 
 def actualizar_un_libro(libro_id, datos):
     conn = get_db_connection()
+    
+    # 🔒 VALIDACIÓN DE INTEGRIDAD: El ISBN debe ser único en todo el catálogo
+    isbn_val = datos.get('isbn')
+    if isbn_val:
+        isbn_saneado = isbn_val.strip()
+        try:
+            # Buscamos si hay OTRO libro con ese mismo ISBN (excluyendo el que estamos editando)
+            res_isbn = conn.table("libros").select("libro_id, titulo").eq("isbn", isbn_saneado).neq("libro_id", libro_id).execute()
+            if res_isbn.data:
+                otro_libro = res_isbn.data[0]
+                return False, f"El ISBN '{isbn_saneado}' ya está asignado a otro libro en tu inventario: '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']})."
+        except Exception as e:
+            return False, f"Fallo al validar la unicidad del ISBN: {e}"
+
     try:
         conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
         cargar_datos_completos.clear()
@@ -255,7 +269,20 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'editorial' in row: datos['editorial'] = limpiar_texto_para_busqueda(str(row['editorial']))
             if 'genero' in row: datos['genero'] = limpiar_texto_para_busqueda(str(row['genero']))
             if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto_para_busqueda(str(row['encuadernacion']))
-            if 'isbn' in row: datos['isbn'] = str(row['isbn']).strip() if pd.notna(row['isbn']) and str(row['isbn']).strip() != "" else None  # <--- Soporte de ISBN en lote
+            
+            # 🔒 VALIDACIÓN DE INTEGRIDAD EN LOTE: Unicidad del ISBN
+            if 'isbn' in row: 
+                isbn_val = str(row['isbn']).strip() if pd.notna(row['isbn']) and str(row['isbn']).strip() != "" else None
+                if isbn_val:
+                    # Buscamos si hay OTRO libro con ese mismo ISBN (ID diferente) en Supabase
+                    res_isbn = conn.table("libros").select("libro_id, titulo").eq("isbn", isbn_val).neq("libro_id", libro_id).execute()
+                    if res_isbn.data:
+                        otro_libro = res_isbn.data[0]
+                        st.error(f"❌ Error en Fila ID {libro_id}: El ISBN '{isbn_val}' ya está registrado en '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']}).")
+                        # Lanzamos excepción para detener el bucle y abortar la subida
+                        raise Exception(f"ISBN duplicado '{isbn_val}' detectado en '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']}).")
+                datos['isbn'] = isbn_val
+                
             if 'stock' in row: datos['stock'] = int(row['stock'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
             if 'titulo' in row: datos['titulo'] = limpiar_texto_para_busqueda(str(row['titulo']))
@@ -281,6 +308,7 @@ def actualizar_libros_batch(df_original, df_editado):
             if datos:
                 conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
                 updates_count += 1
+                
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
@@ -289,8 +317,8 @@ def actualizar_libros_batch(df_original, df_editado):
                 error=f"Error actualizando libro {libro_id}. Detalle: {e}",
                 email_usuario=email_usuario
             )
-            print(f"Error actualizando libro {libro_id}: {e}")
-            continue
+            # st.error(f"Error actualizando libro {libro_id}: {e}") # Se silencia el log de consola del user para evitar sobrecarga si aborta
+            raise e # Elevamos el error para detener el guardado masivo
             
     if updates_count > 0:
         cargar_datos_completos.clear()
