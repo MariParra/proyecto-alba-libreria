@@ -171,6 +171,14 @@ def cargar_db_libros():
 def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
     db_libros = cargar_db_libros()
     
+    # 🚀 ALTO RENDIMIENTO: Pre-agrupamos el catálogo de la BD por título normalizado en O(N)
+    map_db_por_titulo = {}
+    for b in db_libros:
+        t_key = normalizar_para_cruce(b['titulo'])
+        if t_key not in map_db_por_titulo:
+            map_db_por_titulo[t_key] = []
+        map_db_por_titulo[t_key].append(b)
+        
     preview_creados = []
     preview_actualizados = []
     errores = []
@@ -190,7 +198,6 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             if not titulo_key_saneado:
                 continue
                 
-            # --- Dentro del bucle de ejecutar_upsert_editorial_seguro ---
             if editorial_tipo == "PLANETA":
                 formato_raw = row.get('FORMATO')
                 f_upper_formato = limpiar_texto_para_busqueda(formato_raw)
@@ -202,19 +209,14 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 costo_base = (precio_lista - (precio_lista * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 
-                # Saneamos la Temática Web original de la fila
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
                 
-                # 🚫 REGLA DE EXCLUSIÓN TOTAL PLANETA: Omitir si pertenece a las 26 temáticas restringidas
-                
                 if tematica in TEMATICAS_OMITIDAS_PLANETA:
-                    continue  # Descartar libro por completo, nunca ingresa a la base de datos
+                    continue
                     
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
-
             else: # URANO
-                # 🚫 REGLA DE EXCLUSIÓN URANO: Omitir sellos restringidos de la distribuidora
                 sello_raw = str(row.get('Sello', '')).strip().upper()
                 sellos_restringidos = [
                     "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
@@ -222,35 +224,33 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     "URANITO", "MALINKA", "CAELUS BOOKS"
                 ]
                 if sello_raw in sellos_restringidos:
-                    continue # Descartar libro por completo, nunca se sube a la BD
+                    continue
                     
                 precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
                 costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 genero_final = None
                 encuadernacion = None
-
-                        
-            # Búsqueda Inteligente de Doble Factor
+            
+            # =========================================================================
+            # 🔍 BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
+            # =========================================================================
             match_libro = None
-            for b in db_libros:
-                titulo_db_saneado = normalizar_para_cruce(b['titulo'])
+            
+            # 📌 Prioridad 1: Coincidencia por ISBN
+            if isbn_saneado:
+                match_libro = next((b for b in db_libros if b.get('isbn') == isbn_saneado), None)
                 
-                # 📌 Prioridad 1: Coincidencia por ISBN / EAN13
-                if isbn_saneado:
-                    match_libro = next((b for b in db_libros if b.get('isbn') == isbn_saneado), None)
-    
-                # 📌 Prioridad 2: Fallback Secundario por Título y Autor (Si no hay ISBN o no coincide)
-                if not match_libro:
-                    for b in db_libros:
-                        titulo_db_saneado = normalizar_para_cruce(b['titulo'])
-                        if titulo_db_saneado == titulo_key_saneado:
-                            if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
-                                match_libro = b
-                                break
+            # 📌 Prioridad 2: Fallback por Título y Autor (Usando el mapa optimizado)
+            if not match_libro:
+                # Obtenemos en O(1) solo los libros de la BD que tienen exactamente el mismo título
+                libros_candidatos = map_db_por_titulo.get(titulo_key_saneado, [])
+                for b in libros_candidatos:
+                    if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
+                        match_libro = b
+                        break
             
             if match_libro:
-                # Libro existente -> Comparar diferencias de enriquecimiento
                 campos_cambiados = []
                 if not match_libro.get('isbn') and isbn_saneado: campos_cambiados.append("ISBN")
                 if not match_libro.get('autor') and autor_saneado: campos_cambiados.append("Autor")
@@ -274,7 +274,6 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                         "Nuevo Precio": f"${precio_venta:,.0f}" if forzar_finanzas else "Sin cambios"
                     })
             else:
-                # Libro Nuevo
                 preview_creados.append({
                     "Título": titulo_saneado,
                     "Autor": autor_saneado,
