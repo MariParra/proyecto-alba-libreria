@@ -487,16 +487,20 @@ def mostrar_carga_editoriales():
                 c2.metric("Libros Existentes por Enriquecer", len(st.session_state['p_actualizados']))
                 
                 with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
-                    st.dataframe(pd.DataFrame(st.session_state['p_creados']), use_container_width=True, hide_index=True) if st.session_state['p_creados'] else st.info("No hay libros nuevos para crear.")
+                    if st.session_state['p_creados']:
+                        df_creados_p = pd.DataFrame(st.session_state['p_creados'])
+                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático
+                        html_creados_p = df_creados_p.to_html(index=False)
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_creados_p}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No hay libros nuevos para crear.")
                     
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['p_actualizados']:
                         df_act_styled = pd.DataFrame(st.session_state['p_actualizados'])
-                        # Generamos el HTML estilizado de la tabla
-                        html_table = df_act_styled.style.apply(color_enriquecer_existentes, axis=None).to_html()
-                        # Lo renderizamos de forma estática y segura para evitar errores de React #185
+                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático con coloreado
+                        html_table = df_act_styled.style.apply(color_enriquecer_existentes, axis=None).to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table}</div>', unsafe_allow_html=True)
-
                     else:
                         st.info("No hay libros existentes por enriquecer.")
                 
@@ -554,18 +558,23 @@ def mostrar_carga_editoriales():
                 c2.metric("Libros Existentes por Enriquecer", len(st.session_state['u_actualizados']))
                 
                 with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
-                    st.dataframe(pd.DataFrame(st.session_state['u_creados']), use_container_width=True, hide_index=True) if st.session_state['u_creados'] else st.info("No hay libros nuevos para crear.")
+                    if st.session_state['u_creados']:
+                        df_creados_u = pd.DataFrame(st.session_state['u_creados'])
+                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático
+                        html_creados_u = df_creados_u.to_html(index=False)
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_creados_u}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No hay libros nuevos para crear.")
                     
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['u_actualizados']:
                         df_act_styled_u = pd.DataFrame(st.session_state['u_actualizados'])
-                        # Generamos el HTML estilizado de la tabla
-                        html_table_u = df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None).to_html()
-                        # Lo renderizamos de forma estática y segura para evitar errores de React #185
+                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático con coloreado
+                        html_table_u = df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None).to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table_u}</div>', unsafe_allow_html=True)
-
                     else:
                         st.info("No hay libros existentes por enriquecer.")
+
                 
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
