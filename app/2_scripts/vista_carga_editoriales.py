@@ -6,14 +6,6 @@ import json
 import time
 from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
 
-TEMATICAS_OMITIDAS_PLANETA = [
-    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
-    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
-    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
-    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
-    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES", "OCIO Y ENTRETENIMIENTO"
-]
-
 # --- HOMOLOGACIÓN GÉNEROS PLANETA ---
 DICCIONARIO_PLANETA_GENEROS = {
     "NOVELA ROMÁNTICA": "ROMANCE",
@@ -84,6 +76,14 @@ PALABRAS_SEGURIDAD_RANDOM = [
     "DESPACHO", "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
 ]
 
+TEMATICAS_OMITIDAS_PLANETA = [
+    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
+    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
+    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
+    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
+    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES", "OCIO Y ENTRETENIMIENTO"
+]
+
 # --- PARSERS INTELIGENTES ---
 def sanear_numero(val):
     if pd.isna(val): return 0.0
@@ -151,6 +151,40 @@ def aproximar_cien_superior(valor):
     import math
     return int(math.ceil(valor / 100.0)) * 100
 
+def normalizar_encuadernacion_planeta(formato_raw):
+    if pd.isna(formato_raw):
+        return None
+    f_upper = limpiar_texto_para_busqueda(formato_raw)
+    if not f_upper:
+        return None
+    if "RUSTICA" in f_upper or "RUSTICO" in f_upper:
+        return "TAPA BLANDA"
+    if "DURA" in f_upper or "CARTONE" in f_upper or "CARTON" in f_upper:
+        return "TAPA DURA"
+    if "BOLSILLO" in f_upper or "FLEXIBLE" in f_upper:
+        return "BOLSILLO"
+    return f_upper
+
+def limpiar_cache_previsualizaciones():
+    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
+    for k in keys_to_delete:
+        if k in st.session_state:
+            del st.session_state[k]
+
+# --- ALINEADOR DINÁMICO DE CABECERAS EXCEL ---
+def alinear_cabeceras_excel(df):
+    df_clean = df.copy()
+    cols_upper = [str(c).upper().strip() for c in df_clean.columns]
+    if "EDITORIAL" not in cols_upper and "TÍTULO" not in cols_upper and "TITULO" not in cols_upper:
+        for r_idx in range(min(5, len(df_clean))):
+            row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
+            if "EDITORIAL" in row_vals or "TÍTULO" in row_vals or "TITULO" in row_vals:
+                df_clean.columns = df_clean.iloc[r_idx]
+                df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
+                break
+    df_clean.columns = [str(c).strip() for c in df_clean.columns]
+    return df_clean
+
 # --- CARGA DEL INVENTARIO DE BASE ---
 def cargar_db_libros():
     conn = get_db_connection()
@@ -171,7 +205,7 @@ def cargar_db_libros():
 def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
     db_libros = cargar_db_libros()
     
-    # 🚀 ALTO RENDIMIENTO: Pre-agrupamos el catálogo de la BD por título normalizado en O(N)
+    # 🚀 ALTO RENDIMIENTO (O(N))
     map_db_por_titulo = {}
     for b in db_libros:
         t_key = normalizar_para_cruce(b['titulo'])
@@ -183,15 +217,19 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     preview_actualizados = []
     errores = []
     
+    # Alinear cabeceras del excel subido
+    df_import = alinear_cabeceras_excel(df_import)
+    
     for idx, row in df_import.iterrows():
         try:
-            titulo_original = row.get('TITULO') if editorial_tipo == "PLANETA" else row.get('Titulo')
-            autor_original = row.get('AUTOR') if editorial_tipo == "PLANETA" else row.get('Autores')
-            isbn_original = str(row.get('EAN')).split('.')[0] if editorial_tipo == "PLANETA" else str(row.get('EAN13')).split('.')[0]
+            # 🚀 MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta múltiples Excel)
+            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo')))
+            autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores')))
+            isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN')))).split('.')[0]
             
             titulo_saneado = normalizar_titulo(titulo_original)
             autor_saneado = normalizar_autor(autor_original)
-            isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) else None
+            isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) and isbn_original.strip().lower() not in ['nan', 'none', ''] else None
             
             titulo_key_saneado = normalizar_para_cruce(titulo_saneado)
             
@@ -210,14 +248,14 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
-                
                 if tematica in TEMATICAS_OMITIDAS_PLANETA:
                     continue
                     
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
             else: # URANO
-                sello_raw = str(row.get('Sello', '')).strip().upper()
+                # 🚀 EXCLUSIÓN URANO: Sello polimórfico
+                sello_raw = str(row.get('SELLO', row.get('Sello', ''))).strip().upper()
                 sellos_restringidos = [
                     "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
                     "LO SCARABEO", "LITTLE REX", "INDICIOS", "TERAPIAS VERDES", 
@@ -226,8 +264,13 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 if sello_raw in sellos_restringidos:
                     continue
                     
-                precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
-                costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
+                # 🚀 PRECIO POLIMÓRFICO: Soporta 'Precio Neto' y 'PVP'
+                if 'Precio Neto' in row:
+                    base_calc = sanear_numero(row.get('Precio Neto', 0.0))
+                else:
+                    base_calc = sanear_numero(row.get('PVP', row.get('PVP_ACT', 0.0)))
+                    
+                costo_base = (base_calc - (base_calc * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 genero_final = None
                 encuadernacion = None
@@ -237,13 +280,10 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             # =========================================================================
             match_libro = None
             
-            # 📌 Prioridad 1: Coincidencia por ISBN
             if isbn_saneado:
                 match_libro = next((b for b in db_libros if b.get('isbn') == isbn_saneado), None)
                 
-            # 📌 Prioridad 2: Fallback por Título y Autor (Usando el mapa optimizado)
             if not match_libro:
-                # Obtenemos en O(1) solo los libros de la BD que tienen exactamente el mismo título
                 libros_candidatos = map_db_por_titulo.get(titulo_key_saneado, [])
                 for b in libros_candidatos:
                     if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
@@ -356,10 +396,6 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
     return exitos_creados, exitos_actualizados, errores
 
 def color_enriquecer_existentes(data):
-    """
-    Colorea en amarillo pastel suave las celdas que van a sufrir cambios
-    según lo especificado en la columna 'Cambios a Aplicar'.
-    """
     estilos = pd.DataFrame('', index=data.index, columns=data.columns)
     color_amarillo_pastel = 'background-color: #fff9c4; color: #5d4037; font-weight: bold;'
     
@@ -378,28 +414,6 @@ def color_enriquecer_existentes(data):
                 estilos.loc[idx, col_target] = color_amarillo_pastel
                 
     return estilos
-
-def normalizar_encuadernacion_planeta(formato_raw):
-    if pd.isna(formato_raw):
-        return None
-    f_upper = limpiar_texto_para_busqueda(formato_raw)
-    if not f_upper:
-        return None
-        
-    if "RUSTICA" in f_upper or "RUSTICO" in f_upper:
-        return "TAPA BLANDA"
-    if "DURA" in f_upper or "CARTONE" in f_upper or "CARTON" in f_upper:
-        return "TAPA DURA"
-    if "BOLSILLO" in f_upper or "FLEXIBLE" in f_upper:
-        return "BOLSILLO"
-        
-    return f_upper
-
-def limpiar_cache_previsualizaciones():
-    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
-    for k in keys_to_delete:
-        if k in st.session_state:
-            del st.session_state[k]
 
 def mostrar_carga_editoriales():
     # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
@@ -436,10 +450,10 @@ def mostrar_carga_editoriales():
         with col_m2:
             st.markdown("""
             **📋 Columnas relevantes para URANO:**
-            * `Titulo`
-            * `Autores`
-            * `EAN13`
-            * `Precio Neto`
+            * `Titulo` (o `TÍTULO`)
+            * `Autores` (o `AUTOR`)
+            * `EAN13` (o `ISBN`)
+            * `Precio Neto` (o `PVP`)
             """)
 
     tab_planeta, tab_urano = st.tabs(["🌎 Grupo Planeta", "🌌 Urano World"])
