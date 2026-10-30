@@ -11,7 +11,7 @@ TEMATICAS_OMITIDAS_PLANETA = [
     "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
     "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
     "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
-    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES"
+    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES", "OCIO Y ENTRETENIMIENTO"
 ]
 
 # --- HOMOLOGACIÓN GÉNEROS PLANETA ---
@@ -205,16 +205,9 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 # Saneamos la Temática Web original de la fila
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
                 
-                # 🚫 REGLA DE EXCLUSIÓN TOTAL PLANETA: Omitir si pertenece a las 25 temáticas restringidas
-                tematicas_omitidas = [
-                    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
-                    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
-                    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
-                    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
-                    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES"
-                ]
+                # 🚫 REGLA DE EXCLUSIÓN TOTAL PLANETA: Omitir si pertenece a las 26 temáticas restringidas
                 
-                if tematica in tematicas_omitidas:
+                if tematica in TEMATICAS_OMITIDAS_PLANETA:
                     continue  # Descartar libro por completo, nunca ingresa a la base de datos
                     
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
@@ -242,10 +235,19 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             match_libro = None
             for b in db_libros:
                 titulo_db_saneado = normalizar_para_cruce(b['titulo'])
-                if titulo_db_saneado == titulo_key_saneado:
-                    if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
-                        match_libro = b
-                        break
+                
+                # 📌 Prioridad 1: Coincidencia por ISBN / EAN13
+                if isbn_saneado:
+                    match_libro = next((b for b in db_libros if b.get('isbn') == isbn_saneado), None)
+    
+                # 📌 Prioridad 2: Fallback Secundario por Título y Autor (Si no hay ISBN o no coincide)
+                if not match_libro:
+                    for b in db_libros:
+                        titulo_db_saneado = normalizar_para_cruce(b['titulo'])
+                        if titulo_db_saneado == titulo_key_saneado:
+                            if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
+                                match_libro = b
+                                break
             
             if match_libro:
                 # Libro existente -> Comparar diferencias de enriquecimiento
