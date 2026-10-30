@@ -209,129 +209,125 @@ def generar_plantilla_libros():
             worksheet.set_column(i, i, 18)
     return output.getvalue()
 
-def procesar_nuevos_libros(df):
-    conn = get_db_connection()
-    exitos, duplicados, errores = 0, 0, []
+def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
+    db_libros = cargar_db_libros()
     
-    # 🚀 BYPASS DE 1000 REGISTROS: Cargamos todo el catálogo de títulos y autores para validar duplicados
-    all_titles = []
-    chunk_size = 1000
-    for bloque in range(100):
-        start = bloque * chunk_size
-        end = start + chunk_size - 1
-        res_libros = (conn.table('libros')
-            .select('titulo, autor')
-            .order('libro_id')
-            .range(start, end)
-            .execute())
-        if res_libros.data:
-            all_titles.extend(res_libros.data)
-            if len(res_libros.data) < chunk_size:
-                break
-        else:
-            break
-            
-    catalogo_actual = [(limpiar_texto_para_busqueda(l['titulo']), limpiar_texto_para_busqueda(l.get('autor', ''))) for l in all_titles] if all_titles else []
+    # 🚀 ALTO RENDIMIENTO: Pre-agrupamos el catálogo de la BD por título normalizado en O(N)
+    map_db_por_titulo = {}
+    for b in db_libros:
+        t_key = normalizar_para_cruce(b['titulo'])
+        if t_key not in map_db_por_titulo:
+            map_db_por_titulo[t_key] = []
+        map_db_por_titulo[t_key].append(b)
+        
+    preview_creados = []
+    preview_actualizados = []
+    errores = []
     
-    barra_progreso = st.progress(0, text='Iniciando carga de catálogo...')
-    total_filas = len(df)
-    
-    columnas_texto = ['titulo', 'autor', 'genero', 'editorial', 'encuadernacion', 'isbn']
-    columnas_numericas = ['stock', 'precio', 'precio_original', 'costo']
-
-    for indice, fila in df.iterrows():
-        barra_progreso.progress((indice + 1) / total_filas, text=f'Procesando libro {indice + 1} de {total_filas}...')
-        
-        # Omitir filas vacías silenciosamente
-        if fila.dropna().empty or all(str(val).strip().lower() in ['', 'nan', 'none', '<na>'] for val in fila.values):
-            continue
-
-        titulo_raw = normalizar_celda_excel(fila.get('titulo', ''))
-        autor_raw = normalizar_celda_excel(fila.get('autor', ''))
-        
-        titulo_limpio = limpiar_texto_para_busqueda(titulo_raw)
-        autor_limpio = limpiar_texto_para_busqueda(autor_raw)
-        
-        if not titulo_limpio:
-            errores.append(f'Fila {indice + 2}: Falta el "titulo". Es obligatorio.')
-            continue
-            
-        if (titulo_limpio, autor_limpio) in catalogo_actual:
-            duplicados += 1
-            errores.append(f'Fila {indice + 2}: El libro "{titulo_raw}" (Autor: {autor_raw}) ya existe.')
-            continue
-            
+    for idx, row in df_import.iterrows():
         try:
-            nuevo_libro = {}
-            # 1. Columnas de texto
-            for col in columnas_texto:
-                if col in fila and pd.notna(fila[col]):
-                    valor_celda = normalizar_celda_excel(fila[col])
-                    if valor_celda != '':
-                        if col == 'isbn':
-                            nuevo_libro[col] = valor_celda.strip()  # <--- Saneamos el ISBN de forma segura sin remover su formato
-                        else:
-                            nuevo_libro[col] = limpiar_texto_para_busqueda(valor_celda)
+            titulo_original = row.get('TITULO') if editorial_tipo == "PLANETA" else row.get('Titulo')
+            autor_original = row.get('AUTOR') if editorial_tipo == "PLANETA" else row.get('Autores')
+            isbn_original = str(row.get('EAN')).split('.')[0] if editorial_tipo == "PLANETA" else str(row.get('EAN13')).split('.')[0]
             
-            # 2. Columnas numéricas
-            for col in columnas_numericas:
-                if col in fila and pd.notna(fila[col]):
-                    val_clean = sanear_numero(fila[col])
-                    nuevo_libro[col] = int(val_clean)
-                else:
-                    nuevo_libro[col] = 0 if col == 'stock' else 0.0
+            titulo_saneado = normalizar_titulo(titulo_original)
+            autor_saneado = normalizar_autor(autor_original)
+            isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) else None
             
-            encuadernacion = nuevo_libro.get('encuadernacion', '').upper()
+            titulo_key_saneado = normalizar_para_cruce(titulo_saneado)
             
-            if 'apto_cajita' in fila and pd.notna(fila['apto_cajita']):
-                val_bool = normalizar_celda_excel(fila['apto_cajita']).lower()
-                nuevo_libro['apto_cajita'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
-            else:
-                nuevo_libro['apto_cajita'] = False if encuadernacion == 'TAPA DURA' else True
-            
-            if 'destacado' in fila and pd.notna(fila['destacado']):
-                val_bool = normalizar_celda_excel(fila['destacado']).lower()
-                nuevo_libro['destacado'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
-            else:
-                nuevo_libro['destacado'] = False
-            
-            if 'visible_catalogo' in fila and pd.notna(fila['visible_catalogo']):
-                val_bool = normalizar_celda_excel(fila['visible_catalogo']).lower()
-                nuevo_libro['visible_catalogo'] = val_bool in ['true', '1', 'si', 'sí', 'yes', 'y']
-            else:
-                nuevo_libro['visible_catalogo'] = True
+            if not titulo_key_saneado:
+                continue
                 
-            if 'descuento_inicio_YYYY_MM_DD' in fila and pd.notna(fila['descuento_inicio_YYYY_MM_DD']):
-                val_fecha = normalizar_celda_excel(fila['descuento_inicio_YYYY_MM_DD'])
-                if val_fecha:
-                    try:
-                        nuevo_libro['descuento_inicio'] = pd.to_datetime(val_fecha).strftime('%Y-%m-%d')
-                    except:
-                        errores.append(f'Fila {indice + 2}: Formato de "descuento_inicio" inválido.')
-            if 'descuento_fin_YYYY_MM_DD' in fila and pd.notna(fila['descuento_fin_YYYY_MM_DD']):
-                val_fecha = normalizar_celda_excel(fila['descuento_fin_YYYY_MM_DD'])
-                if val_fecha:
-                    try:
-                        nuevo_libro['descuento_fin'] = pd.to_datetime(val_fecha).strftime('%Y-%m-%d')
-                    except:
-                        errores.append(f'Fila {indice + 2}: Formato de "descuento_fin" inválido.')
+            if editorial_tipo == "PLANETA":
+                formato_raw = row.get('FORMATO')
+                f_upper_formato = limpiar_texto_para_busqueda(formato_raw)
+                restringidos_formato = ["LOMO VISTO", "TODO CARTON", "PACK", "LIBRO DE BAN", "LIBRO DE TELA", "CALENDARIO"]
+                if any(k in f_upper_formato for k in restringidos_formato):
+                    continue
+                    
+                precio_lista = sanear_numero(row.get('PVP_ACT', 0.0))
+                costo_base = (precio_lista - (precio_lista * (pct_descuento / 100.0))) * 1.19
+                precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
+                
+                tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
+                
+                if tematica in TEMATICAS_OMITIDAS_PLANETA:
+                    continue
+                    
+                genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
+                encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
+            else: # URANO
+                sello_raw = str(row.get('Sello', '')).strip().upper()
+                sellos_restringidos = [
+                    "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
+                    "LO SCARABEO", "LITTLE REX", "INDICIOS", "TERAPIAS VERDES", 
+                    "URANITO", "MALINKA", "CAELUS BOOKS"
+                ]
+                if sello_raw in sellos_restringidos:
+                    continue
+                    
+                precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
+                costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
+                precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
+                genero_final = None
+                encuadernacion = None
             
-            if 'titulo' in nuevo_libro:
-                nuevo_libro['portada_last_updated'] = 'now()'
-                conn.table('libros').insert(nuevo_libro).execute()
-                exitos += 1
-                catalogo_actual.append((titulo_limpio, autor_limpio))
-
+            # =========================================================================
+            # 🔍 BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
+            # =========================================================================
+            match_libro = None
+            
+            # 📌 Prioridad 1: Coincidencia por ISBN
+            if isbn_saneado:
+                match_libro = next((b for b in db_libros if b.get('isbn') == isbn_saneado), None)
+                
+            # 📌 Prioridad 2: Fallback por Título y Autor (Usando el mapa optimizado)
+            if not match_libro:
+                # Obtenemos en O(1) solo los libros de la BD que tienen exactamente el mismo título
+                libros_candidatos = map_db_por_titulo.get(titulo_key_saneado, [])
+                for b in libros_candidatos:
+                    if autores_coinciden_flexible(b.get('autor', ''), autor_saneado):
+                        match_libro = b
+                        break
+            
+            if match_libro:
+                campos_cambiados = []
+                if not match_libro.get('isbn') and isbn_saneado: campos_cambiados.append("ISBN")
+                if not match_libro.get('autor') and autor_saneado: campos_cambiados.append("Autor")
+                if not match_libro.get('genero') and genero_final: campos_cambiados.append("Género")
+                if not match_libro.get('encuadernacion') and encuadernacion: campos_cambiados.append("Encuadernación")
+                if not match_libro.get('editorial'): campos_cambiados.append("Editorial")
+                
+                if forzar_finanzas:
+                    campos_cambiados.extend(["Costo", "Precio"])
+                
+                if campos_cambiados:
+                    preview_actualizados.append({
+                        "ID": match_libro['libro_id'],
+                        "Título": titulo_saneado,
+                        "Autor": autor_saneado,
+                        "ISBN": isbn_saneado if "ISBN" in campos_cambiados else match_libro.get('isbn'),
+                        "Género": genero_final if "Género" in campos_cambiados else match_libro.get('genero'),
+                        "Encuadernación": encuadernacion if "Encuadernación" in campos_cambiados else match_libro.get('encuadernacion'),
+                        "Cambios a Aplicar": ", ".join(campos_cambiados),
+                        "Nuevo Costo": f"${round(costo_base):,.0f}" if forzar_finanzas else "Sin cambios",
+                        "Nuevo Precio": f"${precio_venta:,.0f}" if forzar_finanzas else "Sin cambios"
+                    })
+            else:
+                preview_creados.append({
+                    "Título": titulo_saneado,
+                    "Autor": autor_saneado,
+                    "ISBN": isbn_saneado,
+                    "Género": genero_final,
+                    "Encuadernación": encuadernacion,
+                    "Costo Calculado": f"${round(costo_base):,.0f}",
+                    "Precio Venta": f"${precio_venta:,.0f}"
+                })
         except Exception as e:
-            email_usuario = st.session_state.get('email_usuario', 'Desconocido')
-            error_detalle = f'Fallo en creación masiva en Fila {indice + 2} ("{titulo_raw}"). Detalle: {e}'
-            log_error(vista='vista_creacion_masiva', funcion='procesar_nuevos_libros', error=error_detalle, email_usuario=email_usuario)
-            errores.append(f'Fila {indice + 2} ("{titulo_raw}"): Error -> {str(e)}')
+            errores.append(f"Fila {idx+2}: Error de simulación: {e}")
             
-    barra_progreso.progress(1.0, text='¡Carga finalizada!')
-    if exitos > 0:
-        st.cache_data.clear()
-    return exitos, duplicados, errores
+    return preview_creados, preview_actualizados, errores
 
 # ====================================================
 # --- LÓGICA 3: IMPORTACIÓN DE VENTAS PASADAS ---

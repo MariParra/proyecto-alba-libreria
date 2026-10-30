@@ -205,20 +205,38 @@ def anadir_nuevo_libro_carrito():
         return
         
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
-    conn = get_db_connection()
-    res_check = conn.table("libros").select("titulo").eq("titulo", titulo_limpio).execute()
+    autor_limpio = limpiar_texto_para_busqueda(autor)
     
-    if res_check.data:
-        st.session_state['vm_error_libro'] = f"🚫 DUPLICADO: Ya existe un libro con el título '{titulo_limpio}' en tu catálogo."
+    conn = get_db_connection()
+    match_libro = None
+    
+    # =========================================================================
+    # 🔍 MOTOR DE BÚSQUEDA EN CASCADA (Doble Factor de Seguridad)
+    # =========================================================================
+    
+    # 📌 Prioridad 1: Buscar por ISBN en Supabase
+    if isbn_final:
+        res_isbn = conn.table("libros").select("libro_id, titulo").eq("isbn", isbn_final).execute()
+        if res_isbn.data:
+            match_libro = res_isbn.data[0]
+            
+    # 📌 Prioridad 2: Fallback por Título y Autor (Si no hay ISBN o no coincide)
+    if not match_libro:
+        res_text = conn.table("libros").select("libro_id, titulo").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
+        if res_text.data:
+            match_libro = res_text.data[0]
+            
+    if match_libro:
+        st.session_state['vm_error_libro'] = f"🚫 DUPLICADO: Ya existe un libro con ese ISBN o Título/Autor en tu catálogo general (ID: {match_libro['libro_id']} - Título: {match_libro['titulo']})."
         return
         
     # Añadimos al carrito
     st.session_state.vm_carrito.append({
-    "libro_id": None, "titulo": titulo.upper(), "cantidad": cant,
-    "stock_actual": stock, "es_nuevo": True, "autor": autor.upper() if autor else "",
-    "genero": genero.upper() if genero else "", "editorial": editorial.upper() if editorial else "",
-    "encuadernacion": encuadernacion, "isbn": isbn_final, "precio": precio,
-    "costo": costo, "stock_inicial": stock
+        "libro_id": None, "titulo": titulo.upper(), "cantidad": cant,
+        "stock_actual": stock, "es_nuevo": True, "autor": autor.upper() if autor else "",
+        "genero": genero.upper() if genero else "", "editorial": editorial.upper() if editorial else "",
+        "encuadernacion": encuadernacion, "isbn": isbn_final, "precio": precio,
+        "costo": costo, "stock_inicial": stock
     })
     
     # Limpiamos todos los campos temporales

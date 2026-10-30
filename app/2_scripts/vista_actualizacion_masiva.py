@@ -185,17 +185,19 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
         except:
             pass
 
-    # Descargar datos existentes en BD en bloques para comparación
+    # 🚀 ALTO RENDIMIENTO: Descargar datos existentes en Supabase en bloques filtrados
     existing_books_data = []
     if ids_libros:
         for idx in range(0, len(ids_libros), 1000):
             chunk = ids_libros[idx:idx + 1000]
             res_original = (conn.table('libros')
                 .select('libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, precio_original, apto_cajita, destacado, visible_catalogo, descuento_inicio, descuento_fin, isbn')
+                .in_('libro_id', chunk)  # <--- CORREGIDO: Filtramos por el bloque de IDs del Excel
                 .execute())
             if res_original.data:
                 existing_books_data.extend(res_original.data)
                 
+    # Indexamos en un diccionario rápido O(1) en memoria
     existing_books_dict = {r['libro_id']: r for r in existing_books_data}
     total_filas = len(df)
 
@@ -236,17 +238,14 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
                         val_converted = None
                         if col in columnas_texto:
                             if col == 'isbn':
-                                val_converted = valor_celda.strip()  # <--- Saneamos el ISBN de forma segura en las actualizaciones sin alterar su formato
+                                val_converted = valor_celda.strip()  # Saneamos el ISBN de forma segura
                             else:
                                 val_converted = limpiar_texto_para_busqueda(valor_celda)
                         elif col == 'stock':
                             try:
                                 val_numeric = float(valor_celda)
-                                if val_numeric == 0:
-                                    val_converted = 0
-                                else:
-                                    val_converted = int(val_numeric)
-                            except (ValueError, TypeError):
+                                val_converted = 0 if val_numeric == 0 else int(val_numeric)
+                            except:
                                 val_converted = 0
                         elif col in columnas_float:
                             val_converted = float(valor_celda)
@@ -300,7 +299,7 @@ def procesar_actualizacion_libros(df, progress_bar=None, status_text=None):
                     precio_float = float(precio_val)
                     if abs(precio_float - (float(db_row.get('precio') or 0.0))) > 1e-4:
                         datos_update['precio'] = precio_float
-
+  
             if datos_update:
                 conn.table('libros').update(datos_update).eq('libro_id', libro_id).execute()
                 updates += 1

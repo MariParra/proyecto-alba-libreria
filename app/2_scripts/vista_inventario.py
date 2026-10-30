@@ -161,11 +161,25 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
     conn = get_db_connection()
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
     autor_limpio = limpiar_texto_para_busqueda(autor)
+    isbn_saneado = isbn.strip() if isbn else None
 
     try:
-        res = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
-        if res.data:
-            return False, f"El libro '{titulo_limpio}' del autor '{autor_limpio}' ya existe en el catálogo."
+        match_libro = None
+        # 📌 Prioridad 1: Buscar por ISBN en la base de datos
+        if isbn_saneado:
+            res_isbn = conn.table("libros").select("libro_id").eq("isbn", isbn_saneado).execute()
+            if res_isbn.data:
+                match_libro = res_isbn.data[0]
+
+        # 📌 Prioridad 2: Buscar por Título y Autor (Si no hay ISBN o no coincide)
+        if not match_libro:
+            res_text = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
+            if res_text.data:
+                match_libro = res_text.data[0]
+
+        if match_libro:
+            return False, f"El libro ya existe en tu catálogo general (ID: {match_libro['libro_id']})."
+
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
