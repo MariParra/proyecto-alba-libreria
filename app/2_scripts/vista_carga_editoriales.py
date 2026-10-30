@@ -492,7 +492,11 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['p_actualizados']:
                         df_act_styled = pd.DataFrame(st.session_state['p_actualizados'])
-                        st.dataframe(df_act_styled.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
+                        # Generamos el HTML estilizado de la tabla
+                        html_table = df_act_styled.style.apply(color_enriquecer_existentes, axis=None).to_html()
+                        # Lo renderizamos de forma estática y segura para evitar errores de React #185
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table}</div>', unsafe_allow_html=True)
+
                     else:
                         st.info("No hay libros existentes por enriquecer.")
                 
@@ -555,7 +559,11 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['u_actualizados']:
                         df_act_styled_u = pd.DataFrame(st.session_state['u_actualizados'])
-                        st.dataframe(df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
+                        # Generamos el HTML estilizado de la tabla
+                        html_table_u = df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None).to_html()
+                        # Lo renderizamos de forma estática y segura para evitar errores de React #185
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table_u}</div>', unsafe_allow_html=True)
+
                     else:
                         st.info("No hay libros existentes por enriquecer.")
                 
