@@ -76,13 +76,6 @@ PALABRAS_SEGURIDAD_RANDOM = [
     "DESPACHO", "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
 ]
 
-def limpiar_cache_previsualizaciones():
-    """Limpia la previsualización de la pantalla al cambiar los parámetros financieros."""
-    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
-    for k in keys_to_delete:
-        if k in st.session_state:
-            del st.session_state[k]
-
 # --- PARSERS INTELIGENTES ---
 def sanear_numero(val):
     if pd.isna(val): return 0.0
@@ -123,7 +116,6 @@ def normalizar_autor(autor_raw):
 def normalizar_titulo(titulo_raw):
     if pd.isna(titulo_raw): return ""
     titulo_str = str(titulo_raw).strip()
-    # 🇨🇱 CORE FIX: Removemos de forma segura y limpia el sufijo "(CHI)" al final de los títulos
     titulo_str = re.sub(r'\s*\(CHI\)\s*$', '', titulo_str, flags=re.IGNORECASE)
     
     articles = [", EL", ", LA", ", LOS", ", LAS", ", UN", ", UNA", ", EN"]
@@ -134,25 +126,15 @@ def normalizar_titulo(titulo_raw):
     return limpiar_texto_para_busqueda(titulo_str)
 
 def normalizar_para_cruce(texto):
-    """
-    Crea una huella digital para comparar títulos de forma robusta.
-    Remueve signos de puntuación especiales (¡, !, ¿, ?, ., ,, ;, :, -, _)
-    y conserva solo caracteres alfanuméricos y espacios simples.
-    """
     clean = limpiar_texto_para_busqueda(texto)
     return re.sub(r'[^A-Z0-9\s]', '', clean).strip()
 
 def autores_coinciden_flexible(autor_db, autor_import):
-    """
-    Compara autores de forma flexible basándose en intersección de palabras clave.
-    Ej: "ENZO ROUBAUD ROJAS" y "ENZO ROBAUD" coincidirán al compartir palabras clave troncales.
-    """
     key_db = set(normalizar_para_cruce(autor_db).split())
     key_import = set(normalizar_para_cruce(autor_import).split())
     
     interseccion = key_db.intersection(key_import)
     
-    # Si comparten el nombre y al menos parte del apellido o coincidencia de prefijos de tokens
     if len(interseccion) >= 2 or (len(key_db) > 0 and any(any(abs(len(a) - len(b)) <= 2 and (a[:4] == b[:4]) for b in key_import) for a in key_db)):
         return True
     return False
@@ -201,12 +183,24 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 continue
                 
             if editorial_tipo == "PLANETA":
+                # 🚫 REGLA DE EXCLUSIÓN 1: Omitir formatos de Planeta restringidos del catálogo por completo
+                formato_raw = row.get('FORMATO')
+                f_upper_formato = limpiar_texto_para_busqueda(formato_raw)
+                restringidos_formato = ["LOMO VISTO", "TODO CARTON", "PACK", "LIBRO DE BAN", "LIBRO DE TELA", "CALENDARIO"]
+                if any(k in f_upper_formato for k in restringidos_formato):
+                    continue  # Descartar libro por completo, nunca se sube a la BD
+                    
                 precio_lista = sanear_numero(row.get('PVP_ACT', 0.0))
                 costo_base = (precio_lista - (precio_lista * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 tematica = limpiar_texto_para_busqueda(str(row.get('TEMÁTICA WEB', '')))
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
-                encuadernacion = normalizar_encuadernacion_planeta(row.get('FORMATO'))
+                
+                # 🚫 REGLA DE EXCLUSIÓN 2: Omitir libros de No Ficción por completo del catálogo
+                if genero_final == "NO FICCION":
+                    continue  # Descartar libro por completo, nunca se sube a la BD
+                    
+                encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
             else: # URANO
                 precio_neto = sanear_numero(row.get('Precio Neto', 0.0))
                 costo_base = (precio_neto - (precio_neto * (pct_descuento / 100.0))) * 1.19
@@ -329,17 +323,15 @@ def ejecutar_upsert_editorial_seguro(lista_creados, lista_actualizados, editoria
     progreso.empty()
     st.cache_data.clear()
     return exitos_creados, exitos_actualizados, errores
+
 def color_enriquecer_existentes(data):
     """
     Colorea en amarillo pastel suave las celdas que van a sufrir cambios
     según lo especificado en la columna 'Cambios a Aplicar'.
     """
-    # Creamos una plantilla de estilos vacía del mismo tamaño del DataFrame
     estilos = pd.DataFrame('', index=data.index, columns=data.columns)
-
-    # Color amarillo pastel suave y amigable para la vista
     color_amarillo_pastel = 'background-color: #fff9c4; color: #5d4037; font-weight: bold;'
-
+    
     for idx, row in data.iterrows():
         cambios = str(row.get('Cambios a Aplicar', '')).split(', ')
         for cambio in cambios:
@@ -350,10 +342,10 @@ def color_enriquecer_existentes(data):
             elif cambio == "Encuadernación": col_target = "Encuadernación"
             elif cambio == "Costo": col_target = "Nuevo Costo"
             elif cambio == "Precio": col_target = "Nuevo Precio"
-
+            
             if col_target and col_target in data.columns:
                 estilos.loc[idx, col_target] = color_amarillo_pastel
-
+                
     return estilos
 
 def normalizar_encuadernacion_planeta(formato_raw):
@@ -363,11 +355,6 @@ def normalizar_encuadernacion_planeta(formato_raw):
     if not f_upper:
         return None
         
-    # Casos explícitos para DEJAR COMO NULL
-    null_keywords = ["LOMO VISTO", "TODO CARTON", "PACK", "LIBRO DE BAN", "LIBRO DE TELA", "CALENDARIO"]
-    if any(k in f_upper for k in null_keywords):
-        return None
-        
     if "RUSTICA" in f_upper or "RUSTICO" in f_upper:
         return "TAPA BLANDA"
     if "DURA" in f_upper or "CARTONE" in f_upper or "CARTON" in f_upper:
@@ -375,7 +362,13 @@ def normalizar_encuadernacion_planeta(formato_raw):
     if "BOLSILLO" in f_upper or "FLEXIBLE" in f_upper:
         return "BOLSILLO"
         
-    return f_upper # Fallback de seguridad
+    return f_upper
+
+def limpiar_cache_previsualizaciones():
+    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
+    for k in keys_to_delete:
+        if k in st.session_state:
+            del st.session_state[k]
 
 def mostrar_carga_editoriales():
     # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
@@ -427,13 +420,8 @@ def mostrar_carga_editoriales():
         pct_p = col_p1.number_input("Descuento Comercial de Planeta (%):", min_value=0.0, max_value=100.0, value=40.0, step=1.0, key="pct_p")
         val_p = col_p2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_p")
         
-        force_p = st.toggle(
-            "🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", 
-            value=False, 
-            key="force_p", 
-            on_change=limpiar_cache_previsualizaciones  # <--- Limpia la simulación vieja al mover el switch
-        )
-
+        force_p = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_p", on_change=limpiar_cache_previsualizaciones)
+        
         up_planeta = st.file_uploader("Sube el catálogo de Planeta (.xlsx):", type=["xlsx"], key="up_planeta")
         if up_planeta:
             df_p = pd.read_excel(up_planeta, engine="openpyxl")
@@ -459,7 +447,6 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['p_actualizados']:
                         df_act_styled = pd.DataFrame(st.session_state['p_actualizados'])
-                        # Aplicamos el coloreado selectivo en caliente
                         st.dataframe(df_act_styled.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
                     else:
                         st.info("No hay libros existentes por enriquecer.")
@@ -496,13 +483,7 @@ def mostrar_carga_editoriales():
         pct_u = col_u1.number_input("Descuento Comercial de Urano (%):", min_value=0.0, max_value=100.0, value=35.0, step=1.0, key="pct_u")
         val_u = col_u2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_u")
         
-        force_u = st.toggle(
-            "🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", 
-            value=False, 
-            key="force_u", 
-            on_change=limpiar_cache_previsualizaciones  # <--- Limpia la simulación vieja al mover el switch
-        )
-
+        force_u = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_u", on_change=limpiar_cache_previsualizaciones)
         
         up_urano = st.file_uploader("Sube el catálogo de Urano (.xlsx):", type=["xlsx"], key="up_urano")
         if up_urano:
@@ -529,11 +510,9 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['u_actualizados']:
                         df_act_styled_u = pd.DataFrame(st.session_state['u_actualizados'])
-                        # 🔵 CORE FIX: Aplicamos el coloreado selectivo en caliente para Urano también
                         st.dataframe(df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None), use_container_width=True, hide_index=True)
                     else:
                         st.info("No hay libros existentes por enriquecer.")
-
                 
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
@@ -541,7 +520,7 @@ def mostrar_carga_editoriales():
                 token_esperado_u = st.session_state.get('u_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_u = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra **{token_esperado_u}** en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_u}\*\* en mayúsculas:", 
                     key="confirm_u",
                     placeholder=f"Escribe {token_esperado_u} aquí..."
                 )
