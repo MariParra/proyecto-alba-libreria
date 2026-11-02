@@ -509,7 +509,7 @@ def mostrar_inventario():
         columnas_fijas = ['libro_id', 'titulo', 'stock']
         columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
-        columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
+        columnas_por_defecto = ['autor', 'precio_original', 'costo', 'isbn']
         favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles]
         
         columnas_extra_seleccionadas = st.multiselect(
