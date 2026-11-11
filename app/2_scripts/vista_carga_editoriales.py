@@ -84,6 +84,18 @@ TEMATICAS_OMITIDAS_PLANETA = [
     "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES", "OCIO Y ENTRETENIMIENTO"
 ]
 
+# --- CONSTANTES PENGUIN RANDOM HOUSE ---
+SELLOS_AUTORIZADOS_PENGUIN = [
+    "PLAZA & JANES", "DEBOLSILLO", "DEBOLS!LLO", "GRIJALBO", "MONTENA", "AGUILAR",
+    "PENGUIN CLASICOS", "PENGUIN CLÁSICOS", "DEBATE", "RESERVOIR BOOKS", "SUMA DE LETRAS",
+    "RANDOM HOUSE", "ANAGRAMA", "SALAMANDRA BOLSILLO", "MOLINO",
+    "SALAMANDRA INFANTIL Y JUVENIL", "BLACKIE BOOKS", "NUBE DE TINTA",
+    "ALFAGUARA", "LUMEN", "ALFAGUARA INFANTIL JUVENIL", "EDICIONES B",
+    "ROCA EDITORIAL", "SALAMANDRA GRAPHIC", "DISTRITO MANGA", "B DE BLOK",
+    "SALAMANDRA", "B DE BOLSILLO", "NOVA", "ACANTILADO", "RANDOM COMICS",
+    "ALFAGUARA I.", "RAE", "ROCA BOLSILLO", "ALFAGUARA J.", "B DE BOOKS", "FANTASCY"
+]
+
 # --- PARSERS INTELIGENTES ---
 def sanear_numero(val):
     if pd.isna(val): return 0.0
@@ -166,7 +178,11 @@ def normalizar_encuadernacion_planeta(formato_raw):
     return f_upper
 
 def limpiar_cache_previsualizaciones():
-    keys_to_delete = ['p_creados', 'p_actualizados', 'p_random_token', 'u_creados', 'u_actualizados', 'u_random_token']
+    keys_to_delete = [
+        'p_creados', 'p_actualizados', 'p_random_token', 
+        'u_creados', 'u_actualizados', 'u_random_token',
+        'pe_creados', 'pe_actualizados', 'pe_random_token'
+    ]
     for k in keys_to_delete:
         if k in st.session_state:
             del st.session_state[k]
@@ -253,6 +269,31 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
+            elif editorial_tipo == "PENGUIN":
+                sello_raw = str(row.get('Sello', row.get('SELLO', ''))).strip().upper()
+                if sello_raw not in [s.upper() for s in SELLOS_AUTORIZADOS_PENGUIN]:
+                    continue
+
+                # Mapeado específico de columnas
+                titulo_original = row.get('Material', row.get('MATERIAL', row.get('TITULO', row.get('TÍTULO'))))
+                autor_original = row.get('Autor', row.get('AUTOR', row.get('Autores')))
+                isbn_original = str(row.get('ISBN', row.get('isbn'))).split('.')[0]
+
+                titulo_saneado = normalizar_titulo(titulo_original)
+                autor_saneado = normalizar_autor(autor_original)
+                isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) and isbn_original.strip().lower() not in ['nan', 'none', ''] else None
+
+                titulo_key_saneado = normalizar_para_cruce(titulo_saneado)
+                if not titulo_key_saneado:
+                    continue
+
+                # Fórmula Financera de Costo: (PVP Neto x Descuento) * 1.19
+                pvp_neto = sanear_numero(row.get('PVP Neto', row.get('PVP_NETO', row.get('PVP NETO', 0.0))))
+                costo_base = (pvp_neto - (pvp_neto * (pct_descuento / 100.0))) * 1.19
+                precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
+
+                genero_final = None
+                encuadernacion = None
             else: # URANO
                 # 🚀 EXCLUSIÓN URANO: Sello polimórfico
                 sello_raw = str(row.get('SELLO', row.get('Sello', ''))).strip().upper()
@@ -429,11 +470,11 @@ def mostrar_carga_editoriales():
         
         #### 📊 Fórmulas de Costos y Ventas:
         * **Urano:** 
-          $$\\text{Costo} = (\\text{Precio Neto} - (\\text{Precio Neto} \\times \\text{Descuento})) \\times 1.19$$
+            $$\\text{Costo} = (\\text{Precio Neto} - (\\text{Precio Neto} \\times \\text{Descuento})) \\times 1.19$$
         * **Planeta:** 
-          $$\\text{Costo} = (\\text{PVP Sugerido} - (\\text{PVP Sugerido} \\times \\text{Descuento})) \\times 1.19$$
+            $$\\text{Costo} = (\\text{PVP Sugerido} - (\\text{PVP Sugerido} \\times \\text{Descuento})) \\times 1.19$$
         * **Precio de Venta (Ambas):** 
-          $$\\text{Precio Venta} = \\text{Costo} + \\text{Valor Fijo} \\rightarrow \\text{Aproximado al 100 Superior (ej: } 24410 \\rightarrow 24500)$$
+            $$\\text{Precio Venta} = \\text{Costo} + \\text{Valor Fijo} \\rightarrow \\text{Aproximado al 100 Superior (ej: } 24410 \\rightarrow 24500)$$
         """)
         
         col_m1, col_m2 = st.columns(2)
@@ -456,7 +497,7 @@ def mostrar_carga_editoriales():
             * `Precio Neto` (o `PVP`)
             """)
 
-    tab_planeta, tab_urano = st.tabs(["🌎 Grupo Planeta", "🌌 Urano World"])
+    tab_planeta, tab_urano, tab_penguin = st.tabs(["🌎 Grupo Planeta", "🌌 Urano World", "🐧 Penguin Random House"])
     
     # ================= PESTAÑA: PLANETA =================
     with tab_planeta:
@@ -600,6 +641,78 @@ def mostrar_carga_editoriales():
                     if 'u_random_token' in st.session_state: del st.session_state['u_random_token']
                     time.sleep(2)
                     st.rerun()
+    # ================= PESTAÑA: PENGUIN =================
+    with tab_penguin:
+        st.subheader("Carga Masiva - Penguin Random House")
+        col_pe1, col_pe2 = st.columns(2)
+        pct_pe = col_pe1.number_input("Descuento Comercial de Penguin (%):", min_value=0.0, max_value=100.0, value=35.0, step=1.0, key="pct_pe")
+        val_pe = col_pe2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_pe")
+        
+        force_pe = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_pe", on_change=limpiar_cache_previsualizaciones)
+        
+        up_penguin = st.file_uploader("Sube el catálogo de Penguin (.xlsx o .csv):", type=["xlsx", "csv"], key="up_penguin")
+        if up_penguin:
+            if up_penguin.name.endswith(".csv"):
+                df_pe = pd.read_csv(up_penguin)
+            else:
+                df_pe = pd.read_excel(up_penguin, engine="openpyxl")
+            
+            if st.button("🔍 Previsualizar Simulación de Cambios (Penguin)", type="secondary", use_container_width=True):
+                with st.spinner("Simulando cambios y analizando duplicados..."):
+                    creados_pe, actualizados_pe, errores_pe = simular_upsert_editorial(df_pe, "PENGUIN", pct_pe, val_pe, force_pe)
+                    st.session_state['pe_creados'] = creados_pe
+                    st.session_state['pe_actualizados'] = actualizados_pe
+                    st.session_state['pe_errores'] = errores_pe
+                    import random
+                    st.session_state['pe_random_token'] = random.choice(PALABRAS_SEGURIDAD_RANDOM)
+                    
+            if 'pe_creados' in st.session_state:
+                st.markdown("### 🔍 Previsualización de Cambios Simulados")
+                c1, c2 = st.columns(2)
+                c1.metric("Libros Nuevos por Crear", len(st.session_state['pe_creados']))
+                c2.metric("Libros Existentes por Enriquecer", len(st.session_state['pe_actualizados']))
+                
+                with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
+                    if st.session_state['pe_creados']:
+                        df_creados_pe = pd.DataFrame(st.session_state['pe_creados'])
+                        html_creados_pe = df_creados_pe.to_html(index=False)
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_creados_pe}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No hay libros nuevos para crear.")
+                    
+                with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
+                    if st.session_state['pe_actualizados']:
+                        df_act_styled_pe = pd.DataFrame(st.session_state['pe_actualizados'])
+                        html_table_pe = df_act_styled_pe.style.apply(color_enriquecer_existentes, axis=None).to_html(index=False)
+                        st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table_pe}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No hay libros existentes por enriquecer.")
+                
+                # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
+                st.markdown("---")
+                st.markdown("#### 🔒 Confirmación de Seguridad Obligatoria")
+                token_esperado_pe = st.session_state.get('pe_random_token', 'CONFIRMAR')
+                
+                palabra_seguridad_pe = st.text_input(
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_pe}** en mayúsculas:", 
+                    key="confirm_pe",
+                    placeholder=f"Escribe {token_esperado_pe} aquí..."
+                )
+                
+                if st.button("🚨 EJECUTAR CARGA MASIVA EN VIVO (PENGUIN)", type="primary", use_container_width=True, disabled=(palabra_seguridad_pe != token_esperado_pe)):
+                    exitos_c, exitos_u, errores_v = ejecutar_upsert_editorial_seguro(
+                        st.session_state['pe_creados'], 
+                        st.session_state['pe_actualizados'], 
+                        "PENGUIN", pct_pe, val_pe, force_pe
+                    )
+                    st.success(f"🎉 Carga masiva completada: Se crearon {exitos_c} libros y se enriquecieron {exitos_u} exitosamente.")
+                    st.balloons()
+                    del st.session_state['pe_creados']
+                    del st.session_state['pe_actualizados']
+                    if 'pe_random_token' in st.session_state: del st.session_state['pe_random_token']
+                    time.sleep(2)
+                    st.rerun()
+
 
 if __name__ == "__main__":
     mostrar_carga_editoriales()
