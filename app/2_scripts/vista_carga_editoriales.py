@@ -192,7 +192,6 @@ def limpiar_cache_previsualizaciones():
 def alinear_cabeceras_excel(df):
     df_clean = df.copy()
     cols_upper = [str(c).upper().strip() for c in df_clean.columns]
-    # Si las columnas iniciales no son válidas, busca en las primeras 10 filas
     if not any(h in cols_upper for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD"]):
         for r_idx in range(min(10, len(df_clean))):
             row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
@@ -202,7 +201,6 @@ def alinear_cabeceras_excel(df):
                 break
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
     return df_clean
-
 
 # --- CARGA DEL INVENTARIO DE BASE ---
 def cargar_db_libros():
@@ -241,7 +239,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     
     for idx, row in df_import.iterrows():
         try:
-            # MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta múltiples Excel, incluyendo Material para Penguin)
+            # 🚀 MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta Planeta, Urano, Penguin y Zig-Zag)
             titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo', row.get('Material', row.get('MATERIAL', row.get('DesProd', row.get('DESPROD')))))))
             autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores', row.get('AUTORES'))))
             isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('isbn', row.get('CodBarra', row.get('CODBARRA'))))))).split('.')[0]
@@ -274,19 +272,19 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
                 
             elif editorial_tipo == "PENGUIN":
-                # FILTRO DE SELLOS AUTORIZADOS PENGUIN
+                # 🚀 FILTRO DE SELLOS AUTORIZADOS PENGUIN
                 sello_raw = str(row.get('Sello', row.get('SELLO', ''))).strip().upper()
                 if sello_raw not in [s.upper() for s in SELLOS_AUTORIZADOS_PENGUIN]:
                     continue
                 
-                # Fórmula Financiera de Costo: (PVP Neto x Descuento) * 1.19
+                # Fórmula Financera de Costo: (PVP Neto x Descuento) * 1.19
                 pvp_neto = sanear_numero(row.get('PVP Neto', row.get('PVP_NETO', row.get('PVP NETO', 0.0))))
                 costo_base = (pvp_neto - (pvp_neto * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 
                 genero_final = None
                 encuadernacion = None
-                
+
             elif editorial_tipo == "ZIG ZAG":
                 # 🚀 1. FILTRO OBLIGATORIO: DESC SUB GRUPO == "VIGENTES"
                 desc_sub_grupo = str(row.get('DESC SUB GRUPO', row.get('Desc Sub Grupo', ''))).strip().upper()
@@ -302,23 +300,24 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 # 🚀 3. FILTRO DE EXCLUSIÓN DE COLECCIONES (Busca substrings)
                 coleccion_raw = str(row.get('COLECCION', row.get('Colección', ''))).strip().upper()
                 colecciones_restringidas_zz = [
-                    "Cozy Mystery", "Clásicos Ilustrados", "Black Bird academy", "Inlov Romantasy", "Inlov romantic", 
-                    "Pocket Ilustrados", "Contraluz", "ADN", "faeris editorial", "Fantasía", "Runas", "Novela Romántica", 
-                    "Romantasy", "Novela contemporánea", "Narrativa juvenil", "Novela historica", "Novela Negra", 
-                    "THRILLER", "Literatura juvenil", "Adn Alianza De Novelas", "Alianza literaria", "Ficción", 
-                    "Young Kiwi", "Kiwi", "LIRIVA"
+                    "COZY MYSTERY", "CLÁSICOS ILUSTRADOS", "CLASICOS ILUSTRADOS", "BLACK BIRD ACADEMY", "INLOV ROMANTASY", 
+                    "INLOV ROMANTIC", "POCKET ILUSTRADOS", "CONTRALUZ", "ADN", "FAERIS EDITORIAL", "FANTASÍA", "FANTASIA", 
+                    "RUNAS", "NOVELA ROMÁNTICA", "NOVELA ROMANTICA", "ROMANTASY", "NOVELA CONTEMPORÁNEA", "NOVELA CONTEMPORANEA", 
+                    "NARRATIVA JUVENIL", "NOVELA HISTÓRICA", "NOVELA HISTORICA", "NOVELA NEGRA", "THRILLER", "LITERATURA JUVENIL", 
+                    "ADN ALIANZA DE NOVELAS", "ALIANZA LITERARIA", "FICCIÓN", "FICCION", "YOUNG KIWI", "KIWI", "LIRIVA"
                 ]
                 if any(c.upper() in coleccion_raw for c in colecciones_restringidas_zz):
                     continue
                 
-                # Fórmula Financiera de Costo: (Precio de Lista x 0.65) * 1.19
+                # Fórmula Financiera de Costo: (Precio de Lista x Descuento) * 1.19
                 precio_lista = sanear_numero(row.get('PRECIO DE LISTA', row.get('Precio de Lista', row.get('PRECIO DE LISTA', 0.0))))
                 costo_base = (precio_lista * (1 - (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 
+                # 🚀 HOMOLOGACIÓN DE GÉNEROS INTELIGENTE SEGÚN COLECCIÓN
                 genero_final = None
                 coleccion_upper = coleccion_raw.upper()
-
+                
                 if "COZY MYSTERY" in coleccion_upper:
                     genero_final = "COZY MYSTERY"
                 elif "ROMANTASY" in coleccion_upper:
@@ -331,12 +330,11 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     genero_final = "HISTORICO"
                 elif "NOVELA NEGRA" in coleccion_upper or "THRILLER" in coleccion_upper:
                     genero_final = "THRILLER"
-
+                
                 encuadernacion = None
 
-                
             else: # URANO
-                #  EXCLUSIÓN URANO: Sello polimórfico
+                # 🚀 EXCLUSIÓN URANO: Sello polimórfico
                 sello_raw = str(row.get('SELLO', row.get('Sello', ''))).strip().upper()
                 sellos_restringidos = [
                     "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
@@ -358,7 +356,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 encuadernacion = None
             
             # =========================================================================
-            #  BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
+            # 🔍 BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
             # =========================================================================
             match_libro = None
             
@@ -373,19 +371,18 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                         break
             
             if match_libro:
-                # 🛡️ REGLA DE INTEGRIDAD EDITORIAL (Evita que Penguin sobreescriba Planeta, etc.)
+                # 🛡️ REGLA DE INTEGRIDAD EDITORIAL (Evita que cruce datos de editoriales diferentes)
                 db_editorial = str(match_libro.get('editorial', '')).strip().upper()
                 if db_editorial and db_editorial != editorial_tipo.upper():
-                    # Si ya tiene una editorial asignada en DB y no coincide con la del Excel, se ignora la fila
                     continue
-
+                
                 campos_cambiados = []
                 if not match_libro.get('isbn') and isbn_saneado: campos_cambiados.append("ISBN")
                 if not match_libro.get('autor') and autor_saneado: campos_cambiados.append("Autor")
                 if not match_libro.get('genero') and genero_final: campos_cambiados.append("Género")
                 if not match_libro.get('encuadernacion') and encuadernacion: campos_cambiados.append("Encuadernación")
                 if not match_libro.get('editorial'): campos_cambiados.append("Editorial")
-
+                
                 if forzar_finanzas:
                     campos_cambiados.extend(["Costo", "Precio"])
                 
@@ -504,7 +501,7 @@ def color_enriquecer_existentes(data):
     return estilos
 
 def mostrar_carga_editoriales():
-        # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
+    # --- EXPLICACIÓN COLAPSABLE (UX GUIDELINE) ---
     with st.expander("📖 Manual y Guía de Ingesta Inteligente de Editoriales (Fórmulas y Columnas)", expanded=False):
         st.markdown("""
         ### ⚙️ ¿Cómo funciona este módulo?
@@ -517,17 +514,16 @@ def mostrar_carga_editoriales():
         
         #### 📊 Fórmulas de Costos y Ventas:
         * **Urano:** 
-            $$\\text{Costo} = (\\text{Precio Neto} - (\\text{Precio Neto} \\times \\text{Descuento})) \\times 1.19$$
+          $$\\text{Costo} = (\\text{Precio Neto} - (\\text{Precio Neto} \\times \\text{Descuento})) \\times 1.19$$
         * **Planeta:** 
-            $$\\text{Costo} = (\\text{PVP Sugerido} - (\\text{PVP Sugerido} \\times \\text{Descuento})) \\times 1.19$$
+          $$\\text{Costo} = (\\text{PVP Sugerido} - (\\text{PVP Sugerido} \\times \\text{Descuento})) \\times 1.19$$
         * **Penguin Random House:** 
-            $$\\text{Costo} = (\\text{PVP Neto} - (\\text{PVP Neto} \\times \\text{Descuento})) \\times 1.19$$
+          $$\\text{Costo} = (\\text{PVP Neto} - (\\text{PVP Neto} \\times \\text{Descuento})) \\times 1.19$$
         * **Editorial Zig-Zag:** 
-            $$\\text{Costo} = (\\text{Precio Lista} - (\\text{Precio Lista} \\times \\text{Descuento})) \\times 1.19$$
+          $$\\text{Costo} = (\\text{Precio Lista} - (\\text{Precio Lista} \\times \\text{Descuento})) \\times 1.19$$
         * **Precio de Venta (Todas):** 
-            $$\\text{Precio Venta} = \\text{Costo} + \\text{Valor Fijo} \\rightarrow \\text{Aproximado al 100 Superior (ej: } 24410 \\rightarrow 24500)$$
+          $$\\text{Precio Venta} = \\text{Costo} + \\text{Valor Fijo} \\rightarrow \\text{Aproximado al 100 Superior (ej: } 24410 \\rightarrow 24500)$$
         """)
-
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
@@ -550,7 +546,7 @@ def mostrar_carga_editoriales():
             """)
 
     tab_planeta, tab_urano, tab_penguin, tab_zigzag = st.tabs(["🌎 Grupo Planeta", "🌌 Urano World", "🐧 Penguin Random House", "📚 Editorial Zig-Zag"])
-
+    
     # ================= PESTAÑA: PLANETA =================
     with tab_planeta:
         st.subheader("Carga Masiva - Grupo Planeta")
@@ -582,7 +578,6 @@ def mostrar_carga_editoriales():
                 with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
                     if st.session_state['p_creados']:
                         df_creados_p = pd.DataFrame(st.session_state['p_creados'])
-                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático
                         html_creados_p = df_creados_p.to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_creados_p}</div>', unsafe_allow_html=True)
                     else:
@@ -591,7 +586,6 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['p_actualizados']:
                         df_act_styled = pd.DataFrame(st.session_state['p_actualizados'])
-                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático con coloreado
                         html_table = df_act_styled.style.apply(color_enriquecer_existentes, axis=None).to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table}</div>', unsafe_allow_html=True)
                     else:
@@ -603,7 +597,7 @@ def mostrar_carga_editoriales():
                 token_esperado_p = st.session_state.get('p_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra **{token_esperado_p}** en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_p}\*\* en mayúsculas:", 
                     key="confirm_p",
                     placeholder=f"Escribe {token_esperado_p} aquí..."
                 )
@@ -626,8 +620,8 @@ def mostrar_carga_editoriales():
     with tab_urano:
         st.subheader("Carga Masiva - Urano World")
         col_u1, col_u2 = st.columns(2)
-        pct_u = col_u1.number_input("Descuento Comercial de Urano (%):", min_value=0.0, max_value=100.0, value=38.0, step=1.0, key="pct_u")
-        val_u = col_u2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=4000, step=500, key="val_u")
+        pct_u = col_u1.number_input("Descuento Comercial de Urano (%):", min_value=0.0, max_value=100.0, value=35.0, step=1.0, key="pct_u")
+        val_u = col_u2.number_input("Valor Fijo de Utilidad ($):", min_value=0, value=5000, step=500, key="val_u")
         
         force_u = st.toggle("🚨 Forzar actualización de Costo y Precio de Venta en libros existentes", value=False, key="force_u", on_change=limpiar_cache_previsualizaciones)
         
@@ -653,7 +647,6 @@ def mostrar_carga_editoriales():
                 with st.expander("📚 Ver Detalle de Libros Nuevos por Crear", expanded=True):
                     if st.session_state['u_creados']:
                         df_creados_u = pd.DataFrame(st.session_state['u_creados'])
-                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático
                         html_creados_u = df_creados_u.to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_creados_u}</div>', unsafe_allow_html=True)
                     else:
@@ -662,12 +655,10 @@ def mostrar_carga_editoriales():
                 with st.expander("🔧 Ver Detalle de Libros Existentes por Enriquecer", expanded=True):
                     if st.session_state['u_actualizados']:
                         df_act_styled_u = pd.DataFrame(st.session_state['u_actualizados'])
-                        # 🛡️ BYPASS REACT 185: Convertimos a HTML estático con coloreado
                         html_table_u = df_act_styled_u.style.apply(color_enriquecer_existentes, axis=None).to_html(index=False)
                         st.markdown(f'<div style="overflow-x:auto; max-height:400px; border:1px solid #ddd; border-radius:5px;">{html_table_u}</div>', unsafe_allow_html=True)
                     else:
                         st.info("No hay libros existentes por enriquecer.")
-
                 
                 # --- SISTEMA DE CONFIRMACIÓN DE SEGURIDAD ---
                 st.markdown("---")
@@ -693,6 +684,7 @@ def mostrar_carga_editoriales():
                     if 'u_random_token' in st.session_state: del st.session_state['u_random_token']
                     time.sleep(2)
                     st.rerun()
+
     # ================= PESTAÑA: PENGUIN =================
     with tab_penguin:
         st.subheader("Carga Masiva - Penguin Random House")
@@ -746,7 +738,7 @@ def mostrar_carga_editoriales():
                 token_esperado_pe = st.session_state.get('pe_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_pe = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra **{token_esperado_pe}** en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_pe}\*\* en mayúsculas:", 
                     key="confirm_pe",
                     placeholder=f"Escribe {token_esperado_pe} aquí..."
                 )
@@ -764,7 +756,7 @@ def mostrar_carga_editoriales():
                     if 'pe_random_token' in st.session_state: del st.session_state['pe_random_token']
                     time.sleep(2)
                     st.rerun()
-                    
+
     # ================= PESTAÑA: ZIG-ZAG =================
     with tab_zigzag:
         st.subheader("Carga Masiva - Editorial Zig-Zag")
@@ -818,7 +810,7 @@ def mostrar_carga_editoriales():
                 token_esperado_z = st.session_state.get('z_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_z = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra **{token_esperado_z}** en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_z}\*\* en mayúsculas:", 
                     key="confirm_z",
                     placeholder=f"Escribe {token_esperado_z} aquí..."
                 )
@@ -836,7 +828,6 @@ def mostrar_carga_editoriales():
                     if 'z_random_token' in st.session_state: del st.session_state['z_random_token']
                     time.sleep(2)
                     st.rerun()
-
 
 if __name__ == "__main__":
     mostrar_carga_editoriales()
