@@ -238,10 +238,10 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     
     for idx, row in df_import.iterrows():
         try:
-            # 🚀 MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta múltiples Excel)
-            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo')))
-            autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores')))
-            isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN')))).split('.')[0]
+            # MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta múltiples Excel, incluyendo Material para Penguin)
+            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo', row.get('Material', row.get('MATERIAL')))))
+            autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores', row.get('AUTORES'))))
+            isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('isbn'))))).split('.')[0]
             
             titulo_saneado = normalizar_titulo(titulo_original)
             autor_saneado = normalizar_autor(autor_original)
@@ -269,33 +269,23 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     
                 genero_final = DICCIONARIO_PLANETA_GENEROS.get(tematica, None)
                 encuadernacion = normalizar_encuadernacion_planeta(formato_raw)
+                
             elif editorial_tipo == "PENGUIN":
+                # FILTRO DE SELLOS AUTORIZADOS PENGUIN
                 sello_raw = str(row.get('Sello', row.get('SELLO', ''))).strip().upper()
                 if sello_raw not in [s.upper() for s in SELLOS_AUTORIZADOS_PENGUIN]:
                     continue
-
-                # Mapeado específico de columnas
-                titulo_original = row.get('Material', row.get('MATERIAL', row.get('TITULO', row.get('TÍTULO'))))
-                autor_original = row.get('Autor', row.get('AUTOR', row.get('Autores')))
-                isbn_original = str(row.get('ISBN', row.get('isbn'))).split('.')[0]
-
-                titulo_saneado = normalizar_titulo(titulo_original)
-                autor_saneado = normalizar_autor(autor_original)
-                isbn_saneado = isbn_original.strip() if pd.notna(isbn_original) and isbn_original.strip().lower() not in ['nan', 'none', ''] else None
-
-                titulo_key_saneado = normalizar_para_cruce(titulo_saneado)
-                if not titulo_key_saneado:
-                    continue
-
-                # Fórmula Financera de Costo: (PVP Neto x Descuento) * 1.19
+                
+                # Fórmula Financiera de Costo: (PVP Neto x Descuento) * 1.19
                 pvp_neto = sanear_numero(row.get('PVP Neto', row.get('PVP_NETO', row.get('PVP NETO', 0.0))))
                 costo_base = (pvp_neto - (pvp_neto * (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
-
+                
                 genero_final = None
                 encuadernacion = None
+
             else: # URANO
-                # 🚀 EXCLUSIÓN URANO: Sello polimórfico
+                #  EXCLUSIÓN URANO: Sello polimórfico
                 sello_raw = str(row.get('SELLO', row.get('Sello', ''))).strip().upper()
                 sellos_restringidos = [
                     "URANO", "KEPLER", "EMPRESA ACTIVA", "TENDENCIAS", "KAIROS", 
@@ -317,7 +307,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 encuadernacion = None
             
             # =========================================================================
-            # 🔍 BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
+            #  BÚSQUEDA INTELIGENTE EN CASCADA OPTIMIZADA EN O(1)
             # =========================================================================
             match_libro = None
             
