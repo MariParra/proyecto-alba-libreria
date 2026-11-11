@@ -322,13 +322,19 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                         break
             
             if match_libro:
+                # 🛡️ REGLA DE INTEGRIDAD EDITORIAL (Evita que Penguin sobreescriba Planeta, etc.)
+                db_editorial = str(match_libro.get('editorial', '')).strip().upper()
+                if db_editorial and db_editorial != editorial_tipo.upper():
+                    # Si ya tiene una editorial asignada en DB y no coincide con la del Excel, se ignora la fila
+                    continue
+
                 campos_cambiados = []
                 if not match_libro.get('isbn') and isbn_saneado: campos_cambiados.append("ISBN")
                 if not match_libro.get('autor') and autor_saneado: campos_cambiados.append("Autor")
                 if not match_libro.get('genero') and genero_final: campos_cambiados.append("Género")
                 if not match_libro.get('encuadernacion') and encuadernacion: campos_cambiados.append("Encuadernación")
                 if not match_libro.get('editorial'): campos_cambiados.append("Editorial")
-                
+
                 if forzar_finanzas:
                     campos_cambiados.extend(["Costo", "Precio"])
                 
