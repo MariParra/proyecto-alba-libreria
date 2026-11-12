@@ -223,6 +223,231 @@ def cargar_db_libros():
             break
     return all_books
 
+import streamlit as st
+import pandas as pd
+import io
+import re
+import json
+import time
+from utilidades import get_db_connection, limpiar_texto_para_busqueda, log_error
+
+# --- HOMOLOGACIÓN GÉNEROS PLANETA ---
+DICCIONARIO_PLANETA_GENEROS = {
+    "NOVELA ROMÁNTICA": "ROMANCE",
+    "NOVELA CONTEMPORÁNEA": "FICCION GENERAL",
+    "AUTOAYUDA": "AUTOAYUDA",
+    "NOVELA LITERARIA": "FICCION GENERAL",
+    "CIENCIA": "NO FICCION",
+    "JUVENIL": None,
+    "INFANTIL": None,
+    "CIENCIAS HUMANAS Y SOCIALES": "NO FICCION",
+    "RELIGIÓN": "NO FICCION",
+    "NOVELA NEGRA": "THRILLER",
+    "PSICOLOGÍA": "NO FICCION",
+    "ACTUALIDAD": "NO FICCION",
+    "ECONOMÍA": "NO FICCION",
+    "HISTORIA": "NO FICCION",
+    "OCIO Y ENTRETENIMIENTO": "NO FICCION",
+    "ARTE": "NO FICCION",
+    "FILOSOFÍA": "NO FICCION",
+    "CÓMIC Y MANGA": None,
+    "DICCIONARIOS Y REFERENCIA": "NO FICCION",
+    "POESÍA": "POESIA",
+    "NOVELA HISTÓRICA": "HISTORICO",
+    "RELATOS": None,
+    "ESTILO DE VIDA": "NO FICCION",
+    "HUMOR": "NO FICCION",
+    "TERROR": "TERROR",
+    "FANTASÍA": "FANTASIA",
+    "MANGA": None,
+    "VIAJES": "NO FICCION",
+    "CIENCIA FICCIÓN": "CIENCIA FICCION",
+    "EMPRESA": "NO FICCION",
+    "CALENDARIOS": "NO FICCION",
+    "TEATRO": None,
+    "SALUD": "NO FICCION",
+    "PARA PADRES": "NO FICCION",
+    "ESOTERISMO": None,
+    "BEBÉS": "NO FICCION",
+    "NOVELA ERÓTICA": "EROTICA",
+    "AGENDAS": "NO FICCION",
+    "COCINA": "NO FICCION"
+}
+
+PALABRAS_SEGURIDAD_RANDOM = [
+    # Nombres de mascotas divertidos
+    "HARRY", "TRUFA", "PETER", "CONO", "PRI", "GUAGUITO", "CACHORRA",
+    
+    # Divertidas y caóticas
+    "APOCALIPSIS", "BOMBA", "TORNADO", "TURBO", "MAGIA", 
+    "MUTACION", "CAOS", "MATRIZ", "VORTEX", "CHISPA", 
+    "CATACLISMO", "FUSION", "ESTALLIDO", "RAYO", "COHETE",
+    "SUPERNOVA", "AVALANCHA", "TERREMOTO", "MISIL", "REACTOR",
+    
+    # Objetos y conceptos cotidianos pero graciosos
+    "PLATANO", "BURBUJA", "GALAXIA", "JARRON", "PINGUINO", 
+    "BOTIQUIN", "PATITO", "KRAKEN", "CIBORG", "HAMBURGUESA",
+    "ZOMBIE", "FANTASMA", "GALLETA", "NINJA", "PIRATA", 
+    "ROBOT", "UNICORNIO", "FOGATA", "BANDIDO",
+    
+    # Literatura y librería con chispa
+    "BIBLIOTECA", "IMPRENTA", "BESTSELLER", "MANUSCRITO", "ESTANTERIA", 
+    "BOOKLOVER", "PROLOGO", "SINOPSIS", "EPILOGO", "TOMO", 
+    "FOLIO", "RESEÑA", "TAPA", "LOMO", "EDICION", 
+    "EJEMPLAR", "AUTOR", "PAGINAS", "CAPITULO", "TINTA",
+    
+    # Acciones y conceptos dinámicos
+    "EJECUTAR", "RESTAURAR", "FORZAR", "SOPORTE", "INGRESAR", 
+    "DESPACHO", "CATALOGO", "EDITORIAL", "ALBA", "LIBRERIA"
+]
+
+TEMATICAS_OMITIDAS_PLANETA = [
+    "ACTUALIDAD", "AGENDAS", "ARTE", "AUTOAYUDA", "BEBES", "CALENDARIOS", 
+    "CIENCIA", "CIENCIAS HUMANAS Y SOCIALES", "COCINA", "DICCIONARIOS Y REFERENCIA", 
+    "ECONOMIA", "EMPRESA", "ESOTERISMO", "ESTILO DE VIDA", "FILOSOFIA", 
+    "HISTORIA", "HUMOR", "INFANTIL", "PARA PADRES", "POESIA", 
+    "PSICOLOGIA", "RELIGION", "SALUD", "TEATRO", "VIAJES", "OCIO Y ENTRETENIMIENTO"
+]
+
+# --- CONSTANTES PENGUIN RANDOM HOUSE ---
+SELLOS_AUTORIZADOS_PENGUIN = [
+    "PLAZA & JANES", "DEBOLSILLO", "DEBOLS!LLO", "GRIJALBO", "MONTENA", "AGUILAR",
+    "PENGUIN CLASICOS", "PENGUIN CLÁSICOS", "DEBATE", "RESERVOIR BOOKS", "SUMA DE LETRAS",
+    "RANDOM HOUSE", "ANAGRAMA", "SALAMANDRA BOLSILLO", "MOLINO",
+    "SALAMANDRA INFANTIL Y JUVENIL", "BLACKIE BOOKS", "NUBE DE TINTA",
+    "ALFAGUARA", "LUMEN", "ALFAGUARA INFANTIL JUVENIL", "EDICIONES B",
+    "ROCA EDITORIAL", "SALAMANDRA GRAPHIC", "DISTRITO MANGA", "B DE BLOK",
+    "SALAMANDRA", "B DE BOLSILLO", "NOVA", "ACANTILADO", "RANDOM COMICS",
+    "ALFAGUARA I.", "RAE", "ROCA BOLSILLO", "ALFAGUARA J.", "B DE BOOKS", "FANTASCY"
+]
+
+# --- PARSERS INTELIGENTES ---
+def sanear_numero(val):
+    if pd.isna(val): return 0.0
+    val_str = str(val).strip()
+    val_str = re.sub(r'[^\d.,-]', '', val_str)
+    if not val_str: return 0.0
+    if ',' in val_str and '.' in val_str:
+        if val_str.find('.') < val_str.find(','):
+            val_str = val_str.replace('.', '').replace(',', '.')
+        else:
+            val_str = val_str.replace(',', '')
+    elif ',' in val_str:
+        parts = val_str.split(',')
+        if len(parts[-1]) == 3:
+            val_str = val_str.replace(',', '')
+        else:
+            val_str = val_str.replace(',', '.')
+    elif '.' in val_str:
+        parts = val_str.split('.')
+        if len(parts[-1]) == 3:
+            val_str = val_str.replace('.', '')
+    try:
+        return float(val_str)
+    except:
+        return 0.0
+
+def normalizar_autor(autor_raw):
+    if pd.isna(autor_raw): return ""
+    autor_str = str(autor_raw).strip()
+    if autor_str.startswith("-"):
+        autor_str = autor_str[1:].strip()
+    if "," in autor_str:
+        parts = autor_str.split(",")
+        if len(parts) == 2:
+            autor_str = f"{parts[1].strip()} {parts[0].strip()}"
+    return limpiar_texto_para_busqueda(autor_str)
+
+def normalizar_titulo(titulo_raw):
+    if pd.isna(titulo_raw): return ""
+    titulo_str = str(titulo_raw).strip()
+    titulo_str = re.sub(r'\s*\(CHI\)\s*$', '', titulo_str, flags=re.IGNORECASE)
+    
+    articles = [", EL", ", LA", ", LOS", ", LAS", ", UN", ", UNA", ", EN"]
+    for art in articles:
+        if titulo_str.upper().endswith(art):
+            titulo_str = art[2:].strip() + " " + titulo_str[:-len(art)].strip()
+            break
+    return limpiar_texto_para_busqueda(titulo_str)
+
+def normalizar_para_cruce(texto):
+    clean = limpiar_texto_para_busqueda(texto)
+    return re.sub(r'[^A-Z0-9\s]', '', clean).strip()
+
+def autores_coinciden_flexible(autor_db, autor_import):
+    key_db = set(normalizar_para_cruce(autor_db).split())
+    key_import = set(normalizar_para_cruce(autor_import).split())
+    
+    interseccion = key_db.intersection(key_import)
+    
+    if len(interseccion) >= 2 or (len(key_db) > 0 and any(any(abs(len(a) - len(b)) <= 2 and (a[:4] == b[:4]) for b in key_import) for a in key_db)):
+        return True
+    return False
+
+def aproximar_cien_superior(valor):
+    import math
+    return int(math.ceil(valor / 100.0)) * 100
+
+def normalizar_encuadernacion_planeta(formato_raw):
+    if pd.isna(formato_raw):
+        return None
+    f_upper = limpiar_texto_para_busqueda(formato_raw)
+    if not f_upper:
+        return None
+    if "RUSTICA" in f_upper or "RUSTICO" in f_upper:
+        return "TAPA BLANDA"
+    if "DURA" in f_upper or "CARTONE" in f_upper or "CARTON" in f_upper:
+        return "TAPA DURA"
+    if "BOLSILLO" in f_upper or "FLEXIBLE" in f_upper:
+        return "BOLSILLO"
+    return f_upper
+
+def limpiar_cache_previsualizaciones():
+    keys_to_delete = [
+        'p_creados', 'p_actualizados', 'p_random_token', 
+        'u_creados', 'u_actualizados', 'u_random_token',
+        'pe_creados', 'pe_actualizados', 'pe_random_token',
+        'z_creados', 'z_actualizados', 'z_random_token'
+    ]
+    for k in keys_to_delete:
+        if k in st.session_state:
+            del st.session_state[k]
+
+# --- ALINEADOR DINÁMICO DE CABECERAS EXCEL ---
+def alinear_cabeceras_excel(df):
+    df_clean = df.copy()
+    cols_upper = [str(c).upper().strip() for c in df_clean.columns]
+    
+    # REGLA DE SEGURIDAD: Si ya tiene las cabeceras correctas de Zig-Zag, Planeta o Urano, no hacemos nada
+    cabeceras_listas = ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "CODBARRA", "EAN", "ISBN"]
+    if any(h in cols_upper for h in cabeceras_listas):
+        return df_clean
+
+    for r_idx in range(min(10, len(df_clean))):
+        row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
+        if any(h in row_vals for h in cabeceras_listas):
+            df_clean.columns = df_clean.iloc[r_idx]
+            df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
+            break
+    df_clean.columns = [str(c).strip().upper() for c in df_clean.columns]
+    return df_clean
+
+# --- CARGA DEL INVENTARIO DE BASE ---
+def cargar_db_libros():
+    conn = get_db_connection()
+    all_books = []
+    chunk_size = 1000
+    for bloque in range(100):
+        start = bloque * chunk_size
+        end = start + chunk_size - 1
+        res = conn.table("libros").select("libro_id, titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, isbn").order("libro_id").range(start, end).execute()
+        if res.data:
+            all_books.extend(res.data)
+            if len(res.data) < chunk_size: break
+        else:
+            break
+    return all_books
+
 # --- SIMULADOR DE CAMBIOS (PREVIEW) ---
 def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fijo, forzar_finanzas):
     db_libros = cargar_db_libros()
