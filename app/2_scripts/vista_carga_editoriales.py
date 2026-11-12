@@ -285,7 +285,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 genero_final = None
                 encuadernacion = None
 
-                        elif editorial_tipo == "ZIG ZAG":
+            elif editorial_tipo == "ZIG ZAG":
                 # 🚀 1. FILTRO OBLIGATORIO: DESC SUB GRUPO == "VIGENTES" (Solo si existe la columna)
                 tiene_columna_grupo = any(c in df_import.columns for c in ["DESC SUB GRUPO", "Desc Sub Grupo"])
                 if tiene_columna_grupo:
