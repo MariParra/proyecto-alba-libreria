@@ -464,12 +464,8 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     preview_actualizados = []
     errores = []
     
-    # Alinear cabeceras del excel subido (hacemos bypass si es ZIG ZAG, ya que usamos header=2)
-    if editorial_tipo != "ZIG ZAG":
-        df_import = alinear_cabeceras_excel(df_import)
-    else:
-        # Para Zig-Zag, solo nos aseguramos de que las columnas estén en mayúsculas y limpias
-        df_import.columns = [str(c).strip().upper() for c in df_import.columns]
+    # Alinear cabeceras del archivo subido dinámicamente para todas las editoriales
+    df_import = alinear_cabeceras_excel(df_import)
     
     for idx, row in df_import.iterrows():
         try:
@@ -1014,8 +1010,11 @@ def mostrar_carga_editoriales():
             if up_zigzag.name.endswith(".csv"):
                 df_z = pd.read_csv(up_zigzag)
             else:
-                # 1. Cargamos el archivo indicando header=2 (Fila 3) para saltar Lista Activa y leer las 12 columnas reales
-                df_z = pd.read_excel(up_zigzag, header=2, engine="openpyxl")
+                # Cargamos el archivo completo y dejamos que el alineador dinámico detecte la cabecera real
+                df_z = pd.read_excel(up_zigzag, engine="openpyxl")
+
+            # Aplicamos la alineación de cabeceras dinámica de inmediato
+            df_z = alinear_cabeceras_excel(df_z)
             
             # Limpiamos las cabeceras para Zig-Zag de inmediato al cargar el archivo
             df_z.columns = [str(c).strip().upper() for c in df_z.columns]
