@@ -192,15 +192,17 @@ def limpiar_cache_previsualizaciones():
 def alinear_cabeceras_excel(df):
     df_clean = df.copy()
     cols_upper = [str(c).upper().strip() for c in df_clean.columns]
-    if not any(h in cols_upper for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD"]):
+    if not any(h in cols_upper for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "DESPROD"]):
         for r_idx in range(min(10, len(df_clean))):
             row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
             if any(h in row_vals for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "SELLO", "CODBARRA"]):
                 df_clean.columns = df_clean.iloc[r_idx]
                 df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
                 break
-    df_clean.columns = [str(c).strip() for c in df_clean.columns]
+    # 🚀 NORMALIZACIÓN TOTAL: Forzar mayúsculas y eliminar espacios en todas las cabeceras
+    df_clean.columns = [str(c).strip().upper() for c in df_clean.columns]
     return df_clean
+
 
 # --- CARGA DEL INVENTARIO DE BASE ---
 def cargar_db_libros():
@@ -239,10 +241,11 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     
     for idx, row in df_import.iterrows():
         try:
-            # 🚀 MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta Planeta, Urano, Penguin y Zig-Zag)
-            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo', row.get('Material', row.get('MATERIAL', row.get('DesProd', row.get('DESPROD', row.get('Desc', row.get('DESC')))))))))
-            autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores', row.get('AUTORES'))))
-            isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('isbn', row.get('CodBarra', row.get('CODBARRA'))))))).split('.')[0]
+            # 🚀 MAPEADO POLIMÓRFICO SEGURO EN MAYÚSCULAS
+            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('MATERIAL', row.get('DESPROD', row.get('DESC')))))
+            autor_original = row.get('AUTOR', row.get('AUTORES', ''))
+            isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('CODBARRA'))))).split('.')[0]
+
             
             titulo_saneado = normalizar_titulo(titulo_original)
             autor_saneado = normalizar_autor(autor_original)
@@ -780,7 +783,7 @@ def mostrar_carga_editoriales():
             if up_zigzag.name.endswith(".csv"):
                 df_z = pd.read_csv(up_zigzag)
             else:
-                df_z = pd.read_excel(up_zigzag, engine="openpyxl")
+                df_z = pd.read_excel(up_zigzag, header=2, engine="openpyxl")
             
             if st.button("🔍 Previsualizar Simulación de Cambios (Zig-Zag)", type="secondary", use_container_width=True):
                 with st.spinner("Simulando cambios y analizando duplicados..."):
