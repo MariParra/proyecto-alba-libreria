@@ -779,6 +779,14 @@ def mostrar_carga_editoriales():
                     st.session_state['z_creados'] = creados_z
                     st.session_state['z_actualizados'] = actualizados_z
                     st.session_state['z_errores'] = errores_z
+                    
+                    # 🐛 BLOQUE DE DIAGNÓSTICO TEMPORAL (Eliminar después)
+                    st.warning("⚠️ Diagnóstico de Ingesta:")
+                    st.write("Columnas detectadas tras alineación:", df_z.columns.tolist() if 'df_z' in locals() else "No cargado")
+                    if 'errores_z' in locals() and errores_z:
+                        st.error("Errores capturados en la simulación:")
+                        st.write(errores_z[:10]) # Muestra los primeros 10 errores
+                
                     import random
                     st.session_state['z_random_token'] = random.choice(PALABRAS_SEGURIDAD_RANDOM)
                     
