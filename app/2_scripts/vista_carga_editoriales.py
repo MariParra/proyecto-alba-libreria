@@ -1008,10 +1008,10 @@ def mostrar_carga_editoriales():
         up_zigzag = st.file_uploader("Sube el catálogo de Zig-Zag (.xlsx o .csv):", type=["xlsx", "csv"], key="up_zigzag")
         if up_zigzag:
             if up_zigzag.name.endswith(".csv"):
-                df_z = pd.read_csv(up_zigzag)
+                df_z = pd.read_csv(up_zigzag, skiprows=2)
             else:
                 # Cargamos el archivo completo y dejamos que el alineador dinámico detecte la cabecera real
-                df_z = pd.read_excel(up_zigzag, engine="openpyxl")
+                df_z = pd.read_excel(up_zigzag, skiprows=3, engine="openpyxl")
 
             # Aplicamos la alineación de cabeceras dinámica de inmediato
             df_z = alinear_cabeceras_excel(df_z)
