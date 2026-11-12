@@ -236,8 +236,13 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     preview_actualizados = []
     errores = []
     
-    # Alinear cabeceras del excel subido
-    df_import = alinear_cabeceras_excel(df_import)
+    # Alinear cabeceras del excel subido (hacemos bypass si es ZIG ZAG, ya que usamos header=2)
+    if editorial_tipo != "ZIG ZAG":
+        df_import = alinear_cabeceras_excel(df_import)
+    else:
+        # Para Zig-Zag, solo nos aseguramos de que las columnas estén en mayúsculas y limpias
+        df_import.columns = [str(c).strip().upper() for c in df_import.columns]
+
     
     for idx, row in df_import.iterrows():
         try:
