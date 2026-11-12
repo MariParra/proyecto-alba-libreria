@@ -192,17 +192,20 @@ def limpiar_cache_previsualizaciones():
 def alinear_cabeceras_excel(df):
     df_clean = df.copy()
     cols_upper = [str(c).upper().strip() for c in df_clean.columns]
-    if not any(h in cols_upper for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "DESPROD"]):
-        for r_idx in range(min(10, len(df_clean))):
-            row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
-            if any(h in row_vals for h in ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "SELLO", "CODBARRA"]):
-                df_clean.columns = df_clean.iloc[r_idx]
-                df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
-                break
-    # 🚀 NORMALIZACIÓN TOTAL: Forzar mayúsculas y eliminar espacios en todas las cabeceras
+    
+    # REGLA DE SEGURIDAD: Si ya tiene las cabeceras correctas de Zig-Zag, Planeta o Urano, no hacemos nada
+    cabeceras_listas = ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "CODBARRA", "EAN", "ISBN"]
+    if any(h in cols_upper for h in cabeceras_listas):
+        return df_clean
+
+    for r_idx in range(min(10, len(df_clean))):
+        row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
+        if any(h in row_vals for h in cabeceras_listas):
+            df_clean.columns = df_clean.iloc[r_idx]
+            df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
+            break
     df_clean.columns = [str(c).strip().upper() for c in df_clean.columns]
     return df_clean
-
 
 # --- CARGA DEL INVENTARIO DE BASE ---
 def cargar_db_libros():
@@ -242,7 +245,6 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     else:
         # Para Zig-Zag, solo nos aseguramos de que las columnas estén en mayúsculas y limpias
         df_import.columns = [str(c).strip().upper() for c in df_import.columns]
-
     
     for idx, row in df_import.iterrows():
         try:
@@ -250,7 +252,6 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
             titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('MATERIAL', row.get('DESPROD', row.get('DESC')))))
             autor_original = row.get('AUTOR', row.get('AUTORES', ''))
             isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('CODBARRA'))))).split('.')[0]
-
             
             titulo_saneado = normalizar_titulo(titulo_original)
             autor_saneado = normalizar_autor(autor_original)
@@ -292,7 +293,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 
                 genero_final = None
                 encuadernacion = None
-
+  
             elif editorial_tipo == "ZIG ZAG":
                 # 🚀 1. FILTRO OBLIGATORIO: DESC SUB GRUPO == "VIGENTES" (Solo si existe la columna)
                 tiene_columna_grupo = any(c in df_import.columns for c in ["DESC SUB GRUPO", "Desc Sub Grupo"])
@@ -349,7 +350,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     genero_final = "THRILLER"
                 
                 encuadernacion = None
-
+  
             else: # URANO
                 # 🚀 EXCLUSIÓN URANO: Sello polimórfico
                 sello_raw = str(row.get('SELLO', row.get('Sello', ''))).strip().upper()
@@ -614,7 +615,7 @@ def mostrar_carga_editoriales():
                 token_esperado_p = st.session_state.get('p_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_p}\*\* en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_p}** en mayúsculas:", 
                     key="confirm_p",
                     placeholder=f"Escribe {token_esperado_p} aquí..."
                 )
@@ -683,7 +684,7 @@ def mostrar_carga_editoriales():
                 token_esperado_u = st.session_state.get('u_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_u = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_u}\*\* en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_u}** en mayúsculas:", 
                     key="confirm_u",
                     placeholder=f"Escribe {token_esperado_u} aquí..."
                 )
@@ -755,7 +756,7 @@ def mostrar_carga_editoriales():
                 token_esperado_pe = st.session_state.get('pe_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_pe = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_pe}\*\* en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_pe}** en mayúsculas:", 
                     key="confirm_pe",
                     placeholder=f"Escribe {token_esperado_pe} aquí..."
                 )
@@ -788,7 +789,11 @@ def mostrar_carga_editoriales():
             if up_zigzag.name.endswith(".csv"):
                 df_z = pd.read_csv(up_zigzag)
             else:
+                # 1. Cargamos el archivo indicando header=2 (Fila 3) para saltar Lista Activa y leer las 12 columnas reales
                 df_z = pd.read_excel(up_zigzag, header=2, engine="openpyxl")
+            
+            # Limpiamos las cabeceras para Zig-Zag de inmediato al cargar el archivo
+            df_z.columns = [str(c).strip().upper() for c in df_z.columns]
             
             if st.button("🔍 Previsualizar Simulación de Cambios (Zig-Zag)", type="secondary", use_container_width=True):
                 with st.spinner("Simulando cambios y analizando duplicados..."):
@@ -797,12 +802,12 @@ def mostrar_carga_editoriales():
                     st.session_state['z_actualizados'] = actualizados_z
                     st.session_state['z_errores'] = errores_z
                     
-                    # 🐛 BLOQUE DE DIAGNÓSTICO TEMPORAL (Eliminar después)
+                    # 🐛 BLOQUE DE DIAGNÓSTICO TEMPORAL (Eliminar después de verificar)
                     st.warning("⚠️ Diagnóstico de Ingesta:")
                     st.write("Columnas detectadas tras alineación:", df_z.columns.tolist() if 'df_z' in locals() else "No cargado")
                     if 'errores_z' in locals() and errores_z:
                         st.error("Errores capturados en la simulación:")
-                        st.write(errores_z[:10]) # Muestra los primeros 10 errores
+                        st.write(errores_z[:10])
                 
                     import random
                     st.session_state['z_random_token'] = random.choice(PALABRAS_SEGURIDAD_RANDOM)
@@ -835,7 +840,7 @@ def mostrar_carga_editoriales():
                 token_esperado_z = st.session_state.get('z_random_token', 'CONFIRMAR')
                 
                 palabra_seguridad_z = st.text_input(
-                    f"Para confirmar, digite exactamente la palabra \*\*{token_esperado_z}\*\* en mayúsculas:", 
+                    f"Para confirmar, digite exactamente la palabra **{token_esperado_z}** en mayúsculas:", 
                     key="confirm_z",
                     placeholder=f"Escribe {token_esperado_z} aquí..."
                 )
