@@ -240,7 +240,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     for idx, row in df_import.iterrows():
         try:
             # 🚀 MAPEADO POLIMÓRFICO DE COLUMNAS (Soporta Planeta, Urano, Penguin y Zig-Zag)
-            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo', row.get('Material', row.get('MATERIAL', row.get('DesProd', row.get('DESPROD')))))))
+            titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('Titulo', row.get('Material', row.get('MATERIAL', row.get('DesProd', row.get('DESPROD', row.get('Desc', row.get('DESC')))))))))
             autor_original = row.get('AUTOR', row.get('Autor', row.get('Autores', row.get('AUTORES'))))
             isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('isbn', row.get('CodBarra', row.get('CODBARRA'))))))).split('.')[0]
             
@@ -285,19 +285,28 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 genero_final = None
                 encuadernacion = None
 
-            elif editorial_tipo == "ZIG ZAG":
-                # 🚀 1. FILTRO OBLIGATORIO: DESC SUB GRUPO == "VIGENTES"
-                desc_sub_grupo = str(row.get('DESC SUB GRUPO', row.get('Desc Sub Grupo', ''))).strip().upper()
-                if desc_sub_grupo != "VIGENTES":
-                    continue
+                        elif editorial_tipo == "ZIG ZAG":
+                # 🚀 1. FILTRO OBLIGATORIO: DESC SUB GRUPO == "VIGENTES" (Solo si existe la columna)
+                tiene_columna_grupo = any(c in df_import.columns for c in ["DESC SUB GRUPO", "Desc Sub Grupo"])
+                if tiene_columna_grupo:
+                    desc_sub_grupo = str(row.get('DESC SUB GRUPO', row.get('Desc Sub Grupo', ''))).strip().upper()
+                    if desc_sub_grupo != "VIGENTES":
+                        continue
                 
-                # 🚀 2. FILTRO DE EXCLUSIÓN DE SELLOS (Busca substrings)
+                # 🚀 2. NUEVO FILTRO OBLIGATORIO: STOCK DISPONIBLE (RESTADO EL COMPROMETIDO) > 0
+                col_stock_name = next((c for c in df_import.columns if "STOCK DISPONIBLE" in c.upper() or "STOCK" in c.upper()), None)
+                if col_stock_name:
+                    stock_val = sanear_numero(row.get(col_stock_name, 0.0))
+                    if stock_val <= 0:
+                        continue
+                
+                # 🚀 3. FILTRO DE EXCLUSIÓN DE SELLOS (Busca substrings)
                 sello_raw = str(row.get('Sello', row.get('SELLO', ''))).strip().upper()
                 sellos_restringidos_zz = ["ALMA", "LATINBOOKS", "VERGARA Y RIBA", "VRYA", "VERA", "VR", "V&R"]
                 if any(s.upper() in sello_raw for s in sellos_restringidos_zz):
                     continue
                 
-                # 🚀 3. FILTRO DE EXCLUSIÓN DE COLECCIONES (Busca substrings)
+                # 🚀 4. FILTRO DE EXCLUSIÓN DE COLECCIONES (Busca substrings)
                 coleccion_raw = str(row.get('COLECCION', row.get('Colección', ''))).strip().upper()
                 colecciones_restringidas_zz = [
                     "COZY MYSTERY", "CLÁSICOS ILUSTRADOS", "CLASICOS ILUSTRADOS", "BLACK BIRD ACADEMY", "INLOV ROMANTASY", 
@@ -310,7 +319,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                     continue
                 
                 # Fórmula Financiera de Costo: (Precio de Lista x Descuento) * 1.19
-                precio_lista = sanear_numero(row.get('PRECIO DE LISTA', row.get('Precio de Lista', row.get('PRECIO DE LISTA', 0.0))))
+                precio_lista = sanear_numero(row.get('PRECIO DE LISTA', row.get('Precio de Lista', 0.0)))
                 costo_base = (precio_lista * (1 - (pct_descuento / 100.0))) * 1.19
                 precio_venta = aproximar_cien_superior(costo_base + valor_fijo)
                 
