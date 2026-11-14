@@ -391,7 +391,7 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
     
     for idx, row in df_import.iterrows():
         try:
-            # 🚀 MAPEADO POLIMÓRFICO SEGURO EN MAYÚSCULAS
+            # 🚀 MAPEADO POLIMÓRFICO SEGURO EN MAYÚSCULASdf_import.column
             titulo_original = row.get('TITULO', row.get('TÍTULO', row.get('MATERIAL', row.get('DESPROD', row.get('DESC')))))
             autor_original = row.get('AUTOR', row.get('AUTORES', ''))
             isbn_original = str(row.get('EAN', row.get('EAN13', row.get('ISBN', row.get('CODBARRA'))))).split('.')[0]
@@ -428,6 +428,12 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 sello_raw = str(row.get('Sello', row.get('SELLO', ''))).strip().upper()
                 if sello_raw not in [s.upper() for s in SELLOS_AUTORIZADOS_PENGUIN]:
                     continue
+                
+                # FILTRO DETALLE IN ('DISPONIBLES', 'STOCK CRITICO')
+                col_stock_name = next((c for c in df_import.columns if "DETALLE" in c.upper()), None)
+                if col_stock_name:
+                    if stock_val not in ('DISPONIBLES', 'STOCK CRITICO'):
+                        continue
                 
                 # Fórmula Financera de Costo: (PVP Neto x Descuento) * 1.19
                 pvp_neto = sanear_numero(row.get('PVP Neto', row.get('PVP_NETO', row.get('PVP NETO', 0.0))))
