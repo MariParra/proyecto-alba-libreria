@@ -432,6 +432,10 @@ def simular_upsert_editorial(df_import, editorial_tipo, pct_descuento, valor_fij
                 # FILTRO DETALLE IN ('DISPONIBLES', 'STOCK CRITICO')
                 col_stock_name = next((c for c in df_import.columns if "DETALLE" in c.upper()), None)
                 if col_stock_name:
+                    # 1. Obtenemos el valor de la celda de la fila actual y lo limpiamos
+                    stock_val = str(row.get(col_stock_name, '')).strip().upper()
+
+                    # 2. Comparamos el valor de la celda con los estados permitidos
                     if stock_val not in ('DISPONIBLES', 'STOCK CRITICO'):
                         continue
                 
