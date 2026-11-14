@@ -338,25 +338,6 @@ def limpiar_cache_previsualizaciones():
         if k in st.session_state:
             del st.session_state[k]
 
-# --- ALINEADOR DINÁMICO DE CABECERAS EXCEL ---
-def alinear_cabeceras_excel(df):
-    df_clean = df.copy()
-    cols_upper = [str(c).upper().strip() for c in df_clean.columns]
-    
-    # REGLA DE SEGURIDAD: Si ya tiene las cabeceras correctas de Zig-Zag, Planeta o Urano, no hacemos nada
-    cabeceras_listas = ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "CODBARRA", "EAN", "ISBN"]
-    if any(h in cols_upper for h in cabeceras_listas):
-        return df_clean
-
-    for r_idx in range(min(10, len(df_clean))):
-        row_vals = [str(v).upper().strip() for v in df_clean.iloc[r_idx].values]
-        if any(h in row_vals for h in cabeceras_listas):
-            df_clean.columns = df_clean.iloc[r_idx]
-            df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
-            break
-    df_clean.columns = [str(c).strip().upper() for c in df_clean.columns]
-    return df_clean
-
 # --- CARGA DEL INVENTARIO DE BASE ---
 def cargar_db_libros():
     conn = get_db_connection()
