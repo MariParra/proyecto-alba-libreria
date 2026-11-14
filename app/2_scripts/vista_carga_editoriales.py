@@ -216,6 +216,8 @@ def alinear_cabeceras_excel(df):
     # REGLA DE SEGURIDAD: Si ya tiene las cabeceras correctas de Zig-Zag, Planeta o Urano, no hacemos nada
     cabeceras_listas = ["EDITORIAL", "TÍTULO", "TITULO", "MATERIAL", "DESPROD", "CODBARRA", "EAN", "ISBN"]
     if any(h in cols_upper for h in cabeceras_listas):
+        # 🚀 CORRECCIÓN: Convertir las columnas a mayúsculas antes de salir por la regla de seguridad
+        df_clean.columns = cols_upper
         return df_clean
 
     for r_idx in range(min(10, len(df_clean))):
@@ -224,6 +226,7 @@ def alinear_cabeceras_excel(df):
             df_clean.columns = df_clean.iloc[r_idx]
             df_clean = df_clean.iloc[r_idx+1:].reset_index(drop=True)
             break
+            
     df_clean.columns = [str(c).strip().upper() for c in df_clean.columns]
     return df_clean
 
