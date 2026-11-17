@@ -39,7 +39,7 @@ def cargar_datos_completos():
         df = pd.DataFrame(all_data)
     
         # Procesamos directamente el DataFrame unificado
-        columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion']
+        columnas_texto = ['titulo', 'autor', 'editorial', 'genero', 'encuadernacion', 'isbn']
         for col in columnas_texto:
             if col in df.columns:
                 df[col] = df[col].fillna("").astype(str).str.strip()
@@ -157,15 +157,29 @@ def actualizar_destacados_batch(df_con_cambios):
         
     return updates_count
 
-def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True):
+def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, precio, costo, apto_cajita=True, destacado=False, visible_catalogo=True, isbn=None):
     conn = get_db_connection()
     titulo_limpio = limpiar_texto_para_busqueda(titulo)
     autor_limpio = limpiar_texto_para_busqueda(autor)
+    isbn_saneado = isbn.strip() if isbn else None
 
     try:
-        res = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
-        if res.data:
-            return False, f"El libro '{titulo_limpio}' del autor '{autor_limpio}' ya existe en el catálogo."
+        match_libro = None
+        # 📌 Prioridad 1: Buscar por ISBN en la base de datos
+        if isbn_saneado:
+            res_isbn = conn.table("libros").select("libro_id").eq("isbn", isbn_saneado).execute()
+            if res_isbn.data:
+                match_libro = res_isbn.data[0]
+
+        # 📌 Prioridad 2: Buscar por Título y Autor (Si no hay ISBN o no coincide)
+        if not match_libro:
+            res_text = conn.table("libros").select("libro_id").eq("titulo", titulo_limpio).eq("autor", autor_limpio).execute()
+            if res_text.data:
+                match_libro = res_text.data[0]
+
+        if match_libro:
+            return False, f"El libro ya existe en tu catálogo general (ID: {match_libro['libro_id']})."
+
     except Exception as e:
         email_usuario = st.session_state.get('email_usuario', 'Desconocido')
         log_error(
@@ -181,9 +195,10 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
         "editorial": limpiar_texto_para_busqueda(editorial), "genero": limpiar_texto_para_busqueda(genero),
         "encuadernacion": limpiar_texto_para_busqueda(encuadernacion), "stock": stock,
         "precio": precio, "precio_original": precio, "costo": costo,
-        "apto_cajita": apto_cajita, 
-        "destacado": destacado, 
-        "visible_catalogo": visible_catalogo
+        "apto_cajita": apto_cajita,
+        "destacado": destacado,
+        "visible_catalogo": visible_catalogo,
+        "isbn": isbn.strip() if isbn else None  # <--- Almacenamos el ISBN en Supabase
     }
     try:
         conn.table("libros").insert(datos).execute()
@@ -201,6 +216,20 @@ def crear_nuevo_libro(titulo, autor, editorial, genero, encuadernacion, stock, p
 
 def actualizar_un_libro(libro_id, datos):
     conn = get_db_connection()
+    
+    # 🔒 VALIDACIÓN DE INTEGRIDAD: El ISBN debe ser único en todo el catálogo
+    isbn_val = datos.get('isbn')
+    if isbn_val:
+        isbn_saneado = isbn_val.strip()
+        try:
+            # Buscamos si hay OTRO libro con ese mismo ISBN (excluyendo el que estamos editando)
+            res_isbn = conn.table("libros").select("libro_id, titulo").eq("isbn", isbn_saneado).neq("libro_id", libro_id).execute()
+            if res_isbn.data:
+                otro_libro = res_isbn.data[0]
+                return False, f"El ISBN '{isbn_saneado}' ya está asignado a otro libro en tu inventario: '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']})."
+        except Exception as e:
+            return False, f"Fallo al validar la unicidad del ISBN: {e}"
+
     try:
         conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
         cargar_datos_completos.clear()
@@ -240,6 +269,20 @@ def actualizar_libros_batch(df_original, df_editado):
             if 'editorial' in row: datos['editorial'] = limpiar_texto_para_busqueda(str(row['editorial']))
             if 'genero' in row: datos['genero'] = limpiar_texto_para_busqueda(str(row['genero']))
             if 'encuadernacion' in row: datos['encuadernacion'] = limpiar_texto_para_busqueda(str(row['encuadernacion']))
+            
+            # 🔒 VALIDACIÓN DE INTEGRIDAD EN LOTE: Unicidad del ISBN
+            if 'isbn' in row: 
+                isbn_val = str(row['isbn']).strip() if pd.notna(row['isbn']) and str(row['isbn']).strip() != "" else None
+                if isbn_val:
+                    # Buscamos si hay OTRO libro con ese mismo ISBN (ID diferente) en Supabase
+                    res_isbn = conn.table("libros").select("libro_id, titulo").eq("isbn", isbn_val).neq("libro_id", libro_id).execute()
+                    if res_isbn.data:
+                        otro_libro = res_isbn.data[0]
+                        st.error(f"❌ Error en Fila ID {libro_id}: El ISBN '{isbn_val}' ya está registrado en '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']}).")
+                        # Lanzamos excepción para detener el bucle y abortar la subida
+                        raise Exception(f"ISBN duplicado '{isbn_val}' detectado en '{otro_libro['titulo']}' (ID: {otro_libro['libro_id']}).")
+                datos['isbn'] = isbn_val
+                
             if 'stock' in row: datos['stock'] = int(row['stock'])
             if 'costo' in row: datos['costo'] = float(row.get('costo', 0))
             if 'titulo' in row: datos['titulo'] = limpiar_texto_para_busqueda(str(row['titulo']))
@@ -265,6 +308,7 @@ def actualizar_libros_batch(df_original, df_editado):
             if datos:
                 conn.table("libros").update(datos).eq("libro_id", libro_id).execute()
                 updates_count += 1
+                
         except Exception as e:
             email_usuario = st.session_state.get('email_usuario', 'Desconocido')
             log_error(
@@ -273,8 +317,8 @@ def actualizar_libros_batch(df_original, df_editado):
                 error=f"Error actualizando libro {libro_id}. Detalle: {e}",
                 email_usuario=email_usuario
             )
-            print(f"Error actualizando libro {libro_id}: {e}")
-            continue
+            # st.error(f"Error actualizando libro {libro_id}: {e}") # Se silencia el log de consola del user para evitar sobrecarga si aborta
+            raise e # Elevamos el error para detener el guardado masivo
             
     if updates_count > 0:
         cargar_datos_completos.clear()
@@ -465,7 +509,7 @@ def mostrar_inventario():
         columnas_fijas = ['libro_id', 'titulo', 'stock']
         columnas_opcionales_disponibles = [col for col in df_inventario.columns if col not in columnas_fijas + ['created_at', 'Dcto %']]
         
-        columnas_por_defecto = ['autor', 'precio', 'precio_original', 'Oferta']
+        columnas_por_defecto = ['autor', 'precio_original', 'costo', 'isbn']
         favoritos_disponibles = [c for c in columnas_por_defecto if c in columnas_opcionales_disponibles]
         
         columnas_extra_seleccionadas = st.multiselect(
@@ -576,10 +620,12 @@ def mostrar_inventario():
                         else:
                             nueva_encuadernacion = sel_enc
                             
-                        col5, col6, col7 = st.columns(3)
+                        col5, col6, col7, col_isbn = st.columns(4)  # <--- Creamos 4 columnas
                         nuevo_stock = col5.number_input("Stock:", min_value=0, step=1, value=int(libro['stock']))
                         nuevo_costo = col6.number_input("Costo ($):", min_value=0.0, format="%.0f", value=float(libro.get('costo', 0)))
                         nuevo_precio_original = col7.number_input("Precio Orig. ($):", min_value=0.0, format="%.0f", value=float(libro['precio_original']))
+                        nuevo_isbn = col_isbn.text_input("ISBN:", value=libro.get('isbn', ''))  # <--- Input para modificar el ISBN
+
                         
                         st.markdown("📅 **Vigencia del Descuento (Individual)**")
                         col_ed_f1, col_ed_f2 = st.columns(2)
@@ -612,9 +658,10 @@ def mostrar_inventario():
                                     "descuento_fin": nuevo_f_fin.strftime("%Y-%m-%d"),
                                     "apto_cajita": nuevo_apto_cajita,
                                     "destacado": nuevo_destacado,
-                                    "visible_catalogo": nuevo_visible
+                                    "visible_catalogo": nuevo_visible,
+                                    "isbn": nuevo_isbn.strip() if nuevo_isbn else None  # <--- Guardamos el ISBN editado
                                 }
-                                
+
                                 pct_dcto = float(libro.get('Dcto %', 0))
                                 if pct_dcto > 0:
                                     datos_actualizados['precio'] = round(nuevo_precio_original * (1.0 - (pct_dcto / 100.0)), 0)
@@ -636,10 +683,11 @@ def mostrar_inventario():
             st.caption(f"Mostrando {len(df_filtrado)} libros. Haz doble clic en las celdas para modificar (estilo Excel).")
             
             columnas_tabla_pc_todas = [
-                "libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", 
+                "libro_id", "titulo", "autor", "editorial", "genero", "encuadernacion", "isbn", # <--- Agregamos isbn a las columnas de la tabla PC
                 "stock", "costo", "precio", "precio_original", 
                 "apto_cajita", "destacado", "visible_catalogo"
             ]
+
             columnas_base = ["libro_id", "titulo"]
             columnas_opcionales = [c for c in columnas_tabla_pc_todas if c in df_filtrado.columns and c not in columnas_base]
             columnas_a_mostrar = st.multiselect(
@@ -659,6 +707,7 @@ def mostrar_inventario():
             
             config_columnas = {
                 "autor": st.column_config.SelectboxColumn("Autor", options=autores_unicos, required=True),
+                "isbn": st.column_config.TextColumn("ISBN"),
                 "editorial": st.column_config.SelectboxColumn("Editorial", options=editoriales_unicas, required=True),
                 "genero": st.column_config.SelectboxColumn("Género", options=generos_unicos),
                 "encuadernacion": st.column_config.SelectboxColumn("Encuadernación", options=encuadernaciones_unicas),
@@ -728,10 +777,12 @@ def mostrar_inventario():
             )
             val_enc_nu = st.text_input("O escribe una nueva Encuadernación:", key="n_enc_nu")
             
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)  # <--- Ampliamos a 4 columnas
             val_stock = c1.number_input("Stock:", min_value=0, step=1, key="n_sto")
             val_costo = c2.number_input("Costo ($):", min_value=0.0, format="%.0f", key="n_cos")
             val_precio = c3.number_input("Precio ($):", min_value=0.0, format="%.0f", key="n_pre")
+            val_isbn = c4.text_input("ISBN (Opcional):", key="n_isbn")  # <--- Entrada del ISBN para el libro nuevo
+
             
             st.markdown("🌐 **Configuración Pública y Web**")
             check_col1, check_col2, check_col3 = st.columns(3)
@@ -743,7 +794,8 @@ def mostrar_inventario():
             col_btn1, col_btn2 = st.columns(2)
             btn_guardar = col_btn1.form_submit_button("➕ Añadir al Catálogo", type="primary", use_container_width=True)
             btn_limpiar = col_btn2.form_submit_button("🧹 Limpiar Formulario", type="secondary", use_container_width=True)
-            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre", "n_apto", "n_dest", "n_vis"]
+            claves_formulario = ["n_tit", "n_aut_ex", "n_aut_nu", "n_edi_ex", "n_edi_nu", "n_gen_ex", "n_gen_nu", "n_enc_ex", "n_enc_nu", "n_sto", "n_cos", "n_pre", "n_isbn", "n_apto", "n_dest", "n_vis"]  # <--- Agregamos 'n_isbn' a las claves a limpiar
+
 
             if btn_limpiar:
                 for key in claves_formulario:
@@ -766,7 +818,8 @@ def mostrar_inventario():
                         val_costo,
                         apto_cajita=val_apto_cajita,
                         destacado=val_destacado,
-                        visible_catalogo=val_visible
+                        visible_catalogo=val_visible,
+                        isbn=val_isbn  # <--- Pasamos el ISBN recogido del formulario
                     )
 
                     if success:
