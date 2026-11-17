@@ -401,7 +401,7 @@ def mostrar_generador_marketing():
                         st.error(f"Error cargando imagen de fondo: {e}")
 
     # =========================================================================
-    # RENDERIZADO COMÚN Y FILTRADO AVANZADO
+    # RENDERIZADO COMÚN Y FILTRADO AVANZADO (POR EDITORIAL / STOCK DINÁMICO)
     # =========================================================================
     with st.container(border=True):
         st.markdown("#### 1. Filtra y Selecciona")
@@ -423,23 +423,35 @@ def mostrar_generador_marketing():
                 options=editoriales_disponibles
             )
             
-        # Checkbox para incluir o excluir libros sin stock
-        excluir_sin_stock = st.checkbox("Excluir libros sin stock (mostrar solo libros con stock > 0)", value=False)
+        # Determinar el universo de editoriales activas para configurar el stock selectivo
+        editoriales_para_configurar = editorial_seleccionada if editorial_seleccionada else editoriales_disponibles
+        
+        # Multiselect dinámico para definir la regla de exclusión de stock por editorial
+        editoriales_excluir_sin_stock = st.multiselect(
+            "🛡️ Selecciona las editoriales donde deseas EXCLUIR libros sin stock (solo mostrar con stock > 0):",
+            options=editoriales_para_configurar,
+            placeholder="Ej: Marca ZIG ZAG para que de ella aparezcan solo libros con stock"
+        )
 
-        # Aplicamos los filtros de forma secuencial y segura
+        # Aplicamos los filtros de forma secuencial y segura sobre una copia
         df_filtrado = df_libros.copy()
         
         # 1. Filtro por Género
         if genero_seleccionado != "Todos":
             df_filtrado = df_filtrado.query(f"genero == '{genero_seleccionado}'").copy()
             
-        # 2. Filtro por Editorial
+        # 2. Filtro de Editorial General (si seleccionó alguna en el multiselect principal)
         if editorial_seleccionada:
             df_filtrado = df_filtrado[df_filtrado.editorial.isin(editorial_seleccionada)].copy()
             
-        # 3. Filtro de Stock
-        if excluir_sin_stock:
-            df_filtrado = df_filtrado[df_filtrado.stock > 0].copy()
+        # 3. FILTRO DE STOCK QUIRÚRGICO POR EDITORIAL SELECCIONADA
+        # Mantiene el libro si su editorial NO está configurada para exclusión,
+        # O si está en la lista de exclusión y tiene stock mayor a 0.
+        if editoriales_excluir_sin_stock:
+            df_filtrado = df_filtrado[
+                (~df_filtrado['editorial'].isin(editoriales_excluir_sin_stock)) | 
+                (df_filtrado['editorial'].isin(editoriales_excluir_sin_stock) & (df_filtrado['stock'] > 0))
+            ].copy()
 
         # Generar etiquetas informativas en el selector de libros
         df_filtrado = df_filtrado.assign(
@@ -454,6 +466,7 @@ def mostrar_generador_marketing():
             libros_seleccionados = list(opciones_libros.keys())
         else:
             libros_seleccionados = st.multiselect("O selecciona manualmente:", options=opciones_libros.keys())
+
 
     if libros_seleccionados:
         st.markdown("---")
