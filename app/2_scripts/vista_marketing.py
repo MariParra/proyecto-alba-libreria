@@ -73,7 +73,7 @@ def cargar_libros_para_marketing():
             start = bloque * chunk_size
             end = start + chunk_size - 1
             res = (conn.table("libros")
-                .select("libro_id, titulo, autor, precio, precio_original, genero, stock")
+                .select("libro_id, titulo, autor, precio, precio_original, genero, stock, editorial")
                 .eq("visible_catalogo", True)
                 .gt("precio", 0)
                 .order("libro_id")
@@ -401,18 +401,47 @@ def mostrar_generador_marketing():
                         st.error(f"Error cargando imagen de fondo: {e}")
 
     # =========================================================================
-    # RENDERIZADO COMÚN
+    # RENDERIZADO COMÚN Y FILTRADO AVANZADO
     # =========================================================================
     with st.container(border=True):
         st.markdown("#### 1. Filtra y Selecciona")
         
-        generos_disponibles = sorted(list(df_libros.genero.dropna().unique()))
-        genero_seleccionado = st.selectbox("Filtrar por Género (opcional):", ["Todos"] + generos_disponibles)
+        # Filtros en columnas simétricas y ordenadas
+        c_filt1, c_filt2 = st.columns(2)
+        
+        with c_filt1:
+            generos_disponibles = sorted(list(df_libros.genero.dropna().unique()))
+            genero_seleccionado = st.selectbox("Filtrar por Género (opcional):", ["Todos"] + generos_disponibles)
+            
+        with c_filt2:
+            # Obtener y ordenar editoriales reales de los datos de Supabase
+            editoriales_disponibles = []
+            if 'editorial' in df_libros.columns:
+                editoriales_disponibles = sorted(list(df_libros.editorial.dropna().unique()))
+            editorial_seleccionada = st.multiselect(
+                "Filtrar por Editorial (selecciona una o varias, vacío = Todas):", 
+                options=editoriales_disponibles
+            )
+            
+        # Checkbox para incluir o excluir libros sin stock
+        excluir_sin_stock = st.checkbox("Excluir libros sin stock (mostrar solo libros con stock > 0)", value=False)
 
-        df_filtrado = df_libros
+        # Aplicamos los filtros de forma secuencial y segura
+        df_filtrado = df_libros.copy()
+        
+        # 1. Filtro por Género
         if genero_seleccionado != "Todos":
-            df_filtrado = df_libros.query(f"genero == '{genero_seleccionado}'").copy()
+            df_filtrado = df_filtrado.query(f"genero == '{genero_seleccionado}'").copy()
+            
+        # 2. Filtro por Editorial
+        if editorial_seleccionada:
+            df_filtrado = df_filtrado[df_filtrado.editorial.isin(editorial_seleccionada)].copy()
+            
+        # 3. Filtro de Stock
+        if excluir_sin_stock:
+            df_filtrado = df_filtrado[df_filtrado.stock > 0].copy()
 
+        # Generar etiquetas informativas en el selector de libros
         df_filtrado = df_filtrado.assign(
             label_selectbox = df_filtrado.apply(lambda x: f"{x.titulo} (Sin Stock)" if int(x.get("stock", 0)) <= 0 else x.titulo, axis=1)
         )
